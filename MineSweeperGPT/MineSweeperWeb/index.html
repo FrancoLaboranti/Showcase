@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>MineSweeper</title>
+<style>
+  :root { --bar-height: 66px; }                                                  /* tweak to taste */
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  /* Canvas occupies only the space ABOVE the bar — the board centers in that rect so it never sits
+     behind the buttons. Dimensions are set explicitly from JS each resize. */
+  #c {
+    display: block; position: absolute;
+    top: 0; left: 0;
+  }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
+    text-align: center; color: rgba(0,0,0,0.45);
+    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
+    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+  }
+
+  /* Bottom bar: mine counter (left) + action buttons (centered). Same shell as BallsWeb. */
+  #bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    padding: 0 16px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.85);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    z-index: 3;
+  }
+  #ui {
+    display: flex; gap: 8px;
+  }
+  #ui button {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    transition: background 0.1s, transform 0.08s;
+    padding: 0;
+  }
+  #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
+  #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
+  #ui #btnReset svg { width: 21px; height: 21px; }
+  /* toggled-on state for flag mode */
+  #ui button.on { background: rgba(255,80,80,0.30); border-color: rgba(255,80,80,0.6); }
+
+  /* Mine counter, left side (lives outside #ui so the buttons stay centered — same trick as #btnDebug). */
+  #status {
+    position: absolute; left: 14px;
+    bottom: calc(env(safe-area-inset-bottom) + 0px);
+    height: var(--bar-height);
+    display: flex; align-items: center; gap: 6px;
+    color: rgba(255,255,255,0.85);
+    font-size: 16px; font-variant-numeric: tabular-nums;
+    pointer-events: none;
+  }
+  #status svg { width: 16px; height: 16px; }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">tocá para descubrir · mantené apretado (o el botón 🚩) para bandera</div>
+  <div id="bar">
+    <div id="status">
+      <svg viewBox="0 0 24 24" fill="rgb(255,80,80)"><circle cx="12" cy="13" r="7"/><rect x="11" y="2" width="2" height="4"/></svg>
+      <span id="mineCount">40</span>
+    </div>
+    <div id="ui">
+      <button id="btnFlag"  aria-label="bandera"   title="Modo bandera (o mantené apretado)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V3"/><path d="M6 4h11l-3 3.5L17 11H6z"/></svg>
+      </button>
+      <button id="btnReset" aria-label="reiniciar" title="Reiniciar (R)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  MINESWEEPER — port web fiel de MineSweeperGPT.py, con el shell mobile de BallsWeb.
+  //  13×13, 40 minas, zona segura tras el primer click, clusters BFS (20%, 3–5).
+  //  Tap = descubrir · long-press / botón 🚩 / click derecho = bandera · R / botón = reset.
+  // ════════════════════════════════════════════════════════════════════
+  const TAU = Math.PI * 2;
+  const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));               // randint inclusivo
+
+  // === CONFIG (igual que el .py) ===
+  const GRID_WIDTH  = 13;
+  const GRID_HEIGHT = 13;
+  const MINES_COUNT = 40;
+
+  // === COLORES (idénticos al .py) ===
+  const WHITE       = 'rgb(255,255,255)';
+  const GRAY        = 'rgb(225,225,225)';
+  const DARK_GRAY   = 'rgb(80,80,80)';
+  const DARKER_GRAY = 'rgb(30,30,30)';
+  const BLACK       = 'rgb(0,0,0)';
+  const RED         = 'rgb(255,0,0)';
+  const GREEN       = 'rgb(0,180,0)';
+  const NUMBER_COLORS = {
+    1: 'rgb(0,100,255)', 2: 'rgb(0,200,0)',   3: 'rgb(255,0,0)',   4: 'rgb(0,0,128)',
+    5: 'rgb(182,128,0)', 6: 'rgb(0,128,128)', 7: 'rgb(0,0,0)',     8: 'rgb(128,128,128)',
+  };
+
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  // === GEOMETRÍA RESPONSIVE ===
+  let W = 0, H = 0, dpr = 1;
+  let tile = 40, boardW = 0, boardH = 0, offX = 0, offY = 0;
+  const barEl = document.getElementById('bar');
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const barH = barEl.offsetHeight;                                             // includes safe-area-inset-bottom on iOS
+    W = window.innerWidth;
+    H = window.innerHeight - barH;                                              // board lives only above the bar
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // tablero cuadrado, centrado, lo más grande que entre
+    tile = Math.floor(Math.min(W / GRID_WIDTH, H / GRID_HEIGHT));
+    boardW = tile * GRID_WIDTH;
+    boardH = tile * GRID_HEIGHT;
+    offX = Math.floor((W - boardW) / 2);
+    offY = Math.floor((H - boardH) / 2);
+    render();
+  }
+  window.addEventListener('resize', resize);
+
+  // === ESTADO ===
+  let grid = [];                 // grid[y][x]
+  let gridReady = false;         // minas colocadas (tras 1er click)
+  let gameOver = false;
+  let victory = false;
+  let revealedCount = 0;
+  let flagMode = false;          // botón 🚩: tap marca en vez de descubrir
+
+  function makeTile(x, y) {
+    return { gx: x, gy: y, isMine: false, isRevealed: false, isFlagged: false, adjacent: 0 };
+  }
+  function reset() {
+    gridReady = false; gameOver = false; victory = false; revealedCount = 0;
+    grid = [];
+    for (let y = 0; y < GRID_HEIGHT; y++) {
+      const row = [];
+      for (let x = 0; x < GRID_WIDTH; x++) row.push(makeTile(x, y));
+      grid.push(row);
+    }
+    updateStatus();
+    render();
+  }
+
+  // vecinos (incluye la propia celda, igual que get_neighbors del .py con dx=dy=0)
+  function neighbors(t) {
+    const out = [];
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dy = -1; dy <= 1; dy++) {
+        const nx = t.gx + dx, ny = t.gy + dy;
+        if (nx >= 0 && nx < GRID_WIDTH && ny >= 0 && ny < GRID_HEIGHT) out.push(grid[ny][nx]);
+      }
+    return out;
+  }
+
+  function generateMineCluster(start, candidateSet, maxSize) {
+    const cluster = new Set([start]);
+    const frontier = [start];
+    while (frontier.length && cluster.size < maxSize) {
+      const current = frontier.pop();
+      for (const nb of neighbors(current)) {
+        if (candidateSet.has(nb) && !cluster.has(nb)) {
+          cluster.add(nb); frontier.push(nb);
+          if (cluster.size >= maxSize) break;
+        }
+      }
+    }
+    return cluster;
+  }
+
+  function placeMines(firstTile) {
+    const safe = new Set(neighbors(firstTile));                                  // incluye firstTile (vecino propio)
+    safe.add(firstTile);
+    const candidates = [];
+    for (const row of grid) for (const t of row) if (!safe.has(t)) candidates.push(t);
+
+    const visited = new Set();
+    let placed = 0, guard = 0;
+    while (placed < MINES_COUNT && guard++ < 100000) {
+      const start = candidates[ri(0, candidates.length - 1)];
+      if (visited.has(start)) continue;
+      if (Math.random() < 0.2) {                                                 // 20%: cluster contiguo de 3–5
+        const candMinusVisited = new Set(candidates.filter(t => !visited.has(t)));
+        const cluster = generateMineCluster(start, candMinusVisited, ri(3, 5));
+        for (const t of cluster) { t.isMine = true; visited.add(t); }
+        placed += cluster.size;
+      } else {                                                                   // mina suelta
+        start.isMine = true; visited.add(start); placed++;
+      }
+    }
+    calculateAdjacency();
+    gridReady = true;
+  }
+
+  function calculateAdjacency() {
+    for (const row of grid)
+      for (const t of row) {
+        let count = 0;
+        for (const nb of neighbors(t)) if (nb.isMine) count++;
+        t.adjacent = count;
+      }
+  }
+
+  function reveal(t) {
+    if (t.isFlagged || t.isRevealed) return;
+    t.isRevealed = true; revealedCount++;
+    if (t.adjacent === 0 && !t.isMine)
+      for (const nb of neighbors(t)) if (!nb.isRevealed) reveal(nb);
+  }
+  function revealAll() {
+    for (const row of grid) for (const t of row) t.isRevealed = true;
+  }
+  function mineTotal() {
+    let n = 0; for (const row of grid) for (const t of row) if (t.isMine) n++; return n;
+  }
+  function flagCount() {
+    let n = 0; for (const row of grid) for (const t of row) if (t.isFlagged && !t.isRevealed) n++; return n;
+  }
+  function checkVictory() {
+    // contra la cantidad REAL de minas — los clusters pueden pasar de MINES_COUNT y el chequeo fijo del
+    // .py dejaba tableros imposibles de ganar.
+    if (revealedCount === GRID_WIDTH * GRID_HEIGHT - mineTotal()) {
+      victory = true;
+      revealAll();                                                              // muestra todo al ganar
+    }
+  }
+
+  function processClick(gx, gy, rightClick) {
+    if (gameOver || victory) return;
+    if (gx < 0 || gx >= GRID_WIDTH || gy < 0 || gy >= GRID_HEIGHT) return;
+    const t = grid[gy][gx];
+    if (!gridReady) placeMines(t);                                              // 1er click (izq O der) coloca minas
+    if (rightClick) {
+      if (!t.isRevealed) t.isFlagged = !t.isFlagged;
+    } else {
+      if (!t.isRevealed && !t.isFlagged) {
+        reveal(t);
+        if (t.isMine) { gameOver = true; revealAll(); }
+      }
+    }
+    checkVictory();
+    updateStatus();
+    render();
+  }
+
+  // === RENDER ===
+  function render() {
+    ctx.fillStyle = WHITE;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.lineWidth = Math.max(1, Math.round(tile * 0.05));                       // ~2px a 40px (= el width=2 del .py)
+    ctx.font = '700 ' + Math.round(tile * 0.62) + "px 'Segoe UI', system-ui, sans-serif";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const r = tile * 0.25;                                                      // = TILE_SIZE//4
+
+    for (const row of grid) for (const t of row) {
+      const px = offX + t.gx * tile, py = offY + t.gy * tile;
+      const cx = px + tile / 2, cy = py + tile / 2;
+      ctx.fillStyle = t.isRevealed ? DARK_GRAY : GRAY;
+      ctx.fillRect(px, py, tile, tile);
+      ctx.strokeStyle = BLACK;
+      ctx.strokeRect(px, py, tile, tile);
+
+      if (t.isRevealed) {
+        if (t.isMine) {
+          ctx.fillStyle = gameOver ? BLACK : DARKER_GRAY;
+          ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+        } else if (t.adjacent > 0) {
+          ctx.fillStyle = NUMBER_COLORS[t.adjacent];
+          ctx.fillText(String(t.adjacent), cx, cy + tile * 0.03);
+        }
+      } else if (t.isFlagged) {
+        ctx.fillStyle = RED;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+      }
+      // mina sin revelar al terminar el juego → círculo negro (igual que el .py)
+      if (gameOver && t.isMine && !t.isRevealed) {
+        ctx.fillStyle = BLACK;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+      }
+    }
+
+    if (gameOver) showMessage('Game Over!', RED);
+    else if (victory) showMessage('You Win!', GREEN);
+  }
+
+  function showMessage(text, color) {
+    ctx.font = '700 ' + Math.round(tile * 0.9) + "px 'Segoe UI', system-ui, sans-serif";
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const cx = W / 2, cy = H / 2;
+    const w = ctx.measureText(text).width, h = tile * 0.9;
+    ctx.fillStyle = color;
+    ctx.fillRect(cx - w / 2 - 14, cy - h / 2 - 10, w + 28, h + 20);
+    ctx.fillStyle = WHITE;
+    ctx.fillText(text, cx, cy + tile * 0.04);
+  }
+
+  // === STATUS ===
+  const mineCountEl = document.getElementById('mineCount');
+  function updateStatus() {
+    mineCountEl.textContent = String(MINES_COUNT - flagCount());
+  }
+
+  // === INPUT ===
+  // tap = descubrir · long-press = bandera · botón 🚩 fuerza modo bandera · click derecho = bandera.
+  const LONG_MS = 420;
+  const MOVE_TOL = () => tile * 0.6;
+  let pressId = null, pressTile = null, pressX = 0, pressY = 0, longFired = false, pressTimer = null;
+
+  function tileAt(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    const gx = Math.floor((clientX - rect.left - offX) / tile);
+    const gy = Math.floor((clientY - rect.top  - offY) / tile);
+    return { gx, gy };
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    if (e.button === 2) {                                                       // click derecho (desktop) → bandera
+      e.preventDefault();
+      const { gx, gy } = tileAt(e.clientX, e.clientY);
+      processClick(gx, gy, true);
+      return;
+    }
+    if (pressId !== null) return;                                               // un solo dedo a la vez
+    pressId = e.pointerId; longFired = false;
+    pressX = e.clientX; pressY = e.clientY;
+    pressTile = tileAt(e.clientX, e.clientY);
+    canvas.setPointerCapture(e.pointerId);
+    pressTimer = setTimeout(() => {                                             // long-press → bandera
+      longFired = true;
+      processClick(pressTile.gx, pressTile.gy, true);
+    }, LONG_MS);
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (e.pointerId !== pressId) return;
+    if (Math.abs(e.clientX - pressX) > MOVE_TOL() || Math.abs(e.clientY - pressY) > MOVE_TOL()) {
+      clearTimeout(pressTimer); pressTimer = null; pressId = null;              // se movió demasiado: cancela
+    }
+  });
+  function endPress(e) {
+    if (e.pointerId !== pressId) return;
+    clearTimeout(pressTimer); pressTimer = null;
+    const id = pressId; pressId = null;
+    if (longFired) return;                                                      // ya disparó bandera
+    const { gx, gy } = tileAt(e.clientX, e.clientY);
+    if (gx === pressTile.gx && gy === pressTile.gy)
+      processClick(gx, gy, flagMode);                                           // tap normal (o bandera si flagMode)
+  }
+  canvas.addEventListener('pointerup', endPress);
+  canvas.addEventListener('pointercancel', e => { if (e.pointerId === pressId) { clearTimeout(pressTimer); pressId = null; } });
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+  // === BOTONES ===
+  const btnFlag = document.getElementById('btnFlag');
+  btnFlag.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    flagMode = !flagMode;
+    btnFlag.classList.toggle('on', flagMode);
+  });
+  document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); reset(); });
+  window.addEventListener('keydown', e => {
+    if (e.key === 'r' || e.key === 'R') reset();
+  });
+
+  // === INIT ===
+  reset();
+  resize();
+
+  const hint = document.getElementById('hint');
+  setTimeout(() => hint.style.opacity = '0', 6000);
+  canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
+  </script>
+</body>
+</html>

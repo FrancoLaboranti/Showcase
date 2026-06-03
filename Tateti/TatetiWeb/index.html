@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Tateti</title>
+<style>
+  :root { --bar-height: 66px; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0e1016;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  /* Canvas occupies only the space ABOVE the bar — same layout as BallsWeb. Dimensions set from JS each resize. */
+  #c {
+    display: block; position: absolute;
+    top: 0; left: 0;
+  }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
+    text-align: center; color: rgba(255,255,255,0.5);
+    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
+    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+  }
+
+  /* Bottom bar (mismo estilo que BallsWeb) */
+  #bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    padding: 0 16px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.85);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    z-index: 3;
+  }
+  #ui {
+    display: flex; gap: 8px;
+  }
+  #ui button {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    transition: background 0.1s, transform 0.08s;
+    padding: 0;
+  }
+  #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
+  #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
+  #ui #btnReset svg { width: 21px; height: 21px; }
+  #ui #btnScores svg { width: 20px; height: 20px; }
+  /* Mode button paints its current mark in the X (red) / O (blue) tint */
+  #ui #btnMode.x  { background: rgba(240,90,95,0.22);  border-color: rgba(240,90,95,0.55);  color: #f0707a; }
+  #ui #btnMode.o  { background: rgba(90,170,240,0.22); border-color: rgba(90,170,240,0.55); color: #5aaaf0; }
+  #ui #btnMode.pvp{ background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.3); }
+  #ui #btnMode svg { width: 24px; height: 24px; }
+
+  /* Info button, esquina abajo derecha — mismo patrón que BallsWeb */
+  #btnInfo {
+    position: absolute;
+    right: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.6);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+  }
+  #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnInfo:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">tocá una celda para jugar · el botón del medio cambia el modo</div>
+  <div id="bar">
+    <div id="ui">
+      <button id="btnMode"  aria-label="modo"     title="Cambiar modo"></button>
+      <button id="btnReset" aria-label="otra"     title="Otra partida">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+      </button>
+      <button id="btnScores" aria-label="marcador" title="Resetear marcador">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
+      </button>
+    </div>
+    <button id="btnInfo" aria-label="info" title="Info">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+    </button>
+  </div>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  TATETI — port web del Pygame Tateti.py, mismo formato que BallsWeb.
+  // ════════════════════════════════════════════════════════════════════
+  const TAU = Math.PI * 2;
+
+  // ── COLORES + CONSTANTES ──
+  const COL_BG       = '#0e1016';
+  const COL_BOARD    = '#181a22';
+  const COL_GRID     = '#464b5a';
+  const COL_X        = [240, 90, 95];    // rojo
+  const COL_O        = [90, 170, 240];   // azul
+  const COL_TEXT     = '#ebebf5';
+  const COL_DIM      = '#9094a4';
+  const COL_FAINT    = '#6e7280';
+  const COL_DRAW     = '#c8cddc';
+
+  const PLACE_ANIM_T = 0.25;
+  const WIN_ANIM_T   = 0.5;
+  const CPU_THINK_T  = 0.35;
+
+  // ── STATE ──
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const barEl = document.getElementById('bar');
+  let W = 0, H = 0, dpr = 1;
+
+  // 0 vacío, 1 X, 2 O
+  let cells = [0,0,0,0,0,0,0,0,0];
+  let turn = 1;
+  let winner = 0;            // 0 = sigue / sin terminar, 1 = X, 2 = O, -1 = empate
+  let winLine = null;        // [a, b, c]
+  let winAnim = 0;
+  let placeAnim = [0,0,0,0,0,0,0,0,0];
+  let cpuThinkCD = 0;
+  let hoverIdx = -1;
+  let startingTurn = 1;
+
+  // mode: 'pvp' | 'cpuO' (you X, cpu O) | 'cpuX' (you O, cpu X)
+  let mode = 'pvp';
+  const MODE_CYCLE = ['pvp', 'cpuO', 'cpuX'];
+
+  let scoreX = 0, scoreO = 0, scoreD = 0;
+  let showInfo = false;
+
+  // ── LAYOUT ──
+  function boardRect() {
+    const topReserved = H * 0.14;
+    const bottomReserved = H * 0.18;
+    const usableH = H - topReserved - bottomReserved;
+    const size = Math.min(W * 0.85, usableH);
+    const cx = W / 2;
+    const cy = topReserved + usableH / 2;
+    return { bx: cx - size/2, by: cy - size/2, size };
+  }
+
+  function cellAt(mx, my) {
+    const { bx, by, size } = boardRect();
+    if (mx < bx || my < by || mx > bx + size || my > by + size) return -1;
+    const col = Math.max(0, Math.min(2, Math.floor((mx - bx) / (size/3))));
+    const row = Math.max(0, Math.min(2, Math.floor((my - by) / (size/3))));
+    return row*3 + col;
+  }
+
+  function cellCenter(idx) {
+    const { bx, by, size } = boardRect();
+    const cs = size/3;
+    return { x: bx + cs*((idx % 3) + 0.5), y: by + cs*(Math.floor(idx/3) + 0.5) };
+  }
+
+  // ── LÓGICA DEL TATETI ──
+  const WIN_LINES = [
+    [0,1,2],[3,4,5],[6,7,8],
+    [0,3,6],[1,4,7],[2,5,8],
+    [0,4,8],[2,4,6],
+  ];
+
+  function checkWinner(b) {
+    for (const line of WIN_LINES) {
+      const [a, x, c] = line;
+      if (b[a] !== 0 && b[a] === b[x] && b[x] === b[c]) return { w: b[a], line };
+    }
+    if (b.every(v => v !== 0)) return { w: -1, line: null };
+    return null;
+  }
+
+  function play(idx, mark) {
+    if (cells[idx] !== 0 || winner !== 0) return false;
+    cells[idx] = mark;
+    placeAnim[idx] = PLACE_ANIM_T;
+    const r = checkWinner(cells);
+    if (r) {
+      winner = r.w;
+      winLine = r.line;
+      winAnim = WIN_ANIM_T;
+      if (r.w === 1) scoreX++;
+      else if (r.w === 2) scoreO++;
+      else scoreD++;
+    } else {
+      turn = (turn === 1 ? 2 : 1);
+    }
+    return true;
+  }
+
+  function cpuMark() {
+    if (mode === 'cpuO') return 2;
+    if (mode === 'cpuX') return 1;
+    return 0;
+  }
+  function youMark() {
+    if (mode === 'cpuO') return 1;
+    if (mode === 'cpuX') return 2;
+    return 0;
+  }
+
+  // Minimax negamax con alfa-beta. 3x3 es trivial (~ms).
+  function bestMove(b, mark) {
+    let best = -10, picks = [];
+    const other = mark === 1 ? 2 : 1;
+    for (let i = 0; i < 9; i++) {
+      if (b[i] === 0) {
+        b[i] = mark;
+        const s = -negamax(b, other, -10, 10, mark);
+        b[i] = 0;
+        if (s > best) { best = s; picks = [i]; }
+        else if (s === best) picks.push(i);
+      }
+    }
+    return picks.length ? picks[Math.floor(Math.random()*picks.length)] : -1;
+  }
+
+  function negamax(b, mark, alpha, beta, root) {
+    const r = checkWinner(b);
+    if (r) {
+      if (r.w === -1) return 0;
+      return r.w === root ? 1 : -1;
+    }
+    const other = mark === 1 ? 2 : 1;
+    let best = -10;
+    for (let i = 0; i < 9; i++) {
+      if (b[i] === 0) {
+        b[i] = mark;
+        const s = -negamax(b, other, -beta, -alpha, root);
+        b[i] = 0;
+        if (s > best) best = s;
+        if (best > alpha) alpha = best;
+        if (alpha >= beta) break;
+      }
+    }
+    return best;
+  }
+
+  // ── RESET / MODE ──
+  function newRound() {
+    cells = [0,0,0,0,0,0,0,0,0];
+    placeAnim = [0,0,0,0,0,0,0,0,0];
+    winner = 0; winLine = null; winAnim = 0; cpuThinkCD = 0;
+    turn = startingTurn;
+    startingTurn = startingTurn === 1 ? 2 : 1;     // alterna en próxima ronda
+  }
+  function fullReset() {
+    scoreX = 0; scoreO = 0; scoreD = 0;
+    startingTurn = 1;
+    newRound();
+    startingTurn = 2;                              // newRound ya flipeó
+  }
+  function setMode(m) {
+    mode = m;
+    fullReset();
+    paintModeBtn();
+  }
+
+  // ── INPUT ──
+  function onCanvasTap(e) {
+    const r = canvas.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    if (winner !== 0) { newRound(); return; }
+    const cpu = cpuMark();
+    if (cpu && turn === cpu) return;               // turno de la CPU, ignorar input humano
+    const idx = cellAt(mx, my);
+    if (idx >= 0 && cells[idx] === 0) play(idx, turn);
+  }
+  canvas.addEventListener('pointerdown', e => {
+    canvas.setPointerCapture(e.pointerId);
+    onCanvasTap(e);
+    hint.style.opacity = '0';
+  });
+  canvas.addEventListener('pointermove', e => {
+    if (winner !== 0) { hoverIdx = -1; return; }
+    const cpu = cpuMark();
+    if (cpu && turn === cpu) { hoverIdx = -1; return; }
+    const r = canvas.getBoundingClientRect();
+    hoverIdx = cellAt(e.clientX - r.left, e.clientY - r.top);
+  });
+  canvas.addEventListener('pointerleave', () => { hoverIdx = -1; });
+
+  // helper de BallsWeb: tap simple en pointerdown así responde aunque otro dedo esté en el canvas
+  function tappable(el, fn) {
+    el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
+  }
+
+  // ── BOTONES ──
+  function modeIconSVG(m) {
+    // pvp: X y O lado a lado · cpuO: O grande (vos jugás X, mostramos lo que SOS) · cpuX: X grande
+    // Mostrar la marca del JUGADOR es más claro que mostrar la de la CPU.
+    if (m === 'pvp') {
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 5l5 5M8 5l-5 5"/><circle cx="17" cy="7.5" r="3"/></svg>';
+    }
+    if (m === 'cpuO') {
+      // jugás X → ícono X grande
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>';
+    }
+    // cpuX: jugás O → ícono O grande
+    return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="7.5"/></svg>';
+  }
+  function paintModeBtn() {
+    const btn = document.getElementById('btnMode');
+    btn.innerHTML = modeIconSVG(mode);
+    btn.classList.remove('pvp', 'x', 'o');
+    if (mode === 'pvp') btn.classList.add('pvp');
+    else if (mode === 'cpuO') btn.classList.add('x');  // jugás X
+    else btn.classList.add('o');                       // cpuX: jugás O
+  }
+
+  const btnMode   = document.getElementById('btnMode');
+  const btnReset  = document.getElementById('btnReset');
+  const btnScores = document.getElementById('btnScores');
+  const btnInfo   = document.getElementById('btnInfo');
+  paintModeBtn();
+
+  tappable(btnMode, () => {
+    const i = (MODE_CYCLE.indexOf(mode) + 1) % MODE_CYCLE.length;
+    setMode(MODE_CYCLE[i]);
+  });
+  tappable(btnReset, () => { newRound(); });
+  tappable(btnScores, () => { fullReset(); });
+  tappable(btnInfo, () => { showInfo = !showInfo; btnInfo.classList.toggle('on', showInfo); });
+
+  // ── RESIZE ──
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const barH = barEl.offsetHeight;
+    W = window.innerWidth;
+    H = window.innerHeight - barH;
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+
+  // ── DRAW ──
+  function rgbStr(c, a) { return `rgba(${c[0]},${c[1]},${c[2]},${a==null?1:a})`; }
+  function colorForMark(m) {
+    if (m === 1) return COL_X;
+    if (m === 2) return COL_O;
+    return [200, 205, 220];
+  }
+  // ease-out-back (un poquito de overshoot al aparecer la marca)
+  function easeOutBack(t) {
+    const c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+  }
+  function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+  function drawRoundedRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+    ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+    ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+    ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+    ctx.closePath();
+  }
+
+  function drawBoard() {
+    const { bx, by, size } = boardRect();
+    const cs = size/3;
+    const lineW = Math.max(2, size * 0.008);
+    const r = size * 0.022;
+
+    // fondo
+    ctx.fillStyle = COL_BOARD;
+    drawRoundedRect(bx, by, size, size, r);
+    ctx.fill();
+
+    // hover preview
+    if (hoverIdx >= 0 && cells[hoverIdx] === 0 && winner === 0) {
+      const cpu = cpuMark();
+      if (!cpu || turn !== cpu) {
+        const row = Math.floor(hoverIdx/3), col = hoverIdx % 3;
+        const hx = bx + col*cs, hy = by + row*cs;
+        const col0 = colorForMark(turn);
+        ctx.fillStyle = `rgba(${col0[0]},${col0[1]},${col0[2]},0.10)`;
+        drawRoundedRect(hx + lineW, hy + lineW, cs - lineW*2, cs - lineW*2, size*0.015);
+        ctx.fill();
+      }
+    }
+
+    // grilla
+    ctx.strokeStyle = COL_GRID;
+    ctx.lineWidth = lineW;
+    ctx.lineCap = 'round';
+    for (let i = 1; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(bx + cs*i, by + size*0.04);
+      ctx.lineTo(bx + cs*i, by + size - size*0.04);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(bx + size*0.04, by + cs*i);
+      ctx.lineTo(bx + size - size*0.04, by + cs*i);
+      ctx.stroke();
+    }
+
+    // marcas
+    for (let i = 0; i < 9; i++) {
+      if (cells[i] === 0) continue;
+      const { x, y } = cellCenter(i);
+      const t = placeAnim[i] > 0 ? 1 - placeAnim[i] / PLACE_ANIM_T : 1;
+      const scale = easeOutBack(Math.max(0, Math.min(1, t)));
+      drawMark(cells[i], x, y, cs*0.32*scale);
+    }
+
+    // línea ganadora animada
+    if (winLine) {
+      const a = cellCenter(winLine[0]);
+      const c = cellCenter(winLine[2]);
+      const t = winAnim > 0 ? 1 - winAnim / WIN_ANIM_T : 1;
+      const e = easeOutCubic(Math.max(0, Math.min(1, t)));
+      const ex = a.x + (c.x - a.x) * e;
+      const ey = a.y + (c.y - a.y) * e;
+      const col = colorForMark(winner);
+      ctx.strokeStyle = rgbStr(col, 1);
+      ctx.lineWidth = size * 0.018;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(ex, ey); ctx.stroke();
+      // halo suave
+      ctx.strokeStyle = rgbStr(col, 0.25);
+      ctx.lineWidth = size * 0.04;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(ex, ey); ctx.stroke();
+      // re-trazado del core encima del halo
+      ctx.strokeStyle = rgbStr(col, 1);
+      ctx.lineWidth = size * 0.018;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(ex, ey); ctx.stroke();
+    }
+  }
+
+  function drawMark(mark, cx, cy, r) {
+    const col = colorForMark(mark);
+    const thick = Math.max(3, r * 0.32);
+    ctx.lineCap = 'round';
+    ctx.lineWidth = thick;
+    ctx.strokeStyle = rgbStr(col);
+    if (mark === 1) {
+      ctx.beginPath();
+      ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy + r);
+      ctx.moveTo(cx + r, cy - r); ctx.lineTo(cx - r, cy + r);
+      ctx.stroke();
+    } else {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, TAU);
+      ctx.stroke();
+    }
+  }
+
+  function drawHeader() {
+    const { bx, by, size } = boardRect();
+    const topY = by - H * 0.07;
+    ctx.textBaseline = 'middle';
+    ctx.textAlign = 'center';
+
+    if (winner === 0) {
+      const cpu = cpuMark();
+      let label, col;
+      if (cpu) {
+        col = colorForMark(turn);
+        label = (turn === cpu) ? 'PENSANDO…' : 'TU TURNO';
+      } else {
+        col = colorForMark(turn);
+        label = (turn === 1 ? 'TURNO DE X' : 'TURNO DE O');
+      }
+      ctx.fillStyle = rgbStr(col);
+      ctx.font = `600 ${Math.round(Math.min(28, H*0.034))}px 'Segoe UI', system-ui, sans-serif`;
+      ctx.fillText(label, W/2, topY);
+    } else {
+      const cpu = cpuMark();
+      let label, col;
+      if (winner === -1) { label = 'EMPATE'; col = [200,205,220]; }
+      else if (cpu) {
+        if (winner === cpu) { label = 'GANA LA CPU'; col = colorForMark(winner); }
+        else { label = '¡GANASTE!'; col = colorForMark(winner); }
+      } else {
+        label = winner === 1 ? 'GANA X' : 'GANA O';
+        col = colorForMark(winner);
+      }
+      ctx.fillStyle = rgbStr(col);
+      ctx.font = `700 ${Math.round(Math.min(34, H*0.045))}px 'Segoe UI', system-ui, sans-serif`;
+      ctx.fillText(label, W/2, topY);
+    }
+  }
+
+  function drawScoreboard() {
+    const { by, size } = boardRect();
+    const y = by + size + H * 0.06;
+    const colX = COL_X, colO = COL_O;
+    const cpu = cpuMark();
+    const slotW = W / 3;
+
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    let leftLabel, leftScore, leftCol;
+    let rightLabel, rightScore, rightCol;
+    if (cpu) {
+      const yourScore = (cpu === 1) ? scoreO : scoreX;
+      const cpuScore  = (cpu === 1) ? scoreX : scoreO;
+      const yourCol   = (cpu === 1) ? colO : colX;
+      const cpuColor  = (cpu === 1) ? colX : colO;
+      leftLabel = 'VOS';      leftScore = yourScore; leftCol = yourCol;
+      rightLabel = 'CPU';     rightScore = cpuScore; rightCol = cpuColor;
+    } else {
+      leftLabel = 'X';  leftScore = scoreX;  leftCol = colX;
+      rightLabel = 'O'; rightScore = scoreO; rightCol = colO;
+    }
+
+    const labelSize = Math.round(Math.min(14, H*0.018));
+    const numSize   = Math.round(Math.min(30, H*0.038));
+
+    // izquierda
+    ctx.fillStyle = rgbStr(leftCol, 0.85);
+    ctx.font = `600 ${labelSize}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillText(leftLabel, slotW*0.5, y - numSize*0.6);
+    ctx.fillStyle = rgbStr(leftCol);
+    ctx.font = `700 ${numSize}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillText(String(leftScore), slotW*0.5, y + numSize*0.2);
+
+    // medio (empates)
+    ctx.fillStyle = COL_DIM;
+    ctx.font = `600 ${labelSize}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillText('EMPATES', slotW*1.5, y - numSize*0.6);
+    ctx.fillStyle = COL_DRAW;
+    ctx.font = `700 ${numSize}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillText(String(scoreD), slotW*1.5, y + numSize*0.2);
+
+    // derecha
+    ctx.fillStyle = rgbStr(rightCol, 0.85);
+    ctx.font = `600 ${labelSize}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillText(rightLabel, slotW*2.5, y - numSize*0.6);
+    ctx.fillStyle = rgbStr(rightCol);
+    ctx.font = `700 ${numSize}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillText(String(rightScore), slotW*2.5, y + numSize*0.2);
+  }
+
+  function drawGameOverPrompt() {
+    if (winner === 0) return;
+    const { by, size } = boardRect();
+    const y = by + size + H * 0.135;
+    const blink = (Math.sin(performance.now()/1000 * 3) + 1) * 0.5;
+    const a = 0.55 + 0.35 * blink;
+    ctx.fillStyle = `rgba(220,225,240,${a})`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = `500 ${Math.round(Math.min(14, H*0.018))}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillText('TOCÁ PARA OTRA PARTIDA', W/2, y);
+  }
+
+  function drawInfoOverlay() {
+    if (!showInfo) return;
+    const lines = [
+      'TATETI',
+      '',
+      'Modo (botón izquierdo de la barra):',
+      '· 2 jugadores  · vs CPU (vos X)  · vs CPU (vos O)',
+      '',
+      'CPU usa minimax — juega perfecto.',
+      'El que arranca alterna cada ronda.',
+      '',
+      'Botón ↻  : otra partida',
+      'Botón ⫶  : resetear marcador',
+    ];
+    const fs = Math.round(Math.min(14, H*0.020));
+    const lh = fs * 1.5;
+    ctx.font = `500 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+    let maxW = 0;
+    for (const l of lines) maxW = Math.max(maxW, ctx.measureText(l).width);
+    const padX = 16, padY = 14;
+    const boxW = maxW + padX*2;
+    const boxH = lh*lines.length + padY*2;
+    const bx = (W - boxW) / 2;
+    const by = (H - boxH) / 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.78)';
+    drawRoundedRect(bx, by, boxW, boxH, 12);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth = 1;
+    drawRoundedRect(bx, by, boxW, boxH, 12);
+    ctx.stroke();
+    ctx.fillStyle = '#ebebf5';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    for (let i = 0; i < lines.length; i++) {
+      const l = lines[i];
+      if (i === 0) ctx.font = `700 ${Math.round(fs*1.4)}px 'Segoe UI', system-ui, sans-serif`;
+      else ctx.font = `500 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+      ctx.fillText(l, bx + padX, by + padY + i*lh);
+    }
+  }
+
+  // ── LOOP ──
+  let lastT = performance.now();
+  function loop(now) {
+    if (typeof now !== 'number') now = performance.now();
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+
+    // animaciones
+    for (let i = 0; i < 9; i++) if (placeAnim[i] > 0) placeAnim[i] = Math.max(0, placeAnim[i] - dt);
+    if (winAnim > 0) winAnim = Math.max(0, winAnim - dt);
+
+    // CPU
+    const cpu = cpuMark();
+    if (winner === 0 && cpu && turn === cpu) {
+      if (cpuThinkCD <= 0) cpuThinkCD = CPU_THINK_T;
+      cpuThinkCD = Math.max(0, cpuThinkCD - dt);
+      if (cpuThinkCD === 0) {
+        const m = bestMove(cells.slice(), cpu);
+        if (m >= 0) play(m, cpu);
+      }
+    } else {
+      cpuThinkCD = 0;
+    }
+
+    // render
+    ctx.fillStyle = COL_BG;
+    ctx.fillRect(0, 0, W, H);
+    drawHeader();
+    drawBoard();
+    drawScoreboard();
+    drawGameOverPrompt();
+    drawInfoOverlay();
+    requestAnimationFrame(loop);
+  }
+
+  // ── INIT ──
+  resize();
+  loop();
+
+  const hint = document.getElementById('hint');
+  setTimeout(() => hint.style.opacity = '0', 5000);
+  </script>
+</body>
+</html>

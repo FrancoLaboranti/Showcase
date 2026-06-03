@@ -1,0 +1,1883 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Chess</title>
+<style>
+  :root { --bar-height: 58px; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    color: #eee;
+    background:
+      radial-gradient(ellipse at 30% 0%, #2a2532 0%, transparent 60%),
+      radial-gradient(ellipse at 70% 100%, #1f2230 0%, transparent 60%),
+      linear-gradient(180deg, #131318 0%, #0d0d12 100%);
+  }
+  #c {
+    display: block; position: absolute;
+    top: 0; left: 0;
+  }
+
+  /* Menú inicial — overlay HTML para que sea fácil de tappear en mobile */
+  #menu {
+    position: absolute; inset: 0; z-index: 5;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px;
+    background:
+      radial-gradient(ellipse at 50% 30%, rgba(60,55,80,0.5) 0%, transparent 55%),
+      linear-gradient(180deg, #18161e 0%, #0e0d12 100%);
+    animation: fadeIn 0.4s ease;
+  }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  #menu h1 {
+    font-size: clamp(40px, 8vw, 64px);
+    font-weight: 200;
+    letter-spacing: 0.22em;
+    margin-bottom: 4px;
+    background: linear-gradient(180deg, #fff 0%, #b0b0c4 100%);
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    text-shadow: 0 2px 18px rgba(120,140,200,0.18);
+  }
+  #menu .sub {
+    font-size: 13px;
+    color: rgba(220,220,235,0.42);
+    margin-bottom: 40px;
+    letter-spacing: 0.18em; text-transform: uppercase;
+    font-weight: 500;
+  }
+  #menu button {
+    width: 100%; max-width: 360px;
+    padding: 16px 24px; margin: 5px 0;
+    background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.015) 100%);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    color: #f4f4f8;
+    border: 1px solid rgba(255,255,255,0.10); border-radius: 12px;
+    font-family: inherit; font-size: 15px; font-weight: 500; letter-spacing: 0.02em;
+    cursor: pointer; touch-action: manipulation;
+    transition: all 0.18s ease;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 4px 14px rgba(0,0,0,0.18);
+  }
+  #menu button:hover {
+    background: linear-gradient(180deg, rgba(140,180,140,0.20) 0%, rgba(90,130,90,0.10) 100%);
+    border-color: rgba(180,220,180,0.32);
+    transform: translateY(-1px);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 6px 22px rgba(0,0,0,0.32);
+  }
+  #menu button:active { transform: translateY(0) scale(0.985); }
+  #menu .engine-line {
+    margin-top: 26px;
+    font-size: 11px; letter-spacing: 0.10em;
+    color: rgba(150,180,150,0.55);
+    font-weight: 500;
+  }
+
+  /* Barra de controles inferior — glassmorphism */
+  #bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    padding: 0 12px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(10,10,16,0.72);
+    backdrop-filter: blur(18px) saturate(140%);
+    -webkit-backdrop-filter: blur(18px) saturate(140%);
+    border-top: 1px solid rgba(255,255,255,0.06);
+    box-shadow: 0 -1px 0 rgba(255,255,255,0.03) inset, 0 -8px 24px rgba(0,0,0,0.2);
+    z-index: 3;
+    gap: 8px;
+  }
+  #bar button {
+    height: 42px; min-width: 46px; padding: 0 14px;
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.10);
+    background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+    color: #f0f0f4; font-family: inherit; font-size: 14px; font-weight: 500;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: manipulation;
+    transition: all 0.14s ease;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
+  }
+  #bar button:hover {
+    background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 100%);
+    border-color: rgba(255,255,255,0.20);
+  }
+  #bar button:active { background: rgba(255,255,255,0.22); transform: scale(0.94); }
+  #bar button.icon { padding: 0 12px; }
+  #bar button svg { display: block; width: 18px; height: 18px; pointer-events: none; }
+  #bar .sep { width: 1px; height: 26px; background: rgba(255,255,255,0.10); margin: 0 4px; }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
+    text-align: center; color: rgba(255,255,255,0.45);
+    font-size: 12px; letter-spacing: 0.08em;
+    pointer-events: none;
+    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+  }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="menu">
+    <h1>AJEDREZ</h1>
+    <div class="sub">Elegí cómo jugar</div>
+    <button data-mode="pvp">2 Jugadores</button>
+    <button data-mode="w">Jugar con Blancas (vs IA)</button>
+    <button data-mode="b">Jugar con Negras (vs IA)</button>
+    <button data-mode="aiva">IA vs IA (espectador)</button>
+    <div class="engine-line" id="engineLine">Cargando Stockfish…</div>
+  </div>
+
+  <div id="bar" style="display:none">
+    <button id="btnFirst" class="icon" title="Posición inicial" aria-label="inicio">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 6l-6 6 6 6M19 6l-6 6 6 6"/></svg>
+    </button>
+    <button id="btnPrev" class="icon" title="Anterior" aria-label="anterior">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+    </button>
+    <button id="btnNext" class="icon" title="Siguiente" aria-label="siguiente">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+    </button>
+    <button id="btnLast" class="icon" title="Posición actual" aria-label="ultimo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 6l6 6-6 6M5 6l6 6-6 6"/></svg>
+    </button>
+    <div class="sep"></div>
+    <button id="btnReset" title="Reiniciar partida">Reiniciar</button>
+    <button id="btnMenu"  title="Volver al menú">Menú</button>
+  </div>
+
+  <div id="hint">Arrastrá o clic-clic para mover · Las flechas navegan el historial</div>
+
+  <!-- Engine + AI: vive en text/plain (no se ejecuta en el parse) y se carga DOS veces:
+       una vía (0,eval) en el main thread (mismas funciones que antes), y otra como Blob URL
+       en un Web Worker para que la IA piense sin congelar la UI. -->
+  <script id="ai-engine" type="text/plain">
+  const PIECE_VALUES = { P:100, N:320, B:330, R:500, Q:900, K:0 };
+
+  // ════════════════════════════════════════════════════════════════════
+  //  CHESS ENGINE
+  // ════════════════════════════════════════════════════════════════════
+
+  // grid es column-major: grid[c][r]. c=file (0=a,7=h), r=rank desde arriba (0=rank 8, 7=rank 1).
+  // Piece = { color:'w'|'b', kind:'K|Q|R|B|N|P', hasMoved:bool }
+
+  function newPiece(color, kind) { return { color, kind, hasMoved: false }; }
+  function pieceAt(grid, c, r)   { return (c>=0 && c<8 && r>=0 && r<8) ? grid[c][r] : null; }
+  function copyGrid(g)           { return g.map(col => col.slice()); }   // shallow — comparte refs
+
+  function initialGrid() {
+    const g = Array.from({length: 8}, () => Array(8).fill(null));
+    for (let c = 0; c < 8; c++) {
+      g[c][6] = newPiece('w', 'P');
+      g[c][1] = newPiece('b', 'P');
+    }
+    const back = ['R','N','B','Q','K','B','N','R'];
+    for (let c = 0; c < 8; c++) {
+      g[c][7] = newPiece('w', back[c]);
+      g[c][0] = newPiece('b', back[c]);
+    }
+    return g;
+  }
+
+  function genPseudoMoves(grid, c, r, ep) {
+    const p = grid[c][r];
+    if (!p) return [];
+    const moves = [];
+    if (p.kind === 'P') {
+      const dir = p.color === 'w' ? -1 : 1;
+      const startRow = p.color === 'w' ? 6 : 1;
+      const promoRow = p.color === 'w' ? 0 : 7;
+      if (pieceAt(grid, c, r+dir) === null) {
+        moves.push([c, r+dir, (r+dir === promoRow) ? {promotion:true} : {}]);
+        if (r === startRow && pieceAt(grid, c, r+2*dir) === null) {
+          moves.push([c, r+2*dir, {double_push: true}]);
+        }
+      }
+      for (const dc of [-1, 1]) {
+        const nc = c+dc, nr = r+dir;
+        const t = pieceAt(grid, nc, nr);
+        if (t && t.color !== p.color) {
+          moves.push([nc, nr, (nr === promoRow) ? {promotion:true} : {}]);
+        }
+        if (ep && ep[0] === nc && ep[1] === nr) {
+          moves.push([nc, nr, {en_passant: true}]);
+        }
+      }
+    } else if (p.kind === 'N') {
+      for (const [dc, dr] of [[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]]) {
+        const nc = c+dc, nr = r+dr;
+        if (nc>=0 && nc<8 && nr>=0 && nr<8) {
+          const t = grid[nc][nr];
+          if (!t || t.color !== p.color) moves.push([nc, nr, {}]);
+        }
+      }
+    } else if (p.kind === 'K') {
+      for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++) {
+        if (dc === 0 && dr === 0) continue;
+        const nc = c+dc, nr = r+dr;
+        if (nc>=0 && nc<8 && nr>=0 && nr<8) {
+          const t = grid[nc][nr];
+          if (!t || t.color !== p.color) moves.push([nc, nr, {}]);
+        }
+      }
+    } else {
+      const dirs = [];
+      if (p.kind === 'B' || p.kind === 'Q') dirs.push([1,1],[-1,1],[1,-1],[-1,-1]);
+      if (p.kind === 'R' || p.kind === 'Q') dirs.push([1,0],[-1,0],[0,1],[0,-1]);
+      for (const [dc, dr] of dirs) {
+        let nc = c+dc, nr = r+dr;
+        while (nc>=0 && nc<8 && nr>=0 && nr<8) {
+          const t = grid[nc][nr];
+          if (!t) moves.push([nc, nr, {}]);
+          else { if (t.color !== p.color) moves.push([nc, nr, {}]); break; }
+          nc += dc; nr += dr;
+        }
+      }
+    }
+    return moves;
+  }
+
+  function squareAttacked(grid, c, r, byColor) {
+    const pawnFromDr = byColor === 'w' ? 1 : -1;
+    for (const dc of [-1, 1]) {
+      const p = pieceAt(grid, c+dc, r+pawnFromDr);
+      if (p && p.color === byColor && p.kind === 'P') return true;
+    }
+    for (const [dc, dr] of [[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]]) {
+      const p = pieceAt(grid, c+dc, r+dr);
+      if (p && p.color === byColor && p.kind === 'N') return true;
+    }
+    for (let dc = -1; dc <= 1; dc++) for (let dr = -1; dr <= 1; dr++) {
+      if (dc === 0 && dr === 0) continue;
+      const p = pieceAt(grid, c+dc, r+dr);
+      if (p && p.color === byColor && p.kind === 'K') return true;
+    }
+    for (const [dc, dr] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      let nc = c+dc, nr = r+dr;
+      while (nc>=0 && nc<8 && nr>=0 && nr<8) {
+        const p = grid[nc][nr];
+        if (p) { if (p.color === byColor && (p.kind === 'R' || p.kind === 'Q')) return true; break; }
+        nc += dc; nr += dr;
+      }
+    }
+    for (const [dc, dr] of [[1,1],[-1,1],[1,-1],[-1,-1]]) {
+      let nc = c+dc, nr = r+dr;
+      while (nc>=0 && nc<8 && nr>=0 && nr<8) {
+        const p = grid[nc][nr];
+        if (p) { if (p.color === byColor && (p.kind === 'B' || p.kind === 'Q')) return true; break; }
+        nc += dc; nr += dr;
+      }
+    }
+    return false;
+  }
+
+  function findKing(grid, color) {
+    for (let c = 0; c < 8; c++) for (let r = 0; r < 8; r++) {
+      const p = grid[c][r];
+      if (p && p.color === color && p.kind === 'K') return [c, r];
+    }
+    return null;
+  }
+
+  function inCheck(grid, color) {
+    const k = findKing(grid, color);
+    if (!k) return false;
+    return squareAttacked(grid, k[0], k[1], color === 'w' ? 'b' : 'w');
+  }
+
+  function simulateMove(grid, fc, fr, tc, tr, extra) {
+    const g = copyGrid(grid);
+    let piece = g[fc][fr];
+    g[fc][fr] = null;
+    if (extra.en_passant)     g[tc][fr] = null;
+    if (extra.castle) {
+      if (tc === 6)      { g[5][tr] = g[7][tr]; g[7][tr] = null; }
+      else if (tc === 2) { g[3][tr] = g[0][tr]; g[0][tr] = null; }
+    }
+    if (extra.promotion) piece = newPiece(piece.color, 'Q');
+    g[tc][tr] = piece;
+    return g;
+  }
+
+  function genLegalMoves(grid, c, r, ep) {
+    const p = grid[c][r];
+    if (!p) return [];
+    const pseudo = genPseudoMoves(grid, c, r, ep);
+
+    // Castling — agregamos pseudo-moves del rey solo si todavía no se movió
+    if (p.kind === 'K' && !p.hasMoved) {
+      const rank = p.color === 'w' ? 7 : 0;
+      if (c === 4 && r === rank) {
+        const enemy = p.color === 'w' ? 'b' : 'w';
+        if (!squareAttacked(grid, 4, rank, enemy)) {
+          const rk = grid[7][rank];
+          if (rk && rk.kind === 'R' && rk.color === p.color && !rk.hasMoved
+              && !grid[5][rank] && !grid[6][rank]
+              && !squareAttacked(grid, 5, rank, enemy)
+              && !squareAttacked(grid, 6, rank, enemy)) {
+            pseudo.push([6, rank, {castle: true}]);
+          }
+          const rq = grid[0][rank];
+          if (rq && rq.kind === 'R' && rq.color === p.color && !rq.hasMoved
+              && !grid[1][rank] && !grid[2][rank] && !grid[3][rank]
+              && !squareAttacked(grid, 3, rank, enemy)
+              && !squareAttacked(grid, 2, rank, enemy)) {
+            pseudo.push([2, rank, {castle: true}]);
+          }
+        }
+      }
+    }
+
+    const legal = [];
+    for (const [tc, tr, extra] of pseudo) {
+      const ng = simulateMove(grid, c, r, tc, tr, extra);
+      if (!inCheck(ng, p.color)) legal.push([tc, tr, extra]);
+    }
+    return legal;
+  }
+
+  function anyLegalMove(grid, color, ep) {
+    for (let c = 0; c < 8; c++) for (let r = 0; r < 8; r++) {
+      const p = grid[c][r];
+      if (p && p.color === color && genLegalMoves(grid, c, r, ep).length > 0) return true;
+    }
+    return false;
+  }
+
+  function allLegalMoves(grid, color, ep) {
+    const out = [];
+    for (let c = 0; c < 8; c++) for (let r = 0; r < 8; r++) {
+      const p = grid[c][r];
+      if (p && p.color === color) {
+        for (const [tc, tr, extra] of genLegalMoves(grid, c, r, ep)) out.push([c, r, tc, tr, extra]);
+      }
+    }
+    return out;
+  }
+
+  // FEN completo (incluye contadores fake 0 1). Usado por la integración Stockfish UCI.
+  function buildFen(grid, turn, ep) {
+    const rows = [];
+    for (let r = 0; r < 8; r++) {
+      let row = '', empty = 0;
+      for (let c = 0; c < 8; c++) {
+        const p = grid[c][r];
+        if (!p) empty++;
+        else { if (empty) { row += empty; empty = 0; } row += (p.color === 'w' ? p.kind : p.kind.toLowerCase()); }
+      }
+      if (empty) row += empty;
+      rows.push(row);
+    }
+    const pieces = rows.join('/');
+    let castle = '';
+    const wk = grid[4][7];
+    if (wk && wk.kind === 'K' && wk.color === 'w' && !wk.hasMoved) {
+      const r1 = grid[7][7]; if (r1 && r1.kind === 'R' && r1.color === 'w' && !r1.hasMoved) castle += 'K';
+      const r2 = grid[0][7]; if (r2 && r2.kind === 'R' && r2.color === 'w' && !r2.hasMoved) castle += 'Q';
+    }
+    const bk = grid[4][0];
+    if (bk && bk.kind === 'K' && bk.color === 'b' && !bk.hasMoved) {
+      const r1 = grid[7][0]; if (r1 && r1.kind === 'R' && r1.color === 'b' && !r1.hasMoved) castle += 'k';
+      const r2 = grid[0][0]; if (r2 && r2.kind === 'R' && r2.color === 'b' && !r2.hasMoved) castle += 'q';
+    }
+    const epS = ep ? ('abcdefgh'[ep[0]] + (8 - ep[1])) : '-';
+    return pieces + ' ' + turn + ' ' + (castle || '-') + ' ' + epS + ' 0 1';
+  }
+
+  // UCI move ("e2e4" o "e7e8q") → tupla (fc,fr,tc,tr,extra) compatible con makeMove.
+  // Busca el match en gen_legal_moves para recuperar las flags (castle/en_passant/promotion).
+  function parseUciMove(uci, grid, ep) {
+    if (!uci || uci.length < 4) return null;
+    const fc = uci.charCodeAt(0) - 97;
+    const fr = 7 - (parseInt(uci[1], 10) - 1);
+    const tc = uci.charCodeAt(2) - 97;
+    const tr = 7 - (parseInt(uci[3], 10) - 1);
+    const legal = genLegalMoves(grid, fc, fr, ep);
+    for (const [c, r, extra] of legal) {
+      if (c === tc && r === tr) return [fc, fr, tc, tr, extra];
+    }
+    return null;
+  }
+
+  // Clave para repetición triple — board + turno + enroque + en-passant
+  function positionKey(grid, turn, ep) {
+    let s = '';
+    for (let r = 0; r < 8; r++) {
+      let empty = 0;
+      for (let c = 0; c < 8; c++) {
+        const p = grid[c][r];
+        if (!p) { empty++; }
+        else { if (empty) { s += empty; empty = 0; } s += (p.color === 'w' ? p.kind : p.kind.toLowerCase()); }
+      }
+      if (empty) s += empty;
+      s += '/';
+    }
+    s += turn;
+    let castle = '';
+    const wk = grid[4][7];
+    if (wk && wk.kind === 'K' && wk.color === 'w' && !wk.hasMoved) {
+      const rr = grid[7][7]; if (rr && rr.kind === 'R' && rr.color === 'w' && !rr.hasMoved) castle += 'K';
+      const rq = grid[0][7]; if (rq && rq.kind === 'R' && rq.color === 'w' && !rq.hasMoved) castle += 'Q';
+    }
+    const bk = grid[4][0];
+    if (bk && bk.kind === 'K' && bk.color === 'b' && !bk.hasMoved) {
+      const rr = grid[7][0]; if (rr && rr.kind === 'R' && rr.color === 'b' && !rr.hasMoved) castle += 'k';
+      const rq = grid[0][0]; if (rq && rq.kind === 'R' && rq.color === 'b' && !rq.hasMoved) castle += 'q';
+    }
+    s += castle || '-';
+    s += ep ? ('abcdefgh'[ep[0]] + (8-ep[1])) : '-';
+    return s;
+  }
+
+  function hasInsufficientMaterial(grid) {
+    const white = [], black = [], wbsq = [], bbsq = [];
+    for (let c = 0; c < 8; c++) for (let r = 0; r < 8; r++) {
+      const p = grid[c][r];
+      if (!p || p.kind === 'K') continue;
+      if (p.kind === 'P' || p.kind === 'R' || p.kind === 'Q') return false;
+      if (p.color === 'w') { white.push(p.kind); if (p.kind === 'B') wbsq.push((c+r) & 1); }
+      else                 { black.push(p.kind); if (p.kind === 'B') bbsq.push((c+r) & 1); }
+    }
+    if (!white.length && !black.length) return true;
+    if (!white.length && black.length === 1 && (black[0] === 'B' || black[0] === 'N')) return true;
+    if (!black.length && white.length === 1 && (white[0] === 'B' || white[0] === 'N')) return true;
+    if (white.length === 1 && white[0] === 'B' && black.length === 1 && black[0] === 'B' && wbsq[0] === bbsq[0]) return true;
+    return false;
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  AI — negamax + alpha-beta + iterative deepening
+  //  (Para enchufar Stockfish.js: descomentar el bloque del worker en _aiWorker.
+  //  Necesita stockfish.js cargado como Web Worker; ~1MB de WASM.)
+  // ════════════════════════════════════════════════════════════════════
+
+  function evaluate(grid) {
+    let score = 0;
+    for (let c = 0; c < 8; c++) for (let r = 0; r < 8; r++) {
+      const p = grid[c][r];
+      if (!p) continue;
+      let val = PIECE_VALUES[p.kind];
+      if (p.kind === 'N' || p.kind === 'B') {
+        const centerDist = Math.max(Math.abs(c - 3.5), Math.abs(r - 3.5));
+        val += Math.floor((3.5 - centerDist) * 6);
+      } else if (p.kind === 'P') {
+        val += (p.color === 'w' ? (6 - r) : (r - 1)) * 5;
+        if (c === 3 || c === 4) val += 6;
+      } else if (p.kind === 'K') {
+        if (c >= 2 && c <= 5 && r >= 2 && r <= 5) val -= 10;
+      }
+      score += (p.color === 'w' ? val : -val);
+    }
+    return score;
+  }
+
+  function moveOrderKey(grid, mv) {
+    const [fc, fr, tc, tr, extra] = mv;
+    let s = 0;
+    const target = grid[tc][tr];
+    if (target) s += PIECE_VALUES[target.kind] * 10 - PIECE_VALUES[grid[fc][fr].kind];
+    if (extra.promotion) s += 800;
+    if (extra.en_passant) s += 100;
+    return s;
+  }
+
+  class TimeoutSignal extends Error {}
+
+  function negamax(grid, depth, alpha, beta, color, ep, deadline) {
+    if (performance.now() >= deadline) throw new TimeoutSignal();
+    if (depth === 0) return evaluate(grid) * (color === 'w' ? 1 : -1);
+    const moves = allLegalMoves(grid, color, ep);
+    if (!moves.length) {
+      if (inCheck(grid, color)) return -100000 - depth;
+      return 0;
+    }
+    moves.sort((a, b) => moveOrderKey(grid, b) - moveOrderKey(grid, a));
+    let best = -Infinity;
+    const opp = color === 'w' ? 'b' : 'w';
+    for (const [fc, fr, tc, tr, extra] of moves) {
+      const ng = simulateMove(grid, fc, fr, tc, tr, extra);
+      let newEp = null;
+      const piece = grid[fc][fr];
+      if (piece.kind === 'P' && extra.double_push) newEp = [fc, (fr + tr) >> 1];
+      const score = -negamax(ng, depth - 1, -beta, -alpha, opp, newEp, deadline);
+      if (score > best) best = score;
+      if (best > alpha) alpha = best;
+      if (alpha >= beta) break;
+    }
+    return best;
+  }
+
+  function searchRoot(grid, color, ep, depth, deadline, hint) {
+    const moves = allLegalMoves(grid, color, ep);
+    if (!moves.length) return null;
+    moves.sort((a, b) => moveOrderKey(grid, b) - moveOrderKey(grid, a));
+    if (hint) {
+      const i = moves.findIndex(m => m[0]===hint[0]&&m[1]===hint[1]&&m[2]===hint[2]&&m[3]===hint[3]);
+      if (i > 0) { const h = moves.splice(i, 1)[0]; moves.unshift(h); }
+    }
+    let bestScore = -Infinity, bestMove = null;
+    let alpha = -Infinity;
+    const beta = Infinity;
+    const opp = color === 'w' ? 'b' : 'w';
+    for (const mv of moves) {
+      if (performance.now() >= deadline) throw new TimeoutSignal();
+      const [fc, fr, tc, tr, extra] = mv;
+      const ng = simulateMove(grid, fc, fr, tc, tr, extra);
+      let newEp = null;
+      const piece = grid[fc][fr];
+      if (piece.kind === 'P' && extra.double_push) newEp = [fc, (fr + tr) >> 1];
+      const score = -negamax(ng, depth - 1, -beta, -alpha, opp, newEp, deadline);
+      if (score > bestScore) { bestScore = score; bestMove = mv; }
+      if (score > alpha) alpha = score;
+    }
+    return bestMove;
+  }
+
+  function findBestMove(grid, color, ep, maxDepth, timeBudgetMs) {
+    const deadline = performance.now() + timeBudgetMs;
+    const moves = allLegalMoves(grid, color, ep);
+    if (!moves.length) return { move: null, depth: 0 };
+    moves.sort((a, b) => moveOrderKey(grid, b) - moveOrderKey(grid, a));
+    let best = moves[0], depthReached = 0;
+    for (let d = 1; d <= maxDepth; d++) {
+      try {
+        const mv = searchRoot(grid, color, ep, d, deadline, best);
+        if (mv) { best = mv; depthReached = d; }
+      } catch (e) {
+        if (e instanceof TimeoutSignal) break;
+        throw e;
+      }
+      if (performance.now() >= deadline) break;
+    }
+    return { move: best, depth: depthReached };
+  }
+  </script>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  CHESS — port web de Chess.py.
+  //  Motor interno (sin Stockfish — el .exe no corre en browser).
+  //
+  //  ARQUITECTURA AI WORKER: el motor + búsqueda viven en el bloque
+  //  <script id="ai-engine" type="text/plain"> de arriba. Acá lo
+  //  cargamos en el main thread con (0,eval) y armamos una segunda
+  //  copia como Blob URL para el Web Worker. La búsqueda corre en
+  //  el worker, el main thread queda libre para renderizar y manejar
+  //  input mientras la IA piensa.
+  // ════════════════════════════════════════════════════════════════════
+  const PIECE_CHARS = { K:'♚', Q:'♛', R:'♜', B:'♝', N:'♞', P:'♟' };
+  const AI_TIME_BUDGET_MS = 3000;     // tope blando por jugada de la IA
+  const AI_TACTICAL_MULT  = 2;        // multiplicador cuando la posición es táctica (jaque, captura ganadora, promoción, pieza colgada)
+  const AI_MAX_DEPTH      = 10;       // techo de iterative deepening (solo motor interno)
+  const MOVE_ANIM_MS      = 180;      // duración slide-animation
+  const SOUND_VOLUME      = 0.18;     // master gain de los SFX (0 = mudo, 1 = full)
+  const CLOCK_INITIAL_MS  = 15 * 60 * 1000;   // 15 minutos por jugador
+  // Stockfish.js asm.js single-file — primero intentamos el archivo local
+  // (mismo origen, anda en iOS Safari y otros browsers estrictos con Workers
+  // cross-origin). Si no está, caemos al CDN. Si tampoco carga el CDN, motor interno.
+  const STOCKFISH_URLS = [
+    'stockfish.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js',
+  ];
+
+  const __engineSrc = document.getElementById('ai-engine').textContent;
+  // Inyectamos como <script> real: ejecuta en scope global y las funciones quedan
+  // accesibles para el main thread. Más confiable que (0,eval) entre browsers.
+  const __engineScript = document.createElement('script');
+  __engineScript.textContent = __engineSrc;
+  document.head.appendChild(__engineScript);
+
+  const __workerSrc = __engineSrc + `
+    self.onmessage = function(e) {
+      try {
+        const { grid, color, ep, maxDepth, timeBudgetMs } = e.data;
+        const result = findBestMove(grid, color, ep, maxDepth, timeBudgetMs);
+        self.postMessage(result);
+      } catch (err) {
+        self.postMessage({ error: String(err) });
+      }
+    };
+  `;
+  const WORKER_URL = URL.createObjectURL(new Blob([__workerSrc], { type: 'application/javascript' }));
+
+  // ════════════════════════════════════════════════════════════════════
+  //  STOCKFISH.JS LOADER (CDN, asm.js single-file)
+  //  Si carga OK queda como motor principal — mucho más fuerte que el
+  //  interno. Si falla (offline, CSP, network) usamos el interno.
+  // ════════════════════════════════════════════════════════════════════
+  let stockfishWorker = null;
+  let stockfishReady = false;
+  let stockfishPending = null;       // { resolve, depth: int (current best depth seen) }
+
+  function updateEngineLine(msg, color) {
+    const el = document.getElementById('engineLine');
+    if (!el) return;
+    el.textContent = msg;
+    if (color) el.style.color = color;
+  }
+
+  function tryStockfishUrl(url, label, onFail) {
+    let sf;
+    try {
+      sf = new Worker(url);
+    } catch (err) {
+      console.warn('Stockfish: no se pudo crear el Worker desde', url, err);
+      onFail();
+      return;
+    }
+    let settled = false;
+    sf.onmessage = (e) => {
+      const line = String(e.data || '');
+      if (line === 'uciok')          sf.postMessage('isready');
+      else if (line === 'readyok')   {
+        settled = true;
+        stockfishReady = true;
+        updateEngineLine('Motor: Stockfish (' + label + ') · ' + (AI_TIME_BUDGET_MS/1000) + 's por jugada',
+                         'rgba(140,220,140,0.65)');
+      }
+      else if (line.startsWith('info ')) {
+        if (stockfishPending) {
+          const md = line.match(/\bdepth (\d+)/);
+          if (md) {
+            stockfishPending.depth = parseInt(md[1], 10);
+            game.aiLastDepth = stockfishPending.depth;   // live depth update
+          }
+          const ms = line.match(/\bseldepth (\d+)/);
+          if (ms) {
+            stockfishPending.seldepth = parseInt(ms[1], 10);
+            game.aiLastSeldepth = stockfishPending.seldepth;
+          }
+        }
+      } else if (line.startsWith('bestmove ')) {
+        const uci = line.split(/\s+/)[1];
+        const pending = stockfishPending;
+        stockfishPending = null;
+        if (pending) pending.resolve({ uci, depth: pending.depth, seldepth: pending.seldepth || 0 });
+      }
+    };
+    sf.onerror = (err) => {
+      console.warn('Stockfish: error en runtime con', url, err.message || err);
+      try { sf.terminate(); } catch {}
+      if (!settled) { onFail(); return; }
+      stockfishReady = false;
+      stockfishWorker = null;
+      updateEngineLine('Motor: Interno (Stockfish falló)', 'rgba(220,180,100,0.6)');
+      if (stockfishPending) { stockfishPending.resolve(null); stockfishPending = null; }
+    };
+    stockfishWorker = sf;
+    sf.postMessage('uci');
+    // Si no llega "uciok"/"readyok" en 5s, asumimos que esta URL falló
+    setTimeout(() => {
+      if (!settled) {
+        try { sf.terminate(); } catch {}
+        if (stockfishWorker === sf) stockfishWorker = null;
+        onFail();
+      }
+    }, 5000);
+  }
+
+  function initStockfish() {
+    let idx = 0;
+    const tryNext = () => {
+      if (idx >= STOCKFISH_URLS.length) {
+        updateEngineLine('Motor: Interno (Stockfish no disponible)', 'rgba(220,180,100,0.6)');
+        return;
+      }
+      const url = STOCKFISH_URLS[idx++];
+      const label = url.startsWith('http') ? 'CDN' : 'local';
+      tryStockfishUrl(url, label, tryNext);
+    };
+    tryNext();
+  }
+
+  function askStockfish(fen, timeMs) {
+    return new Promise((resolve) => {
+      if (!stockfishReady || !stockfishWorker) { resolve(null); return; }
+      if (stockfishPending) {            // defensivo — no debería pasar
+        stockfishPending.resolve(null);
+      }
+      stockfishPending = { resolve, depth: 0, seldepth: 0 };
+      stockfishWorker.postMessage('position fen ' + fen);
+      stockfishWorker.postMessage('go movetime ' + timeMs);
+    });
+  }
+
+  initStockfish();
+
+  // ════════════════════════════════════════════════════════════════════
+  //  SOUND (Web Audio API — sintetizado, sin assets)
+  // ════════════════════════════════════════════════════════════════════
+  let actx = null;
+  let masterGain = null;
+  const sounds = {};
+
+  function ensureAudio() {
+    if (actx) return;
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
+    catch (e) { return; }
+    masterGain = actx.createGain();
+    masterGain.gain.value = SOUND_VOLUME;
+    masterGain.connect(actx.destination);
+    buildSounds();
+  }
+
+  function makeBuffer(durationMs, sampleFn) {
+    const sr = actx.sampleRate;
+    const n = Math.floor(sr * durationMs / 1000);
+    const buf = actx.createBuffer(1, n, sr);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) data[i] = sampleFn(i, n, sr);
+    return buf;
+  }
+
+  function makeClick(durationMs, volume, freq) {
+    return makeBuffer(durationMs, (i, n, sr) => {
+      const env = Math.exp(-i / (n * 0.18));
+      const t = i / sr;
+      const tone = freq ? Math.sin(2 * Math.PI * freq * t) : 0;
+      const noise = Math.random() * 2 - 1;
+      const sample = freq ? (tone * 0.6 + noise * 0.4) : noise;
+      return sample * env * volume;
+    });
+  }
+
+  function makeChord(freqs, durationMs, volume) {
+    return makeBuffer(durationMs, (i, n, sr) => {
+      const t = i / sr;
+      const env = Math.sin(Math.PI * i / n);
+      let v = 0;
+      for (const f of freqs) v += Math.sin(2 * Math.PI * f * t);
+      return (v / freqs.length) * env * volume;
+    });
+  }
+
+  function buildSounds() {
+    sounds.move      = makeClick(60,  0.35, 420);
+    sounds.capture   = makeClick(120, 0.50, 180);
+    sounds.check     = makeChord([880, 1100], 220, 0.30);
+    sounds.castle    = makeChord([300, 450],  180, 0.40);
+    sounds.promotion = makeChord([600, 900, 1200], 280, 0.35);
+    sounds.end       = makeChord([220, 280, 350], 600, 0.50);
+  }
+
+  function play(name) {
+    if (!actx || !sounds[name] || !masterGain) return;
+    const src = actx.createBufferSource();
+    src.buffer = sounds[name];
+    src.connect(masterGain);   // pasa por el master gain global (= SOUND_VOLUME)
+    src.start();
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  GAME STATE
+  // ════════════════════════════════════════════════════════════════════
+  const game = {
+    state: 'menu',          // 'menu' | 'play'
+    mode: null,             // 'pvp' | 'w' | 'b' | 'aiva'
+    aiColor: null,          // 'w' | 'b' | null
+    humanColor: null,
+    aiBoth: false,
+    flip: false,
+    grid: initialGrid(),
+    turn: 'w',
+    lastMove: null,
+    enPassant: null,
+    status: '',             // '' | 'check' | 'checkmate' | 'stalemate' | 'repetition' | 'insufficient'
+    gameOver: false,
+    captured: [],           // [{color, kind}, ...]
+    positionCounts: new Map(),
+    history: [],
+    historyIndex: 0,
+    selected: null,
+    legal: [],
+    dragging: false,
+    dragFrom: null,
+    aiThinking: false,
+    aiLastDepth: 0,
+    aiLastSeldepth: 0,
+    aiEngineName: '',
+    aiTactical: false,      // ¿la posición que está pensando es táctica? (se setea en triggerAI)
+    aiWorking: false,       // re-entrancy guard for the async AI worker
+    aiWorker: null,         // referencia al Worker activo (para terminarlo en reset/menu)
+    pendingAI: null,
+    animation: null,
+    gen: 0,
+    // Relojes
+    clockW: CLOCK_INITIAL_MS,
+    clockB: CLOCK_INITIAL_MS,
+    clockLastTick: 0,       // performance.now() del último tick; 0 = aún no arrancó
+  };
+
+  function recordPosition() {
+    const key = positionKey(game.grid, game.turn, game.enPassant);
+    const n = (game.positionCounts.get(key) || 0) + 1;
+    game.positionCounts.set(key, n);
+    return n;
+  }
+
+  // ── Reloj ──
+  // Decrementa el reloj del jugador a mover. Si llega a 0, declara timeout.
+  // Al hacer un movimiento (turno cambia), automáticamente arranca el otro
+  // reloj porque siempre tickea el del game.turn actual — eso es lo que hace
+  // un reloj de ajedrez real cuando apretás el botón.
+  function tickClock() {
+    const now = performance.now();
+    if (game.state === 'play' && !game.gameOver
+        && !isViewingHistory() && game.clockLastTick > 0) {
+      const dt = now - game.clockLastTick;
+      if (game.turn === 'w') game.clockW = Math.max(0, game.clockW - dt);
+      else                   game.clockB = Math.max(0, game.clockB - dt);
+      if (game.clockW <= 0 || game.clockB <= 0) {
+        game.status = 'timeout';
+        game.gameOver = true;
+        play('end');
+        if (game.aiWorker) { game.aiWorker.terminate(); game.aiWorker = null; }
+      }
+    }
+    game.clockLastTick = now;
+  }
+
+  function formatClock(ms) {
+    ms = Math.max(0, ms);
+    const total = Math.ceil(ms / 1000);
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return m + ':' + s.toString().padStart(2, '0');
+  }
+
+  function pushHistory() {
+    game.history.push({
+      grid: copyGrid(game.grid),
+      turn: game.turn,
+      lastMove: game.lastMove,
+      status: game.status,
+      gameOver: game.gameOver,
+      captured: game.captured.slice(),
+    });
+    game.historyIndex = game.history.length - 1;
+  }
+
+  function isViewingHistory() { return game.historyIndex < game.history.length - 1; }
+  function currentPlayerIsAI() {
+    if (game.aiBoth) return true;
+    if (!game.aiColor) return false;
+    return game.turn === game.aiColor;
+  }
+
+  function resetBoard() {
+    game.gen++;
+    // Si la IA estaba pensando, matar el worker antes de armar el tablero nuevo
+    if (game.aiWorker) { game.aiWorker.terminate(); game.aiWorker = null; }
+    game.grid = initialGrid();
+    game.turn = 'w';
+    game.lastMove = null;
+    game.enPassant = null;
+    game.status = '';
+    game.gameOver = false;
+    game.captured = [];
+    game.positionCounts = new Map();
+    game.history = [];
+    game.historyIndex = 0;
+    game.selected = null;
+    game.legal = [];
+    game.dragging = false;
+    game.dragFrom = null;
+    game.aiThinking = false;
+    game.aiWorking = false;
+    game.aiLastDepth = 0;
+    game.aiTactical = false;
+    game.pendingAI = null;
+    game.animation = null;
+    game.clockW = CLOCK_INITIAL_MS;
+    game.clockB = CLOCK_INITIAL_MS;
+    game.clockLastTick = 0;            // arranca cuando startGame lo seteé
+    recordPosition();
+    pushHistory();
+  }
+
+  function startGame(mode) {
+    game.mode = mode;
+    game.aiBoth = (mode === 'aiva');
+    if (mode === 'pvp')      { game.aiColor = null; game.humanColor = null; game.flip = false; }
+    else if (mode === 'w')   { game.aiColor = 'b';  game.humanColor = 'w';  game.flip = false; }
+    else if (mode === 'b')   { game.aiColor = 'w';  game.humanColor = 'b';  game.flip = true;  }
+    else                     { game.aiColor = null; game.humanColor = null; game.flip = false; }
+    resetBoard();
+    game.state = 'play';
+    game.clockLastTick = performance.now();   // ahora arranca el reloj de white (turn inicial)
+    document.getElementById('menu').style.display = 'none';
+    document.getElementById('bar').style.display  = 'flex';
+    document.getElementById('hint').style.opacity = '0';
+    ensureAudio();
+  }
+
+  function backToMenu() {
+    game.state = 'menu';
+    resetBoard();
+    document.getElementById('menu').style.display = 'flex';
+    document.getElementById('bar').style.display  = 'none';
+  }
+
+  function makeMove(fc, fr, tc, tr, extra, animate=true) {
+    const piece = game.grid[fc][fr];
+    const capturedPiece = extra.en_passant ? game.grid[tc][fr] : game.grid[tc][tr];
+    const wasCapture = capturedPiece !== null;
+    if (wasCapture) game.captured.push({ color: capturedPiece.color, kind: capturedPiece.kind });
+
+    if (animate) {
+      game.animation = {
+        fromC: fc, fromR: fr, toC: tc, toR: tr,
+        color: piece.color, kind: piece.kind,
+        startTime: performance.now(),
+        duration: MOVE_ANIM_MS,
+        rookAnim: null,
+      };
+      if (extra.castle) {
+        const rookFromC = (tc === 6) ? 7 : 0;
+        const rookToC   = (tc === 6) ? 5 : 3;
+        game.animation.rookAnim = { fromC: rookFromC, fromR: tr, toC: rookToC, toR: tr };
+      }
+    } else {
+      game.animation = null;
+    }
+
+    let newEp = null;
+    if (piece.kind === 'P' && extra.double_push) newEp = [fc, (fr + tr) >> 1];
+    if (extra.en_passant) game.grid[tc][fr] = null;
+    if (extra.castle) {
+      if (tc === 6)      { const r = game.grid[7][tr]; game.grid[7][tr] = null; game.grid[5][tr] = r; r.hasMoved = true; }
+      else if (tc === 2) { const r = game.grid[0][tr]; game.grid[0][tr] = null; game.grid[3][tr] = r; r.hasMoved = true; }
+    }
+    game.grid[fc][fr] = null;
+    game.grid[tc][tr] = piece;
+    piece.hasMoved = true;
+    if (extra.promotion) {
+      const promoted = newPiece(piece.color, 'Q');
+      promoted.hasMoved = true;
+      game.grid[tc][tr] = promoted;
+    }
+
+    game.lastMove = [fc, fr, tc, tr];
+    game.enPassant = newEp;
+    game.turn = (game.turn === 'w') ? 'b' : 'w';
+
+    const hasMove = anyLegalMove(game.grid, game.turn, game.enPassant);
+    const isCheck = inCheck(game.grid, game.turn);
+    const repCount = recordPosition();
+    const insufficient = hasInsufficientMaterial(game.grid);
+
+    if (!hasMove) {
+      game.status = isCheck ? 'checkmate' : 'stalemate';
+      game.gameOver = true;
+      play('end');
+    } else if (insufficient) {
+      game.status = 'insufficient';
+      game.gameOver = true;
+      play('end');
+    } else if (repCount >= 3) {
+      game.status = 'repetition';
+      game.gameOver = true;
+      play('end');
+    } else {
+      game.status = isCheck ? 'check' : '';
+      if (isCheck)             play('check');
+      else if (extra.promotion) play('promotion');
+      else if (extra.castle)    play('castle');
+      else if (wasCapture)      play('capture');
+      else                      play('move');
+    }
+    pushHistory();
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  Heurística táctica — decide si darle más tiempo a la IA.
+  //  Una posición se considera "táctica" si:
+  //   - el lado a mover está en jaque (forzado a responder)
+  //   - hay promoción disponible
+  //   - hay una captura ganadora (pieza menos valiosa toma una más valiosa)
+  //   - hay una captura sobre una pieza enemiga no defendida (pieza colgada)
+  //  Las funciones del engine (inCheck, allLegalMoves, squareAttacked,
+  //  PIECE_VALUES) viven en scope global porque el bloque ai-engine se
+  //  inyecta como <script>.
+  // ════════════════════════════════════════════════════════════════════
+  function isTacticalPosition(grid, color, ep) {
+    if (inCheck(grid, color)) return true;
+    const enemy = color === 'w' ? 'b' : 'w';
+    const moves = allLegalMoves(grid, color, ep);
+    for (const [fc, fr, tc, tr, extra] of moves) {
+      if (extra && extra.promotion) return true;
+      const isEp = extra && extra.en_passant;
+      const target = grid[tc][tr];
+      if (!target && !isEp) continue;
+      const attacker = grid[fc][fr];
+      const tv = isEp ? PIECE_VALUES.P : PIECE_VALUES[target.kind];
+      const av = PIECE_VALUES[attacker.kind];
+      if (tv > av) return true;
+      if (!squareAttacked(grid, tc, tr, enemy)) return true;
+    }
+    return false;
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  AI worker — corre la búsqueda en un Web Worker (off-main-thread)
+  //  para que la UI siga respondiendo (botones de historial, menú,
+  //  reset, render del tablero) mientras la IA piensa.
+  //
+  //  Para enchufar Stockfish.js: reemplazar el WORKER_URL de arriba
+  //  por un worker que cargue stockfish.js. El protocolo de mensajes
+  //  acá es {grid, color, ep, ...} → {move, depth}; con Stockfish
+  //  conviene cambiar a FEN + parsear `bestmove` UCI.
+  // ════════════════════════════════════════════════════════════════════
+  async function triggerAI() {
+    if (game.aiWorking) return;
+    game.aiWorking = true;
+    game.aiThinking = true;
+    const epSnap = game.enPassant ? [game.enPassant[0], game.enPassant[1]] : null;
+    const colorSnap = game.turn;
+    const genSnap = game.gen;
+
+    // ¿Posición táctica? → le damos el doble de tiempo para pensar.
+    const tactical = isTacticalPosition(game.grid, colorSnap, epSnap);
+    const budgetMs = tactical ? AI_TIME_BUDGET_MS * AI_TACTICAL_MULT : AI_TIME_BUDGET_MS;
+    game.aiTactical = tactical;
+
+    const applyResult = (move, depth, seldepth, engineName) => {
+      game.aiThinking = false;
+      game.aiWorking = false;
+      if (genSnap !== game.gen || !currentPlayerIsAI() || game.gameOver || !move) return;
+      game.aiEngineName = engineName;
+      if (game.animation) {
+        game.pendingAI = { move, depth, seldepth, engineName };
+      } else {
+        game.aiLastDepth = depth;
+        game.aiLastSeldepth = seldepth;
+        const [fc, fr, tc, tr, extra] = move;
+        makeMove(fc, fr, tc, tr, extra, true);
+      }
+    };
+
+    // ── Path 1: Stockfish vía UCI (mucho más fuerte) ──
+    if (stockfishReady && stockfishWorker) {
+      try {
+        const fen = buildFen(game.grid, colorSnap, epSnap);
+        const sfResult = await askStockfish(fen, budgetMs);
+        if (sfResult && sfResult.uci) {
+          const move = parseUciMove(sfResult.uci, game.grid, epSnap);
+          applyResult(move, sfResult.depth || 0, sfResult.seldepth || 0, 'Stockfish');
+          return;
+        }
+        // Stockfish devolvió null o falló — caemos al interno
+      } catch (err) {
+        console.warn('Stockfish falló, cayendo al motor interno', err);
+      }
+    }
+
+    // ── Path 2: Motor interno (negamax + α-β en un Worker propio) ──
+    let worker;
+    try {
+      worker = new Worker(WORKER_URL);
+    } catch (err) {
+      console.error('Worker creation failed:', err);
+      applyResult(null, 0, 0, '');
+      return;
+    }
+    game.aiWorker = worker;
+
+    worker.onmessage = (e) => {
+      const result = e.data;
+      worker.terminate();
+      if (game.aiWorker === worker) game.aiWorker = null;
+      if (result && result.error) { console.error('AI worker exception:', result.error); applyResult(null, 0, 0, ''); return; }
+      applyResult(result && result.move, (result && result.depth) || 0, 0, 'Interno');
+    };
+    worker.onerror = (err) => {
+      console.error('AI worker error:', err.message || err);
+      try { worker.terminate(); } catch {}
+      if (game.aiWorker === worker) game.aiWorker = null;
+      applyResult(null, 0, 0, '');
+    };
+
+    try {
+      worker.postMessage({
+        grid: game.grid,
+        color: colorSnap,
+        ep: epSnap,
+        maxDepth: AI_MAX_DEPTH,
+        timeBudgetMs: budgetMs,
+      });
+    } catch (err) {
+      console.error('Worker postMessage failed:', err);
+      try { worker.terminate(); } catch {}
+      applyResult(null, 0, 0, '');
+    }
+  }
+
+  function killAIWorker() {
+    if (game.aiWorker) {
+      game.aiWorker.terminate();
+      game.aiWorker = null;
+    }
+    game.aiThinking = false;
+    game.aiWorking = false;
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  RENDERING
+  // ════════════════════════════════════════════════════════════════════
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, dpr = 1;
+  let boardSize = 0, boardX = 0, boardY = 0, cellSize = 0;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const barH = document.getElementById('bar').offsetHeight || 0;
+    W = window.innerWidth;
+    H = window.innerHeight - barH;
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+
+    // Layout: status arriba, strip horizontal (relojes + capturas) sobre el tablero,
+    // labels abajo. Sin paneles laterales — todo se agrupa arriba.
+    // Proporciones mínimas garantizan que entren 2 filas de capturas + reloj.
+    const statusReserve = 52;    // status text (y≈22) + depth info (y≈48)
+    const stripReserve  = 72;    // alto FIJO del strip (2 filas de piezas + reloj)
+    const stripGap      = 18;    // aire entre strip y borde del tablero
+    const topReserve    = statusReserve + stripReserve + stripGap;
+    const bottomReserve = 38;    // labels a-h + aire
+    const sideReserve   = 24;    // margen lateral mínimo
+    const availH = Math.max(160, H - topReserve - bottomReserve);
+    const availW = Math.max(160, W - sideReserve * 2);
+    boardSize = Math.min(availH, availW);
+    cellSize  = boardSize / 8;
+    boardX = (W - boardSize) / 2;
+    boardY = topReserve + (availH - boardSize) / 2;
+  }
+  window.addEventListener('resize', resize);
+
+  function cellToScreen(c, r) {
+    const sc = game.flip ? (7 - c) : c;
+    const sr = game.flip ? (7 - r) : r;
+    return [boardX + sc * cellSize, boardY + sr * cellSize];
+  }
+  function pixelToSquare(px, py) {
+    const sc = Math.floor((px - boardX) / cellSize);
+    const sr = Math.floor((py - boardY) / cellSize);
+    if (sc < 0 || sc > 7 || sr < 0 || sr > 7) return null;
+    return [game.flip ? (7 - sc) : sc, game.flip ? (7 - sr) : sr];
+  }
+
+  // ── Sprite caching: bakear cada pieza una vez a un canvas offscreen ──
+  // Permite usar source-atop para el specular highlight sin pintar el fondo,
+  // y deja el drawing per-frame en un solo drawImage por pieza.
+  const pieceSprites = {};
+  let lastSpriteSize = 0;
+  let lastSpriteDpr  = 0;
+
+  function bakePiece(c, kind, color, cx, cy, size) {
+    const ch = PIECE_CHARS[kind];
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.font = `${Math.floor(size * 0.92)}px "Segoe UI Symbol", "Arial Unicode MS", "DejaVu Sans", serif`;
+
+    // 1) Sombra proyectada — pieza en color oscuro con shadow nativo (offset Y > 0)
+    c.save();
+    c.shadowColor = 'rgba(0,0,0,0.55)';
+    c.shadowBlur = size * 0.14;
+    c.shadowOffsetY = size * 0.08;
+    c.fillStyle = color === 'w' ? '#2c2c38' : '#04040a';
+    c.fillText(ch, cx, cy);
+    c.restore();
+
+    // 2) Outline 8-direccional para un borde crisp y suave
+    const outlineColor = color === 'w' ? '#0d0d16' : '#fbfbfe';
+    const off = Math.max(1, size * 0.042);
+    c.fillStyle = outlineColor;
+    for (const [dx, dy] of [[-off,0],[off,0],[0,-off],[0,off],
+                            [-off*0.7,-off*0.7],[off*0.7,-off*0.7],[-off*0.7,off*0.7],[off*0.7,off*0.7]]) {
+      c.fillText(ch, cx + dx, cy + dy);
+    }
+
+    // 3) Cuerpo principal con gradiente vertical fuerte (top claro → bottom oscuro)
+    let grad;
+    if (color === 'w') {
+      grad = c.createLinearGradient(0, cy - size*0.42, 0, cy + size*0.42);
+      grad.addColorStop(0,    '#ffffff');
+      grad.addColorStop(0.30, '#f2f2f8');
+      grad.addColorStop(0.65, '#c4c4d4');
+      grad.addColorStop(1,    '#888896');
+    } else {
+      grad = c.createLinearGradient(0, cy - size*0.42, 0, cy + size*0.42);
+      grad.addColorStop(0,    '#6a6a78');
+      grad.addColorStop(0.35, '#34343e');
+      grad.addColorStop(0.75, '#101018');
+      grad.addColorStop(1,    '#040408');
+    }
+    c.fillStyle = grad;
+    c.fillText(ch, cx, cy);
+
+    // 4) Reflejo arriba-izquierda — clippeado al silhouette con source-atop.
+    //    Blancas: highlight claro (luz blanca).
+    //    Negras: "brillo oscuro" — sombra suave en la misma zona, da look glossy noir.
+    c.save();
+    c.globalCompositeOperation = 'source-atop';
+    const hl = c.createRadialGradient(
+      cx - size*0.20, cy - size*0.28, 0,
+      cx - size*0.20, cy - size*0.28, size*0.48
+    );
+    if (color === 'w') {
+      hl.addColorStop(0,   'rgba(255,255,255,0.65)');
+      hl.addColorStop(0.4, 'rgba(255,255,255,0.18)');
+      hl.addColorStop(1,   'rgba(255,255,255,0)');
+    } else {
+      hl.addColorStop(0,   'rgba(0,0,0,0.255)');
+      hl.addColorStop(0.4, 'rgba(0,0,0,0.22)');
+      hl.addColorStop(1,   'rgba(0,0,0,0)');
+    }
+    c.fillStyle = hl;
+    c.fillRect(cx - size*0.6, cy - size*0.6, size*1.2, size*1.2);
+    c.restore();
+
+    // 5) Reflejo inferior sutil — un "fake ambient occlusion" interior para dar peso
+    c.save();
+    c.globalCompositeOperation = 'source-atop';
+    const ao = c.createLinearGradient(0, cy, 0, cy + size*0.45);
+    if (color === 'w') {
+      ao.addColorStop(0, 'rgba(0,0,0,0)');
+      ao.addColorStop(1, 'rgba(0,0,0,0.18)');
+    } else {
+      ao.addColorStop(0, 'rgba(0,0,0,0)');
+      ao.addColorStop(1, 'rgba(0,0,0,0.45)');
+    }
+    c.fillStyle = ao;
+    c.fillRect(cx - size*0.5, cy, size, size*0.5);
+    c.restore();
+  }
+
+  function bakeSpriteAt(kind, color, baseSize) {
+    try {
+      if (!(baseSize > 0) || !(dpr > 0)) return null;
+      const dim = Math.ceil(baseSize * 1.35);
+      const px  = Math.ceil(dim * dpr);
+      if (px <= 0 || px > 4096) return null;            // límite defensivo
+      const off = document.createElement('canvas');
+      off.width = off.height = px;
+      const c = off.getContext('2d');
+      if (!c) return null;
+      c.scale(dpr, dpr);
+      c.imageSmoothingEnabled = true;
+      c.imageSmoothingQuality = 'high';
+      bakePiece(c, kind, color, dim/2, dim/2, baseSize);
+      return { canvas: off, dim };
+    } catch (err) {
+      console.warn('bakeSpriteAt failed:', err);
+      return null;
+    }
+  }
+
+  function rebuildPieceSprites(baseSize) {
+    lastSpriteSize = baseSize;
+    lastSpriteDpr  = dpr;
+    for (const color of ['w', 'b']) {
+      for (const kind of ['K','Q','R','B','N','P']) {
+        const s = bakeSpriteAt(kind, color, baseSize);
+        if (s) pieceSprites[color + kind] = s;
+      }
+    }
+  }
+
+  // Cache de sprites pequeños (capturas) — bakeados a su tamaño NATURAL
+  // así no perdemos definición al downscalear desde un sprite grande de tablero.
+  // Indexado por tamaño redondeado para evitar re-bakeos por sub-px.
+  const smallSpriteCache = new Map();    // key = `${color}${kind}@${roundedSize}@${dpr}`
+  let lastSmallSpriteDpr = 0;
+
+  function getSmallSprite(kind, color, size) {
+    if (dpr !== lastSmallSpriteDpr) { smallSpriteCache.clear(); lastSmallSpriteDpr = dpr; }
+    const rounded = Math.round(size);
+    if (!(rounded > 0)) return null;
+    const key = color + kind + '@' + rounded;
+    let s = smallSpriteCache.get(key);
+    if (s === undefined) {
+      s = bakeSpriteAt(kind, color, rounded);
+      smallSpriteCache.set(key, s);     // guardamos incluso null para no re-intentar cada frame
+    }
+    return s;
+  }
+
+  function drawPiece(kind, color, cx, cy, size) {
+    // Re-bake si cambió el tamaño de celda (resize) o el dpr (raro)
+    if (cellSize > 0 && (Math.abs(cellSize - lastSpriteSize) >= 0.5 || dpr !== lastSpriteDpr)) {
+      rebuildPieceSprites(cellSize);
+    }
+    // Si la pieza se pide bastante más chica que el sprite del tablero, usar el
+    // cache de tamaño nativo — preserva definición de outline + gradiente.
+    // Si el bake fallara (raro en mobile/Safari) caemos al downscale del grande.
+    if (lastSpriteSize > 0 && size < lastSpriteSize * 0.7) {
+      const sprite = getSmallSprite(kind, color, size);
+      if (sprite) {
+        ctx.drawImage(sprite.canvas, cx - sprite.dim/2, cy - sprite.dim/2, sprite.dim, sprite.dim);
+        return;
+      }
+    }
+    const sprite = pieceSprites[color + kind];
+    if (!sprite) return;
+    const scale = size / (lastSpriteSize || size);
+    const t = sprite.dim * scale;
+    ctx.drawImage(sprite.canvas, cx - t/2, cy - t/2, t, t);
+  }
+
+  function drawBoard() {
+    const view = isViewingHistory() ? game.history[game.historyIndex] : {
+      grid: game.grid, turn: game.turn, lastMove: game.lastMove, status: game.status, captured: game.captured,
+    };
+    const viewing = isViewingHistory();
+
+    // ── Marco de madera con gradiente + sombra proyectada ──
+    const FRAME = Math.max(8, cellSize * 0.12);
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.55)';
+    ctx.shadowBlur = 28;
+    ctx.shadowOffsetY = 12;
+    const frameGrad = ctx.createLinearGradient(
+      boardX - FRAME, boardY - FRAME,
+      boardX + boardSize + FRAME, boardY + boardSize + FRAME);
+    if (viewing) {
+      frameGrad.addColorStop(0, '#7a5a30');
+      frameGrad.addColorStop(0.5, '#9c7644');
+      frameGrad.addColorStop(1, '#5e4022');
+    } else {
+      frameGrad.addColorStop(0, '#3b2a1c');
+      frameGrad.addColorStop(0.5, '#5c4128');
+      frameGrad.addColorStop(1, '#2a1d12');
+    }
+    ctx.fillStyle = frameGrad;
+    ctx.fillRect(boardX - FRAME, boardY - FRAME, boardSize + FRAME*2, boardSize + FRAME*2);
+    ctx.restore();
+
+    // Borde interno (línea fina más clara para "biselar" el marco)
+    ctx.strokeStyle = 'rgba(255,235,200,0.18)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(boardX - 0.5, boardY - 0.5, boardSize + 1, boardSize + 1);
+
+    // ── Casillas con paleta más cálida ──
+    const LIGHT = '#ecd9b3', DARK = '#a87c52';
+    for (let sc = 0; sc < 8; sc++) for (let sr = 0; sr < 8; sr++) {
+      const c = game.flip ? (7 - sc) : sc, r = game.flip ? (7 - sr) : sr;
+      ctx.fillStyle = ((c + r) & 1) === 0 ? LIGHT : DARK;
+      ctx.fillRect(boardX + sc * cellSize, boardY + sr * cellSize, cellSize, cellSize);
+    }
+
+    // ── Vignette muy sutil en el centro del tablero para profundidad ──
+    const vGrad = ctx.createRadialGradient(
+      boardX + boardSize/2, boardY + boardSize/2, boardSize * 0.2,
+      boardX + boardSize/2, boardY + boardSize/2, boardSize * 0.75);
+    vGrad.addColorStop(0, 'rgba(0,0,0,0)');
+    vGrad.addColorStop(1, 'rgba(0,0,0,0.10)');
+    ctx.fillStyle = vGrad;
+    ctx.fillRect(boardX, boardY, boardSize, boardSize);
+
+    // ── Highlight última jugada — flat amarillo translúcido ──
+    if (view.lastMove) {
+      ctx.fillStyle = 'rgba(246,236,120,0.40)';
+      const [fc, fr, tc, tr] = view.lastMove;
+      const [fx, fy] = cellToScreen(fc, fr);
+      const [tx, ty] = cellToScreen(tc, tr);
+      ctx.fillRect(fx, fy, cellSize, cellSize);
+      ctx.fillRect(tx, ty, cellSize, cellSize);
+    }
+
+    // ── Rey en jaque — flat rojo translúcido ──
+    if (view.status === 'check' || view.status === 'checkmate') {
+      const k = findKing(view.grid, view.turn);
+      if (k) {
+        const [kx, ky] = cellToScreen(k[0], k[1]);
+        ctx.fillStyle = 'rgba(220,60,60,0.50)';
+        ctx.fillRect(kx, ky, cellSize, cellSize);
+      }
+    }
+
+    // ── Selección — flat verde translúcido ──
+    if (!viewing && game.selected) {
+      const [sx, sy] = cellToScreen(game.selected[0], game.selected[1]);
+      ctx.fillStyle = 'rgba(120,210,120,0.45)';
+      ctx.fillRect(sx, sy, cellSize, cellSize);
+    }
+
+    // Piezas — saltamos la celda destino de la animación (la dibujamos interpolada después)
+    const skip = new Set();
+    if (!viewing && game.animation) {
+      skip.add(game.animation.toC + ',' + game.animation.toR);
+      if (game.animation.rookAnim) skip.add(game.animation.rookAnim.toC + ',' + game.animation.rookAnim.toR);
+    }
+    if (!viewing && game.dragging && game.dragFrom) skip.add(game.dragFrom[0] + ',' + game.dragFrom[1]);
+
+    for (let c = 0; c < 8; c++) for (let r = 0; r < 8; r++) {
+      const p = view.grid[c][r];
+      if (!p) continue;
+      if (skip.has(c + ',' + r)) continue;
+      const [x, y] = cellToScreen(c, r);
+      drawPiece(p.kind, p.color, x + cellSize/2, y + cellSize/2, cellSize);
+    }
+
+    // Pieza animada
+    if (!viewing && game.animation) {
+      const a = game.animation;
+      const t = Math.min(1, (performance.now() - a.startTime) / a.duration);
+      const te = 1 - (1 - t) * (1 - t);
+      const [fx, fy] = cellToScreen(a.fromC, a.fromR);
+      const [tx, ty] = cellToScreen(a.toC, a.toR);
+      const cx = fx + (tx - fx) * te, cy = fy + (ty - fy) * te;
+      drawPiece(a.kind, a.color, cx + cellSize/2, cy + cellSize/2, cellSize);
+      if (a.rookAnim) {
+        const ra = a.rookAnim;
+        const [rfx, rfy] = cellToScreen(ra.fromC, ra.fromR);
+        const [rtx, rty] = cellToScreen(ra.toC, ra.toR);
+        const rcx = rfx + (rtx - rfx) * te, rcy = rfy + (rty - rfy) * te;
+        drawPiece('R', a.color, rcx + cellSize/2, rcy + cellSize/2, cellSize);
+      }
+    }
+
+    // ── Targets legales — dots/rings verdes flat ──
+    if (!viewing && !game.animation) {
+      ctx.save();
+      for (const [tc, tr, extra] of game.legal) {
+        const [x, y] = cellToScreen(tc, tr);
+        const cx = x + cellSize/2, cy = y + cellSize/2;
+        const target = game.grid[tc][tr];
+        ctx.beginPath();
+        if (target || extra.en_passant) {
+          ctx.strokeStyle = 'rgba(80,220,80,0.85)';
+          ctx.lineWidth = Math.max(2, cellSize * 0.07);
+          ctx.arc(cx, cy, cellSize * 0.46, 0, Math.PI * 2);
+          ctx.stroke();
+        } else {
+          ctx.fillStyle = 'rgba(80,220,80,0.7)';
+          ctx.arc(cx, cy, cellSize * 0.14, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    // Pieza arrastrada — un poco más grande, con shadow extra para "levantarla"
+    if (!viewing && game.dragging && game.dragFrom) {
+      const p = game.grid[game.dragFrom[0]][game.dragFrom[1]];
+      if (p) {
+        ctx.save();
+        ctx.shadowColor = 'rgba(0,0,0,0.5)';
+        ctx.shadowBlur = cellSize * 0.25;
+        ctx.shadowOffsetY = cellSize * 0.08;
+        drawPiece(p.kind, p.color, pointerX, pointerY, cellSize * 1.08);
+        ctx.restore();
+      }
+    }
+
+    // ── Labels a-h, 1-8 — color cálido (color del marco) ──
+    ctx.fillStyle = 'rgba(240,225,195,0.85)';
+    ctx.font = `600 ${Math.max(11, Math.floor(cellSize * 0.18))}px "Segoe UI", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    const labelOff = FRAME * 0.55;
+    for (let i = 0; i < 8; i++) {
+      const fileC = game.flip ? (7 - i) : i;
+      const rankR = game.flip ? (7 - i) : i;
+      ctx.fillText('abcdefgh'[fileC], boardX + i * cellSize + cellSize/2, boardY + boardSize + labelOff);
+      ctx.fillText(String(8 - rankR), boardX - labelOff, boardY + i * cellSize + cellSize/2);
+    }
+
+    // Aislamos cada call: si drawTopBar tira, drawTopStatus tiene que correr
+    // igual (el texto de turno/depth no debe desaparecer porque falló una pieza).
+    try { drawTopBar(view.captured); } catch (e) { console.error('drawTopBar:', e); }
+    try { drawTopStatus(view);       } catch (e) { console.error('drawTopStatus:', e); }
+  }
+
+  const CAPTURE_ROWS = 2;        // siempre 2 filas, las cols se calculan dinámicamente
+
+  function drawTopBar(viewCaptured) {
+    // Barra horizontal arriba del tablero. Las piezas se dibujan en 2 filas
+    // pegadas al reloj — TODAS las capturas, ordenadas por valor decreciente.
+    //   [♛ ♜ ♜ ♝ ♝ ♞][Black clock][White clock][♕ ♖ ♖ ♗ ♗ ♘]
+    //   [♞ ♟ ♟ ♟ ♟ ♟ ♟ ♟]                                  [♘ ♟ ♟ ♟ ♟ ♟ ♟ ♟]
+    const order = { Q: 5, R: 4, B: 3, N: 2, P: 1, K: 0 };
+    const black = (viewCaptured || []).filter(p => p.color === 'b').map(p => p.kind).sort((a, b) => order[b] - order[a]);
+    const white = (viewCaptured || []).filter(p => p.color === 'w').map(p => p.kind).sort((a, b) => order[b] - order[a]);
+
+    const minStripTop = 56;                  // tope: justo debajo de status + depth info
+    const maxStripH   = 72;                  // techo para 2 filas de capturas + reloj
+    const gapToBoard  = 18;                  // separación entre strip y tablero
+    const stripBottom = boardY - gapToBoard;
+    const available   = stripBottom - minStripTop;
+    const stripH      = Math.min(maxStripH, available);
+    if (stripH < 56) return;                 // proporción mínima — no hay aire para 2 filas
+    const stripTop    = stripBottom - stripH;
+
+    // Relojes compactos pegados en el centro
+    const clockW = Math.min(108, Math.max(78, boardSize * 0.16));
+    const clockGap = 4;
+    const center = boardX + boardSize / 2;
+    const leftClockCx  = center - clockW/2 - clockGap/2;
+    const rightClockCx = center + clockW/2 + clockGap/2;
+
+    drawClock(leftClockCx,  stripTop, stripH, clockW, 'b');
+    drawClock(rightClockCx, stripTop, stripH, clockW, 'w');
+
+    // Piezas más chicas: 2 filas tienen que entrar en stripH
+    const pieceSize = Math.max(18, Math.min(26, stripH * 0.42));
+    const innerPad  = 10;
+
+    // Negras a la izquierda de los relojes: Q pegada al reloj negro → expanden a la izq
+    const blackAnchor = leftClockCx - clockW/2 - innerPad;
+    const blackLimit  = boardX + 4;
+    renderCapturesOutward(black, 'b', blackAnchor, blackLimit, stripTop + stripH/2, pieceSize, 'left');
+
+    // Blancas a la derecha de los relojes: Q pegada al reloj blanco → expanden a la der
+    const whiteAnchor = rightClockCx + clockW/2 + innerPad;
+    const whiteLimit  = boardX + boardSize - 4;
+    renderCapturesOutward(white, 'w', whiteAnchor, whiteLimit, stripTop + stripH/2, pieceSize, 'right');
+  }
+
+  function renderCapturesOutward(kinds, color, anchorX, limitX, cy, size, dir) {
+    // Las piezas se acomodan EMPEZANDO en anchorX (lado de la reina) y se
+    // expanden hacia limitX en HASTA 2 filas. Cap absoluto a MAX_VISIBLE_CAPTURES
+    // (las más valiosas — ya vinieron sorteadas). dir='left' / 'right' = sentido.
+    if (!kinds.length) return;
+    const visible = Math.min(kinds.length, MAX_VISIBLE_CAPTURES);
+    const span    = Math.abs(limitX - anchorX);
+    if (span < size) return;
+    // SIEMPRE usamos CAPTURES_PER_ROW columnas. Si no hay aire para el spacing
+    // natural, lo apretamos (overlap más fuerte). Floor mínimo para que no se
+    // colapsen unas sobre otras.
+    const cols     = CAPTURES_PER_ROW;
+    const natural  = size * 0.78;
+    const spacing  = Math.max(size * 0.42, Math.min(natural, span / cols));
+    const sign     = dir === 'left' ? -1 : 1;
+    const rowOff   = size * 0.50;                // distancia de cada fila al centro
+    for (let i = 0; i < visible; i++) {
+      const row = Math.floor(i / cols);
+      if (row > 1) break;                        // máximo 2 filas
+      const col = i % cols;
+      const cx = anchorX + sign * (col + 0.5) * spacing;
+      const py = cy + (row === 0 ? -rowOff : rowOff);
+      drawPiece(kinds[i], color, cx, py, size);
+    }
+  }
+
+  function drawClock(cx, top, height, width, color) {
+    const isActive = (game.state === 'play' && !game.gameOver
+                      && !isViewingHistory() && game.turn === color);
+    const ms = color === 'w' ? game.clockW : game.clockB;
+    const lowTime = ms < 30 * 1000;
+    const x = cx - width/2;
+
+    // ── Cuadrante: el ACTIVO tiene fondo blanco/claro (= "encendido"),
+    //    el INACTIVO tiene fondo oscuro (= "apagado"). El fondo se PASA al
+    //    otro reloj cuando cambia el turno, como un chess clock real.
+    const bgColor     = isActive ? '#f4f4f8' : '#1a1a22';
+    const strokeColor = isActive ? '#ffb83a' : '#33333e';
+    ctx.fillStyle = bgColor;
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = isActive ? 2.6 : 1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, top, width, height, 8);
+    else ctx.rect(x, top, width, height);
+    ctx.fill();
+    ctx.stroke();
+
+    // ── Texto: contraste con el fondo ──
+    const textColor = lowTime
+      ? '#ff3838'
+      : (isActive ? '#181820' : '#7a7a86');
+    ctx.fillStyle = textColor;
+    ctx.font = `900 ${Math.floor(height * 0.28)}px Bahnschrift, "Segoe UI Black", Oswald, Impact, "Arial Black", sans-serif`;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0.04em';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(formatClock(ms), cx, top + height/2);
+    if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
+  }
+
+  function drawTopStatus(view) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.45)';
+    ctx.shadowBlur = 4;
+    ctx.shadowOffsetY = 1;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+
+    const viewing = isViewingHistory();
+    const bigFont = (px) => `300 ${px}px "Segoe UI", sans-serif`;
+    const banner  = (px) => `600 ${px}px "Segoe UI", sans-serif`;
+
+    if (viewing) {
+      const idx = game.historyIndex, total = game.history.length - 1;
+      const txt = idx === 0
+        ? 'Posición inicial · END vuelve al presente'
+        : `Viendo movida ${idx} de ${total}  ·  ← → navegar  ·  END = al presente`;
+      ctx.fillStyle = '#e8d878';
+      ctx.font = bigFont(Math.max(14, Math.floor(W * 0.018)));
+      ctx.fillText(txt, W / 2, 24);
+    } else if (view.status === 'checkmate') {
+      const winner = view.turn === 'w' ? 'Negras' : 'Blancas';
+      ctx.fillStyle = '#ff6464';
+      ctx.font = banner(Math.max(22, Math.floor(W * 0.028)));
+      ctx.fillText('JAQUE MATE — Ganan ' + winner, W / 2, 28);
+    } else if (view.status === 'stalemate') {
+      ctx.fillStyle = '#e8d864';
+      ctx.font = banner(Math.max(22, Math.floor(W * 0.028)));
+      ctx.fillText('AHOGADO — Tablas', W / 2, 28);
+    } else if (view.status === 'repetition') {
+      ctx.fillStyle = '#e8d864';
+      ctx.font = banner(Math.max(22, Math.floor(W * 0.028)));
+      ctx.fillText('TABLAS POR REPETICIÓN', W / 2, 28);
+    } else if (view.status === 'insufficient') {
+      ctx.fillStyle = '#e8d864';
+      ctx.font = banner(Math.max(22, Math.floor(W * 0.028)));
+      ctx.fillText('TABLAS POR FALTA DE MATERIAL', W / 2, 28);
+    } else if (view.status === 'timeout') {
+      // El jugador que se quedó sin tiempo es el del turno actual (la vista lo congela)
+      const winner = view.turn === 'w' ? 'Negras' : 'Blancas';
+      ctx.fillStyle = '#ff6464';
+      ctx.font = banner(Math.max(22, Math.floor(W * 0.028)));
+      ctx.fillText('TIEMPO AGOTADO — Ganan ' + winner, W / 2, 28);
+    } else {
+      let txt = view.turn === 'w' ? 'Turno: Blancas' : 'Turno: Negras';
+      let color = '#ececf0';
+      if (game.aiThinking) {
+        // Animación de puntos "Pensando . . ."
+        const dots = '.'.repeat(1 + Math.floor((performance.now() / 350) % 3));
+        txt += '   ·   Pensando' + dots;
+        color = '#c8c8ff';
+      } else if (view.status === 'check') {
+        txt += '   ·   JAQUE';
+        color = '#ff8a8a';
+      }
+      ctx.fillStyle = color;
+      ctx.font = bigFont(Math.max(14, Math.floor(W * 0.022)));
+      ctx.fillText(txt, W / 2, 24);
+    }
+    ctx.restore();
+
+    // Modo a la derecha — chip estilo pill
+    if (W > 500) {
+      let mode;
+      if (game.aiBoth)              mode = 'IA vs IA';
+      else if (!game.aiColor)       mode = '2 Jugadores';
+      else                          mode = 'vs IA · ' + (game.humanColor === 'w' ? 'Blancas' : 'Negras');
+      ctx.font = `500 ${Math.max(11, Math.floor(W * 0.013))}px "Segoe UI", sans-serif`;
+      ctx.textBaseline = 'middle';
+      ctx.textAlign = 'right';
+      const padX = 10, padY = 4;
+      const txtW = ctx.measureText(mode).width;
+      const chipW = txtW + padX*2, chipH = 22;
+      const chipX = W - 12 - chipW, chipY = 16 - chipH/2;
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(chipX, chipY, chipW, chipH, 11);
+      else ctx.rect(chipX, chipY, chipW, chipH);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.fillStyle = 'rgba(220,220,235,0.85)';
+      ctx.fillText(mode, W - 12 - padX, 16);
+    }
+
+    // Depth secundario + nombre del motor
+    // depth   = profundidad nominal de iterative deepening
+    // seldepth = profundidad máxima alcanzada con extensiones / quiescence (siempre ≥ depth)
+    const fmtDepth = (d, sd) => sd > 0 && sd > d ? (d + '/' + sd) : String(d);
+    if (!viewing && !game.gameOver) {
+      ctx.font = `400 ${Math.max(10, Math.floor(W * 0.012))}px "Segoe UI", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      if (game.aiThinking) {
+        // Línea en vivo: motor + depth (si ya lo reportó) o "pensando..."
+        // Stockfish stream-ea depth via UCI; el motor interno sólo reporta al final,
+        // entonces durante su primera pensada mostramos solo el indicador animado.
+        const motorLive = game.aiEngineName || (stockfishReady ? 'Stockfish' : 'Interno');
+        const dots = '.'.repeat(1 + Math.floor((performance.now() / 400) % 3));
+        let line;
+        if (game.aiLastDepth > 0) {
+          line = motorLive + ' · depth ' + fmtDepth(game.aiLastDepth, game.aiLastSeldepth);
+        } else {
+          line = motorLive + ' · pensando' + dots;
+        }
+        if (game.aiTactical) line += ' · táctica';
+        ctx.fillStyle = 'rgba(180,200,240,0.7)';
+        ctx.fillText(line, W / 2, 48);
+      } else if (game.aiLastDepth > 0) {
+        // Última jugada de la IA — depth final de la búsqueda
+        const motor = game.aiEngineName || 'IA';
+        ctx.fillStyle = 'rgba(160,180,210,0.65)';
+        ctx.fillText('Última jugada · ' + motor + ' · depth ' + fmtDepth(game.aiLastDepth, game.aiLastSeldepth), W / 2, 48);
+      }
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  INPUT — pointer events (unifica mouse + touch)
+  // ════════════════════════════════════════════════════════════════════
+  let pointerX = 0, pointerY = 0, pointerDown = false;
+  let pressOriginSq = null;
+
+  canvas.addEventListener('pointerdown', e => {
+    if (game.state !== 'play') return;
+    canvas.setPointerCapture(e.pointerId);
+    const rect = canvas.getBoundingClientRect();
+    pointerX = e.clientX - rect.left;
+    pointerY = e.clientY - rect.top;
+    pointerDown = true;
+    handlePress();
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', e => {
+    const rect = canvas.getBoundingClientRect();
+    pointerX = e.clientX - rect.left;
+    pointerY = e.clientY - rect.top;
+  });
+  canvas.addEventListener('pointerup', e => {
+    if (game.state !== 'play') return;
+    pointerDown = false;
+    handleRelease();
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointercancel', () => { pointerDown = false; game.dragging = false; game.dragFrom = null; });
+
+  function handlePress() {
+    if (game.gameOver || isViewingHistory() || game.aiThinking || game.animation) return;
+    if (currentPlayerIsAI()) return;
+    const sq = pixelToSquare(pointerX, pointerY);
+    if (!sq) { game.selected = null; game.legal = []; game.dragging = false; return; }
+    const [c, r] = sq;
+    // ¿clic sobre un destino legal? — mover (click-click, anima)
+    if (game.selected) {
+      for (const [tc, tr, extra] of game.legal) {
+        if (tc === c && tr === r) {
+          makeMove(game.selected[0], game.selected[1], tc, tr, extra, true);
+          game.selected = null; game.legal = []; game.dragging = false;
+          return;
+        }
+      }
+    }
+    // ¿clic sobre pieza propia? — seleccionar + arrancar drag
+    const p = game.grid[c][r];
+    if (p && p.color === game.turn) {
+      game.selected = [c, r];
+      game.legal = genLegalMoves(game.grid, c, r, game.enPassant);
+      game.dragging = true;
+      game.dragFrom = [c, r];
+      pressOriginSq = [c, r];
+    } else {
+      game.selected = null; game.legal = []; game.dragging = false;
+    }
+  }
+
+  function handleRelease() {
+    if (!game.dragging) return;
+    game.dragging = false;
+    const from = game.dragFrom;
+    game.dragFrom = null;
+    if (!from) return;
+    const sq = pixelToSquare(pointerX, pointerY);
+    if (!sq) return;
+    const [c, r] = sq;
+    if (c === from[0] && r === from[1]) return;   // soltó en mismo lugar → queda en click-click mode
+    for (const [tc, tr, extra] of game.legal) {
+      if (tc === c && tr === r) {
+        makeMove(from[0], from[1], tc, tr, extra, false);   // drag → snap (no anima)
+        game.selected = null; game.legal = [];
+        return;
+      }
+    }
+    // Soltó en cualquier otra cosa (incluida otra pieza propia) → cancelar.
+    // El cambio de selección a otra pieza propia sólo ocurre vía click, no vía drag.
+    game.selected = null; game.legal = [];
+  }
+
+  // Teclado: flechas + R + N (desktop)
+  window.addEventListener('keydown', e => {
+    if (game.state !== 'play') return;
+    if (e.key === 'ArrowLeft')      historyBack();
+    else if (e.key === 'ArrowRight') historyForward();
+    else if (e.key === 'Home')       historyFirst();
+    else if (e.key === 'End')        historyLast();
+    else if (e.key === 'r' || e.key === 'R') resetBoard();
+    else if (e.key === 'n' || e.key === 'N') backToMenu();
+  });
+
+  function historyBack()    { if (game.historyIndex > 0) { game.historyIndex--; clearSelection(); } }
+  function historyForward() { if (game.historyIndex < game.history.length - 1) { game.historyIndex++; clearSelection(); } }
+  function historyFirst()   { game.historyIndex = 0; clearSelection(); }
+  function historyLast()    { game.historyIndex = game.history.length - 1; clearSelection(); }
+  function clearSelection() { game.selected = null; game.legal = []; game.dragging = false; game.dragFrom = null; }
+
+  // Botones del menú
+  document.querySelectorAll('#menu button').forEach(b => {
+    b.addEventListener('click', () => startGame(b.dataset.mode));
+  });
+  document.getElementById('btnFirst').addEventListener('click', historyFirst);
+  document.getElementById('btnPrev').addEventListener('click', historyBack);
+  document.getElementById('btnNext').addEventListener('click', historyForward);
+  document.getElementById('btnLast').addEventListener('click', historyLast);
+  document.getElementById('btnReset').addEventListener('click', resetBoard);
+  document.getElementById('btnMenu').addEventListener('click', backToMenu);
+
+  // ════════════════════════════════════════════════════════════════════
+  //  MAIN LOOP
+  // ════════════════════════════════════════════════════════════════════
+  function loop() {
+    try {
+      tickClock();
+      // Limpia animación cuando expira
+      if (game.animation && performance.now() - game.animation.startTime >= game.animation.duration) {
+        game.animation = null;
+      }
+      // Aplica jugada de IA pendiente cuando termina la animación
+      if (!game.animation && game.pendingAI) {
+        const r = game.pendingAI; game.pendingAI = null;
+        if (currentPlayerIsAI() && !game.gameOver && r.move) {
+          game.aiLastDepth = r.depth;
+          game.aiLastSeldepth = r.seldepth || 0;
+          if (r.engineName) game.aiEngineName = r.engineName;
+          const [fc, fr, tc, tr, extra] = r.move;
+          makeMove(fc, fr, tc, tr, extra, true);
+        }
+      }
+      // Disparar IA cuando le toca
+      if (game.state === 'play' && currentPlayerIsAI() && !game.aiThinking && !game.aiWorking
+          && !game.gameOver && !game.animation && !game.pendingAI) {
+        triggerAI();
+      }
+      if (game.state === 'play') {
+        ctx.clearRect(0, 0, W, H);
+        drawBoard();
+      }
+    } catch (err) {
+      // No matar el render loop por una excepción de pintado — el juego sigue.
+      console.error('render loop error:', err);
+    }
+    requestAnimationFrame(loop);
+  }
+
+  resize();
+  loop();
+
+  // Ocultar hint después de 5s o al primer toque
+  const hint = document.getElementById('hint');
+  setTimeout(() => hint.style.opacity = '0', 5000);
+  canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
+  </script>
+</body>
+</html>

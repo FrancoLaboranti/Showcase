@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Poker</title>
+<style>
+  :root { --bar-height: 78px; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #06180b;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    color: #f0e8d0;
+  }
+  #c {
+    display: block; position: absolute;
+    top: 0; left: 0;
+  }
+  #bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    padding: 8px 10px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    background: rgba(0,0,0,0.85);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    z-index: 3;
+  }
+  /* Pill-shaped action buttons. Label changes with state ("CHECK" ↔ "CALL $40"), so width auto-fits. */
+  .btn {
+    height: 48px; min-width: 64px; padding: 0 12px; border-radius: 24px;
+    border: 1px solid rgba(255,255,255,0.18);
+    background: rgba(150,115,40,0.55);
+    color: #f6ecc8;
+    font: 600 14px/1 'Segoe UI', system-ui, sans-serif;
+    letter-spacing: 0.03em;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    transition: background 0.1s, transform 0.08s, opacity 0.1s;
+  }
+  .btn:active { background: rgba(220,185,90,0.85); color: #1a1408; transform: scale(0.96); }
+  .btn:disabled { opacity: 0.32; cursor: default; }
+  .btn.primary { background: rgba(60,140,70,0.75); border-color: rgba(140,230,160,0.4); }
+  .btn.danger  { background: rgba(150,50,50,0.6); border-color: rgba(255,150,150,0.3); }
+  .btn.compact { min-width: 38px; padding: 0 8px; }
+  /* Raise group: [-] $40 [+] sticks together so the amount reads as a unit, with two tap targets. */
+  #raiseGroup {
+    display: flex; align-items: center; gap: 4px;
+    padding: 0 6px;
+    background: rgba(255,255,255,0.04);
+    border-radius: 24px;
+    height: 48px;
+  }
+  #raiseAmt {
+    min-width: 56px; text-align: center;
+    font: 600 14px/1 ui-monospace, Consolas, monospace;
+    color: #ffd86b;
+    padding: 0 4px;
+  }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="bar">
+    <button id="btnFold"  class="btn danger">FOLD</button>
+    <button id="btnCall"  class="btn">CHECK</button>
+    <div id="raiseGroup">
+      <button id="btnMinus" class="btn compact">−</button>
+      <span id="raiseAmt">$40</span>
+      <button id="btnPlus"  class="btn compact">+</button>
+    </div>
+    <button id="btnRaise" class="btn">RAISE</button>
+    <button id="btnDeal"  class="btn primary">DEAL</button>
+  </div>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  POKER — port web del Texas Hold'em heads-up de Poker.py
+  // ════════════════════════════════════════════════════════════════════
+  const TAU = Math.PI * 2;
+  const ri  = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  // ── BARAJA ──
+  const RANKS = '23456789TJQKA';
+  const SUITS = 'shdc';
+  const SUIT_SYMBOL = { s: '♠', h: '♥', d: '♦', c: '♣' };
+  const SUIT_COLOR  = { s: '#1a1a1a', c: '#1a1a1a', h: '#c81e1e', d: '#c81e1e' };
+  const RANK_DISPLAY = { T: '10' };
+  const HAND_NAMES = {
+    1:'High Card', 2:'Pair', 3:'Two Pair', 4:'Three of a Kind',
+    5:'Straight', 6:'Flush', 7:'Full House', 8:'Four of a Kind', 9:'Straight Flush'
+  };
+
+  // ── EVALUADOR ──
+  // Devuelve tuple (category, ...kickers). Comparable lexicográficamente; mayor = mejor.
+  function handRank(cards5) {
+    const vals = cards5.map(c => RANKS.indexOf(c[0])).sort((a,b) => b - a);
+    const suits = cards5.map(c => c[1]);
+    const counts = {};
+    for (const v of vals) counts[v] = (counts[v] || 0) + 1;
+    const byCount = Object.entries(counts)
+      .map(([v,c]) => [+v, c])
+      .sort((a,b) => b[1] - a[1] || b[0] - a[0]);
+    const isFlush = new Set(suits).size === 1;
+    const uniq = [...new Set(vals)].sort((a,b) => b - a);
+    let isStraight = false, sh = 0;
+    if (uniq.length === 5) {
+      if (uniq[0] - uniq[4] === 4) { isStraight = true; sh = uniq[0]; }
+      else if (uniq[0] === 12 && uniq[1] === 3 && uniq[2] === 2 && uniq[3] === 1 && uniq[4] === 0) {
+        isStraight = true; sh = 3;                                                 // wheel A-2-3-4-5 → 5-high
+      }
+    }
+    if (isStraight && isFlush) return [9, sh];
+    if (byCount[0][1] === 4) return [8, byCount[0][0], byCount[1][0]];
+    if (byCount[0][1] === 3 && byCount[1][1] === 2) return [7, byCount[0][0], byCount[1][0]];
+    if (isFlush) return [6, ...vals];
+    if (isStraight) return [5, sh];
+    if (byCount[0][1] === 3) return [4, byCount[0][0], ...byCount.slice(1).map(x => x[0])];
+    if (byCount[0][1] === 2 && byCount[1][1] === 2)
+      return [3, byCount[0][0], byCount[1][0], byCount[2][0]];
+    if (byCount[0][1] === 2) return [2, byCount[0][0], ...byCount.slice(1).map(x => x[0])];
+    return [1, ...vals];
+  }
+  function rankCmp(a, b) {
+    const n = Math.max(a.length, b.length);
+    for (let i = 0; i < n; i++) {
+      const ai = a[i] ?? -1, bi = b[i] ?? -1;
+      if (ai !== bi) return ai - bi;
+    }
+    return 0;
+  }
+  function bestHand(seven) {
+    let best = [0];
+    const n = seven.length;
+    for (let a = 0; a < n - 4; a++)
+      for (let b = a + 1; b < n - 3; b++)
+        for (let c = b + 1; c < n - 2; c++)
+          for (let d = c + 1; d < n - 1; d++)
+            for (let e = d + 1; e < n; e++) {
+              const r = handRank([seven[a],seven[b],seven[c],seven[d],seven[e]]);
+              if (rankCmp(r, best) > 0) best = r;
+            }
+    return best;
+  }
+
+  // ── CANVAS / RESIZE ──
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, dpr = 1;
+  const barEl = document.getElementById('bar');
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const barH = barEl.offsetHeight;
+    W = window.innerWidth;
+    H = window.innerHeight - barH;
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+
+  // ── LAYOUT HELPERS ──
+  // Posiciones expresadas como % del canvas (preserva la escala del Poker.py).
+  function xp(p) { return p * W; }
+  function yp(p) { return p * H; }
+  function sp(p) { return p * (W + H) / 2; }
+  function cardSize() {
+    const w = Math.min(W, H) * 0.13;
+    return { w, h: w * 1.45 };
+  }
+
+  // ── CARTAS (sprites con animación de movimiento + flip) ──
+  const cards = [];
+  function makeCard(code, targetX, targetY, hidden, owner) {
+    const { w, h } = cardSize();
+    cards.push({
+      code, rank: code[0], suit: code[1],
+      x: xp(0.5), y: owner === 'cpu' ? yp(-0.2) : yp(1.2),
+      targetX, targetY,
+      flip: hidden ? 0 : 1,
+      flipTarget: hidden ? 0 : 1,
+      hidden, owner, w, h,
+    });
+  }
+  function revealCpuCards() {
+    for (const c of cards) if (c.owner === 'cpu') { c.hidden = false; c.flipTarget = 1; }
+  }
+  function clearCards() { cards.length = 0; }
+
+  function drawCard(c) {
+    const scale = Math.abs(c.flip - 0.5) * 2;
+    const w = Math.max(c.w * scale, 2);
+    const h = c.h;
+    const x = c.x - w/2;
+    const y = c.y - h/2;
+    const r = sp(0.008);
+    const faceUp = c.flip > 0.5 && !c.hidden;
+
+    if (faceUp) {
+      roundRect(ctx, x, y, w, h, r);
+      ctx.fillStyle = '#f8f6ec';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#1a1a1a';
+      ctx.stroke();
+      if (scale > 0.4) {
+        const color = SUIT_COLOR[c.suit];
+        const rtxt = RANK_DISPLAY[c.rank] || c.rank;
+        const sym = SUIT_SYMBOL[c.suit];
+        ctx.fillStyle = color;
+        ctx.textBaseline = 'top';
+        ctx.textAlign = 'left';
+        ctx.font = `bold ${Math.round(sp(0.022))}px 'Segoe UI', system-ui, sans-serif`;
+        ctx.fillText(rtxt, x + w*0.08, y + h*0.04);
+        ctx.font = `${Math.round(sp(0.018))}px 'Segoe UI', system-ui, sans-serif`;
+        ctx.fillText(sym, x + w*0.10, y + h*0.27);
+        ctx.font = `${Math.round(sp(0.055))}px 'Segoe UI', system-ui, sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(sym, x + w/2, y + h/2);
+        ctx.font = `bold ${Math.round(sp(0.022))}px 'Segoe UI', system-ui, sans-serif`;
+        ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+        ctx.fillText(rtxt, x + w*0.92, y + h*0.96);
+      }
+    } else {
+      roundRect(ctx, x, y, w, h, r);
+      ctx.fillStyle = '#1e3870';
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#c8c8e0';
+      ctx.stroke();
+      if (scale > 0.5) {
+        ctx.fillStyle = '#4664aa';
+        for (let i = 0; i < 4; i++)
+          for (let j = 0; j < 6; j++) {
+            const px = x + w * (0.15 + i*0.23);
+            const py = y + h * (0.1 + j*0.16);
+            ctx.beginPath();
+            ctx.arc(px, py, Math.max(sp(0.004), 1.5), 0, TAU);
+            ctx.fill();
+          }
+      }
+    }
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    r = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function tickCards(dt) {
+    const k = Math.min(dt * 8, 1);
+    const kf = Math.min(dt * 7, 1);
+    for (const c of cards) {
+      c.x += (c.targetX - c.x) * k;
+      c.y += (c.targetY - c.y) * k;
+      c.flip += (c.flipTarget - c.flip) * kf;
+    }
+  }
+
+  // ════════════════ STATE MACHINE (mirror de Manager en Poker.py) ════════════════
+  const SMALL_BLIND = 10;
+  const BIG_BLIND   = 20;
+  const G = {
+    playerChips: 1000, cpuChips: 1000,
+    button: Math.random() < 0.5 ? 'player' : 'cpu',
+    phase: 'idle',                         // idle | preflop | flop | turn | river | hand_end
+    deck: [], playerHole: [], cpuHole: [], community: [],
+    pot: 0, playerBet: 0, cpuBet: 0,
+    lastRaiser: null, acted: new Set(),
+    currentPlayer: 'player',
+    raiseAmount: 40,
+    message: 'Click DEAL to start',
+    cpuPending: false, cpuTimer: 0,
+    handEndTimer: 0,
+  };
+
+  function inBetting() {
+    return G.phase === 'preflop' || G.phase === 'flop' || G.phase === 'turn' || G.phase === 'river';
+  }
+
+  function postBet(who, amount) {
+    if (who === 'player') {
+      amount = Math.min(amount, G.playerChips);
+      G.playerChips -= amount;
+      G.playerBet += amount;
+    } else {
+      amount = Math.min(amount, G.cpuChips);
+      G.cpuChips -= amount;
+      G.cpuBet += amount;
+    }
+    G.pot += amount;
+  }
+
+  function dealHand() {
+    if (G.phase !== 'idle' && G.phase !== 'hand_end') return;
+    if (G.playerChips <= 0 || G.cpuChips <= 0) {
+      G.playerChips = 1000;
+      G.cpuChips = 1000;
+    }
+    clearCards();
+    G.deck = [];
+    for (const r of RANKS) for (const s of SUITS) G.deck.push(r + s);
+    for (let i = G.deck.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [G.deck[i], G.deck[j]] = [G.deck[j], G.deck[i]];
+    }
+    G.playerHole = []; G.cpuHole = []; G.community = [];
+    G.pot = 0; G.playerBet = 0; G.cpuBet = 0;
+    G.lastRaiser = null; G.acted = new Set();
+    G.message = ''; G.cpuPending = false;
+
+    G.button = G.button === 'player' ? 'cpu' : 'player';
+    const sbWho = G.button;
+    const bbWho = G.button === 'player' ? 'cpu' : 'player';
+    postBet(sbWho, SMALL_BLIND);
+    postBet(bbWho, BIG_BLIND);
+    G.currentPlayer = G.button;
+
+    for (let i = 0; i < 2; i++) {
+      G.playerHole.push(G.deck.pop());
+      G.cpuHole.push(G.deck.pop());
+    }
+    const { w } = cardSize();
+    const dx = w * 1.05;
+    for (let i = 0; i < 2; i++) {
+      makeCard(G.playerHole[i], xp(0.5) + (i - 0.5) * dx, yp(0.76), false, 'player');
+      makeCard(G.cpuHole[i],    xp(0.5) + (i - 0.5) * dx, yp(0.20), true,  'cpu');
+    }
+    G.phase = 'preflop';
+  }
+
+  function actFold() {
+    if (!inBetting() || G.currentPlayer !== 'player') return;
+    G.cpuChips += G.pot; G.pot = 0;
+    G.message = 'CPU wins (you folded)';
+    G.phase = 'hand_end';
+    G.handEndTimer = 2.5;
+  }
+  function actCall() {
+    if (!inBetting() || G.currentPlayer !== 'player') return;
+    const diff = G.cpuBet - G.playerBet;
+    if (diff > 0) postBet('player', diff);
+    G.acted.add('player');
+    G.currentPlayer = 'cpu';
+    checkRoundEnd();
+  }
+  function actRaise() {
+    if (!inBetting() || G.currentPlayer !== 'player') return;
+    const callAmt = Math.max(0, G.cpuBet - G.playerBet);
+    const bump = Math.min(G.raiseAmount, Math.max(G.playerChips - callAmt, 0));
+    if (bump <= 0) return;
+    postBet('player', callAmt + bump);
+    G.lastRaiser = 'player';
+    G.acted = new Set(['player']);
+    G.currentPlayer = 'cpu';
+  }
+  function decRaise() { G.raiseAmount = Math.max(BIG_BLIND, G.raiseAmount - BIG_BLIND); }
+  function incRaise() { G.raiseAmount = Math.min(Math.max(G.playerChips, BIG_BLIND), G.raiseAmount + BIG_BLIND); }
+
+  function cpuAct() {
+    if (!inBetting() || G.currentPlayer !== 'cpu') return;
+    const callAmt = Math.max(0, G.playerBet - G.cpuBet);
+    let strength;
+    if (G.phase === 'preflop') {
+      const r1 = G.cpuHole[0][0], r2 = G.cpuHole[1][0];
+      const v1 = RANKS.indexOf(r1), v2 = RANKS.indexOf(r2);
+      const pair = r1 === r2;
+      const suited = G.cpuHole[0][1] === G.cpuHole[1][1];
+      const high = Math.max(v1, v2), low = Math.min(v1, v2);
+      strength = 0.15 + (high/12) * 0.32 + (low/12) * 0.18;
+      if (pair) strength += 0.30;
+      if (suited) strength += 0.05;
+      if ((high - low) >= 1 && (high - low) <= 4) strength += 0.04;
+    } else {
+      const score = bestHand(G.cpuHole.concat(G.community));
+      strength = score[0] / 9.0;
+      if (score.length > 1) strength += (score[1] / 12.0) * 0.04;
+    }
+    strength += rnd(-0.12, 0.10);
+    const potOdds = callAmt / Math.max(G.pot + callAmt, 1);
+
+    if (callAmt > 0 && strength < 0.20 + potOdds * 0.3) {
+      G.playerChips += G.pot; G.pot = 0;
+      G.message = 'You win (CPU folded)';
+      G.phase = 'hand_end';
+      G.handEndTimer = 2.5;
+      return;
+    }
+    const canRaise = G.cpuChips > callAmt + BIG_BLIND;
+    const willRaise = canRaise && strength > 0.62 && (G.lastRaiser !== 'cpu' || Math.random() < 0.25);
+    if (willRaise) {
+      const mult = [1,1,2,2,3][Math.floor(Math.random() * 5)];
+      const bump = Math.min(BIG_BLIND * mult, G.cpuChips - callAmt);
+      postBet('cpu', callAmt + bump);
+      G.lastRaiser = 'cpu';
+      G.acted = new Set(['cpu']);
+      G.currentPlayer = 'player';
+      return;
+    }
+    if (callAmt > 0) postBet('cpu', callAmt);
+    G.acted.add('cpu');
+    G.currentPlayer = 'player';
+    checkRoundEnd();
+  }
+
+  function checkRoundEnd() {
+    if (G.playerBet !== G.cpuBet) return;
+    if (G.acted.has('player') && G.acted.has('cpu')) advancePhase();
+  }
+
+  function advancePhase() {
+    G.playerBet = 0; G.cpuBet = 0;
+    G.lastRaiser = null;
+    G.acted = new Set();
+    const nonButton = G.button === 'player' ? 'cpu' : 'player';
+    G.currentPlayer = nonButton;
+    G.cpuPending = false;
+
+    const { w } = cardSize();
+    const dx = w * 1.05;
+    if (G.phase === 'preflop') {
+      G.phase = 'flop';
+      for (let i = 0; i < 3; i++) {
+        const code = G.deck.pop();
+        G.community.push(code);
+        makeCard(code, xp(0.5) + (i - 2) * dx, yp(0.46), false, 'community');
+      }
+    } else if (G.phase === 'flop') {
+      G.phase = 'turn';
+      const code = G.deck.pop();
+      G.community.push(code);
+      makeCard(code, xp(0.5) + (3 - 2) * dx, yp(0.46), false, 'community');
+    } else if (G.phase === 'turn') {
+      G.phase = 'river';
+      const code = G.deck.pop();
+      G.community.push(code);
+      makeCard(code, xp(0.5) + (4 - 2) * dx, yp(0.46), false, 'community');
+    } else if (G.phase === 'river') {
+      showdown();
+    }
+  }
+
+  function showdown() {
+    revealCpuCards();
+    const pScore = bestHand(G.playerHole.concat(G.community));
+    const cScore = bestHand(G.cpuHole.concat(G.community));
+    const pName = HAND_NAMES[pScore[0]];
+    const cName = HAND_NAMES[cScore[0]];
+    const cmp = rankCmp(pScore, cScore);
+    if (cmp > 0) {
+      G.playerChips += G.pot;
+      G.message = `You win! ${pName} beats ${cName}`;
+    } else if (cmp < 0) {
+      G.cpuChips += G.pot;
+      G.message = `CPU wins! ${cName} beats ${pName}`;
+    } else {
+      const half = Math.floor(G.pot / 2);
+      G.playerChips += half;
+      G.cpuChips += G.pot - half;
+      G.message = `Split pot — both ${pName}`;
+    }
+    G.pot = 0;
+    G.phase = 'hand_end';
+    G.handEndTimer = 4;
+  }
+
+  // ── UI WIRING ──
+  const $ = id => document.getElementById(id);
+  const btnFold  = $('btnFold');
+  const btnCall  = $('btnCall');
+  const btnMinus = $('btnMinus');
+  const btnPlus  = $('btnPlus');
+  const btnRaise = $('btnRaise');
+  const btnDeal  = $('btnDeal');
+  const raiseAmtEl = $('raiseAmt');
+
+  // pointerdown wiring so taps fire even mid-animation; same trick used in BallsWeb.
+  function tap(el, fn) {
+    el.addEventListener('pointerdown', e => {
+      if (el.disabled) return;
+      e.preventDefault();
+      fn();
+    });
+  }
+  tap(btnFold,  actFold);
+  tap(btnCall,  actCall);
+  tap(btnMinus, decRaise);
+  tap(btnPlus,  incRaise);
+  tap(btnRaise, actRaise);
+  tap(btnDeal,  dealHand);
+
+  function refreshButtons() {
+    const myTurn = inBetting() && G.currentPlayer === 'player';
+    const callAmt = Math.max(0, G.cpuBet - G.playerBet);
+    btnDeal.disabled  = G.phase !== 'idle' && G.phase !== 'hand_end';
+    btnFold.disabled  = !myTurn;
+    btnCall.disabled  = !myTurn;
+    btnRaise.disabled = !myTurn || G.playerChips <= callAmt;
+    btnMinus.disabled = !myTurn;
+    btnPlus.disabled  = !myTurn;
+    btnCall.textContent  = callAmt === 0 ? 'CHECK' : `CALL $${callAmt}`;
+    btnRaise.textContent = 'RAISE';
+    raiseAmtEl.textContent = '$' + G.raiseAmount;
+  }
+
+  // ── DRAW LOOP ──
+  function drawTable() {
+    ctx.save();
+    ctx.translate(W/2, H/2 - H*0.02);
+    const rx = W * 0.46;
+    const ry = H * 0.42;
+    ctx.fillStyle = '#0f5520';
+    ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#5a3614';
+    ctx.lineWidth = sp(0.012);
+    ctx.stroke();
+    ctx.strokeStyle = '#0a3818';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(0, 0, rx - sp(0.025), ry - sp(0.025), 0, 0, TAU); ctx.stroke();
+    ctx.restore();
+  }
+
+  function txt(size, content, align, color, x, y, baseline) {
+    ctx.fillStyle = color;
+    ctx.textAlign = align;
+    ctx.textBaseline = baseline || 'middle';
+    ctx.font = `${Math.round(size)}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillText(content, x, y);
+  }
+  function txtBold(size, content, align, color, x, y, baseline) {
+    ctx.fillStyle = color;
+    ctx.textAlign = align;
+    ctx.textBaseline = baseline || 'middle';
+    ctx.font = `bold ${Math.round(size)}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillText(content, x, y);
+  }
+
+  function drawHud() {
+    txtBold(sp(0.022), `CPU  $${G.cpuChips}`, 'center', '#f0e8d0', xp(0.5), yp(0.07));
+    txtBold(sp(0.022), `YOU  $${G.playerChips}`, 'center', '#f0e8d0', xp(0.5), yp(0.88));
+    if (G.pot > 0) txtBold(sp(0.028), `POT  $${G.pot}`, 'center', '#ffd86b', xp(0.5), yp(0.355));
+    if (G.cpuBet > 0)    txt(sp(0.018), `$${G.cpuBet}`,    'center', '#fff', xp(0.5), yp(0.30));
+    if (G.playerBet > 0) txt(sp(0.018), `$${G.playerBet}`, 'center', '#fff', xp(0.5), yp(0.65));
+
+    // dealer button
+    const dy = G.button === 'player' ? yp(0.72) : yp(0.22);
+    ctx.fillStyle = '#f0e8b4';
+    ctx.beginPath(); ctx.arc(xp(0.34), dy, sp(0.013), 0, TAU); ctx.fill();
+    ctx.fillStyle = '#1a1408';
+    ctx.font = `bold ${Math.round(sp(0.016))}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('D', xp(0.34), dy);
+
+    if (G.message)
+      txtBold(sp(0.024), G.message, 'center', '#ffe896', xp(0.5), yp(0.555));
+
+    if (G.community.length && inBetting()) {
+      const score = bestHand(G.playerHole.concat(G.community));
+      txt(sp(0.018), 'Your hand: ' + HAND_NAMES[score[0]], 'center', '#bcffbc', xp(0.5), yp(0.83));
+    }
+
+    if (inBetting()) {
+      const y = G.currentPlayer === 'player' ? yp(0.76) : yp(0.20);
+      ctx.fillStyle = G.currentPlayer === 'player' ? '#50ff50' : '#ff5050';
+      ctx.beginPath(); ctx.arc(xp(0.66), y, sp(0.009), 0, TAU); ctx.fill();
+    }
+  }
+
+  // ── MAIN LOOP ──
+  let lastT = performance.now();
+  function loop(now) {
+    if (typeof now !== 'number') now = performance.now();
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+
+    // CPU "turn" pacing — set a delay first time it becomes their turn, then act when it elapses.
+    if (inBetting() && G.currentPlayer === 'cpu') {
+      if (!G.cpuPending) { G.cpuPending = true; G.cpuTimer = 0.9; }
+      else {
+        G.cpuTimer -= dt;
+        if (G.cpuTimer <= 0) { G.cpuPending = false; cpuAct(); }
+      }
+    } else {
+      G.cpuPending = false;
+    }
+    if (G.phase === 'hand_end') {
+      G.handEndTimer -= dt;
+      if (G.handEndTimer <= 0) {
+        G.phase = 'idle';
+        if (G.playerChips <= 0)      G.message = 'You went broke — DEAL to rebuy';
+        else if (G.cpuChips <= 0)    G.message = 'CPU went broke — DEAL to rebuy';
+      }
+    }
+
+    tickCards(dt);
+
+    ctx.clearRect(0, 0, W, H);
+    drawTable();
+    drawHud();
+    for (const c of cards) drawCard(c);
+
+    refreshButtons();
+    requestAnimationFrame(loop);
+  }
+
+  resize();
+  loop();
+  </script>
+</body>
+</html>

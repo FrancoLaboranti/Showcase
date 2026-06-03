@@ -1,0 +1,1297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Hangman / Ahorcado</title>
+<style>
+  :root { --kb-height: 168px; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #14161e;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    color: #e6e6e6;
+  }
+  /* Canvas occupies the screen ABOVE the on-screen keyboard. Dimensions set explicitly from JS. */
+  #c {
+    display: block; position: absolute;
+    top: 0; left: 0;
+  }
+
+  /* HUD arriba a la derecha: nueva-ronda + cambio de idioma. */
+  #topbar {
+    position: absolute; top: calc(8px + env(safe-area-inset-top)); right: 10px;
+    display: flex; gap: 8px; align-items: center;
+    z-index: 3;
+  }
+  #topbar button {
+    height: 38px; min-width: 38px; padding: 0 12px;
+    border-radius: 19px;
+    border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.08);
+    color: #e6e6e6;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: manipulation;
+    transition: background 0.1s, transform 0.08s;
+    font-size: 14px; font-weight: 700; letter-spacing: 0.04em;
+  }
+  #topbar button:active { background: rgba(255,255,255,0.22); transform: scale(0.94); }
+  #topbar #btnNew { font-size: 19px; padding: 0; width: 38px; }
+
+  /* Teclado virtual abajo. Las teclas se generan desde JS según el idioma. */
+  #keyboard {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--kb-height) + env(safe-area-inset-bottom));
+    padding: 8px 6px env(safe-area-inset-bottom);
+    display: flex; flex-direction: column; gap: 5px;
+    background: rgba(0,0,0,0.55);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    z-index: 3;
+  }
+  #keyboard.hidden { display: none; }
+  .kbrow { display: flex; justify-content: center; gap: 4px; flex: 1; padding: 0 4px; }
+  .key {
+    flex: 1 1 0; min-width: 0;
+    border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.08);
+    color: #d8d8d8;
+    border-radius: 8px;
+    font-size: clamp(14px, 4.5vw, 22px);
+    font-weight: 700; letter-spacing: 0.02em;
+    cursor: pointer; touch-action: manipulation;
+    transition: background 0.08s, transform 0.06s, opacity 0.15s;
+    display: flex; align-items: center; justify-content: center;
+    padding: 0;
+  }
+  .key:active:not(:disabled) { background: rgba(255,255,255,0.22); transform: scale(0.92); }
+  .key.correct { background: rgba(110,230,110,0.22); border-color: rgba(110,230,110,0.55); color: #c8ffc8; }
+  .key.wrong   { background: rgba(230,90,90,0.22);  border-color: rgba(230,90,90,0.55);  color: #ffc8c8; }
+  .key:disabled { cursor: default; opacity: 0.85; }
+
+  /* Menú inicial: tapa todo, se oculta una vez elegido el idioma. */
+  #menu {
+    position: absolute; inset: 0;
+    background: #14161e;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 14px; padding: 24px;
+    z-index: 5;
+  }
+  #menu.hidden { display: none; }
+  #menu h1 {
+    font-size: clamp(40px, 11vw, 84px);
+    font-weight: 800; letter-spacing: 0.06em;
+  }
+  #menu .sub {
+    font-size: clamp(14px, 4vw, 18px);
+    color: rgba(255,255,255,0.55);
+    margin-top: 4px; margin-bottom: 18px;
+  }
+  #menu .lang-row { display: flex; gap: 14px; }
+  #menu .lang-btn {
+    padding: 16px 32px;
+    font-size: clamp(16px, 4.5vw, 20px);
+    font-weight: 800; letter-spacing: 0.05em;
+    border: 2px solid rgba(150,150,150,0.4);
+    background: rgba(255,255,255,0.03);
+    color: rgba(255,255,255,0.55);
+    border-radius: 14px;
+    cursor: pointer; touch-action: manipulation;
+    transition: all 0.12s;
+  }
+  #menu .lang-btn.selected {
+    border-color: rgba(110,230,110,0.85);
+    color: #b8ffc8;
+    background: rgba(110,230,110,0.10);
+  }
+  #menu .play-btn {
+    margin-top: 24px;
+    padding: 16px 48px;
+    font-size: clamp(18px, 5vw, 22px);
+    font-weight: 800; letter-spacing: 0.08em;
+    background: rgba(110,180,255,0.15);
+    border: 2px solid rgba(110,180,255,0.6);
+    color: #e6f2ff;
+    border-radius: 14px;
+    cursor: pointer; touch-action: manipulation;
+  }
+  #menu .play-btn:active { transform: scale(0.96); background: rgba(110,180,255,0.28); }
+  #menu .foot {
+    position: absolute; bottom: calc(18px + env(safe-area-inset-bottom));
+    font-size: 12px; color: rgba(255,255,255,0.3);
+  }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div id="topbar">
+    <button id="btnNew"  aria-label="nueva palabra" title="Nueva palabra">↻</button>
+    <button id="btnLang" aria-label="idioma" title="Cambiar idioma">ES</button>
+  </div>
+
+  <div id="keyboard"></div>
+
+  <div id="menu">
+    <h1 id="menuTitle">AHORCADO</h1>
+    <div class="sub" id="menuSub">ELEGÍ IDIOMA</div>
+    <div class="lang-row">
+      <button class="lang-btn selected" data-lang="es">ESPAÑOL</button>
+      <button class="lang-btn" data-lang="en">ENGLISH</button>
+    </div>
+    <button class="play-btn" id="btnPlay">JUGAR</button>
+    <div class="foot" id="menuFoot">tipeá una letra o tocá las teclas</div>
+  </div>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  HANGMAN — port web de Hangman.py.
+  //  Renderiza horca + palabra + categoría/pista en canvas. El teclado
+  //  virtual abajo es HTML para que el toque en mobile sea cómodo.
+  //  Acepta también teclas físicas (incluida Ñ).
+  // ════════════════════════════════════════════════════════════════════
+  const TAU = Math.PI * 2;
+  const MAX_FAILS = 6;
+
+  const ALPHABETS = {
+    es: 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ',
+    en: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+  };
+  // Layout alfabético en 3 filas. Igual ES y EN salvo por la Ñ.
+  const KB_ROWS = {
+    es: ['ABCDEFGHI', 'JKLMNÑOPQ', 'RSTUVWXYZ'],
+    en: ['ABCDEFGHI',  'JKLMNOPQR',  'STUVWXYZ'],
+  };
+  const UI = {
+    es: { title:'AHORCADO', sub:'ELEGÍ IDIOMA', play:'JUGAR',
+          misses:'FALLOS', used:'LETRAS USADAS',
+          won:'¡GANASTE!', lost:'PERDISTE',
+          wordWas:'LA PALABRA ERA', tryAgain:'TOCÁ ↻ PARA OTRA' },
+    en: { title:'HANGMAN', sub:'CHOOSE LANGUAGE', play:'PLAY',
+          misses:'MISSES', used:'LETTERS USED',
+          won:'YOU WIN!', lost:'YOU LOSE',
+          wordWas:'THE WORD WAS', tryAgain:'TAP ↻ FOR ANOTHER' },
+  };
+
+  // ---------- Estado del juego ----------
+  const state = {
+    screen: 'menu',        // 'menu' | 'playing' | 'won' | 'lost'
+    lang:   'es',
+    word:   '',
+    category: '',
+    hint:   '',
+    revealed: [],
+    fails: 0,
+    correct: new Set(),
+    wrong:   new Set(),
+    wins: 0, losses: 0,
+    shakeT: 0, shakeTotal: 0.4, lastFails: 0,
+    flashT: 0,
+  };
+
+  // ---------- Palabras (texto fuente al final del archivo) ----------
+  function parseWords(raw) {
+    const out = [];
+    for (let line of raw.split('\n')) {
+      line = line.trim();
+      if (!line || line.startsWith('#')) continue;
+      const parts = line.split('|').map(p => p.trim());
+      const word = parts[0].toUpperCase();
+      const category = (parts[1] || '').toUpperCase();
+      const hint = parts[2] || '';
+      if (word) out.push({ word, category, hint });
+    }
+    return out;
+  }
+  const WORDS = { es: [], en: [] };
+
+  // ---------- Canvas + resize ----------
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, dpr = 1;
+
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = window.innerWidth;
+    const kb = document.getElementById('keyboard');
+    const kbH = state.screen === 'menu' ? 0 : kb.offsetHeight;
+    H = Math.max(120, window.innerHeight - kbH);
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 50));
+
+  // ---------- Helpers (espejo de xper / yper / sper de la versión Pygame) ----------
+  const xper = p => p * W;
+  const yper = p => p * H;
+  const sper = p => p * (W + H) / 2;
+
+  function text(size, content, align, color, x, y) {
+    ctx.font = '700 ' + Math.round(size) + "px 'Segoe UI', system-ui, sans-serif";
+    ctx.textAlign = align;
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = color;
+    ctx.fillText(content, x, y);
+  }
+
+  // ---------- Dibujo de la horca + muñeco ----------
+  function drawGallows() {
+    const fails = state.fails;
+    let shake = 0;
+    if (state.shakeT > 0) {
+      const phase = state.shakeT / state.shakeTotal;
+      shake = Math.sin(state.shakeT * 80) * sper(0.005) * phase;
+    }
+
+    // Layout responsivo: en pantallas angostas (portrait) la horca queda más
+    // chica y centrada arriba; en landscape va a la izquierda.
+    const portrait = W < H * 1.2;
+    const cx = portrait ? xper(0.5) : xper(0.25);
+    const topY = portrait ? yper(0.10) : yper(0.12);
+    const botY = portrait ? yper(0.55) : yper(0.85);
+    const span = botY - topY;
+    const armW = portrait ? xper(0.20) : xper(0.16);
+
+    const thick = Math.max(3, sper(0.006));
+    const wood = '#be965f';
+
+    // Base, poste, travesaño, soporte diagonal
+    line(wood, cx - armW * 0.9, botY, cx + armW * 0.9, botY, thick);
+    line(wood, cx - armW * 0.5, botY, cx - armW * 0.5, topY, thick);
+    line(wood, cx - armW * 0.5, topY, cx + armW * 0.6, topY, thick);
+    line(wood, cx - armW * 0.5, topY + span * 0.06, cx - armW * 0.2, topY, Math.max(2, thick - 1));
+
+    // Soga
+    const ropeX = cx + armW * 0.6;
+    const ropeTop = topY;
+    const ropeBot = topY + span * 0.10;
+    line('#cccccc', ropeX, ropeTop, ropeX, ropeBot, Math.max(2, thick - 2));
+
+    // Muñeco
+    const headR = span * 0.07;
+    const bx = ropeX + shake;
+    const headCY = ropeBot + headR;
+    const dead = fails >= MAX_FAILS;
+    const manColor = dead ? '#f05a5a' : '#ebdcc8';
+    const bodyTop = headCY + headR;
+    const bodyBot = bodyTop + span * 0.18;
+    const shouldersY = bodyTop + span * 0.012;
+    const hipY = bodyBot;
+    const armLen = span * 0.12;
+    const legLen = span * 0.16;
+    const lw = Math.max(3, thick - 1);
+
+    if (fails >= 1) {
+      // Cabeza
+      ctx.lineWidth = lw;
+      ctx.strokeStyle = manColor;
+      ctx.beginPath();
+      ctx.arc(bx, headCY, headR, 0, TAU);
+      ctx.stroke();
+      const eoX = headR * 0.4;
+      const eoY = headR * 0.15;
+      if (dead) {
+        const d = headR * 0.22;
+        for (const ox of [-eoX, eoX]) {
+          line(manColor, bx + ox - d, headCY - eoY - d, bx + ox + d, headCY - eoY + d, 2);
+          line(manColor, bx + ox - d, headCY - eoY + d, bx + ox + d, headCY - eoY - d, 2);
+        }
+        // bocota de :(
+        ctx.beginPath();
+        ctx.strokeStyle = manColor;
+        ctx.lineWidth = 2;
+        ctx.arc(bx, headCY + headR * 0.45, headR * 0.30, Math.PI, TAU);
+        ctx.stroke();
+      } else {
+        circle('#000', bx - eoX, headCY - eoY, Math.max(1, headR * 0.13));
+        circle('#000', bx + eoX, headCY - eoY, Math.max(1, headR * 0.13));
+      }
+    }
+    if (fails >= 2) line(manColor, bx, bodyTop, bx, bodyBot, lw);
+    if (fails >= 3) line(manColor, bx, shouldersY, bx - armLen, shouldersY + armLen * 0.6, lw);
+    if (fails >= 4) line(manColor, bx, shouldersY, bx + armLen, shouldersY + armLen * 0.6, lw);
+    if (fails >= 5) line(manColor, bx, hipY, bx - armLen * 0.85, hipY + legLen, lw);
+    if (fails >= 6) line(manColor, bx, hipY, bx + armLen * 0.85, hipY + legLen, lw);
+  }
+
+  function line(color, x1, y1, x2, y2, w) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+  function circle(color, x, y, r) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, TAU);
+    ctx.fill();
+  }
+
+  function drawWord() {
+    if (!state.word) return;
+    const portrait = W < H * 1.2;
+    const cx = portrait ? xper(0.5) : xper(0.65);
+    const yCat  = portrait ? yper(0.62) : yper(0.30);
+    const yHint = portrait ? yper(0.68) : yper(0.36);
+    const yWord = portrait ? yper(0.78) : yper(0.55);
+
+    if (state.category) {
+      text(sper(0.024), state.category, 'center', '#d8d870', cx, yCat);
+    }
+    if (state.hint) {
+      text(sper(0.020), '"' + state.hint + '"', 'center', '#a0a0d0', cx, yHint);
+    }
+
+    const word = state.word;
+    // Auto-ajustar tamaño según longitud para que entre siempre
+    const maxWidth = portrait ? W * 0.9 : W * 0.65;
+    let size = sper(0.055);
+    let gap = size * 0.95;
+    let totalW = word.length * gap;
+    if (totalW > maxWidth) {
+      const k = maxWidth / totalW;
+      size *= k; gap *= k; totalW = maxWidth;
+    }
+    const startX = cx - totalW / 2 + gap / 2;
+
+    for (let i = 0; i < word.length; i++) {
+      const ch = word[i];
+      const px = startX + i * gap;
+      if (ch === ' ') continue;
+      const reveal = state.revealed[i] || state.screen === 'lost' || state.screen === 'won';
+      const shown = reveal ? ch : '';
+      let color = '#e8e8e8';
+      if (state.revealed[i]) color = '#78f078';
+      else if (state.screen === 'lost') color = '#f06e6e';
+      if (shown) text(size, shown, 'center', color, px, yWord - size * 0.05);
+      // raya inferior
+      line('#9a9a9a', px - gap * 0.4, yWord + size * 0.45, px + gap * 0.4, yWord + size * 0.45, Math.max(2, sper(0.0022)));
+    }
+  }
+
+  function drawHUD() {
+    const t = UI[state.lang];
+    text(sper(0.022), t.misses + ': ' + state.fails + ' / ' + MAX_FAILS, 'left', '#c8c8c8', xper(0.02), yper(0.04));
+    text(sper(0.022), 'W ' + state.wins + ' · L ' + state.losses, 'left', '#c8c8c8', xper(0.02), yper(0.085));
+  }
+
+  function drawEndMessage() {
+    const t = UI[state.lang];
+    const cx = (W < H * 1.2) ? xper(0.5) : xper(0.65);
+    if (state.screen === 'won') {
+      const f = 0.5 + 0.5 * Math.sin(performance.now() / 160);
+      const r = Math.round(120 + 135 * f);
+      const col = 'rgb(' + r + ',230,' + r + ')';
+      text(sper(0.05), t.won, 'center', col, cx, yper(0.18));
+      text(sper(0.022), t.tryAgain, 'center', '#c8c8c8', cx, yper(0.92));
+    } else if (state.screen === 'lost') {
+      text(sper(0.05), t.lost, 'center', '#f06e6e', cx, yper(0.18));
+      text(sper(0.022), t.tryAgain, 'center', '#c8c8c8', cx, yper(0.92));
+    }
+  }
+
+  // ---------- Loop ----------
+  let lastT = performance.now();
+  function frame() {
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+
+    // shake al fallar
+    if (state.fails > state.lastFails) state.shakeT = state.shakeTotal;
+    state.lastFails = state.fails;
+    if (state.shakeT > 0) state.shakeT = Math.max(0, state.shakeT - dt);
+    if (state.flashT > 0) state.flashT = Math.max(0, state.flashT - dt);
+
+    ctx.fillStyle = '#14161e';
+    ctx.fillRect(0, 0, W, H);
+
+    if (state.screen !== 'menu') {
+      drawGallows();
+      drawWord();
+      drawHUD();
+      drawEndMessage();
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  // ---------- Lógica del juego ----------
+  function startRound() {
+    const pool = WORDS[state.lang];
+    if (!pool || !pool.length) { state.screen = 'menu'; return; }
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    state.word = pick.word;
+    state.category = pick.category;
+    state.hint = pick.hint;
+    state.revealed = [];
+    for (const ch of state.word) state.revealed.push(ch === ' ');
+    state.fails = 0;
+    state.lastFails = 0;
+    state.correct = new Set();
+    state.wrong = new Set();
+    state.screen = 'playing';
+    buildKeyboard();
+    document.getElementById('keyboard').classList.remove('hidden');
+    document.getElementById('menu').classList.add('hidden');
+    resize();
+  }
+
+  function guess(letter) {
+    if (state.screen !== 'playing') return;
+    if (!letter) return;
+    letter = letter.toUpperCase();
+    if (!ALPHABETS[state.lang].includes(letter)) return;
+    if (state.correct.has(letter) || state.wrong.has(letter)) return;
+
+    if (state.word.includes(letter)) {
+      state.correct.add(letter);
+      for (let i = 0; i < state.word.length; i++) {
+        if (state.word[i] === letter) state.revealed[i] = true;
+      }
+      if (state.revealed.every(Boolean)) {
+        state.screen = 'won';
+        state.wins++;
+        state.flashT = 1.0;
+      }
+    } else {
+      state.wrong.add(letter);
+      state.fails++;
+      if (state.fails >= MAX_FAILS) {
+        state.screen = 'lost';
+        state.losses++;
+        state.flashT = 1.0;
+      }
+    }
+    refreshKeyboardKeys();
+  }
+
+  // ---------- Teclado virtual ----------
+  function buildKeyboard() {
+    const kb = document.getElementById('keyboard');
+    kb.innerHTML = '';
+    const rows = KB_ROWS[state.lang];
+    rows.forEach(rowStr => {
+      const row = document.createElement('div');
+      row.className = 'kbrow';
+      for (const ch of rowStr) {
+        const b = document.createElement('button');
+        b.className = 'key';
+        b.dataset.letter = ch;
+        b.textContent = ch;
+        b.addEventListener('pointerdown', e => {
+          e.preventDefault();
+          guess(ch);
+        });
+        row.appendChild(b);
+      }
+      kb.appendChild(row);
+    });
+    refreshKeyboardKeys();
+  }
+
+  function refreshKeyboardKeys() {
+    document.querySelectorAll('.key').forEach(k => {
+      const ch = k.dataset.letter;
+      k.classList.remove('correct', 'wrong');
+      k.disabled = false;
+      if (state.correct.has(ch)) { k.classList.add('correct'); k.disabled = true; }
+      else if (state.wrong.has(ch)) { k.classList.add('wrong'); k.disabled = true; }
+      if (state.screen === 'won' || state.screen === 'lost') k.disabled = true;
+    });
+  }
+
+  // ---------- Input físico ----------
+  window.addEventListener('keydown', e => {
+    if (e.key === 'Escape') {
+      if (state.screen === 'menu') return;
+      showMenu();
+      return;
+    }
+    if (state.screen === 'menu') {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        startRound();
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') {
+        e.preventDefault();
+        state.lang = state.lang === 'es' ? 'en' : 'es';
+        applyLangToMenu();
+      }
+      return;
+    }
+    if (state.screen === 'won' || state.screen === 'lost') {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        startRound();
+      }
+      return;
+    }
+    // playing
+    const ch = (e.key || '').toUpperCase();
+    if (ch.length === 1) guess(ch);
+  });
+
+  // ---------- Menú ----------
+  function applyLangToMenu() {
+    const t = UI[state.lang];
+    document.getElementById('menuTitle').textContent = t.title;
+    document.getElementById('menuSub').textContent   = t.sub;
+    document.getElementById('btnPlay').textContent   = t.play;
+    document.querySelectorAll('#menu .lang-btn').forEach(b => {
+      b.classList.toggle('selected', b.dataset.lang === state.lang);
+    });
+    document.getElementById('btnLang').textContent = state.lang.toUpperCase();
+    document.documentElement.lang = state.lang;
+  }
+  function showMenu() {
+    state.screen = 'menu';
+    document.getElementById('menu').classList.remove('hidden');
+    document.getElementById('keyboard').classList.add('hidden');
+    applyLangToMenu();
+    resize();
+  }
+
+  document.querySelectorAll('#menu .lang-btn').forEach(b => {
+    b.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      state.lang = b.dataset.lang;
+      applyLangToMenu();
+    });
+  });
+  document.getElementById('btnPlay').addEventListener('pointerdown', e => {
+    e.preventDefault();
+    startRound();
+  });
+  document.getElementById('btnNew').addEventListener('pointerdown', e => {
+    e.preventDefault();
+    startRound();
+  });
+  document.getElementById('btnLang').addEventListener('pointerdown', e => {
+    e.preventDefault();
+    state.lang = state.lang === 'es' ? 'en' : 'es';
+    applyLangToMenu();
+    startRound();
+  });
+
+  // ---------- Bootstrap ----------
+  function init() {
+    WORDS.es = parseWords(RAW_WORDS_ES);
+    WORDS.en = parseWords(RAW_WORDS_EN);
+    applyLangToMenu();
+    resize();
+    requestAnimationFrame(frame);
+  }
+
+  // ════════════════════════════════════════════════════════════════════
+  //  Fuentes de palabras — mismo formato que Hangman/words_*.txt
+  //  PALABRA|CATEGORIA|pista (la pista es opcional). Las líneas que
+  //  arrancan con # son comentarios.
+  // ════════════════════════════════════════════════════════════════════
+  const RAW_WORDS_ES = `
+# --- ANIMALES ---
+ABEJA|ANIMAL|hace miel
+AGUILA|ANIMAL|ave rapaz
+ARANA|ANIMAL|tiene ocho patas
+ARDILLA|ANIMAL|come bellotas
+ATUN|ANIMAL|pescado azul
+AVESTRUZ|ANIMAL|ave gigante que no vuela
+BALLENA|ANIMAL|mamifero marino enorme
+BUHO|ANIMAL|ave nocturna de ojos grandes
+CABALLO|ANIMAL|se monta
+CAMELLO|ANIMAL|del desierto, con jorobas
+CANGREJO|ANIMAL|con pinzas y caparazon
+CANGURO|ANIMAL|salta con bolsa
+CARACOL|ANIMAL|deja baba al moverse
+CASTOR|ANIMAL|construye represas
+CIERVO|ANIMAL|macho con cuernos ramificados
+COCODRILO|ANIMAL|reptil de pantano
+COLIBRI|ANIMAL|ave diminuta
+CONEJO|ANIMAL|orejas largas
+CUERVO|ANIMAL|ave negra inteligente
+DELFIN|ANIMAL|mamifero marino juguetón
+ELEFANTE|ANIMAL|tiene trompa
+ERIZO|ANIMAL|con puas
+ESCARABAJO|ANIMAL|insecto de caparazon duro
+FLAMENCO|ANIMAL|ave rosada de patas largas
+FOCA|ANIMAL|aplaude bajo agua
+GALLINA|ANIMAL|pone huevos
+GATO|ANIMAL|maulla
+GAVIOTA|ANIMAL|ave de la costa
+GORILA|ANIMAL|primate fuerte
+HALCON|ANIMAL|ave rapaz veloz
+HIPOPOTAMO|ANIMAL|vive en rios africanos
+HORMIGA|ANIMAL|insecto que carga 50 veces su peso
+IGUANA|ANIMAL|lagarto grande
+JABALI|ANIMAL|cerdo salvaje
+JIRAFA|ANIMAL|cuello larguisimo
+KOALA|ANIMAL|duerme en eucaliptos
+LANGOSTA|ANIMAL|crustaceo rojo
+LEON|ANIMAL|rey de la selva
+LIBELULA|ANIMAL|insecto de cuatro alas
+LOBO|ANIMAL|aulla a la luna
+LUCIERNAGA|ANIMAL|insecto que brilla en la noche
+MARIPOSA|ANIMAL|antes era oruga
+MARIQUITA|ANIMAL|escarabajo rojo con puntos
+MEDUSA|ANIMAL|gelatinosa de mar
+MONO|ANIMAL|primate juguetón
+MOSQUITO|ANIMAL|insecto chupasangre
+MURCIELAGO|ANIMAL|mamifero que vuela
+NUTRIA|ANIMAL|nada con piedra en el pecho
+OSO|ANIMAL|grande y peludo
+PALOMA|ANIMAL|ave de la paz
+PANDA|ANIMAL|blanco y negro, come bambu
+PERRO|ANIMAL|mejor amigo del hombre
+PINGUINO|ANIMAL|ave que no vuela del polo sur
+PULPO|ANIMAL|ocho tentaculos
+RANA|ANIMAL|croa en el estanque
+RATON|ANIMAL|roedor pequeño
+RINOCERONTE|ANIMAL|tiene cuerno en el hocico
+SALAMANDRA|ANIMAL|anfibio de cola larga
+SAPO|ANIMAL|pariente de la rana
+SERPIENTE|ANIMAL|reptil sin patas
+TIBURON|ANIMAL|depredador del mar
+TIGRE|ANIMAL|felino a rayas
+TORTUGA|ANIMAL|caparazon a cuestas
+TUCAN|ANIMAL|ave de pico enorme y colorido
+VENADO|ANIMAL|pariente del ciervo
+ZORRO|ANIMAL|astuto y pelirrojo
+
+# --- OBJETOS ---
+ABANICO|OBJETO|se abre para dar aire
+ALMOHADA|OBJETO|para apoyar la cabeza al dormir
+ANCLA|OBJETO|sujeta al barco
+BRUJULA|OBJETO|señala al norte
+BUFANDA|ROPA|abriga el cuello
+CAMPANA|OBJETO|suena en la iglesia
+CANDELABRO|OBJETO|sostiene velas
+CARTERA|OBJETO|guarda dinero
+CEPILLO|OBJETO|desenreda el pelo
+CINTURON|ROPA|sujeta el pantalon
+COLLAR|OBJETO|joya para el cuello
+CORONA|OBJETO|la usa la realeza
+CUADERNO|OBJETO|se escribe en sus hojas
+CUCHARA|OBJETO|para tomar sopa
+DIAMANTE|OBJETO|piedra preciosa muy dura
+ESCOBA|OBJETO|para barrer
+ESPADA|OBJETO|arma medieval con filo
+ESPEJO|OBJETO|refleja imagenes
+FAROL|OBJETO|alumbra la calle
+FLAUTA|INSTRUMENTO|se sopla
+GAFAS|OBJETO|ayudan a ver mejor
+GUANTE|ROPA|para las manos
+GUITARRA|INSTRUMENTO|seis cuerdas
+HACHA|OBJETO|para cortar madera
+JARRON|OBJETO|guarda flores
+LAMPARA|OBJETO|da luz interior
+LAPIZ|OBJETO|tiene grafito y goma
+LIBRO|OBJETO|tiene paginas para leer
+LLAVE|OBJETO|abre cerraduras
+MALETA|OBJETO|para llevar ropa al viajar
+MARTILLO|OBJETO|clava clavos
+MASCARA|OBJETO|cubre el rostro
+MOCHILA|OBJETO|se carga a la espalda
+NAVAJA|OBJETO|cuchillo plegable
+PARAGUAS|OBJETO|protege de la lluvia
+PIANO|INSTRUMENTO|teclas blancas y negras
+PINCEL|OBJETO|para pintar
+RAQUETA|OBJETO|para golpear pelotas
+RELOJ|OBJETO|marca la hora
+REVOLVER|OBJETO|arma de seis disparos
+SARTEN|OBJETO|para freir
+SOMBRERO|ROPA|cubre la cabeza
+TAMBOR|INSTRUMENTO|se golpea
+TELEFONO|OBJETO|para hablar a distancia
+TELESCOPIO|OBJETO|para ver lo lejano
+TENEDOR|OBJETO|cubierto con puas
+TIJERA|OBJETO|corta papel
+TROMPETA|INSTRUMENTO|metal y se sopla
+VIOLIN|INSTRUMENTO|de cuerdas, con arco
+ZAPATO|ROPA|protege el pie
+
+# --- LUGARES ---
+AEROPUERTO|LUGAR|aviones aterrizan ahi
+BIBLIOTECA|LUGAR|guarda libros
+CASTILLO|LUGAR|donde vivian los reyes
+CIRCO|LUGAR|payasos y acrobatas
+COCINA|LUGAR|donde se cocina
+DESIERTO|LUGAR|seco y caliente
+ESCUELA|LUGAR|donde van los niños a aprender
+FABRICA|LUGAR|donde se producen cosas
+GIMNASIO|LUGAR|para hacer ejercicio
+HOSPITAL|LUGAR|atienden enfermos
+HOTEL|LUGAR|alojamiento de viajeros
+IGLESIA|LUGAR|edificio religioso
+ISLA|LUGAR|rodeada de agua
+JARDIN|LUGAR|hay flores y plantas
+LABERINTO|LUGAR|facil entrar, dificil salir
+MERCADO|LUGAR|se compra comida fresca
+MUSEO|LUGAR|exhibe obras
+OFICINA|LUGAR|se trabaja con papeles
+PALACIO|LUGAR|vivienda lujosa real
+PARQUE|LUGAR|verde al aire libre
+PIRAMIDE|LUGAR|monumento egipcio
+PLAYA|LUGAR|arena y mar
+PUENTE|LUGAR|cruza un rio
+PUERTO|LUGAR|atracan los barcos
+RESTAURANTE|LUGAR|se come fuera de casa
+TEATRO|LUGAR|se ven obras en vivo
+UNIVERSIDAD|LUGAR|para estudios superiores
+VOLCAN|LUGAR|montaña con lava
+ZOOLOGICO|LUGAR|hay animales en exhibicion
+
+# --- COMIDA ---
+AGUACATE|COMIDA|verde y cremoso
+AJO|COMIDA|condimento que llora al cortar
+ALCACHOFA|COMIDA|hortaliza de hojas
+ARROZ|COMIDA|grano blanco
+AZUCAR|COMIDA|dulce blanca o morena
+BANANA|COMIDA|amarilla y curva
+CALABAZA|COMIDA|naranja, gigante en otoño
+CEBOLLA|COMIDA|hace llorar al cortar
+CEREZA|COMIDA|fruta roja pequeña con carozo
+CHOCOLATE|COMIDA|hecho con cacao
+COCO|COMIDA|cae de la palmera
+FRAMBUESA|COMIDA|fruta roja pequeña
+FRESA|COMIDA|fruta roja con puntitos
+GALLETA|COMIDA|crujiente y dulce
+HELADO|COMIDA|postre frio
+JAMON|COMIDA|carne curada de cerdo
+LECHUGA|COMIDA|hoja de ensalada
+LIMON|COMIDA|amarillo y acido
+MANZANA|COMIDA|fruta roja o verde
+MELOCOTON|COMIDA|fruta naranja con pelusa
+NARANJA|COMIDA|citrico naranja
+PIZZA|COMIDA|italiana con queso
+QUESO|COMIDA|hecho con leche
+SANDIA|COMIDA|verde por fuera, roja por dentro
+TOMATE|COMIDA|fruta roja, base de salsas
+UVA|COMIDA|en racimo, para vino
+YOGUR|COMIDA|lacteo fermentado
+ZANAHORIA|COMIDA|naranja y crujiente
+
+# --- NATURALEZA ---
+AMANECER|NATURALEZA|inicio del dia
+ATARDECER|NATURALEZA|fin del dia
+BOSQUE|NATURALEZA|lleno de arboles
+CASCADA|NATURALEZA|caida de agua
+CIELO|NATURALEZA|azul de dia
+COMETA|NATURALEZA|cuerpo celeste con cola
+ESTRELLA|NATURALEZA|brilla de noche
+GALAXIA|NATURALEZA|conjunto de estrellas
+HORIZONTE|NATURALEZA|donde cielo y tierra se juntan
+HURACAN|NATURALEZA|tormenta gigante con vientos
+LUNA|NATURALEZA|satelite de la tierra
+MONTAÑA|NATURALEZA|elevacion enorme
+NEBLINA|NATURALEZA|nube baja
+NIEVE|NATURALEZA|copos blancos
+NUBE|NATURALEZA|flota en el cielo
+OCEANO|NATURALEZA|gran masa de agua salada
+OTOÑO|NATURALEZA|hojas caen
+PLANETA|NATURALEZA|orbita una estrella
+RELAMPAGO|NATURALEZA|destello del cielo
+RIO|NATURALEZA|cauce de agua dulce
+TORMENTA|NATURALEZA|lluvia con truenos
+UNIVERSO|NATURALEZA|todo lo que existe
+VIENTO|NATURALEZA|aire en movimiento
+
+# --- PROFESIONES ---
+ABOGADO|PROFESION|defiende en juicios
+ARQUITECTO|PROFESION|diseña edificios
+ASTRONAUTA|PROFESION|viaja al espacio
+BOMBERO|PROFESION|apaga incendios
+CARPINTERO|PROFESION|trabaja la madera
+CIENTIFICO|PROFESION|hace experimentos
+DENTISTA|PROFESION|cuida los dientes
+ELECTRICISTA|PROFESION|instala cables
+ENFERMERA|PROFESION|asiste a los enfermos
+FOTOGRAFO|PROFESION|hace fotos
+INGENIERO|PROFESION|diseña sistemas y maquinas
+MAESTRO|PROFESION|enseña a niños
+MARINERO|PROFESION|trabaja en barcos
+MEDICO|PROFESION|cura enfermedades
+PANADERO|PROFESION|hornea pan
+PERIODISTA|PROFESION|escribe noticias
+PILOTO|PROFESION|conduce aviones
+PINTOR|PROFESION|pinta cuadros o paredes
+POLICIA|PROFESION|mantiene el orden
+PROGRAMADOR|PROFESION|escribe codigo
+SOLDADO|PROFESION|sirve en el ejercito
+
+# --- DEPORTES ---
+AJEDREZ|DEPORTE|tablero de 64 casillas
+ATLETISMO|DEPORTE|carrera y salto
+BALONCESTO|DEPORTE|encestar en aro alto
+BEISBOL|DEPORTE|bate y guantes
+BOXEO|DEPORTE|guantes en el ring
+CICLISMO|DEPORTE|en bicicleta
+ESGRIMA|DEPORTE|con florete
+FUTBOL|DEPORTE|el deporte rey
+GIMNASIA|DEPORTE|coreografias y agilidad
+GOLF|DEPORTE|pelota chica en el hoyo
+JUDO|DEPORTE|marcial japones
+KARATE|DEPORTE|marcial con golpes y kata
+NATACION|DEPORTE|en la piscina
+PATINAJE|DEPORTE|sobre hielo o ruedas
+RUGBY|DEPORTE|pelota ovalada
+TENIS|DEPORTE|raqueta y red
+VOLEIBOL|DEPORTE|red, sin tocar el suelo
+
+# --- VEHICULOS ---
+AMBULANCIA|VEHICULO|transporta heridos
+AUTOBUS|VEHICULO|transporte publico urbano
+AVION|VEHICULO|vuela con motores
+BARCO|VEHICULO|cruza mares
+CAMION|VEHICULO|transporta carga pesada
+COCHE|VEHICULO|cuatro ruedas
+COHETE|VEHICULO|llega al espacio
+GLOBO|VEHICULO|sube con aire caliente
+HELICOPTERO|VEHICULO|tiene helices arriba
+LANCHA|VEHICULO|bote a motor
+MOTOCICLETA|VEHICULO|dos ruedas a motor
+PATINETE|VEHICULO|se empuja con un pie
+SUBMARINO|VEHICULO|navega bajo el mar
+TRACTOR|VEHICULO|de campo
+TRINEO|VEHICULO|se desliza sobre nieve
+VELERO|VEHICULO|barco con velas
+YATE|VEHICULO|barco de lujo
+
+# --- CUERPO ---
+BRAZO|CUERPO|de hombro a mano
+CABEZA|CUERPO|contiene el cerebro
+CADERA|CUERPO|une el tronco y la pierna
+CEREBRO|CUERPO|piensa por nosotros
+CODO|CUERPO|articulacion del brazo
+CORAZON|CUERPO|bombea sangre
+ESPALDA|CUERPO|atras del torso
+ESTOMAGO|CUERPO|digiere comida
+GARGANTA|CUERPO|por donde pasa la voz
+HOMBRO|CUERPO|une brazo y torso
+LENGUA|CUERPO|saborea
+PESTAÑA|CUERPO|pelitos del parpado
+PULMON|CUERPO|para respirar
+RODILLA|CUERPO|articulacion de la pierna
+TOBILLO|CUERPO|une pie y pierna
+
+# --- ROPA ---
+ABRIGO|ROPA|para el frio
+BLUSA|ROPA|camisa femenina
+CAMISA|ROPA|con botones al frente
+CAMISETA|ROPA|de manga corta
+CHALECO|ROPA|sin mangas
+CHAQUETA|ROPA|abrigo corto
+FALDA|ROPA|se usa de cintura abajo
+PANTALON|ROPA|cubre piernas
+PIJAMA|ROPA|para dormir
+SUDADERA|ROPA|deportiva con capucha
+VESTIDO|ROPA|prenda femenina entera
+
+# --- MITOLOGIA ---
+CENTAURO|MITOLOGIA|mitad hombre mitad caballo
+CICLOPE|MITOLOGIA|un solo ojo
+DRAGON|MITOLOGIA|reptil que escupe fuego
+DUENDE|MITOLOGIA|criatura pequeña traviesa
+ELFO|MITOLOGIA|orejas puntiagudas
+FANTASMA|MITOLOGIA|espiritu de un muerto
+GIGANTE|MITOLOGIA|enorme y poderoso
+HADA|MITOLOGIA|pequeña con alas y varita
+MINOTAURO|MITOLOGIA|hombre con cabeza de toro
+MOMIA|MITOLOGIA|cadaver vendado
+PEGASO|MITOLOGIA|caballo alado
+SIRENA|MITOLOGIA|mujer pez
+UNICORNIO|MITOLOGIA|caballo con cuerno
+VAMPIRO|MITOLOGIA|chupa sangre
+ZOMBIE|MITOLOGIA|muerto que camina
+`;
+
+  const RAW_WORDS_EN = `
+# --- ANIMALS ---
+BEAR|ANIMAL|large and furry
+BEAVER|ANIMAL|builds dams
+BEE|ANIMAL|makes honey
+BUTTERFLY|ANIMAL|was a caterpillar
+CAMEL|ANIMAL|desert animal with humps
+CAT|ANIMAL|says meow
+CHEETAH|ANIMAL|fastest land animal
+CRAB|ANIMAL|sideways walker with claws
+CROCODILE|ANIMAL|swamp reptile
+CROW|ANIMAL|black smart bird
+DEER|ANIMAL|antlered forest animal
+DOG|ANIMAL|man's best friend
+DOLPHIN|ANIMAL|playful sea mammal
+EAGLE|ANIMAL|bird of prey
+ELEPHANT|ANIMAL|has a trunk
+FALCON|ANIMAL|swift hunting bird
+FIREFLY|ANIMAL|glows in the night
+FLAMINGO|ANIMAL|pink long-legged bird
+FOX|ANIMAL|cunning and red
+FROG|ANIMAL|hops and croaks
+GAZELLE|ANIMAL|graceful and fast
+GIRAFFE|ANIMAL|very long neck
+GORILLA|ANIMAL|strong primate
+HAWK|ANIMAL|sharp eyed hunter
+HEDGEHOG|ANIMAL|small spiky mammal
+HIPPOPOTAMUS|ANIMAL|big African river animal
+HORSE|ANIMAL|you ride it
+HUMMINGBIRD|ANIMAL|tiny fast-flapping bird
+IGUANA|ANIMAL|tropical lizard
+JAGUAR|ANIMAL|spotted big cat
+JELLYFISH|ANIMAL|gelatinous sea creature
+KANGAROO|ANIMAL|jumps with a pouch
+KOALA|ANIMAL|sleeps in eucalyptus
+LADYBUG|ANIMAL|red beetle with dots
+LION|ANIMAL|king of the jungle
+LIZARD|ANIMAL|small scaly reptile
+LOBSTER|ANIMAL|red crustacean with claws
+MONKEY|ANIMAL|playful primate
+MOSQUITO|ANIMAL|tiny bloodsucker
+MOUSE|ANIMAL|small rodent
+OCTOPUS|ANIMAL|eight tentacles
+OSTRICH|ANIMAL|big bird that cannot fly
+OTTER|ANIMAL|swims with rock on chest
+OWL|ANIMAL|big-eyed night bird
+PANDA|ANIMAL|black-white bamboo eater
+PARROT|ANIMAL|colorful talking bird
+PEACOCK|ANIMAL|fans a glorious tail
+PENGUIN|ANIMAL|flightless bird of the south
+PIGEON|ANIMAL|city bird
+RABBIT|ANIMAL|long ears, hops
+RACCOON|ANIMAL|masked mischief maker
+RHINOCEROS|ANIMAL|horned heavy beast
+SALMON|ANIMAL|swims upriver
+SEAGULL|ANIMAL|shore bird
+SHARK|ANIMAL|sea predator
+SKUNK|ANIMAL|stinky black-white striped
+SNAIL|ANIMAL|carries its house
+SNAKE|ANIMAL|legless reptile
+SPARROW|ANIMAL|tiny common bird
+SPIDER|ANIMAL|eight legs, weaves webs
+SQUIRREL|ANIMAL|collects acorns
+TIGER|ANIMAL|striped big cat
+TOAD|ANIMAL|frog's drier cousin
+TORTOISE|ANIMAL|land turtle
+TOUCAN|ANIMAL|huge colorful beak
+TURTLE|ANIMAL|wears its shell
+WHALE|ANIMAL|huge sea mammal
+WOLF|ANIMAL|howls at the moon
+ZEBRA|ANIMAL|striped horse
+
+# --- OBJECTS ---
+ANCHOR|OBJECT|holds a boat
+BACKPACK|OBJECT|carried on the back
+BICYCLE|VEHICLE|two wheels, you pedal
+BOOK|OBJECT|has pages to read
+BROOM|OBJECT|for sweeping
+BRUSH|OBJECT|paint or hair
+BUTTON|OBJECT|round, holds clothes shut
+CAMERA|OBJECT|takes pictures
+CANDLE|OBJECT|wax with a flame
+CLOCK|OBJECT|tells time
+COMPASS|OBJECT|points north
+COUCH|OBJECT|long seat for many
+CRADLE|OBJECT|where babies rock
+CRYSTAL|OBJECT|clear precious stone
+DIAMOND|OBJECT|hardest gemstone
+DRUM|INSTRUMENT|you hit it
+EASEL|OBJECT|holds a painting up
+FAN|OBJECT|moves air around
+FLUTE|INSTRUMENT|long and you blow
+FORK|OBJECT|utensil with tines
+GLASSES|OBJECT|help you see
+GLOVE|CLOTHING|covers the hand
+GUITAR|INSTRUMENT|six strings
+HAMMER|OBJECT|drives nails
+HARP|INSTRUMENT|tall, plucked strings
+KEY|OBJECT|opens locks
+KETTLE|OBJECT|boils water
+LADDER|OBJECT|climb its rungs
+LAMP|OBJECT|gives indoor light
+LANTERN|OBJECT|portable light
+MAGNET|OBJECT|attracts iron
+MASK|OBJECT|covers the face
+MIRROR|OBJECT|reflects you
+NEEDLE|OBJECT|small and sharp, for sewing
+NOTEBOOK|OBJECT|paper bound together
+PAINTBRUSH|OBJECT|spreads color
+PENCIL|OBJECT|graphite with eraser
+PIANO|INSTRUMENT|black and white keys
+PILLOW|OBJECT|soft, for sleeping
+RACKET|OBJECT|hits a ball with strings
+ROPE|OBJECT|braided fiber
+SCISSORS|OBJECT|two blades, cuts paper
+SHOVEL|OBJECT|digs holes
+SPOON|OBJECT|scoops liquid
+SUITCASE|OBJECT|for travel clothes
+SWORD|OBJECT|sharp medieval blade
+TELESCOPE|OBJECT|view things far away
+TROMBONE|INSTRUMENT|slides to change pitch
+TRUMPET|INSTRUMENT|brass, you blow
+UMBRELLA|OBJECT|shields from rain
+VIOLIN|INSTRUMENT|four strings, with a bow
+ZIPPER|OBJECT|joins two halves of cloth
+
+# --- PLACES ---
+AIRPORT|PLACE|planes land here
+BEACH|PLACE|sand and waves
+BRIDGE|PLACE|crosses a river
+CASTLE|PLACE|kings used to live there
+CAVE|PLACE|underground hollow
+CHURCH|PLACE|religious building
+CITY|PLACE|big urban area
+DESERT|PLACE|dry and hot
+FACTORY|PLACE|things are made here
+FOREST|PLACE|full of trees
+GARDEN|PLACE|flowers grow here
+GLACIER|PLACE|river of ice
+HARBOR|PLACE|ships dock here
+HOSPITAL|PLACE|where the sick are treated
+HOTEL|PLACE|where travelers sleep
+ISLAND|PLACE|surrounded by water
+JUNGLE|PLACE|dense tropical forest
+KITCHEN|PLACE|where food is cooked
+LIBRARY|PLACE|keeps books
+MEADOW|PLACE|open grassy field
+MOUNTAIN|PLACE|huge elevation
+MUSEUM|PLACE|displays art and history
+OCEAN|PLACE|huge salt water body
+OFFICE|PLACE|paper work happens here
+PALACE|PLACE|royal residence
+PARK|PLACE|green public space
+PYRAMID|PLACE|Egyptian monument
+RESTAURANT|PLACE|you eat out here
+RIVER|PLACE|fresh water flowing
+SCHOOL|PLACE|where kids learn
+SWAMP|PLACE|muddy wetland
+THEATER|PLACE|live shows
+UNIVERSITY|PLACE|higher learning
+VALLEY|PLACE|low land between hills
+VOLCANO|PLACE|mountain that erupts
+WATERFALL|PLACE|water plunges down
+
+# --- FOOD ---
+APPLE|FOOD|red or green fruit
+AVOCADO|FOOD|creamy green
+BACON|FOOD|fried pig strips
+BANANA|FOOD|yellow and curved
+BREAD|FOOD|baked from flour
+BURGER|FOOD|meat patty in a bun
+CABBAGE|FOOD|round leafy vegetable
+CARROT|FOOD|orange and crunchy
+CHEESE|FOOD|made from milk
+CHERRY|FOOD|small red fruit with pit
+CHOCOLATE|FOOD|made from cocoa
+COCONUT|FOOD|hairy hard shell, white inside
+COOKIE|FOOD|sweet baked treat
+CUCUMBER|FOOD|long green salad veg
+GARLIC|FOOD|smelly cooking bulb
+GRAPE|FOOD|grows in clusters
+HAM|FOOD|cured pork
+ICECREAM|FOOD|cold sweet treat
+LEMON|FOOD|yellow and sour
+LETTUCE|FOOD|leafy salad base
+MUSHROOM|FOOD|grows in shade
+ONION|FOOD|makes you cry
+ORANGE|FOOD|orange citrus
+PEACH|FOOD|fuzzy stone fruit
+PINEAPPLE|FOOD|spiky tropical fruit
+PIZZA|FOOD|Italian round with cheese
+POTATO|FOOD|grows underground
+PUMPKIN|FOOD|big orange autumn squash
+RASPBERRY|FOOD|small bumpy red fruit
+SPAGHETTI|FOOD|long thin pasta
+STRAWBERRY|FOOD|red with tiny seeds
+SUGAR|FOOD|sweet white grains
+TOMATO|FOOD|red fruit, sauce base
+WATERMELON|FOOD|green outside, red inside
+YOGURT|FOOD|fermented dairy
+
+# --- NATURE ---
+AUTUMN|NATURE|leaves fall
+BLIZZARD|NATURE|snowstorm with wind
+CLOUD|NATURE|floats in the sky
+COMET|NATURE|icy body with a tail
+ECLIPSE|NATURE|sun or moon goes dark
+GALAXY|NATURE|cluster of stars
+HORIZON|NATURE|where sky meets land
+HURRICANE|NATURE|giant tropical storm
+ICEBERG|NATURE|floating chunk of ice
+LIGHTNING|NATURE|sky flash
+MOON|NATURE|earth's satellite
+NEBULA|NATURE|cosmic cloud
+PLANET|NATURE|orbits a star
+RAINBOW|NATURE|colored arc after rain
+SKY|NATURE|blue by day
+SNOW|NATURE|white flakes
+STAR|NATURE|shines at night
+STORM|NATURE|rain plus thunder
+SUNRISE|NATURE|start of the day
+SUNSET|NATURE|end of the day
+THUNDER|NATURE|sound after lightning
+TORNADO|NATURE|spinning funnel of wind
+UNIVERSE|NATURE|everything that exists
+WIND|NATURE|moving air
+
+# --- PROFESSIONS ---
+ACTOR|PROFESSION|plays roles
+ARCHITECT|PROFESSION|designs buildings
+ASTRONAUT|PROFESSION|travels to space
+BAKER|PROFESSION|makes bread
+BLACKSMITH|PROFESSION|hammers iron
+CARPENTER|PROFESSION|works wood
+CHEF|PROFESSION|cooks at restaurants
+DENTIST|PROFESSION|cares for teeth
+DOCTOR|PROFESSION|heals the sick
+ELECTRICIAN|PROFESSION|installs wiring
+ENGINEER|PROFESSION|designs systems
+FIREFIGHTER|PROFESSION|puts out fires
+GARDENER|PROFESSION|tends plants
+JOURNALIST|PROFESSION|writes news
+JUDGE|PROFESSION|rules in court
+LAWYER|PROFESSION|defends in court
+MUSICIAN|PROFESSION|plays instruments
+NURSE|PROFESSION|cares for patients
+PAINTER|PROFESSION|paints walls or art
+PHOTOGRAPHER|PROFESSION|captures images
+PILOT|PROFESSION|flies aircraft
+PROGRAMMER|PROFESSION|writes code
+SAILOR|PROFESSION|works on ships
+SOLDIER|PROFESSION|serves in the army
+TEACHER|PROFESSION|teaches students
+
+# --- SPORTS ---
+ARCHERY|SPORT|shoot with bow and arrow
+ATHLETICS|SPORT|track and field
+BASEBALL|SPORT|bat and mitt
+BASKETBALL|SPORT|net up high
+BOXING|SPORT|gloves in a ring
+CHESS|SPORT|64 squares
+CYCLING|SPORT|on a bike
+FENCING|SPORT|sword sport
+FOOTBALL|SPORT|the global one with a ball
+GOLF|SPORT|small ball into hole
+GYMNASTICS|SPORT|tumbling and beams
+HOCKEY|SPORT|stick and puck
+JUDO|SPORT|Japanese martial art
+KARATE|SPORT|striking martial art
+RUGBY|SPORT|oval ball, tackles
+SKATING|SPORT|on ice or wheels
+SKIING|SPORT|down snowy slopes
+SURFING|SPORT|on ocean waves
+SWIMMING|SPORT|in a pool
+TENNIS|SPORT|racket and net
+VOLLEYBALL|SPORT|net, don't let ball drop
+
+# --- VEHICLES ---
+AMBULANCE|VEHICLE|takes the injured
+BALLOON|VEHICLE|rises with hot air
+BUS|VEHICLE|urban transport
+CAR|VEHICLE|four wheels
+CARRIAGE|VEHICLE|horse drawn
+FERRY|VEHICLE|carries cars over water
+HELICOPTER|VEHICLE|rotor on top
+MOTORCYCLE|VEHICLE|two motorized wheels
+PLANE|VEHICLE|flies with engines
+ROCKET|VEHICLE|reaches space
+SAILBOAT|VEHICLE|boat with sails
+SLED|VEHICLE|slides on snow
+SUBMARINE|VEHICLE|travels under water
+TRACTOR|VEHICLE|farm machine
+TRAIN|VEHICLE|runs on rails
+TRUCK|VEHICLE|heavy load carrier
+YACHT|VEHICLE|luxury boat
+
+# --- BODY ---
+ANKLE|BODY|joins foot and leg
+ARM|BODY|shoulder to hand
+BRAIN|BODY|thinks for us
+ELBOW|BODY|joint in the arm
+EYEBROW|BODY|hair above the eye
+HEART|BODY|pumps blood
+HIP|BODY|joins torso and leg
+KIDNEY|BODY|filters blood
+KNEE|BODY|joint in the leg
+LIVER|BODY|filters and stores
+LUNG|BODY|for breathing
+SHOULDER|BODY|joins arm and torso
+SKULL|BODY|protects the brain
+STOMACH|BODY|digests food
+THROAT|BODY|voice passes through
+THUMB|BODY|opposable digit
+TONGUE|BODY|tastes things
+WRIST|BODY|joins hand and arm
+
+# --- CLOTHING ---
+BLOUSE|CLOTHING|women's shirt
+COAT|CLOTHING|for the cold
+DRESS|CLOTHING|one piece women's
+JACKET|CLOTHING|short coat
+PAJAMAS|CLOTHING|for sleeping
+PANTS|CLOTHING|covers legs
+RAINCOAT|CLOTHING|waterproof
+SANDAL|CLOTHING|open shoe
+SCARF|CLOTHING|wraps the neck
+SHIRT|CLOTHING|buttons up the front
+SHOE|CLOTHING|protects the foot
+SKIRT|CLOTHING|hangs from waist
+SNEAKER|CLOTHING|sports shoe
+SOCK|CLOTHING|fits in your shoe
+SWEATER|CLOTHING|warm knit top
+TSHIRT|CLOTHING|short sleeve top
+VEST|CLOTHING|sleeveless top
+
+# --- MYTHOLOGY ---
+CENTAUR|MYTHOLOGY|half man half horse
+CYCLOPS|MYTHOLOGY|one eye in the middle
+DRAGON|MYTHOLOGY|fire breathing reptile
+ELF|MYTHOLOGY|pointed ears
+FAIRY|MYTHOLOGY|tiny winged being
+GHOST|MYTHOLOGY|spirit of the dead
+GIANT|MYTHOLOGY|huge being
+GNOME|MYTHOLOGY|small earth dweller
+GORGON|MYTHOLOGY|snakes for hair
+MERMAID|MYTHOLOGY|half woman half fish
+MINOTAUR|MYTHOLOGY|man with bull head
+MUMMY|MYTHOLOGY|wrapped corpse
+OGRE|MYTHOLOGY|big mean fairy tale brute
+PEGASUS|MYTHOLOGY|winged horse
+PHOENIX|MYTHOLOGY|reborn from its ashes
+SIREN|MYTHOLOGY|sings to lure sailors
+TROLL|MYTHOLOGY|under-the-bridge creature
+UNICORN|MYTHOLOGY|horse with a horn
+VAMPIRE|MYTHOLOGY|drinks blood
+WITCH|MYTHOLOGY|with broom and hat
+WIZARD|MYTHOLOGY|casts spells
+ZOMBIE|MYTHOLOGY|walking corpse
+
+# --- SCIENCE ---
+ATOM|SCIENCE|tiniest unit of matter
+CELL|SCIENCE|basic unit of life
+ENERGY|SCIENCE|capacity to do work
+ENZYME|SCIENCE|biological catalyst
+GRAVITY|SCIENCE|pulls things down
+LASER|SCIENCE|coherent light beam
+MAGNET|SCIENCE|attracts iron
+MICROSCOPE|SCIENCE|see tiny things
+MOLECULE|SCIENCE|atoms bonded together
+NEUTRON|SCIENCE|neutral particle in atom
+ORBIT|SCIENCE|circular path
+PROTON|SCIENCE|positive particle in atom
+ROBOT|SCIENCE|programmable machine
+SATELLITE|SCIENCE|orbits a planet
+VACCINE|SCIENCE|trains immunity
+`;
+
+  init();
+  </script>
+</body>
+</html>

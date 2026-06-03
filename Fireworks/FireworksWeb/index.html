@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Fireworks</title>
+<style>
+  :root { --bar-height: 66px; }                                                  /* tweak to taste */
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  /* Canvas occupies only the space ABOVE the bar — same layout as BallsWeb so the action buttons
+     never sit on top of the playfield. Dimensions are set explicitly from JS each resize. */
+  #c {
+    display: block; position: absolute;
+    top: 0; left: 0;
+  }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
+    text-align: center; color: rgba(255,255,255,0.5);
+    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
+    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+  }
+
+  /* Bottom bar: the action buttons. Opaque-ish background so it reads as a bezel rather than a HUD. */
+  #bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    padding: 0 16px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.85);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    z-index: 3;
+  }
+  #ui {
+    display: flex; gap: 8px;
+  }
+  #ui button {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    transition: background 0.1s, transform 0.08s;
+    padding: 0;
+  }
+  #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
+  /* SVG icons: inherit color via currentColor so they tint with the toggled-on state. */
+  #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
+  #ui #btnMulti svg { width: 24px; height: 24px; }
+  /* visual indicator for toggled-on state */
+  #ui button.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); }
+
+  /* Info: chico, en la esquina abajo-derecha. Lives outside #ui so the main row stays centered. */
+  #btnDebug {
+    position: absolute;
+    right: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.6);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+  }
+  #btnDebug svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnDebug:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  #btnDebug.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">tocá y arrastrá para lanzar · botones para más fuegos</div>
+  <div id="bar">
+    <div id="ui">
+      <button id="btnMulti" aria-label="multi" title="Lanzar 5 a la vez">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.5l1.5 3.6 3.6 1.5-3.6 1.5L12 12.7l-1.5-3.6L6.9 7.6l3.6-1.5z"/><path d="M5.5 13l.9 2.1 2.1.9-2.1.9-.9 2.1-.9-2.1L2.5 16l2.1-.9z"/><path d="M17.5 13.5l.8 1.9 1.9.8-1.9.8-.8 1.9-.8-1.9-1.9-.8 1.9-.8z"/></svg>
+      </button>
+      <button id="btnRapid" aria-label="rapido" title="Disparo rápido (sin pausa)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L4 14h6l-1 8 9-12h-6z"/></svg>
+      </button>
+      <button id="btnBlowOne" aria-label="reventar uno" title="Reventar uno al azar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v4M12 16v4M4 12h4M16 12h4M6.3 6.3l2.6 2.6M14.9 14.9l2.6 2.6M17.7 6.3l-2.6 2.6M9.1 14.9l-2.6 2.6"/></svg>
+      </button>
+      <button id="btnBlowAll" aria-label="reventar todo" title="Reventar todos">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
+      </button>
+    </div>
+    <button id="btnDebug" aria-label="debug" title="Info / debug">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+    </button>
+  </div>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  FIREWORKS — port web fiel de Fireworks.py (V1) (Canvas, sin física externa).
+  //  Cohetes que suben, deceleran y explotan; explosiones con 3 estilos de
+  //  dibujo y una capa de recursión (chispas hijas).
+  //  Diferencias con FireworksV2Web (el modelo): cohetes más grandes
+  //  (FW_RADIUS_FRAC 0.005 vs 0.0015), lanzamiento "alto" más fuerte
+  //  (2.4 vs 1.8) y cursor rojo más grande — los valores del .py V1.
+  //  La pausa en el .py V1 es un no-op; acá la dejo funcional (mejor UX).
+  // ════════════════════════════════════════════════════════════════════
+  const TAU = Math.PI * 2;
+  const ri  = (a, b) => a + Math.floor(Math.random() * (b - a + 1));               // randint inclusivo
+  const rnd = (a, b) => a + Math.random() * (b - a);                               // uniform
+
+  // ── TUNING KNOBS ──
+  // Las fracciones son las mismas que Fireworks.py (sper(...) sobre (W+H)/2), así escalan con la pantalla.
+  const FW_RADIUS_FRAC   = 0.005;    // radio del cohete en vuelo (V1: más gordo que el V2)
+  const ACEL_NORMAL_FRAC = 1.2;      // empuje inicial hacia arriba (px/s vía sper)
+  const GRAV_FRAC        = 0.2;      // gravedad que va comiendo el empuje
+  const ANGLE_FRAC       = 0.12;     // deriva horizontal aleatoria (± px/s vía sper)
+  const ACEL_DECAY       = 0.99;     // por-frame: el empuje se apaga
+  const GRAV_GROWTH      = 1.004;    // por-frame: la gravedad crece
+  const FW_TIMER_MIN     = 1, FW_TIMER_MAX = 3;                                    // segundos hasta explotar
+
+  // La explosión se expande POR TIEMPO (e.life), no por un decay por-frame: más controlable y
+  // framerate-independiente. reach = radio final; lifespan = cuánto dura (más largo = más lento).
+  const EXP_REACH_FRAC   = 0.11;     // radio final del burst (fracción de pantalla, vía sper) — grande, envolvente
+  const EXP_REACH_VAR    = [0.85, 1.15];  // variación de tamaño de los bursts normales
+  const EXP_BIG_CHANCE   = 0.25;     // prob de que un burst salga notablemente más grande
+  const EXP_BIG_MULT     = [1.5, 2.2];    // cuánto más grande es uno "grande"
+  const EXP_LIFE         = [0.7, 1.0];     // duración total en s (incluye el fade-out)
+  const EXP_EXPAND_TIME  = 0.2;      // s en abrirse del todo — corto = estallido rápido (independiente de lifespan)
+  const EXP_EASE         = 2.2;      // curva de expansión (ease-out): dispara fuerte y frena → efecto "envolvente"
+  const EXP_FADE_START   = 0.45;     // fracción de vida en la que arranca el fade-out gradual
+  const EXP_DROOP        = 1.2;      // multiplicador global de caída (gravedad de las chispas)
+  const EXP_MAX_EXPLOSIONS = 100;    // tope de explosiones para permitir recursión (chispas hijas)
+  const BLOWALL_CAP      = 500;      // tope al reventar todo (Q)
+
+  const LAUNCH_INTERVAL  = 0.1;      // s entre cohetes mientras se mantiene apretado (= fireworkCD)
+  const MULTI_COUNT      = 5;        // cohetes por disparo con el toggle multi
+  const CURSOR_R_FRAC    = 0.01;     // marcador bajo cada dedo/cursor activo (V1: sper(0.01))
+
+  // ── CANVAS ──
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, dpr = 1;
+
+  const xper = p => p * W;
+  const yper = p => p * H;
+  const sper = p => p * (W + H) / 2;                                               // promedio de ejes, como en el .py
+
+  const barEl = document.getElementById('bar');
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const barH = barEl.offsetHeight;                                             // incluye el safe-area-inset-bottom en iOS
+    W = window.innerWidth;
+    H = window.innerHeight - barH;                                               // el playfield ocupa sólo lo de arriba de la barra
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+
+  // ── COLOR ──
+  const clamp255 = v => Math.max(0, Math.min(255, v | 0));
+  const randColorInRange = (rl, rh, gl, gh, bl, bh) => [ri(rl, rh), ri(gl, gh), ri(bl, bh)];
+  const randColorGray = (lo, hi) => { const n = ri(lo, hi); return [n, n, n]; };
+  const modifyColorPerc = (c, f) => [clamp255(c[0]*f), clamp255(c[1]*f), clamp255(c[2]*f)];
+  const rgbStr = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+
+  // Misma paleta que Fireworks.py: rangos (rojoLow,rojoHigh, verdeLow,verdeHigh, azulLow,azulHigh).
+  const COLORS = [
+    [75,155, 0,0, 0,0],        // Rojo oscuro
+    [0,0, 75,155, 0,0],        // Verde oscuro
+    [0,0, 0,0, 75,155],        // Azul oscuro
+    [75,155, 75,155, 0,0],     // Rojo y verde oscuro
+    [0,0, 75,155, 75,155],     // Verde y azul oscuro
+    [75,155, 0,0, 75,155],     // Rojo y azul oscuro
+    [200,255, 0,0, 0,0],       // Rojo claro
+    [0,0, 200,255, 0,0],       // Verde claro
+    [0,0, 0,0, 200,255],       // Azul claro
+    [200,255, 200,255, 0,0],   // Rojo y verde claro
+    [0,0, 200,255, 200,255],   // Verde y azul claro
+    [200,255, 0,0, 200,255],   // Rojo y azul claro
+    [75,255, 75,255, 75,255],  // Rojo, verde y azul claro
+  ];
+  // Empuja los canales lejos del gris (sube saturación) → colores más vívidos, no lavados.
+  const vivid = c => { const m = (c[0]+c[1]+c[2])/3, k = 1.3; return [clamp255(m+(c[0]-m)*k), clamp255(m+(c[1]-m)*k), clamp255(m+(c[2]-m)*k)]; };
+  const pickColor = () => vivid(randColorInRange(...COLORS[ri(0, COLORS.length - 1)]));
+
+  // ── ESTADO ──
+  let fireworks = [];
+  let explosions = [];
+  let multiLaunch = false;                                                         // toggle 5x (= MMB+LMB)
+  let rapidLaunch = false;                                                         // toggle sin-cooldown (= RMB)
+  let showDebug = false;
+  let blowCD = 0;                                                                  // cooldown de "reventar uno" (W)
+
+  // ════════════════ COHETE ════════════════
+  function makeFirework(x, y) {
+    const fw = {
+      x, y,
+      radius: sper(FW_RADIUS_FRAC),
+      color: pickColor(),
+      acel: -sper(ACEL_NORMAL_FRAC),                                              // negativo = hacia arriba
+      grav: sper(GRAV_FRAC),
+      angle: rnd(-sper(ANGLE_FRAC), sper(ANGLE_FRAC)),                            // deriva horizontal
+      timer: rnd(FW_TIMER_MIN, FW_TIMER_MAX),
+    };
+    fireworks.push(fw);
+    return fw;
+  }
+  function processFirework(fw, dt, fs) {
+    fw.timer -= dt;
+    if (fw.timer <= 0) { fw.dead = true; spawnExplosion(fw.x, fw.y, fw.radius, false, fw.color); return; }
+    fw.y += (fw.acel + fw.grav) * dt;
+    fw.x += fw.angle * dt;
+    fw.acel *= Math.pow(ACEL_DECAY, fs);                                          // decaimiento por-frame del .py, hecho framerate-independiente
+    fw.grav *= Math.pow(GRAV_GROWTH, fs);
+    // Clamp horizontal raro pero fiel: si se pasa de un borde, reaparece en el opuesto.
+    if (fw.x > W) fw.x = 0; else if (fw.x < 0) fw.x = W;
+  }
+  function drawFirework(fw) {
+    ctx.fillStyle = rgbStr(fw.color);
+    ctx.beginPath(); ctx.arc(fw.x, fw.y, fw.radius, 0, TAU); ctx.fill();
+  }
+
+  // ════════════════ EXPLOSIÓN ════════════════
+  // Sistema de partículas: en el spawn se sortea un PATRÓN (como chooseStyle del BallsWeb) y se
+  // genera un set de chispas con dirección 3D {dx,dy,dz}, radio `r` y largo de estela `len`.
+  // La expansión va POR TIEMPO: dist = reach * easeOut(age/EXP_EXPAND_TIME) → estalla rápido y grande
+  // (independiente de lifespan, que sólo controla cuánto vive/fadea). dz da profundidad (tamaño/brillo).
+  // Todo con composite 'lighter' (aditivo).
+  const CHILD_PATTERNS = ['peony', 'glitter', 'ring'];                             // las chispas hijas: bursts chicos y simples
+
+  function pickPattern() {                                                         // sorteo ponderado (estilo chooseStyle del BallsWeb)
+    const sr = Math.random();
+    if      (sr < 0.24) return 'peony';
+    else if (sr < 0.40) return 'chrysanthemum';
+    else if (sr < 0.52) return 'ring';
+    else if (sr < 0.64) return 'willow';
+    else if (sr < 0.74) return 'palm';
+    else if (sr < 0.84) return 'spiky';
+    else if (sr < 0.93) return 'double';
+    else                return 'glitter';
+  }
+
+  // ── helpers 3D: una dirección al azar sobre la esfera unidad, y un anillo inclinado ──
+  // Cada partícula guarda (dx,dy,dz): dx/dy posicionan en 2D, dz es la "profundidad" que el
+  // dibujo usa para escalar tamaño y brillo → la chispa parece estar adelante o atrás (volumen).
+  function dir3() {
+    const u = Math.random()*2 - 1, th = rnd(0, TAU), s = Math.sqrt(1 - u*u);
+    return { dx: s*Math.cos(th), dy: s*Math.sin(th), dz: u };
+  }
+  function tiltDir(ax, ay, a) {                                                    // círculo en XY rotado en X e Y → se proyecta como elipse 3D
+    let x = Math.cos(a), y = Math.sin(a), z = 0;
+    let ny = y*Math.cos(ax) - z*Math.sin(ax), nz = y*Math.sin(ax) + z*Math.cos(ax); y = ny; z = nz;
+    let nx = x*Math.cos(ay) + z*Math.sin(ay);  nz = -x*Math.sin(ay) + z*Math.cos(ay); x = nx; z = nz;
+    return { dx: x, dy: y, dz: z };
+  }
+
+  function makeParticles(e) {
+    const P = [];
+    switch (e.pattern) {
+      case 'peony': {                       // BOLA: chispas cortas sobre la esfera → disco redondo lleno
+        const n = ri(34, 50);
+        for (let i = 0; i < n; i++) { const d = dir3(); P.push({ ...d, r: rnd(0.9, 1), len: 0.2 }); }
+        e.grav = 0.3; e.headSize = 1.0; break;
+      }
+      case 'chrysanthemum': {               // ARAÑA: pocas chispas con estela MUY larga y radial
+        const n = ri(24, 34);
+        for (let i = 0; i < n; i++) { const d = dir3(); P.push({ ...d, r: rnd(0.92, 1), len: 0.82 }); }
+        e.grav = 0.5; e.headSize = 1.1; break;
+      }
+      case 'ring': {                        // ANILLO inclinado (elipse 3D), denso para que la línea se lea
+        const n = ri(52, 72), ax = rnd(0.35, 1.2)*(Math.random()<0.5?-1:1), ay = rnd(0, TAU);
+        for (let i = 0; i < n; i++) { const d = tiltDir(ax, ay, TAU*i/n); P.push({ ...d, r: rnd(0.97, 1), len: 0.06 }); }
+        e.grav = 0.15; e.headSize = 0.9; break;
+      }
+      case 'willow': {                      // SAUCE: nube media de brasas que cae mucho, estelas cortas
+        const n = ri(46, 66);
+        for (let i = 0; i < n; i++) { const d = dir3(); P.push({ ...d, r: rnd(0.45, 1), len: rnd(0.1, 0.2) }); }
+        e.grav = 2.4; e.headSize = 0.95; break;
+      }
+      case 'palm': {                        // PALMERA: pocas frondas hacia arriba con estela larga
+        const fr = ri(6, 8);
+        for (let f = 0; f < fr; f++) {
+          const baseA = TAU*f/fr;
+          const bx = Math.cos(baseA), by = -Math.abs(Math.sin(baseA))*0.7 - 0.35;   // sesgo claro hacia arriba
+          const sprays = ri(5, 8);
+          for (let s = 0; s < sprays; s++) {
+            const jx = bx + rnd(-0.14,0.14), jy = by + rnd(-0.1,0.1), jz = rnd(-0.5,0.5);
+            const L = Math.hypot(jx, jy, jz) || 1;
+            P.push({ dx: jx/L, dy: jy/L, dz: jz/L, r: rnd(0.6, 1), len: 0.4 });
+          }
+        }
+        e.grav = 1.0; e.headSize = 1.3; break;
+      }
+      case 'spiky': {                       // ESTRELLA: púas que salen del CENTRO (len = r), largas/cortas alternadas
+        const n = ri(16, 24);
+        for (let i = 0; i < n; i++) { const d = dir3(); const r = (i%2===0) ? 1 : 0.45; P.push({ ...d, r, len: r }); }
+        e.grav = 0.25; e.headSize = 1.0; break;
+      }
+      case 'glitter': {                     // POLVO: chispas dispersas que titilan, sin estela
+        const n = ri(44, 66);
+        for (let i = 0; i < n; i++) { const d = dir3(); P.push({ ...d, r: rnd(0.2, 1), len: 0, size: rnd(0.7,1.5), phase: rnd(0,TAU) }); }
+        e.grav = 0.35; e.headSize = 1.0; break;
+      }
+      case 'double': {                      // DOS ANILLOS inclinados cruzados, distinto color
+        const n = ri(34, 46);
+        const ax1 = rnd(0.35,1.1)*(Math.random()<0.5?-1:1), ay1 = rnd(0,TAU);
+        const ax2 = rnd(0.35,1.1)*(Math.random()<0.5?-1:1), ay2 = rnd(0,TAU);
+        const outer = [], inner = [];
+        for (let i = 0; i < n; i++) {
+          const o = tiltDir(ax1, ay1, TAU*i/n); outer.push({ ...o, r: 1,   len: 0.06 });
+          const j = tiltDir(ax2, ay2, TAU*i/n); inner.push({ ...j, r: 0.6, len: 0.06 });
+        }
+        e.parts = outer; e.parts2 = inner;
+        e.color2 = pickColor();                                                   // segundo color vívido
+        e.grav = 0.2; e.headSize = 0.9; return;
+      }
+    }
+    e.parts = P;
+  }
+
+  function spawnExplosion(x, y, radius, isChild, color) {
+    if (!color) color = pickColor();
+    // tamaño final: la mayoría parejos, ~EXP_BIG_CHANCE salen notablemente más grandes
+    const sizeMul = (Math.random() < EXP_BIG_CHANCE)
+      ? rnd(EXP_BIG_MULT[0], EXP_BIG_MULT[1])
+      : rnd(EXP_REACH_VAR[0], EXP_REACH_VAR[1]);
+    const lifespan = rnd(EXP_LIFE[0], EXP_LIFE[1]) * (isChild ? 0.8 : 1);
+    const e = {
+      x, y, isChild,
+      pattern: isChild ? CHILD_PATTERNS[ri(0, CHILD_PATTERNS.length - 1)] : pickPattern(),
+      color: color.slice(),                                                       // color vívido tal cual (no se lava a blanco)
+      reach: sper(EXP_REACH_FRAC) * sizeMul * (isChild ? 0.5 : 1),                // radio final al que llega la expansión
+      lifespan, timer: lifespan, life: 0,
+      grav: 0.25, headSize: 1,
+    };
+    makeParticles(e);
+    explosions.push(e);
+    return e;
+  }
+  function processExplosion(e, dt) {                                              // dt = segundos reales; toda la animación deriva de e.life
+    e.timer = Math.max(e.timer - dt, 0);
+    e.life = 1 - e.timer / e.lifespan;
+    if (e.timer === 0) {
+      e.dead = true;
+      if (!e.isChild && explosions.length < EXP_MAX_EXPLOSIONS) {                 // recursión: 3 chispas hijas, más chicas
+        const color = Math.random() < 0.2 ? randColorGray(200, 255) : e.color;
+        for (let i = 0; i < 3; i++) {
+          const cx = e.x + rnd(-e.reach*0.4, e.reach*0.4);
+          const cy = e.y + rnd(-e.reach*0.4, e.reach*0.4);
+          spawnExplosion(cx, cy, 0, true, color);
+        }
+      }
+    }
+  }
+
+  const mixWhite = (c, amt) => `rgb(${(c[0]+(255-c[0])*amt)|0},${(c[1]+(255-c[1])*amt)|0},${(c[2]+(255-c[2])*amt)|0})`;
+  const smooth = t => t*t*(3 - 2*t);                                              // smoothstep, para un fade-out suave
+
+  // Estelas en 2 pasadas: primero las de atrás (dz<0) tenues y finas, después las de adelante
+  // brillantes y gruesas → profundidad sin ordenar nada. `fade` apaga gradualmente sobre el final.
+  function drawTrails(e, parts, colArr, lw, expand, droopY, fade) {
+    for (let pass = 0; pass < 2; pass++) {
+      const back = pass === 0;
+      ctx.strokeStyle = rgbStr(back ? modifyColorPerc(colArr, 0.5) : colArr);
+      ctx.lineWidth = Math.max(1, back ? lw*0.6 : lw);
+      ctx.globalAlpha = (back ? 0.28 : 0.6) * fade;                              // alpha bajo → la forma se lee, no se lava a blanco
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (const p of parts) {
+        if (p.len <= 0 || (p.dz < 0) !== back) continue;
+        const inner = Math.max(0, p.r - p.len);
+        const d2 = expand*p.r, d1 = expand*inner;
+        ctx.moveTo(e.x + p.dx*d1, e.y + p.dy*d1 + droopY*inner);                  // los de más afuera caen más (droop ∝ r)
+        ctx.lineTo(e.x + p.dx*d2, e.y + p.dy*d2 + droopY*p.r);
+      }
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Cabezas: un punto que brilla por chispa. Tamaño y opacidad según dz (profundidad) → volumétrico.
+  function drawHeads(e, parts, colArr, hr, expand, droopY, fade, twinkle) {
+    ctx.fillStyle = mixWhite(colArr, 0.1);                                        // casi el color puro (no blanco)
+    for (const p of parts) {
+      const scale = 1 + p.dz*0.5;                                                 // adelante más grande
+      let a = (0.22 + 0.45*(p.dz*0.5 + 0.5)) * fade;                              // atrás más tenue, + fade-out final
+      if (twinkle) a *= 0.35 + 0.65*Math.max(0, Math.sin(e.life*24 + p.phase));
+      if (a <= 0.02) continue;
+      const d = expand*p.r;
+      ctx.globalAlpha = a;
+      ctx.beginPath();
+      ctx.arc(e.x + p.dx*d, e.y + p.dy*d + droopY*p.r, Math.max(0.6, hr*scale*(p.size || 1)), 0, TAU);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawExplosion(e) {
+    const t = e.life;
+    const age = e.lifespan - e.timer;                                            // segundos desde que estalló
+    const expandT = Math.min(1, age / EXP_EXPAND_TIME);                          // se abre rápido y corto, no a lo largo de toda la vida
+    const expand = e.reach * (1 - Math.pow(1 - expandT, EXP_EASE));              // estallido veloz que frena (envolvente)
+    const fade = t < EXP_FADE_START ? 1                                           // fade-out gradual sobre el final
+               : 1 - smooth((t - EXP_FADE_START) / (1 - EXP_FADE_START));
+    const droopY = e.grav * e.reach * EXP_DROOP * t * t;                          // caída acelerada (∝ life²)
+    const lw = Math.max(1, e.reach / 26 * e.headSize);
+    const hr = Math.max(0.6, e.reach / 26 * e.headSize);
+
+    if (e.pattern === 'glitter') { drawHeads(e, e.parts, e.color, hr, expand, droopY, fade, true); return; }
+
+    drawTrails(e, e.parts, e.color, lw, expand, droopY, fade);
+    drawHeads(e, e.parts, e.color, hr, expand, droopY, fade, false);
+    if (e.parts2) {                                                               // segundo color (double)
+      drawTrails(e, e.parts2, e.color2, lw, expand, droopY, fade);
+      drawHeads(e, e.parts2, e.color2, hr, expand, droopY, fade, false);
+    }
+  }
+
+  // ════════════════ ACCIONES (= teclas Q / W del .py) ════════════════
+  function blowAll() {                                                            // Q: reventar todos los cohetes en vuelo
+    for (const fw of fireworks) {
+      fw.dead = true;
+      if (explosions.length < BLOWALL_CAP) spawnExplosion(fw.x, fw.y, fw.radius, true, fw.color);
+    }
+  }
+  function blowOne() {                                                            // W: reventar uno al azar (con cooldown)
+    if (blowCD > 0 || !fireworks.length) return;
+    const idx = ri(0, fireworks.length - 1);
+    const fw = fireworks[idx];
+    fw.dead = true;
+    spawnExplosion(fw.x, fw.y, fw.radius, true, fw.color);
+    blowCD = 0.1;
+  }
+
+  // ════════════════ INPUT ════════════════
+  // Multi-touch: cada dedo/cursor activo lanza su propio chorro de cohetes con su propio cooldown.
+  const pointers = new Map();                                                      // pointerId → { x, y, cd }
+  function evtPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+
+  canvas.addEventListener('pointerdown', e => {
+    canvas.setPointerCapture(e.pointerId);
+    const p = evtPos(e);
+    pointers.set(e.pointerId, { x: p.x, y: p.y, cd: 0 });                          // cd=0 → primer cohete al toque sale ya
+  });
+  canvas.addEventListener('pointermove', e => {
+    const ps = pointers.get(e.pointerId);
+    if (!ps) return;
+    const p = evtPos(e); ps.x = p.x; ps.y = p.y;
+  });
+  function endPointer(e) { pointers.delete(e.pointerId); }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+  // botones — tap dispara en pointerdown (responde aunque haya un dedo ocupado en el canvas)
+  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
+  function toggle(el, get, set) {
+    tappable(el, () => { set(!get()); el.classList.toggle('on', get()); });
+  }
+
+  toggle(document.getElementById('btnMulti'), () => multiLaunch, v => multiLaunch = v);
+  toggle(document.getElementById('btnRapid'), () => rapidLaunch, v => rapidLaunch = v);
+  tappable(document.getElementById('btnBlowOne'), blowOne);
+  tappable(document.getElementById('btnBlowAll'), blowAll);
+
+  const btnDebug = document.getElementById('btnDebug');
+  tappable(btnDebug, () => { showDebug = !showDebug; btnDebug.classList.toggle('on', showDebug); });
+
+  // ── LOOP ──
+  let lastT = performance.now();
+  let dtSmoothed = 1/60;
+  function loop(now) {
+    if (typeof now !== 'number') now = performance.now();
+    const dt = Math.min(0.05, (now - lastT) / 1000);                              // dt real, clamp a 50ms como el deltaT del .py
+    lastT = now;
+    dtSmoothed = dtSmoothed * 0.9 + dt * 0.1;
+    const fs = dt * 60;                                                           // "frames a 60fps" — convierte los decay por-frame del .py a algo framerate-independiente
+
+    blowCD = Math.max(blowCD - dt, 0);
+
+    // lanzar desde cada dedo activo, con su cooldown (rapid = sin cooldown)
+    const interval = rapidLaunch ? 0 : LAUNCH_INTERVAL;
+    for (const ps of pointers.values()) {
+      ps.cd -= dt;
+      if (ps.cd <= 0) {
+        const n = multiLaunch ? MULTI_COUNT : 1;
+        for (let i = 0; i < n; i++) makeFirework(ps.x, ps.y);
+        ps.cd = interval;
+      }
+    }
+
+    for (const fw of fireworks) processFirework(fw, dt, fs);
+    for (const e of explosions) processExplosion(e, dt, fs);
+    fireworks = fireworks.filter(fw => !fw.dead);
+    explosions = explosions.filter(e => !e.dead);
+
+    // render — cohetes primero, explosiones encima (orden de z del .py)
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    for (const fw of fireworks) drawFirework(fw);
+    ctx.globalCompositeOperation = 'lighter';                                     // aditivo: las explosiones suman luz (brillan donde se solapan)
+    for (const e of explosions) drawExplosion(e);
+    ctx.globalCompositeOperation = 'source-over';
+
+    // marcador bajo cada dedo/cursor activo (como el cursor (100,0,0) del .py V1)
+    ctx.fillStyle = 'rgb(100,0,0)';
+    for (const ps of pointers.values()) {
+      ctx.beginPath(); ctx.arc(ps.x, ps.y, sper(CURSOR_R_FRAC), 0, TAU); ctx.fill();
+    }
+
+    if (showDebug) drawDebugHUD();
+    requestAnimationFrame(loop);
+  }
+
+  function drawDebugHUD() {
+    const lines = [
+      'FPS: ' + Math.round(1 / Math.max(1e-3, dtSmoothed)),
+      'Cohetes: ' + fireworks.length,
+      'Explos.: ' + explosions.length,
+    ];
+    const lh = 18, padX = 8, padY = 8, w = 120;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(padX, padY, w, lh * lines.length + 8);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.font = '13px ui-monospace, Menlo, Consolas, monospace';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    lines.forEach((s, i) => ctx.fillText(s, padX + 6, padY + 4 + i * lh));
+  }
+
+  // ── INIT ──
+  resize();
+  loop();
+
+  const hint = document.getElementById('hint');
+  setTimeout(() => hint.style.opacity = '0', 5000);
+  canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
+  </script>
+</body>
+</html>

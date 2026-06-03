@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Clock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;600;700&family=Rajdhani:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bar-height: 66px;                                                          /* tweak to taste */
+    --accent: 0,255,0;                                                           /* color base del reloj (lo setea el JS) */
+    --accent-dark: 0,180,0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Rajdhani', 'Segoe UI', system-ui, sans-serif;
+  }
+  /* Canvas occupies only the space ABOVE the bar — the clock centers in that rect so it never sits
+     behind the button. Dimensions are set explicitly from JS each resize. */
+  #c {
+    display: block; position: absolute;
+    top: 0; left: 0;
+  }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
+    text-align: center; color: rgba(var(--accent-dark),0.55);
+    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
+    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+  }
+
+  /* Bottom bar: holds the second-hand toggle. Opaque-ish background so it reads as a bezel rather than
+     a HUD overlay. Same shell as BallsWeb. */
+  #bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    padding: 0 16px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.85);
+    border-top: 1px solid rgba(var(--accent-dark),0.12);
+    z-index: 3;
+  }
+  #ui {
+    display: flex; gap: 8px;
+  }
+  #ui button {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 1px solid rgba(var(--accent-dark),0.28);
+    background: rgba(var(--accent-dark),0.08);
+    color: rgb(var(--accent));
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    transition: background 0.1s, transform 0.08s;
+    padding: 0;
+  }
+  #ui button:active { background: rgba(var(--accent-dark),0.22); transform: scale(0.92); }
+  /* SVG icons inherit color via currentColor so they tint with the toggled-on state. */
+  #ui button svg { display: block; width: 24px; height: 24px; pointer-events: none; }
+  /* visual indicator for the smooth (suave) mode */
+  #ui button.on { background: rgba(var(--accent),0.26); border-color: rgba(var(--accent),0.6); color: rgb(var(--accent)); }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">tocá el reloj o el botón · segundero tic-tac ⇄ suave</div>
+  <div id="bar">
+    <div id="ui">
+      <button id="btnSec" aria-label="segundero" title="Segundero: tic-tac / suave"></button>
+      <button id="btnColor" aria-label="color" title="Color del reloj">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg>
+      </button>
+      <button id="btnAuto" aria-label="auto" title="Color automático (cada 2 s)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.7 4.5L18 8l-4.3 1.5L12 14l-1.7-4.5L6 8l4.3-1.5z"/><circle cx="18.5" cy="16.5" r="1.6"/><circle cx="6" cy="16" r="1.2"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  CLOCK — port web fiel de Clock.py, con el mismo shell mobile que BallsWeb.
+  //  Reloj analógico dibujado desde Date(). El botón (o un toque en el reloj)
+  //  alterna el segundero entre tic-tac (segundero=0) y suave (segundero=1).
+  // ════════════════════════════════════════════════════════════════════
+  const TAU = Math.PI * 2;
+
+  // ── TEMAS DE COLOR ──
+  // Todo el reloj se deriva de UN color base (el "bright"). El resto de los tonos —oscuro, acento,
+  // anillos, viñeta, cara de vidrio, hub— son escalas de ese color, así el contraste neón se mantiene
+  // sea cual sea el color elegido. El verde [0,255,0] reproduce exactamente los valores del Clock.py.
+  const clampC = v => Math.max(0, Math.min(255, Math.round(v)));
+  function makeTheme(base) {
+    const [r, g, b] = base;
+    const s  = t      => `rgb(${clampC(r*t)},${clampC(g*t)},${clampC(b*t)})`;
+    const sa = (t, a) => `rgba(${clampC(r*t)},${clampC(g*t)},${clampC(b*t)},${a})`;
+    const lighten = c => clampC(c + (255 - c) * 0.745);                           // mezcla hacia blanco (highlight del hub)
+    return {
+      base,
+      bright:  s(1),        // GREEN original
+      dark:    s(0.706),    // DARKGREEN original (0,180,0)
+      accent:  s(0.902),    // aguja de minutos (0,230,0)
+      ringMid: sa(0.706, 0.35),
+      ringOut: sa(1, 0.16),
+      bg0:     s(0.085),    // centro de la viñeta
+      bg1:     s(0.04),
+      face0:   sa(0.216, 0.55),
+      face1:   sa(0.094, 0.35),
+      hubHi:   `rgb(${lighten(r)},${lighten(g)},${lighten(b)})`,
+      pinhole: s(0.078),
+    };
+  }
+  const PALETTES = [
+    { name: 'Verde',   base: [0, 255, 0]     },
+    { name: 'Cyan',    base: [0, 220, 255]   },
+    { name: 'Ámbar',   base: [255, 176, 0]   },
+    { name: 'Rojo',    base: [255, 64, 52]   },
+    { name: 'Magenta', base: [255, 64, 200]  },
+    { name: 'Azul',    base: [90, 130, 255]  },
+    { name: 'Blanco',  base: [235, 235, 235] },
+  ];
+  let themeIndex = 0;
+  let T = makeTheme(PALETTES[0].base);
+
+  // mismas abreviaturas que strftime por defecto (locale C → inglés)
+  const DIAS  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const MESES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const dos = n => String(n).padStart(2, '0');
+
+  // fuentes modernas (Google Fonts, fallback a system): Orbitron para los números de la hora
+  // (dígitos monoespaciados, no bailan al cambiar el segundo), Rajdhani para la fecha.
+  const FONT_TIME = "'Orbitron', system-ui, sans-serif";
+  const FONT_DATE = "'Rajdhani', 'Segoe UI', system-ui, sans-serif";
+
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  let W = 0, H = 0, dpr = 1;
+  let S = 0;                 // lado de referencia (= SCREEN_WIDTH/HEIGHT en Clock.py)
+  let radio = 0, centroX = 0, centroY = 0, k = 1;
+  let segundero = 0;         // 0 = tic-tac (salta por segundo), 1 = suave (interpolado por ms)
+
+  const barEl = document.getElementById('bar');
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const barH = barEl.offsetHeight;                                             // includes the safe-area-inset-bottom padding on iOS
+    W = window.innerWidth;
+    H = window.innerHeight - barH;                                               // el reloj vive sólo sobre la barra
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    // S = lado del cuadrado que entra en el área de dibujo. Las fórmulas de Clock.py
+    // asumían SCREEN_WIDTH == SCREEN_HEIGHT == 650; acá lo hacemos responsive.
+    S = Math.min(W, H);
+    radio   = (S + S) / 4.25;          // = S/2.125, igual que (SCREEN_WIDTH+SCREEN_HEIGHT)/4.25
+    centroX = W / 2;
+    centroY = H / 2;
+    k = S / 650;                       // escala de los anchos de línea (definidos a 650 px)
+  }
+  window.addEventListener('resize', resize);
+
+  // ── HELPERS DE DIBUJO (con glow neón) ──
+  // Todo el look nuevo es verde-fósforo sobre negro: cada trazo importante se acompaña de un
+  // shadowBlur del mismo color, que en canvas equivale a un halo de neón.
+  function setGlow(color, blur) { ctx.shadowColor = color; ctx.shadowBlur = blur * k; }
+  function clearGlow() { ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; }
+
+  // texto centrado, chico y prolijo (mucho más chico que los 30 px del Clock.py original)
+  function crearTexto(texto, color, posx, posy, size, glow, font, weight) {
+    ctx.font = (weight || 600) + ' ' + Math.round(size * k) + 'px ' + (font || FONT_DATE);
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    if (glow) setGlow(color, glow);
+    ctx.fillStyle = color;
+    ctx.fillText(texto, posx, posy);
+    clearGlow();
+  }
+
+  function linea(color, x1, y1, x2, y2, ancho, cap) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = Math.max(1, ancho * k);
+    ctx.lineCap = cap || 'butt';
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.stroke();
+  }
+  function circulo(color, cx, cy, r, ancho) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, TAU);
+    if (ancho) { ctx.strokeStyle = color; ctx.lineWidth = Math.max(0.5, ancho * k); ctx.stroke(); }
+    else       { ctx.fillStyle = color; ctx.fill(); }
+  }
+
+  // aguja cónica tipo lozenge: ancha en el perno, afilada en la punta, con colita atrás.
+  // baseW/tipW van en px-650 (se escalan por k); length y tailLen ya vienen en px.
+  function drawHand(ang, length, baseW, tipW, tailLen, color, glow) {
+    const dx = Math.cos(ang), dy = Math.sin(ang), px = -dy, py = dx;   // dir + perpendicular
+    const bw = baseW * k * 0.5, tw = tipW * k * 0.5;
+    const tipX = centroX + dx * length, tipY = centroY + dy * length;
+    const tailX = centroX - dx * tailLen, tailY = centroY - dy * tailLen;
+    if (glow) setGlow(color, glow);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(tipX + px * tw, tipY + py * tw);
+    ctx.lineTo(centroX + px * bw, centroY + py * bw);
+    ctx.lineTo(tailX + px * tw, tailY + py * tw);
+    ctx.lineTo(tailX - px * tw, tailY - py * tw);
+    ctx.lineTo(centroX - px * bw, centroY - py * bw);
+    ctx.lineTo(tipX - px * tw, tipY - py * tw);
+    ctx.closePath();
+    ctx.fill();
+    clearGlow();
+  }
+
+  function draw() {
+    const now = new Date();
+    const ca_h  = now.getHours();
+    const ca_m  = now.getMinutes();
+    const ca_s  = now.getSeconds();
+    const ca_ms = now.getMilliseconds() * 1000;   // µs equivalentes (Date sólo da ms)
+
+    const fecha = `${DIAS[now.getDay()]}, ${dos(now.getDate())} ${MESES[now.getMonth()]} ${now.getFullYear()}`;
+    const hora  = `${dos(ca_h)}:${dos(ca_m)}:${dos(ca_s)}`;
+
+    // fondo con viñeta (verde muy oscuro al centro → negro en los bordes)
+    const vg = ctx.createRadialGradient(centroX, centroY, radio * 0.1, centroX, centroY, Math.max(W, H) * 0.75);
+    vg.addColorStop(0, T.bg0); vg.addColorStop(0.6, T.bg1); vg.addColorStop(1, '#000000');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
+
+    // cara del dial (vidrio oscuro con highlight arriba-izquierda)
+    const fg = ctx.createRadialGradient(centroX - radio * 0.3, centroY - radio * 0.3, radio * 0.05, centroX, centroY, radio);
+    fg.addColorStop(0, T.face0); fg.addColorStop(0.7, T.face1); fg.addColorStop(1, 'rgba(0,0,0,0.1)');
+    ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(centroX, centroY, radio * 0.92, 0, TAU); ctx.fill();
+
+    // anillos exteriores: uno principal con glow fuerte + dos finos decorativos
+    setGlow(T.bright, 18);
+    circulo(T.dark, centroX, centroY, radio, 6);
+    clearGlow();
+    circulo(T.ringMid, centroX, centroY, radio * 0.955, 2);
+    circulo(T.ringOut, centroX, centroY, radio * 1.025, 1);
+
+    // marcas de minutos (60) — finas, glow suave
+    setGlow(T.dark, 5);
+    for (let i = 1; i <= 60; i++) {
+      const a = TAU * i / 60;
+      linea(T.dark,
+        centroX + Math.cos(a) * radio * 0.83, centroY + Math.sin(a) * radio * 0.83,
+        centroX + Math.cos(a) * radio * 0.85, centroY + Math.sin(a) * radio * 0.85, 2);
+    }
+    clearGlow();
+    // marcas de horas (12) — gruesas, brillantes, con punta redondeada
+    setGlow(T.bright, 12);
+    for (let i = 1; i <= 12; i++) {
+      const a = TAU * i / 12;
+      linea(T.bright,
+        centroX + Math.cos(a) * radio * 0.80, centroY + Math.sin(a) * radio * 0.80,
+        centroX + Math.cos(a) * radio * 0.87, centroY + Math.sin(a) * radio * 0.87, 6, 'round');
+    }
+    clearGlow();
+
+    // fecha + hora, espejadas arriba y abajo del centro — texto chico, con leve glow
+    const offY = S * 5 / 16;
+    crearTexto(hora,  T.bright, centroX, centroY + offY,         17, 8, FONT_TIME, 600);
+    crearTexto(fecha, T.dark,   centroX, centroY + offY * 0.875, 13, 5, FONT_DATE, 500);
+    crearTexto(hora,  T.bright, centroX, centroY - offY,         17, 8, FONT_TIME, 600);
+    crearTexto(fecha, T.dark,   centroX, centroY - offY * 0.875, 13, 5, FONT_DATE, 500);
+
+    // agujas cónicas — hora más corta y robusta, minutos más larga y fina
+    const am = ca_m * TAU / 60 - Math.PI / 2;
+    const ah = (ca_h * 60 + ca_m) * TAU / 720 - Math.PI / 2;
+    drawHand(ah, radio * 0.50, 20, 5, radio * 0.09, T.dark, 10);
+    drawHand(am, radio * 0.72, 13, 3, radio * 0.11, T.accent, 12);
+
+    // segundero — ángulo según el modo (tic-tac vs suave)
+    let as;
+    if (segundero === 0) as = ca_s * TAU / 60 - Math.PI / 2;
+    else                 as = (ca_ms + ca_s * 999999) * TAU / (60 * 999999) - Math.PI / 2;
+    const cos = Math.cos(as), sin = Math.sin(as);
+    const pivX = centroX - cos * radio * 0.075, pivY = centroY - sin * radio * 0.075;
+    setGlow(T.bright, 14);
+    linea(T.bright, pivX, pivY, centroX - cos * radio * 0.15, centroY - sin * radio * 0.15, 5, 'round');   // contrapeso
+    linea(T.bright, pivX, pivY, centroX + cos * radio * 0.75, centroY + sin * radio * 0.75, 3, 'round');   // aguja larga
+    circulo(T.bright, centroX + cos * radio * 0.62, centroY + sin * radio * 0.62, radio * 0.018, 0);        // perlita en la aguja
+    clearGlow();
+
+    // perno central — hub con degradé + pinhole oscuro
+    setGlow(T.bright, 12);
+    const hub = ctx.createRadialGradient(centroX - radio * 0.02, centroY - radio * 0.02, 1, centroX, centroY, radio * 0.06);
+    hub.addColorStop(0, T.hubHi); hub.addColorStop(1, T.dark);
+    ctx.fillStyle = hub; ctx.beginPath(); ctx.arc(centroX, centroY, radio * 0.06, 0, TAU); ctx.fill();
+    clearGlow();
+    circulo(T.pinhole, centroX, centroY, radio * 0.02, 0);
+
+    requestAnimationFrame(draw);
+  }
+
+  // ── TOGGLE SEGUNDERO ──
+  // Igual que el WALL_ICONS de BallsWeb: un SVG por estado. 0 = tic-tac (reloj con segundero recto),
+  // 1 = suave (reloj con flecha de barrido continuo). El botón se ilumina (.on) en modo suave.
+  const SEC_ICONS = {
+    // tic-tac: reloj con aguja vertical (salta de marca en marca)
+    0: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 12V6"/></svg>',
+    // suave: reloj con flecha de barrido (movimiento continuo)
+    1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 12l4-2"/><path d="M18.5 8.5a7 7 0 1 1-2.4-3.1"/><path d="M17 3.6v2.4h-2.4"/></svg>',
+  };
+  const btnSec = document.getElementById('btnSec');
+  function refreshSecBtn() {
+    btnSec.innerHTML = SEC_ICONS[segundero];
+    btnSec.classList.toggle('on', segundero === 1);
+  }
+  function toggleSegundero() { segundero = segundero === 0 ? 1 : 0; refreshSecBtn(); save(); }
+
+  // pointerdown (no click): responde aunque haya otro toque activo, igual que los botones de BallsWeb.
+  btnSec.addEventListener('pointerdown', e => { e.preventDefault(); toggleSegundero(); });
+  // tocar el reloj también alterna (comportamiento original de Clock.py)
+  canvas.addEventListener('pointerdown', toggleSegundero);
+
+  // ── BOTÓN DE COLOR ──
+  // Cicla PALETTES y reconstruye el tema T. Además publica el color en las variables CSS --accent /
+  // --accent-dark, así la barra y los botones se tiñen del mismo color que el reloj.
+  const btnColor = document.getElementById('btnColor');
+  function applyTheme() {
+    const p = PALETTES[themeIndex];
+    T = makeTheme(p.base);
+    const root = document.documentElement.style;
+    root.setProperty('--accent', p.base.join(','));
+    root.setProperty('--accent-dark', p.base.map(c => Math.round(c * 0.706)).join(','));
+    btnColor.title = 'Color: ' + p.name;
+  }
+  function cycleColor() { themeIndex = (themeIndex + 1) % PALETTES.length; applyTheme(); save(); }
+  btnColor.addEventListener('pointerdown', e => { e.preventDefault(); cycleColor(); });
+
+  // ── AUTO-COLOR (cicla solo cada 2 s) ──
+  const btnAuto = document.getElementById('btnAuto');
+  let autoTimer = null;
+  let autoOn = false;                                                             // estado restaurado por load()
+  function setAuto(on) {
+    if (on && !autoTimer)      autoTimer = setInterval(cycleColor, 2000);
+    else if (!on && autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+    btnAuto.classList.toggle('on', !!autoTimer);
+    save();
+  }
+  function toggleAuto() { setAuto(!autoTimer); }
+  btnAuto.addEventListener('pointerdown', e => { e.preventDefault(); toggleAuto(); });
+
+  // ── PERSISTENCIA (color + modo del segundero + auto) ──
+  const STORE_KEY = 'clockweb';
+  function save() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ themeIndex, segundero, auto: !!autoTimer })); } catch {}
+  }
+  function load() {
+    try {
+      const s = JSON.parse(localStorage.getItem(STORE_KEY) || '{}');
+      if (Number.isInteger(s.themeIndex) && s.themeIndex >= 0 && s.themeIndex < PALETTES.length) themeIndex = s.themeIndex;
+      if (s.segundero === 0 || s.segundero === 1) segundero = s.segundero;
+      autoOn = !!s.auto;
+    } catch {}
+  }
+
+  load();
+  refreshSecBtn();
+  applyTheme();
+  if (autoOn) setAuto(true);                                                      // re-arranca el ciclado si estaba activo
+  resize();
+  draw();
+
+  const hint = document.getElementById('hint');
+  setTimeout(() => hint.style.opacity = '0', 5000);
+  canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
+  </script>
+</body>
+</html>

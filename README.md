@@ -4,10 +4,11 @@ A browser-based marble physics sandbox. Drag, throw, pile up and shake a bag of
 procedurally-generated glass marbles, with real recorded marble sound effects.
 Built for touch (multi-touch aware) but works with a mouse too.
 
-Physics run on [Matter.js](https://brm.io/matter-js/); rendering, marble art and
-audio are hand-rolled on a plain `<canvas>`. The whole thing is a single
-[Marbles/index.html](Marbles/index.html) plus the sound samples in
-[Marbles/sounds/](Marbles/sounds/) — no build step.
+Physics run on [Matter.js](https://brm.io/matter-js/) (vendored locally as
+`matter.min.js`, so no CDN dependency at load); rendering, marble art and audio are
+hand-rolled on a plain `<canvas>`. It's just [Marbles/index.html](Marbles/index.html),
+`matter.min.js` and the sound samples in [Marbles/sounds/](Marbles/sounds/) — no
+build step, works fully offline.
 
 ## Features
 
@@ -56,5 +57,5 @@ python -m http.server 8000
 Any static server works. On a phone, the shake-to-jump accelerometer only fires
 over **HTTPS** (or inside an app WebView); the rest works over plain HTTP.
 
-> Matter.js is loaded from a CDN. For a fully offline / packaged build (e.g.
-> Capacitor) vendor `matter.min.js` locally and point the `<script>` tag at it.
+> Matter.js ships in the repo as `matter.min.js`, so there's no network dependency
+> at startup and the app runs offline / inside a packaged WebView (e.g. Capacitor).

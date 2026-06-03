@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Snake</title>
+<style>
+  :root { --bar-height: 66px; }                                                  /* tweak to taste */
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  /* Canvas occupies only the space ABOVE the bar — the playfield (screenX/screenY) is sized to this
+     rect, so the snake never runs behind the buttons. Dimensions are set explicitly from JS each resize. */
+  #c {
+    display: block; position: absolute;
+    top: 0; left: 0;
+    cursor: none;                                                                /* hide the OS cursor — we draw our own dot at the steering point (port of pygame.mouse.set_visible(False)) */
+  }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
+    text-align: center; color: rgba(120,255,120,0.5);
+    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
+    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+  }
+
+  /* Bottom bar: holds the action buttons. Same shell as BallsWeb. */
+  #bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    padding: 0 16px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.85);
+    border-top: 1px solid rgba(0,255,0,0.12);
+    z-index: 3;
+  }
+  #ui {
+    display: flex; gap: 8px;
+  }
+  #ui button {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 1px solid rgba(0,255,0,0.28);
+    background: rgba(0,255,0,0.06);
+    color: rgb(0,220,0);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    transition: background 0.1s, transform 0.08s;
+    padding: 0;
+  }
+  #ui button:active { background: rgba(0,255,0,0.20); transform: scale(0.92); }
+  #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
+  #ui #btnSprint svg { width: 24px; height: 24px; }
+  /* visual indicator for toggled-on / held state */
+  #ui button.on { background: rgba(0,255,0,0.28); border-color: rgba(0,255,0,0.6); color: #fff; }
+
+  /* Info: chico, en la esquina abajo-derecha. Lives outside #ui so the main row stays centered. */
+  #btnDebug {
+    position: absolute;
+    right: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(0,255,0,0.18);
+    background: rgba(0,255,0,0.04);
+    color: rgba(0,220,0,0.6);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+  }
+  #btnDebug svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnDebug:active { background: rgba(0,255,0,0.22); transform: scale(0.9); }
+  #btnDebug.on { background: rgba(0,255,0,0.28); border-color: rgba(0,255,0,0.6); color: #fff; }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">movés el dedo/mouse para dirigir · ⚡ para acelerar · comé las estrellas, evitá el cuerpo</div>
+  <div id="bar">
+    <div id="ui">
+      <button id="btnSprint" aria-label="acelerar" title="Acelerar (mantener)">
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+      </button>
+      <button id="btnPause" aria-label="pausa" title="Pausa">
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+      </button>
+      <button id="btnReset" aria-label="reiniciar" title="Reiniciar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+      </button>
+    </div>
+    <button id="btnDebug" aria-label="debug" title="Info / debug">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+    </button>
+  </div>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  SNAKE — port web fiel de Snake.py, con el mismo shell mobile que BallsWeb.
+  //  Snake no-grid: la cabeza persigue el puntero, cada segmento persigue al
+  //  anterior. Comés estrellas (crece +10), chocar un segmento "brillante"
+  //  (cada 4º, id>5) es game over.
+  // ════════════════════════════════════════════════════════════════════
+  const TAU = Math.PI * 2;
+
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  // ── ESTADO GLOBAL (al estilo del esqueleto del repo: los sprites lo leen directo) ──
+  let W = 0, H = 0, dpr = 1;
+  let screenX = 0, screenY = 0;                                                   // = W, H (alias para que las fórmulas de Snake.py calcen)
+  let deltaT = 0, lastT = performance.now(), dtSmoothed = 1/60;
+  let mouseX = 0, mouseY = 0;                                                     // punto de dirección (último puntero conocido)
+  let sprint = false;                                                             // ×1.5 a la velocidad de la cabeza (port de "mouseLeft")
+  let showDebug = false;
+
+  let sprites = [];                                                               // todo lo procesable/dibujable, ordenado por z
+  let snake = [];
+  let food = [];
+  let spritesToRemove = [];
+  let manager = null;
+
+  // ── HELPERS DE RESOLUCIÓN (idénticos a Snake.py) ──
+  const xper = p => p * screenX;
+  const yper = p => p * screenY;
+  const sper = p => p * (screenX + screenY) / 2;
+  const tscale = () => (screenX + screenY) / 2000;                               // los tamaños de texto eran absolutos a 1280×720 (suma 2000); acá escalan
+
+  // ── HELPERS DE COLOR / GEOMETRÍA (port directo) ──
+  const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));              // randint inclusivo
+  function randColorInRange(rL, rH, gL, gH, bL, bH) { return [ri(rL,rH), ri(gL,gH), ri(bL,bH)]; }
+  function modifyColorPerc(c, off) { return [clamp(c[0]*off), clamp(c[1]*off), clamp(c[2]*off)]; }
+  const clamp = v => Math.max(0, Math.min(255, v|0));
+  const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+  function getAngle2(prevAng, p1, p2) {
+    let a = Math.atan2(p2[1]-p1[1], p2[0]-p1[0]);
+    if (a - prevAng < -Math.PI) a += TAU;
+    if (a - prevAng >  Math.PI) a -= TAU;
+    return a;
+  }
+  const getDist = (p1, p2) => Math.hypot(p1[0]-p2[0], p1[1]-p2[1]);
+
+  // texto centrado / alineado (port de createText). alignment: 'center' | 'topleft' | 'topright'
+  function createText(size, content, alignment, color, posX, posY) {
+    const px = Math.round(size * tscale());
+    ctx.font = px + "px 'Segoe UI', system-ui, sans-serif";
+    ctx.textBaseline = (alignment === 'center') ? 'middle' : 'top';
+    ctx.textAlign = alignment === 'topright' ? 'right' : (alignment === 'center' ? 'center' : 'left');
+    ctx.fillStyle = rgb(color);
+    ctx.fillText(content, posX, posY);
+  }
+
+  function addSprite(s) { sprites.push(s); return s; }
+  function removeSprites() {
+    if (!spritesToRemove.length) return;
+    const dead = new Set(spritesToRemove);
+    sprites = sprites.filter(s => !dead.has(s));
+    snake = snake.filter(s => !dead.has(s));
+    food = food.filter(s => !dead.has(s));
+    spritesToRemove = [];
+  }
+
+  // ════════════════ SNAKE PIECE ════════════════
+  class SnakePiece {
+    constructor(n) {
+      this.id = this.z = n;
+      this.vel = sper(0.3);
+      this.angVel = sper(0.01);
+      this.ang = (this.id === 0) ? Math.random()*TAU : snake[this.id-1].ang;
+      this.x = (this.id === 0) ? xper(0.5) : snake[this.id-1].x;
+      this.y = (this.id === 0) ? yper(0.5) : snake[this.id-1].y;
+      this.wave_time = 0;
+      this.wave_time_total = 0.2;
+      // cada 4º segmento usa un verde más brillante (y son los que matan)
+      this.color = (this.id % 4 === 0) ? randColorInRange(10,40,225,255,10,40)
+                                       : randColorInRange(10,40,75,125,10,40);
+      snake.push(this);
+    }
+
+    get radius() { return sper(0.01); }                                          // live para ser responsive ante resize
+
+    process() {
+      if (manager.gameOver || manager.pause) return;
+      const r = this.radius;
+      const targetX = (this.id === 0) ? mouseX : snake[this.id-1].x;
+      const targetY = (this.id === 0) ? mouseY : snake[this.id-1].y;
+
+      const targetAng  = getAngle2(this.ang, [this.x,this.y], [targetX,targetY]);
+      const targetDist = getDist([this.x,this.y], [targetX,targetY]);
+
+      if (this.id === 0) {
+        this.vel = sper(0.3); this.angVel = sper(0.01);
+        this.checkHeadCol();
+      } else {
+        this.vel    = targetDist > r*0.75 ? sper(0.4) : targetDist < r*0.75 ? sper(0.2) : sper(0.3);
+        this.angVel = (targetDist > r*0.75 || targetDist < r*0.75) ? sper(0.02) : sper(0.01);
+      }
+
+      this.ang += (targetAng > this.ang ? this.angVel : -this.angVel) * deltaT;
+      this.ang = ((this.ang % TAU) + TAU) % TAU;
+      const boost = (this.id === 0 && sprint) ? 1.5 : 1;                         // sólo la cabeza acelera; el cuerpo la sigue
+      this.x += Math.cos(this.ang) * this.vel * deltaT * boost;
+      this.y += Math.sin(this.ang) * this.vel * deltaT * boost;
+
+      // onda "respiración" que se propaga hacia la cola
+      if (this.wave_time > 0) {
+        this.wave_time = Math.max(this.wave_time - deltaT, 0);
+        const next = snake[this.id+1];
+        if (this.wave_time < this.wave_time_total*0.97 && this.wave_time > this.wave_time_total*0.5
+            && next && next.wave_time === 0) {
+          next.wave_time = this.wave_time_total;
+        }
+      }
+    }
+
+    draw() {
+      let color = this.color;
+      const baseR = this.radius;
+      let radius;
+      if (this.id === 0 && snake.length > 80)      radius = baseR * 1.4;
+      else if (this.id === 0 && snake.length > 40) radius = baseR * 1.2;
+      else                                          radius = baseR;
+
+      const limit = snake.length - Math.min(snake.length/2, 20);
+      if (this.id > limit) {
+        const last = snake[snake.length-1];
+        radius -= radius * ((this.id - limit) / (last.id - limit) * 0.6);
+      }
+
+      if (this.wave_time > 0) {
+        const wf = (this.wave_time_total - this.wave_time) / this.wave_time_total;
+        radius += baseR * (Math.sin(Math.PI*wf) * (this.id === 0 ? 3 : 1));
+        color = modifyColorPerc(color, 1 + (Math.sin(Math.PI*wf)*3));
+      }
+
+      circle(color, this.x, this.y, radius);
+
+      if (this.id === 0) {
+        const ca = Math.cos(this.ang), sa = Math.sin(this.ang);
+        const px = Math.cos(this.ang + Math.PI/2), py = Math.sin(this.ang + Math.PI/2);
+        // ojos (blanco) + pupilas (rojo oscuro)
+        circle([255,255,255], this.x + ca*radius*0.4 + px*radius*0.5, this.y + sa*radius*0.4 + py*radius*0.5, radius*0.4);
+        circle([255,255,255], this.x + ca*radius*0.4 - px*radius*0.5, this.y + sa*radius*0.4 - py*radius*0.5, radius*0.4);
+        circle([100,0,0],     this.x + ca*radius*0.55 + px*radius*0.5, this.y + sa*radius*0.55 + py*radius*0.5, radius*0.2);
+        circle([100,0,0],     this.x + ca*radius*0.55 - px*radius*0.5, this.y + sa*radius*0.55 - py*radius*0.5, radius*0.2);
+      }
+    }
+
+    checkHeadCol() {
+      const r = this.radius;
+      for (const piece of snake) {
+        if (piece.id > 5 && piece.id % 4 === 0) {
+          if (getDist([piece.x,piece.y], [this.x,this.y]) < r*2) manager.gameOver = true;
+        }
+      }
+      for (const f of food) {
+        if (getDist([f.x,f.y], [this.x,this.y]) < r*2 && !f.grabbed) {
+          f.grabbed = true;
+          manager.score += 110;
+          for (let i = 0; i < 10; i++) addSprite(new SnakePiece(snake.length));
+          this.wave_time = this.wave_time_total;
+        }
+      }
+    }
+  }
+
+  // ════════════════ FOOD (estrella giratoria con glow parpadeante) ════════════════
+  class Food {
+    constructor() {
+      this.z = -1;
+      this.ang = Math.random()*TAU;
+      this.angVel = sper(0.03);
+      this.glowCD = 1;
+      this.grabbed = false;
+      this.timer = 10;
+      // posición lejos del cuerpo
+      let reroll = true, guard = 0;
+      while (reroll && guard++ < 200) {
+        this.x = rndRange(xper(0.1), screenX - xper(0.1));
+        this.y = rndRange(yper(0.1), screenY - yper(0.1));
+        reroll = false;
+        for (const piece of snake) {
+          if (getDist([piece.x,piece.y], [this.x,this.y]) < this.radius*10) { reroll = true; break; }
+        }
+      }
+      food.push(this);
+    }
+
+    get radius() { return sper(0.01); }
+
+    process() {
+      if (!manager.gameOver && !manager.pause) this.timer = Math.max(this.timer - deltaT, 0);
+      this.glowCD = Math.max(this.glowCD - deltaT, 0);
+      if (this.glowCD === 0) this.glowCD = this.timer <= 2 ? 0.2 : this.timer <= 5 ? 0.5 : 1;
+      if (this.timer === 0 || this.grabbed) spritesToRemove.push(this);
+      this.ang += this.angVel * deltaT;
+    }
+
+    draw() {
+      const r = this.radius, a = this.ang;
+      const color = this.glowCD <= 0.1 ? [255,255,255] : [100,0,0];
+      const lw = Math.max(1, r/4);
+      const C = (off, scl=1) => [this.x + Math.cos(a+off)*r*scl, this.y + Math.sin(a+off)*r*scl];
+      // abanico interior (brillante)
+      for (let i = 0; i < 10; i++) {
+        const s = 1 - i*0.2;
+        line(modifyColorPerc(color,2), C(-Math.PI/2, s), C(0, s), lw);
+      }
+      // contorno de estrella (4 trazos)
+      line(color, C(0),          C(Math.PI/2),  lw);
+      line(color, C(Math.PI/2),  C(Math.PI),    lw);
+      line(color, C(Math.PI),    C(-Math.PI/2), lw);
+      line(color, C(-Math.PI/2), C(0),          lw);
+    }
+  }
+
+  // ════════════════ MANAGER ════════════════
+  class Manager {
+    constructor() {
+      this.z = -2;
+      this.gameOver = false;
+      this.score = 0;
+      this.pause = false;
+      this.pauseBlinkCD = 0;
+      this.initCD = 4;
+    }
+    process() {
+      if (this.initCD > 0) this.initCD = Math.max(this.initCD - deltaT, 0);
+      if (!snake.length) for (let i = 0; i < 5; i++) addSprite(new SnakePiece(i));
+      if (food.length < 3 && this.initCD === 0) addSprite(new Food());
+    }
+    draw() {
+      if (this.gameOver) {
+        createText(100, 'GAME OVER',        'center', [255,255,255], xper(0.5), yper(0.47));
+        createText(50,  'SCORE: '+this.score,'center', [255,255,255], xper(0.5), yper(0.6));
+        createText(24,  'TOCÁ PARA REINICIAR','center',[255,0,0],     xper(0.5), yper(0.67));
+      } else {
+        createText(24, String(this.score), 'topleft', [0,255,0], xper(0.02), yper(0.02));
+      }
+      if (this.pause) {
+        this.pauseBlinkCD += deltaT;
+        createText(100, this.pauseBlinkCD > 0.25 ? 'PAUSA' : '', 'center', [255,255,255], xper(0.5), yper(0.5));
+        if (this.pauseBlinkCD > 0.5) this.pauseBlinkCD = 0;
+      }
+      if (showDebug) {
+        createText(14, 'FPS: '+Math.round(1/Math.max(1e-3,dtSmoothed)), 'topright', [255,255,255], xper(0.98), yper(0.02));
+        createText(14, 'len: '+snake.length, 'topright', [255,255,255], xper(0.98), yper(0.05));
+      }
+    }
+    reset() {
+      for (const s of sprites) if (s !== this) spritesToRemove.push(s);
+      removeSprites();
+      this.gameOver = false; this.score = 0; this.initCD = 4; this.pause = false;
+    }
+  }
+
+  // ── primitivas de dibujo ──
+  function circle(color, x, y, r) {
+    ctx.fillStyle = rgb(color);
+    ctx.beginPath(); ctx.arc(x, y, Math.max(0.5, r), 0, TAU); ctx.fill();
+  }
+  function line(color, p1, p2, w) {
+    ctx.strokeStyle = rgb(color); ctx.lineWidth = w; ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.stroke();
+  }
+  const rndRange = (a, b) => a + Math.random()*(b-a);
+
+  // ════════════════ RESIZE ════════════════
+  const barEl = document.getElementById('bar');
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const barH = barEl.offsetHeight;
+    W = screenX = window.innerWidth;
+    H = screenY = window.innerHeight - barH;
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+
+  // ════════════════ INPUT ════════════════
+  // La posición del puntero dirige a la cabeza. En desktop, además, mantener el botón del mouse
+  // acelera (port de "LMB held = sprint"); en touch usás el botón ⚡ porque el dedo ya está ocupado
+  // dirigiendo.
+  function evtPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  let mousePressed = false;
+  function updateSprint() { sprint = sprintBtnHeld || mousePressed; }
+
+  canvas.addEventListener('pointermove', e => { const p = evtPos(e); mouseX = p.x; mouseY = p.y; });
+  canvas.addEventListener('pointerdown', e => {
+    const p = evtPos(e); mouseX = p.x; mouseY = p.y;
+    if (manager.gameOver) { manager.reset(); return; }                           // tocá para reiniciar
+    if (e.pointerType === 'mouse') { mousePressed = true; updateSprint(); }
+    hint.style.opacity = '0';
+  });
+  function endMouse(e) { if (e.pointerType === 'mouse') { mousePressed = false; updateSprint(); } }
+  canvas.addEventListener('pointerup', endMouse);
+  canvas.addEventListener('pointercancel', endMouse);
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+  // ── BOTONES ──
+  // tap en pointerdown (responde aunque otro dedo esté dirigiendo en el canvas), igual que BallsWeb.
+  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
+  // press-and-hold: mantener apretado el botón ⚡ acelera; soltar/arrastrar afuera lo corta.
+  let sprintBtnHeld = false;
+  function pressable(el, onDown, onUp) {
+    let pid = null;
+    const stop = () => {
+      if (pid === null) return; pid = null; onUp();
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', stop);
+      document.removeEventListener('pointercancel', stop);
+    };
+    const onMove = e => {
+      if (e.pointerId !== pid) return;
+      const r = el.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) stop();
+    };
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault(); pid = e.pointerId;
+      try { el.releasePointerCapture(e.pointerId); } catch {}
+      onDown();
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', stop);
+      document.addEventListener('pointercancel', stop);
+    });
+  }
+
+  const btnSprint = document.getElementById('btnSprint');
+  pressable(btnSprint,
+    () => { sprintBtnHeld = true;  updateSprint(); btnSprint.classList.add('on'); },
+    () => { sprintBtnHeld = false; updateSprint(); btnSprint.classList.remove('on'); });
+
+  const btnPause = document.getElementById('btnPause');
+  tappable(btnPause, () => {
+    if (manager.gameOver) return;
+    manager.pause = !manager.pause; manager.pauseBlinkCD = 0;
+    btnPause.classList.toggle('on', manager.pause);
+  });
+
+  tappable(document.getElementById('btnReset'), () => { manager.reset(); btnPause.classList.remove('on'); });
+
+  const btnDebug = document.getElementById('btnDebug');
+  tappable(btnDebug, () => { showDebug = !showDebug; btnDebug.classList.toggle('on', showDebug); });
+
+  // ════════════════ LOOP ════════════════
+  function loop(now) {
+    if (typeof now !== 'number') now = performance.now();
+    deltaT = Math.min(0.05, (now - lastT) / 1000);                               // dt real, clamp 50ms (igual que Snake.py)
+    lastT = now;
+    dtSmoothed = dtSmoothed*0.9 + deltaT*0.1;
+
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+
+    // z-orden como el original: cola (z alto) → cabeza → comida → manager (encima)
+    sprites.sort((a, b) => b.z - a.z);
+    for (const s of sprites) { s.process(); s.draw(); }
+    removeSprites();
+
+    // cursor propio (port del círculo blanco en mouse pos)
+    if (!manager.gameOver) circle([255,255,255], mouseX, mouseY, Math.max(3, sper(0.005)));
+
+    requestAnimationFrame(loop);
+  }
+
+  // ── INIT ──
+  resize();
+  manager = addSprite(new Manager());
+  mouseX = xper(0.5); mouseY = yper(0.5);
+  loop();
+
+  const hint = document.getElementById('hint');
+  setTimeout(() => hint.style.opacity = '0', 6000);
+  </script>
+</body>
+</html>

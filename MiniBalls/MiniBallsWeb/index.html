@@ -1,0 +1,970 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>MiniBalls</title>
+<style>
+  :root { --bar-height: 66px; }                                                  /* tweak to taste */
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  /* Canvas occupies only the space ABOVE the bar — physics walls are sized to this rect, so balls
+     can't fall behind the buttons. Dimensions are set explicitly from JS each resize. */
+  #c {
+    display: block; position: absolute;
+    top: 0; left: 0;
+  }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
+    text-align: center; color: rgba(255,255,255,0.5);
+    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
+    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+  }
+
+  /* Bottom bar: contains the action buttons. Opaque-ish background so it reads as a bezel. */
+  #bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    padding: 0 16px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.85);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    z-index: 3;
+  }
+  #ui {
+    display: flex; gap: 8px;
+  }
+  #ui button {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    transition: background 0.1s, transform 0.08s;
+    padding: 0;
+  }
+  #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
+  #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
+  #ui #btnPin    svg { width: 19px; height: 19px; }
+  #ui #btnMinus  svg, #ui #btnPlus svg { width: 24px; height: 24px; }
+  #ui #btnReset  svg { width: 21px; height: 21px; }
+  /* visual indicator for toggled-on state */
+  #ui button.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); }
+
+  /* Info: chico, en la esquina abajo-derecha. Lives outside #ui so the main row stays centered. */
+  #btnDebug {
+    position: absolute;
+    right: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.6);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+  }
+  #btnDebug svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnDebug:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  #btnDebug.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">arrastrá para tirar · varios dedos = varias bolas · +/− para las bolas</div>
+  <div id="bar">
+    <div id="ui">
+      <button id="btnJump"  aria-label="saltar"  title="Saltar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 11l6-6 6 6"/></svg>
+      </button>
+      <button id="btnPin"   aria-label="fijar"   title="Fijar (chinche)">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 3h8v1.5h-1.5v5l2.5 3.5v1h-5v6.5l-1 1-1-1v-6.5h-5v-1l2.5-3.5v-5H8z"/></svg>
+      </button>
+      <button id="btnWall"  aria-label="modo"    title="Modo de pared"></button>
+      <button id="btnMinus" aria-label="quitar"  title="Quitar bola">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 12h12"/></svg>
+      </button>
+      <button id="btnPlus"  aria-label="agregar" title="Agregar bola">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg>
+      </button>
+      <button id="btnReset" aria-label="reiniciar" title="Reiniciar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+      </button>
+    </div>
+    <button id="btnDebug" aria-label="debug" title="Info / debug">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+    </button>
+  </div>
+
+  <!-- Física. Vendorizado local (matter-js 0.19.0) — evita que un hipo del CDN deje el juego sin arrancar. -->
+  <script src="matter.min.js"></script>
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  MINIBALLS — port web del sandbox de pygame, con las canicas baked de
+  //  BallsWeb. Variante "trim": bolas chicas TODAS del mismo tamaño, hasta
+  //  300, sin sonido. Multi-touch: cada dedo agarra y tira su propia bola.
+  //  Patrones EXCLUSIVOS de MiniBalls (no están en Balls): rings, checker,
+  //  star, wavy.
+  // ════════════════════════════════════════════════════════════════════
+  const TAU = Math.PI * 2;
+  const mod = (a, n) => ((a % n) + n) % n;
+  const ri  = (a, b) => a + Math.floor(Math.random() * (b - a + 1)); // randint inclusivo
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  // ── TUNING KNOBS ──
+  const GRAVITY_Y        = 1.4;
+  const BALL_BALL_RESTITUTION = 0.85;  // bola↔bola muy elástica → rebotes vivos entre canicas
+  const BALL_WALL_RESTITUTION = 0.97;  // bola↔pared casi sin pérdida → saltan alto contra piso/paredes
+  const BALL_FRICTION    = 0.1;
+  const BALL_FRICTION_AIR= 0.002;      // menos rozamiento de aire → conservan energía y siguen saltando
+  const R_FRAC           = 0.014;    // radio = R_FRAC·(W+H)/2 — port de sper(); TODAS las bolas iguales. Subido de 0.01 para que los patrones se lean.
+  const COLLISION_RADIUS_MULT = 1.03;
+  const BALL_ALPHA       = 0.7;      // translucidez del cuerpo (esfera de color + under-glow); el hotspot queda opaco
+  const PATTERN_ALPHA    = 1;        // translucidez del overlay del patrón
+  const MAX_BALLS        = 150;      // tope de bolas
+  const INITIAL_BALLS    = 1;
+  const GROWTH_RATE      = 250;      // px/s de la animación de crecer/encoger
+
+  // Spawn/remove en ráfaga: mantener +/− agrega/quita a ritmo CONSTANTE, dimensionado para
+  // llegar al tope (MAX_BALLS) en ~3 s. perTick = MAX_BALLS · interval / 3000.
+  const BURST_INTERVAL_MS = 35;      // cada cuánto corre un tick mientras mantenés apretado
+  const BURST_PER_TICK    = MAX_BALLS * BURST_INTERVAL_MS / 7000; // = 3 bolas/tick → 300 en 3 s
+
+  const GRAB_GAIN        = 0.5;
+  const GRAB_MAX_SPEED   = 55;
+  const MOUSE_SMOOTH_TC  = 0.04;     // time constant (sec) del low-pass de velocidad del puntero
+  const ANGULAR_DAMPING_TC = 0.8;    // decae el spin extra (frictionAir de matter mezcla lineal+angular)
+  const MAX_SPEED_PXS    = 6000;     // tope de velocidad (px/s). En unidades matter (px/step ≈ ×60) = MAX_SPEED_PXS/60
+  const MAX_SPEED        = MAX_SPEED_PXS / 60;
+
+  const JUMP_VELOCITY    = 22;
+  const SHAKE_THRESHOLD  = 22;
+  const SHAKE_COOLDOWN_MS= 600;
+
+  // Sonido — samples reales de canica (sounds/), mismo sistema que BallsWeb.
+  const SND_MAX_PER_FRAME = 1;       // tope de sonidos por frame para no saturar cuando caen varias juntas
+  const PITCH_JITTER     = 0.06;     // ± random sobre playbackRate, naturaliza la repetición de samples
+  // Umbrales en matter velocity units (px/step, ~×60 = px/s).
+  const VTHR_AUDIBLE     = 2.5;      // por debajo no suena nada (vibración numérica)
+  const VTHR_MED         = 6;        // bajo→medio
+  const VTHR_HARD        = 13;       // medio→fuerte
+  // Roll loop: cuándo una bola "rueda" en el piso (sólo wallMode 1).
+  const ROLL_MIN_HSPEED  = 4;        // vx horizontal mínima para empezar a sonar
+  const ROLL_FULL_HSPEED = 18;       // vx donde el gain del roll llega al máximo
+
+  // ── SETUP MATTER ──
+  const { Engine, World, Bodies, Body, Composite, Query, Vector } = Matter;
+  const engine = Engine.create();
+  engine.gravity.y = GRAVITY_Y;
+  const world = engine.world;
+
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  let W = 0, H = 0, dpr = 1;
+  let ballR = 12;                                                                  // radio común, recalculado en resize()
+  let walls = [];
+  let wallMode = 1;                                                                // 1 = 4 paredes, 2 = laterales (techo/piso abiertos), 3 = sin paredes (wrap)
+  const pinnedBodies = new Map();                                                  // body → {x, y} para cada bola fijada (se mantienen clavadas; agarrarlas las desclava)
+  let showDebug = false;
+
+  function buildWalls() {
+    for (const w of walls) World.remove(world, w);
+    walls = [];
+    const t = 600;                                                                 // grueso fuera de pantalla: una bola empujada al borde queda dentro y se reinyecta
+    const opt = { isStatic: true, restitution: BALL_WALL_RESTITUTION, friction: 0.4 };
+    if (wallMode === 1) {                                                          // techo + piso solo en modo 1
+      walls.push(Bodies.rectangle(W/2, -t/2,    W + 2*t, t, opt));
+      walls.push(Bodies.rectangle(W/2, H + t/2, W + 2*t, t, opt));
+    }
+    if (wallMode === 1 || wallMode === 2) {                                        // laterales en modo 1 y 2
+      walls.push(Bodies.rectangle(-t/2, H/2,    t, H + 2*t, opt));
+      walls.push(Bodies.rectangle(W + t/2, H/2, t, H + 2*t, opt));
+    }
+    World.add(world, walls);
+  }
+  const barEl = document.getElementById('bar');
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const barH = barEl.offsetHeight;
+    W = window.innerWidth;
+    H = window.innerHeight - barH;
+    ballR = R_FRAC * (W + H) / 2;                                                   // port de sper()
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    buildWalls();
+  }
+  window.addEventListener('resize', resize);
+
+  // ── COLOR ──
+  const clamp = v => Math.max(0, Math.min(255, v|0));
+  function hsv255(h, s, v) {
+    const i = Math.floor(h*6), f = h*6 - i;
+    const p = v*(1-s), q = v*(1-f*s), t = v*(1-(1-f)*s);
+    const m = [[v,t,p],[q,v,p],[p,v,t],[p,q,v],[t,p,v],[v,p,q]][i%6];
+    return [Math.round(m[0]*255), Math.round(m[1]*255), Math.round(m[2]*255)];
+  }
+  const tint    = (c, t) => [clamp(c[0]*t), clamp(c[1]*t), clamp(c[2]*t)];
+  const rgbStr  = (c, t=1) => `rgb(${clamp(c[0]*t)},${clamp(c[1]*t)},${clamp(c[2]*t)})`;
+
+  // ════════════════ MÁSCARAS DE PATRÓN ════════════════
+  // Todas dibujan blanco en coords locales centradas en (0,0); el caller hace translate/rotate.
+  // ── heredadas de Balls ──
+  function stripesSphere(m, r, n, fillRatio) {
+    const phiStep = Math.PI/n, halfW = phiStep*0.5*fillRatio;
+    for (let yy = -r; yy <= r; yy++) {
+      const crossR = Math.sqrt(Math.max(0, r*r - yy*yy));
+      for (let i = 0; i < n; i++) {
+        const phiC = -Math.PI*0.5 + (i+0.5)*phiStep;
+        const xL = Math.sin(phiC - halfW) * crossR;
+        const xR = Math.sin(phiC + halfW) * crossR;
+        if (xR > xL) m.fillRect(xL, yy, xR - xL, 1);
+      }
+    }
+  }
+  function dotsSphere(m, r, nDots) {
+    const pos = [], centerR = r*0.28;
+    m.beginPath(); m.arc(0, 0, centerR, 0, TAU); m.fill(); pos.push([0, 0, centerR]);
+    const theta = 50*Math.PI/180, ringR2D = r*Math.sin(theta), ringDotR = centerR*Math.cos(theta);
+    const rot = Math.random()*TAU;
+    for (let i = 0; i < nDots; i++) {
+      const a = rot + (i/nDots)*TAU, dx = Math.cos(a)*ringR2D, dy = Math.sin(a)*ringR2D;
+      m.beginPath(); m.arc(dx, dy, ringDotR, 0, TAU); m.fill(); pos.push([dx, dy, ringDotR]);
+    }
+    return pos;
+  }
+  function dotsCandy(m, r, nDots) {
+    const pos = [], safeR = r*0.85, minR = r*0.16, maxR = r*0.28;
+    let att = 0;
+    while (pos.length < nDots && att < 400) {
+      att++;
+      const rDot = rnd(minR, maxR), d = Math.sqrt(Math.random())*Math.max(0, safeR - rDot*0.4), a = Math.random()*TAU;
+      const px = Math.cos(a)*d, py = Math.sin(a)*d;
+      if (pos.every(q => Math.hypot(px-q[0], py-q[1]) > (rDot+q[2])*0.82)) {
+        pos.push([px, py, rDot]);
+        m.beginPath(); m.arc(px, py, rDot, 0, TAU); m.fill();
+      }
+    }
+    return pos;
+  }
+
+  // ── NUEVAS (exclusivas de MiniBalls) ──
+  // rings: anillos concéntricos (diana). Stroke de circunferencias con gap entre bandas.
+  function ringsConcentric(m, r, n) {
+    const bandW = r / n;
+    m.lineWidth = bandW * 0.6;
+    for (let i = 0; i < n; i++) {
+      const rr = bandW * (i + 0.5);
+      m.beginPath(); m.arc(0, 0, rr, 0, TAU); m.stroke();
+    }
+  }
+  // checker: damero ESFÉRICO. Particiona la esfera en celdas lat/lon → la cuadrícula se curva
+  // hacia la silueta (no es un damero plano). Scanline + run-length por fila.
+  function checkerSphere(m, r, nLat, nLon) {
+    const latStep = Math.PI/nLat, lonStep = Math.PI/nLon;
+    for (let yy = -r; yy <= r; yy++) {
+      const crossR = Math.sqrt(Math.max(0, r*r - yy*yy));
+      if (crossR < 1) continue;
+      const lat = Math.asin(Math.max(-1, Math.min(1, yy/r)));
+      const latIdx = Math.floor((lat + Math.PI*0.5) / latStep);
+      const xMax = Math.floor(crossR);
+      let inCell = false, runStart = -xMax;
+      for (let xx = -xMax; xx <= xMax; xx++) {
+        const phi = Math.asin(Math.max(-1, Math.min(1, xx/crossR)));
+        const lonIdx = Math.floor((phi + Math.PI*0.5) / lonStep);
+        const on = ((latIdx + lonIdx) & 1) === 0;
+        if (on !== inCell) {
+          if (inCell) m.fillRect(runStart, yy, xx - runStart, 1);
+          runStart = xx; inCell = on;
+        }
+      }
+      if (inCell) m.fillRect(runStart, yy, xMax - runStart + 1, 1);
+    }
+  }
+  // star: estrella de N puntas estampada al frente.
+  function starShape(m, r, points, innerRatio) {
+    const outer = r * 0.92, inner = outer * innerRatio;
+    m.beginPath();
+    for (let i = 0; i < points*2; i++) {
+      const rad = (i & 1) ? inner : outer;
+      const a = -Math.PI*0.5 + i * Math.PI / points;
+      const x = Math.cos(a)*rad, y = Math.sin(a)*rad;
+      if (i === 0) m.moveTo(x, y); else m.lineTo(x, y);
+    }
+    m.closePath(); m.fill();
+  }
+  // wavy: meridianos ondulados — como stripesSphere pero el centro de cada banda hace shimmy
+  // senoidal a lo largo de la latitud, dando bandas onduladas que envuelven la esfera.
+  function wavySphere(m, r, n, amp) {
+    const phiStep = Math.PI/n, halfW = phiStep*0.5*0.45;
+    for (let yy = -r; yy <= r; yy++) {
+      const crossR = Math.sqrt(Math.max(0, r*r - yy*yy));
+      const wave = amp * Math.sin((yy/r) * Math.PI * 2);
+      for (let i = 0; i < n; i++) {
+        const phiC = -Math.PI*0.5 + (i+0.5)*phiStep + wave;
+        const xL = Math.sin(phiC - halfW) * crossR;
+        const xR = Math.sin(phiC + halfW) * crossR;
+        if (xR > xL) m.fillRect(xL, yy, xR - xL, 1);
+      }
+    }
+  }
+
+  function drawMask(m, e, cx, cy, r) {
+    const SS = 7;
+    const R = r * SS;
+    const tmp = document.createElement('canvas');
+    tmp.width = tmp.height = Math.ceil(2*R) + 4;
+    const tc = tmp.getContext('2d');
+    tc.fillStyle = tc.strokeStyle = '#fff';
+    tc.translate(tmp.width*0.5, tmp.height*0.5);
+
+    let localDots = null;
+    switch (e.style) {
+      case 'striped_sphere':   tc.rotate(e.styleAngle); stripesSphere(tc, R, e.n, 0.5); break;
+      case 'striped_diamond':  tc.rotate(e.styleAngle); stripesSphere(tc, R, e.n, 0.18); tc.rotate(Math.PI/3); stripesSphere(tc, R, e.n, 0.18); break;
+      case 'dotted_sphere':    localDots = dotsSphere(tc, R, e.nDots); break;
+      case 'dotted_candy':     localDots = dotsCandy(tc, R, e.nDots); break;
+      // nuevos
+      case 'rings':            ringsConcentric(tc, R, e.n); break;
+      case 'checker':          checkerSphere(tc, R, e.nLat, e.nLon); break;
+      case 'star':             tc.rotate(e.styleAngle); starShape(tc, R, e.points, e.innerRatio); break;
+      case 'wavy':             tc.rotate(e.styleAngle); wavySphere(tc, R, e.n, e.amp); break;
+    }
+
+    const prevSmooth = m.imageSmoothingEnabled, prevQuality = m.imageSmoothingQuality;
+    m.imageSmoothingEnabled = true;
+    m.imageSmoothingQuality = 'high';
+    m.drawImage(tmp, cx - r - 1, cy - r - 1, tmp.width / SS, tmp.height / SS);
+    m.drawImage(tmp, cx - r - 1, cy - r - 1, tmp.width / SS, tmp.height / SS);
+    m.imageSmoothingEnabled = prevSmooth;
+    m.imageSmoothingQuality = prevQuality;
+
+    return localDots ? localDots.map(([x,y,dr]) => [cx + x/SS, cy + y/SS, dr/SS]) : null;
+  }
+
+  // ════════════════ BAKE (esfera + patrón + hotspot), 1 vez por bola ════════════════
+  function newOff(S) {
+    const o = document.createElement('canvas');
+    o.width = o.height = Math.ceil(S*dpr);
+    const c = o.getContext('2d'); c.scale(dpr, dpr);
+    return { o, c };
+  }
+  function paintSphere(o, cx, cy, r, color) {
+    const lx = cx + r*0.21, ly = cy - r*0.564;                                     // luz desde arriba-derecha
+    const grad = o.createRadialGradient(lx, ly, r*0.05, cx, cy, r);
+    grad.addColorStop(0,   rgbStr(color, 1.65));
+    grad.addColorStop(0.5, rgbStr(color, 1.0));
+    grad.addColorStop(1,   rgbStr(color, 0.45));
+    o.fillStyle = grad;
+    o.beginPath(); o.arc(cx, cy, r, 0, TAU); o.fill();
+  }
+  function drawHotspot(o, cx, cy, specR) {
+    const rCore = Math.max(2, specR);
+    o.fillStyle = 'rgba(255,255,255,0.086)'; o.beginPath(); o.arc(cx, cy, rCore*3, 0, TAU); o.fill();
+    o.fillStyle = 'rgba(255,255,255,0.216)'; o.beginPath(); o.arc(cx, cy, rCore*2, 0, TAU); o.fill();
+    o.fillStyle = 'rgba(255,255,255,1)';     o.beginPath(); o.arc(cx, cy, rCore,   0, TAU); o.fill();
+  }
+  function bakeBall(e) {
+    const r = Math.round(e.targetR), S = r*2 + 4, cx = S/2, cy = S/2;
+    const { o, c } = newOff(S);
+
+    c.globalAlpha = BALL_ALPHA;
+    paintSphere(c, cx, cy, r, e.color);
+    c.globalAlpha = PATTERN_ALPHA;
+
+    if (e.style !== 'plain') {
+      const mask = newOff(S);
+      const dots = drawMask(mask.c, e, cx, cy, r);
+      if (dots && Math.max(...e.overlay) < 200) {                                  // rim oscuro alrededor de lunares con overlay tenue
+        c.fillStyle = 'rgba(0,0,0,0.27)';
+        for (const [px, py, dr] of dots) { c.beginPath(); c.arc(px, py, dr + Math.max(1, dr*0.07), 0, TAU); c.fill(); }
+      }
+      const ov = newOff(S);
+      paintSphere(ov.c, cx, cy, r, e.overlay);
+      ov.c.globalCompositeOperation = 'destination-in';
+      ov.c.drawImage(mask.o, 0, 0, S, S);
+      ov.c.globalCompositeOperation = 'source-over';
+      c.drawImage(ov.o, 0, 0, S, S);
+    }
+    c.globalAlpha = 1;
+
+    drawHotspot(c, cx + r*0.21, cy - r*0.564, Math.max(2, r*0.06));
+    c.strokeStyle = 'rgba(255,255,255,0.14)'; c.lineWidth = 1;
+    c.beginPath(); c.arc(cx, cy, r - 0.5, 0, TAU); c.stroke();
+
+    e.sprite = o; e.spriteHalf = S/2;
+  }
+
+  // ════════════════ BOLAS (estado growing/live/removing) ════════════════
+  let balls = [];
+  function liveCount() { let n = 0; for (const e of balls) if (e.state !== 'removing') n++; return n; }
+
+  function makeBall(x, y) {
+    if (liveCount() >= MAX_BALLS) return;
+
+    const hue = Math.random();
+    const color = hsv255(hue, rnd(0.95, 1.0), rnd(0.95, 1.0));
+    const e = { color, targetR: ballR, visR: 1, x, y, angle: 0, state: 'growing' };
+
+    // estilo — incluye los heredados de Balls + los 4 nuevos de MiniBalls
+    const sr = Math.random();
+    if      (sr < 0.10) { e.style='striped_sphere';  e.styleAngle=rnd(0,Math.PI); e.n=ri(3,7); }
+    else if (sr < 0.20) { e.style='striped_diamond'; e.styleAngle=rnd(0,Math.PI); e.n=ri(5,8); }
+    else if (sr < 0.30) { e.style='dotted_sphere';   e.nDots=ri(5,8); }
+    else if (sr < 0.40) { e.style='dotted_candy';    e.nDots=ri(6,12); }
+    else if (sr < 0.54) { e.style='rings';           e.n=ri(4,7); }                // NUEVO
+    else if (sr < 0.68) { e.style='checker';         e.nLat=ri(5,8); e.nLon=ri(6,10); } // NUEVO
+    else if (sr < 0.80) { e.style='star';            e.styleAngle=rnd(0,TAU); e.points=ri(5,7); e.innerRatio=rnd(0.40,0.50); } // NUEVO
+    else if (sr < 0.92) { e.style='wavy';            e.styleAngle=rnd(0,Math.PI); e.n=ri(4,7); e.amp=rnd(0.15,0.30); } // NUEVO
+    else                { e.style='plain'; }
+
+    // overlay color
+    if (e.style === 'plain') e.overlay = null;
+    else if (e.style === 'dotted_candy') e.overlay = tint(color, 1.8);
+    else {
+      const o = Math.random();
+      if (o < 0.25) e.overlay = [255,255,255];
+      else if (o < 0.50) e.overlay = [18, 18, 18];
+      else e.overlay = hsv255(mod(hue+0.5, 1), 0.95, 1.0);
+    }
+
+    bakeBall(e);
+
+    const body = Bodies.circle(x, y, ballR * COLLISION_RADIUS_MULT, {
+      restitution: BALL_BALL_RESTITUTION, friction: BALL_FRICTION,
+      frictionAir: BALL_FRICTION_AIR, density: 0.001,
+    });
+    body.mbPitch = rnd(0.85, 1.15);                                                // pitch propio: las bolas son todas iguales, esto las diferencia al sonar
+    e.body = body;
+    balls.push(e);
+    return e;
+  }
+
+  // spawn/remove en lotes (la cantidad la decide el caller-ráfaga)
+  function addBall(n = 1)    { for (let i = 0; i < n; i++) makeBall(rnd(W*0.1, W*0.9), rnd(H*0.12, H*0.45)); }
+  function removeBall(n = 1) {
+    for (let k = 0; k < n; k++) {
+      let done = false;
+      for (let i = balls.length - 1; i >= 0 && !done; i--) {
+        const e = balls[i];
+        if (e.state === 'live' && !isGrabbedBody(e.body)) {
+          if (pinnedBodies.has(e.body)) {
+            Body.setStatic(e.body, false);                                         // volver a dinámico antes de remover, estado consistente
+            pinnedBodies.delete(e.body);
+            document.getElementById('btnPin').classList.toggle('on', pinnedBodies.size > 0);
+          }
+          e.x = e.body.position.x; e.y = e.body.position.y; e.angle = e.body.angle;
+          stopRollNode(e);
+          World.remove(world, e.body); e.state = 'removing';
+          done = true;
+        }
+      }
+      if (!done) break;                                                            // no quedan candidatas
+    }
+  }
+  function reset() {
+    const n = liveCount() || INITIAL_BALLS;
+    for (const e of balls) { stopRollNode(e); if (e.state === 'live') World.remove(world, e.body); }
+    balls = [];
+    for (const ps of pointers.values()) ps.grab = null;
+    pinnedBodies.clear();
+    document.getElementById('btnPin').classList.remove('on');
+    for (let i = 0; i < n; i++) makeBall(rnd(W*0.1, W*0.9), rnd(H*0.1, H*0.5));
+  }
+
+  function updateGrowth(dt) {
+    const step = GROWTH_RATE * dt;
+    for (const e of balls) {
+      if (e.state === 'growing') {
+        e.visR += step;
+        if (e.visR >= e.targetR) { e.visR = e.targetR; e.state = 'live'; World.add(world, e.body); }
+      } else if (e.state === 'removing') {
+        e.visR -= step;
+      }
+    }
+    balls = balls.filter(e => {
+      if (e.state === 'removing' && e.visR <= 1) { stopRollNode(e); return false; }
+      return true;
+    });
+  }
+
+  function wrapBalls() {
+    // teletransporta las bolas que salieron del área en los ejes con wrap activo (modos 2/3)
+    if (wallMode === 1) return;
+    for (const e of balls) {
+      if (e.state !== 'live' || pinnedBodies.has(e.body)) continue;
+      const r = e.body.circleRadius, p = e.body.position;
+      let nx = p.x, ny = p.y;
+      if (wallMode === 2 || wallMode === 3) {
+        if (ny < -r) ny = H + r; else if (ny > H + r) ny = -r;
+      }
+      if (wallMode === 3) {
+        if (nx < -r) nx = W + r; else if (nx > W + r) nx = -r;
+      }
+      if (nx !== p.x || ny !== p.y) Body.setPosition(e.body, { x: nx, y: ny });
+    }
+  }
+
+  function drawGlowRing(x, y, r, color) {
+    const outerR = r * 1.30, layers = 6;
+    const halo = tint(color, 1.7);
+    for (let i = 0; i < layers; i++) {
+      const u = i / (layers - 1);
+      const rL = outerR - (outerR - r) * u;
+      const alpha = (90 + 130 * u) / 255;
+      ctx.fillStyle = `rgba(${halo[0]},${halo[1]},${halo[2]},${alpha})`;
+      ctx.beginPath(); ctx.arc(x, y, rL, 0, TAU); ctx.fill();
+    }
+  }
+  function drawBall(e) {
+    let x, y, ang, scale;
+    if (e.state === 'live') { x = e.body.position.x; y = e.body.position.y; ang = e.body.angle; scale = 1; }
+    else { x = e.x; y = e.y; ang = e.angle; scale = e.visR / e.targetR; }
+    if (isGrabbedBody(e.body)) drawGlowRing(x, y, e.targetR * scale, e.color);
+    const h = e.spriteHalf * scale;
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(ang);
+    ctx.drawImage(e.sprite, -h, -h, h*2, h*2);
+    ctx.restore();
+  }
+
+  // ── SALTO ──
+  function jumpAll() {
+    for (const e of balls) {
+      if (e.state !== 'live' || isGrabbedBody(e.body) || pinnedBodies.has(e.body)) continue;
+      Body.setVelocity(e.body, { x: e.body.velocity.x, y: -JUMP_VELOCITY });
+    }
+  }
+
+  // ── INPUT ── multi-touch: cada puntero (dedo/mouse) tiene su propio estado y agarra/tira su bola
+  const pointers = new Map();                                                      // pointerId → { x, y, vx, vy, lastMoveT, grab }
+
+  function evtPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+  function grabbedBodySet() {
+    const s = new Set();
+    for (const ps of pointers.values()) if (ps.grab) s.add(ps.grab.body);
+    return s;
+  }
+  function isGrabbedBody(body) {
+    for (const ps of pointers.values()) if (ps.grab && ps.grab.body === body) return true;
+    return false;
+  }
+  function tryGrabAt(p, exclude) {
+    // permitimos agarrar bolas fijadas (estáticas) para poder seleccionarlas y que el botón pin las suelte
+    const hits = Query.point(Composite.allBodies(world), p).filter(b => (!b.isStatic || pinnedBodies.has(b)) && !exclude.has(b));
+    if (!hits.length) return null;
+    const body = hits[hits.length - 1];
+    return { body, offX: body.position.x - p.x, offY: body.position.y - p.y };
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    audioResume(); enableMotion();
+    canvas.setPointerCapture(e.pointerId);
+    const p = evtPos(e);
+    const ps = { x: p.x, y: p.y, vx: 0, vy: 0, lastMoveT: performance.now(), grab: null };
+    pointers.set(e.pointerId, ps);
+    ps.grab = tryGrabAt(p, grabbedBodySet());                                       // primera bola bajo este dedo (excluyendo las que sostienen otros dedos)
+  });
+  canvas.addEventListener('pointermove', e => {
+    const ps = pointers.get(e.pointerId);
+    if (!ps) return;
+    const p = evtPos(e);
+    const now = performance.now();
+    const dt = Math.max(0.001, Math.min(0.1, (now - ps.lastMoveT) / 1000));
+    ps.lastMoveT = now;
+    const rawVx = (p.x - ps.x) / dt, rawVy = (p.y - ps.y) / dt;
+    const k = 1 - Math.exp(-dt / MOUSE_SMOOTH_TC);
+    ps.vx += (rawVx - ps.vx) * k;
+    ps.vy += (rawVy - ps.vy) * k;
+    ps.x = p.x; ps.y = p.y;
+    if (!ps.grab) ps.grab = tryGrabAt(p, grabbedBodySet());                         // agarre al pasar sobre una bola libre
+  });
+  function endPointer(e) {
+    const ps = pointers.get(e.pointerId);
+    if (!ps) return;
+    pointers.delete(e.pointerId);
+    if (ps.grab && !ps.grab.body.isStatic) {                                        // las fijadas (estáticas) no se tiran
+      const k = dtSmoothed;                                                         // vx/vy px/s → unidades matter (px/step)
+      Body.setVelocity(ps.grab.body, { x: ps.vx * k, y: ps.vy * k });
+      Body.setAngularVelocity(ps.grab.body, (ps.vx / ps.grab.body.circleRadius) * k);
+    }
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('contextmenu', e => { e.preventDefault(); });
+
+  // ── BOTONES ──
+  // ráfaga a ritmo constante para +/−: BURST_PER_TICK bolas cada BURST_INTERVAL_MS → tope en ~3 s
+  function holdBurst(el, fn) {
+    let iv = null, pid = null;
+    const stop = () => {
+      if (iv) { clearInterval(iv); iv = null; }
+      pid = null;
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', stop);
+      document.removeEventListener('pointercancel', stop);
+    };
+    const onMove = e => {
+      if (e.pointerId !== pid) return;
+      const r = el.getBoundingClientRect();
+      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) stop();
+    };
+    const start = e => {
+      e.preventDefault(); audioResume();
+      pid = e.pointerId;
+      try { el.releasePointerCapture(e.pointerId); } catch {}
+      fn(BURST_PER_TICK);                                                          // primer lote en el toque
+      iv = setInterval(() => fn(BURST_PER_TICK), BURST_INTERVAL_MS);
+      document.addEventListener('pointermove', onMove);
+      document.addEventListener('pointerup', stop);
+      document.addEventListener('pointercancel', stop);
+    };
+    el.addEventListener('pointerdown', start);
+  }
+  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); audioResume(); fn(); }); }
+
+  holdBurst(document.getElementById('btnPlus'), addBall);
+  holdBurst(document.getElementById('btnMinus'), removeBall);
+  tappable(document.getElementById('btnReset'), reset);
+  tappable(document.getElementById('btnJump'), jumpAll);
+
+  // Modo de pared: 1 → 2 → 3 → 1, con SVG por modo. Reconstruye las paredes en cada tap.
+  const WALL_ICONS = {
+    1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg>',
+    2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M7 4v16M17 4v16"/></svg>',
+    3: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10 4 4M4 9V4h5M14 10l6-6M15 4h5v5M10 14l-6 6M4 15v5h5M14 14l6 6M20 15v5h-5"/></svg>',
+  };
+  const btnWall = document.getElementById('btnWall');
+  btnWall.innerHTML = WALL_ICONS[wallMode];
+  tappable(btnWall, () => {
+    wallMode = (wallMode % 3) + 1;
+    btnWall.innerHTML = WALL_ICONS[wallMode];
+    buildWalls();
+    if (wallMode !== 1) stopAllRolls();                                            // sin piso, no hay rolls que seguir
+  });
+
+  // Pin: fija/desfija las bolas agarradas. Fijar = body STATIC (otras rebotan sin moverla). Suelta el
+  // grab al fijar. Desfijar restaura dinámica y MANTIENE el grab para arrastrarla. Tap sin nada = no-op.
+  const btnPin = document.getElementById('btnPin');
+  tappable(btnPin, () => {
+    for (const ps of pointers.values()) {
+      if (!ps.grab) continue;
+      const body = ps.grab.body;
+      if (pinnedBodies.has(body)) {
+        Body.setStatic(body, false);
+        Body.setVelocity(body, { x: 0, y: 0 });                                    // matter no resetea positionPrev en setStatic(false); forzamos cero para que no patee
+        Body.setAngularVelocity(body, 0);
+        pinnedBodies.delete(body);
+      } else {
+        Body.setStatic(body, true);
+        pinnedBodies.set(body, { x: body.position.x, y: body.position.y });
+        ps.grab = null;
+      }
+    }
+    btnPin.classList.toggle('on', pinnedBodies.size > 0);
+  });
+
+  const btnDebug = document.getElementById('btnDebug');
+  tappable(btnDebug, () => { showDebug = !showDebug; btnDebug.classList.toggle('on', showDebug); });
+
+  // ── ACELERÓMETRO (sacudir = saltar; requiere HTTPS / WebView) ──
+  let motionReady = false, lastShake = 0;
+  function enableMotion() {
+    if (motionReady) return; motionReady = true;
+    const DME = window.DeviceMotionEvent;
+    if (DME && typeof DME.requestPermission === 'function')
+      DME.requestPermission().then(s => { if (s === 'granted') window.addEventListener('devicemotion', onMotion); }).catch(()=>{});
+    else if (DME) window.addEventListener('devicemotion', onMotion);
+  }
+  function onMotion(e) {
+    const a = e.accelerationIncludingGravity; if (!a) return;
+    const mag = Math.hypot(a.x||0, a.y||0, a.z||0);
+    if (mag > SHAKE_THRESHOLD && performance.now() - lastShake > SHAKE_COOLDOWN_MS) { lastShake = performance.now(); jumpAll(); }
+  }
+
+  // ════════════════ SONIDO ════════════════
+  // Sistema de samples reales (todas canicas), files en sounds/. Cada "bucket" tiene N variantes
+  // numeradas; al tocar se pickea random del pool. Buffers cargan async al primer audioResume().
+  let actx = null;
+  const SOUND_DIR = 'sounds/';
+  const SOUND_BUCKETS = {                                                          // bucket → cuántas variantes esperar (sin sufijo + sufijo 2..N)
+    MarbleClick:       1,
+    MarbleLowClick:    6,
+    MarblesInHand:     5,
+    MarblesInHandB:    3,
+    ShortBounceEnd:    1,
+    ShortDoubleBounce: 1,
+    LongRoll:          1,
+  };
+  const soundBuffers = {};                                                         // bucket → AudioBuffer[]
+  let samplesLoading = false;
+  const BUCKET_COOLDOWN = {                                                        // ms mínimos entre disparos del mismo bucket
+    MarbleClick:       80,
+    MarbleLowClick:    120,
+    MarblesInHand:     100,
+    MarblesInHandB:    100,
+    ShortBounceEnd:    90,
+    ShortDoubleBounce: 70,
+  };
+  const lastBucketT = {};
+  let sndThisFrame = 0;
+
+  async function loadSamples() {
+    if (samplesLoading || !actx) return;
+    samplesLoading = true;
+    for (const [bucket, count] of Object.entries(SOUND_BUCKETS)) {
+      soundBuffers[bucket] = soundBuffers[bucket] || [];
+      for (let i = 0; i < count; i++) {
+        if (soundBuffers[bucket][i]) continue;
+        const suffix = i === 0 ? '' : String(i + 1);
+        try {
+          const r = await fetch(`${SOUND_DIR}${bucket}${suffix}.mp3`);
+          if (!r.ok) continue;
+          const arr = await r.arrayBuffer();
+          soundBuffers[bucket][i] = await actx.decodeAudioData(arr);
+        } catch (_) { /* variante faltante: pool más chico */ }
+      }
+      soundBuffers[bucket] = soundBuffers[bucket].filter(Boolean);                 // compactar huecos así random pickea uniforme
+    }
+  }
+
+  function audioResume() {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+    loadSamples();
+  }
+
+  function pitchForBall(b) { return b.mbPitch || 1; }                              // pitch propio de cada bola (set en makeBall)
+
+  function playBuffer(buf, gain, pitch) {
+    const g = actx.createGain(); g.gain.value = gain; g.connect(actx.destination);
+    const src = actx.createBufferSource(); src.buffer = buf;
+    src.playbackRate.value = pitch;
+    src.connect(g); src.start(actx.currentTime);
+  }
+
+  function tryPlay(bucket, intensity, basePitch) {
+    if (!actx) return;
+    const pool = soundBuffers[bucket];
+    if (!pool || !pool.length) return;
+    const now = performance.now();
+    if (now - (lastBucketT[bucket] || 0) < (BUCKET_COOLDOWN[bucket] || 50)) return;
+    if (sndThisFrame >= SND_MAX_PER_FRAME) return;
+    const buf = pool[Math.floor(Math.random() * pool.length)];
+    const pitch = (basePitch || 1) * (1 + (Math.random()*2 - 1) * PITCH_JITTER);
+    const gain = Math.max(0.1, Math.min(1, intensity)) * 0.5;
+    playBuffer(buf, gain, pitch);
+    lastBucketT[bucket] = now;
+    sndThisFrame++;
+  }
+
+  Matter.Events.on(engine, 'collisionStart', ev => {
+    for (const pair of ev.pairs) {
+      const { bodyA, bodyB } = pair;
+      const vrel = Vector.magnitude(Vector.sub(bodyA.velocity, bodyB.velocity));
+      if (vrel < VTHR_AUDIBLE) continue;
+
+      const grabbed = isGrabbedBody(bodyA) || isGrabbedBody(bodyB);
+      const wallHit = bodyA.isStatic || bodyB.isStatic;
+      let pitchBody;                                                               // para el pitch usamos la bola (la más chica gana; acá son iguales)
+      if (wallHit) pitchBody = bodyA.isStatic ? bodyB : bodyA;
+      else pitchBody = (bodyA.circleRadius <= bodyB.circleRadius) ? bodyA : bodyB;
+      const pitch = pitchForBall(pitchBody);
+
+      // Los InHand viven en updateBagSounds(); acá van clicks fuerte/medio/suave.
+      const intensity = (vrel - VTHR_AUDIBLE) / (VTHR_HARD - VTHR_AUDIBLE);
+      if (vrel >= VTHR_MED) {
+        tryPlay('MarbleLowClick', intensity, pitch);
+      } else {
+        tryPlay('MarbleLowClick', intensity * 0.7, pitch);                         // baja velocidad: mismo sample más suave
+      }
+    }
+  });
+
+  // ── ROLL LOOP ── LongRoll en loop por bola que "rueda" en el piso (sólo wallMode 1).
+  const ROLL_NEAR_FLOOR_FRAC = 0.4, ROLL_ATTACK_TC = 0.08, ROLL_RELEASE_TC = 0.18;
+  function stopRollNode(e) {
+    if (!e || !e.rollNode) return;
+    try { e.rollNode.src.stop(); } catch {}
+    try { e.rollNode.src.disconnect(); } catch {}
+    try { e.rollNode.gain.disconnect(); } catch {}
+    e.rollNode = null;
+  }
+  function stopAllRolls() { for (const e of balls) stopRollNode(e); }
+  function updateRollSounds(dt) {
+    if (!actx || !soundBuffers.LongRoll || !soundBuffers.LongRoll.length) return;
+    const buf = soundBuffers.LongRoll[0];
+    for (const e of balls) {
+      const b = e.body;
+      if (e.state !== 'live' || b.isStatic) { stopRollNode(e); continue; }
+      const r = b.circleRadius;
+      const distToFloor = H - b.position.y - r;
+      const onFloor = wallMode === 1 && distToFloor < r * ROLL_NEAR_FLOOR_FRAC && distToFloor > -r * 1.5;
+      const hSpeed = Math.abs(b.velocity.x);
+      const rolling = onFloor && hSpeed > ROLL_MIN_HSPEED;
+      if (rolling) {
+        if (!e.rollNode) {
+          const src = actx.createBufferSource();
+          src.buffer = buf; src.loop = true;
+          src.playbackRate.value = pitchForBall(b);
+          const gain = actx.createGain(); gain.gain.value = 0;
+          src.connect(gain).connect(actx.destination);
+          try { src.start(); } catch {}
+          e.rollNode = { src, gain };
+        }
+        const t = Math.min(1, (hSpeed - ROLL_MIN_HSPEED) / (ROLL_FULL_HSPEED - ROLL_MIN_HSPEED));
+        const target = t * 0.35;
+        const k = 1 - Math.exp(-dt / ROLL_ATTACK_TC);
+        e.rollNode.gain.gain.value += (target - e.rollNode.gain.gain.value) * k;
+      } else if (e.rollNode) {
+        const k = 1 - Math.exp(-dt / ROLL_RELEASE_TC);
+        e.rollNode.gain.gain.value *= 1 - k;
+        if (e.rollNode.gain.gain.value < 0.002) stopRollNode(e);
+      }
+    }
+  }
+
+  // ── BAG SOUNDS ── InHand sólo cuando la bola agarrada toca ≥ BAG_MIN_CONTACTS bolas a la vez.
+  const BAG_MIN_CONTACTS = 4;
+  function updateBagSounds() {
+    if (!actx) return;
+    for (const ps of pointers.values()) {
+      if (!ps.grab) continue;
+      const b = ps.grab.body;
+      if (b.isStatic) continue;
+      let n = 0;
+      for (const p of engine.pairs.list) {
+        if (!p.isActive) continue;
+        const other = p.bodyA === b ? p.bodyB : (p.bodyB === b ? p.bodyA : null);
+        if (other && !other.isStatic) n++;
+      }
+      if (n >= BAG_MIN_CONTACTS) {
+        const bucket = Math.random() < 0.65 ? 'MarblesInHand' : 'MarblesInHandB';
+        tryPlay(bucket, Math.min(1, 0.5 + n / 16), pitchForBall(b));
+      }
+    }
+  }
+
+  // ── LOOP ──
+  let lastT = performance.now();
+  let dtSmoothed = 1/60;
+  function loop(now) {
+    if (typeof now !== 'number') now = performance.now();
+    const dt = Math.min(0.05, (now - lastT) / 1000);                               // dt real, clamped a 50ms
+    lastT = now;
+    dtSmoothed = dtSmoothed*0.9 + dt*0.1;
+    sndThisFrame = 0;
+
+    // perseguir cada bola agarrada hacia el dedo que la sostiene (una por puntero; las fijadas no se mueven)
+    for (const ps of pointers.values()) {
+      if (!ps.grab) continue;
+      const b = ps.grab.body;
+      if (b.isStatic) continue;
+      const tx = ps.x + ps.grab.offX, ty = ps.y + ps.grab.offY;
+      let vx = (tx - b.position.x)*GRAB_GAIN, vy = (ty - b.position.y)*GRAB_GAIN;
+      const sp = Math.hypot(vx, vy);
+      if (sp > GRAB_MAX_SPEED) { vx *= GRAB_MAX_SPEED/sp; vy *= GRAB_MAX_SPEED/sp; }
+      Body.setVelocity(b, { x: vx, y: vy });
+      Body.setAngularVelocity(b, 0);
+    }
+
+    updateGrowth(dt);
+    Engine.update(engine, dt * 1000);                                              // matter quiere ms
+    updateRollSounds(dt);
+    updateBagSounds();
+
+    // damping angular extra + clamp de velocidad lineal a MAX_SPEED
+    const angDecay = Math.exp(-dt / ANGULAR_DAMPING_TC);
+    for (const e of balls) {
+      if (e.state !== 'live' || e.body.isStatic || isGrabbedBody(e.body)) continue;
+      Body.setAngularVelocity(e.body, e.body.angularVelocity * angDecay);
+      const v = e.body.velocity, sp = Math.hypot(v.x, v.y);
+      if (sp > MAX_SPEED) Body.setVelocity(e.body, { x: v.x / sp * MAX_SPEED, y: v.y / sp * MAX_SPEED });
+    }
+
+    wrapBalls();
+
+    ctx.clearRect(0, 0, W, H);
+    for (const e of balls) drawBall(e);
+    if (showDebug) drawDebugHUD();
+    requestAnimationFrame(loop);
+  }
+
+  function drawDebugHUD() {
+    const liveBalls = balls.filter(e => e.state === 'live');
+    const lines = [
+      'FPS: ' + Math.round(1/Math.max(1e-3, dtSmoothed)),
+      'Balls: ' + liveBalls.length + ' / ' + MAX_BALLS,
+      'Pinned: ' + pinnedBodies.size,
+    ];
+    const lh = 18, padX = 8, padY = 8;
+    const statsW = 130;
+
+    // Top-10 velocidades — bar chart (port del overlay de Balls). Matter da velocidad por step;
+    // ×60 para mostrar algo cercano a px/s (asumiendo 60fps), igual que Balls.
+    const top = liveBalls
+      .map(e => ({ e, sp: Math.hypot(e.body.velocity.x, e.body.velocity.y) }))
+      .sort((a, b) => b.sp - a.sp)
+      .slice(0, 10);
+    const labelW = 28, barW = 160, barH = 11, rowGap = 16, speedW = 56;
+    const chartX = padX, chartY = padY;
+    const chartW = 8 + labelW + barW + 6 + speedW;
+
+    // stats a la derecha del chart (o pegado al borde si no hay bolas)
+    const statsX = top.length ? (chartX + chartW + 8) : padX;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(statsX, padY, statsW, lh*lines.length + 8);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.font = '13px ui-monospace, Menlo, Consolas, monospace';
+    ctx.textBaseline = 'top';
+    lines.forEach((s, i) => ctx.fillText(s, statsX + 6, padY + 4 + i*lh));
+
+    if (!top.length) return;
+    const chartH = 22 + rowGap*top.length;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(chartX, chartY, chartW, chartH);
+    const topSp = Math.max(1, top[0].sp);
+    ctx.fillStyle = 'rgba(200,200,200,0.9)';
+    ctx.font = '11px ui-monospace, Menlo, Consolas, monospace';
+    ctx.fillText('Top ' + top.length + '  (max ' + (topSp*60).toFixed(0) + ' px/s)', chartX + 6, chartY + 4);
+    for (let i = 0; i < top.length; i++) {
+      const { e, sp } = top[i];
+      const y = chartY + 20 + i*rowGap;
+      ctx.fillStyle = 'rgba(200,200,200,0.85)';
+      ctx.fillText('#' + (i+1), chartX + 4, y);
+      const bx = chartX + 4 + labelW;
+      ctx.fillStyle = 'rgba(50,50,50,0.9)';
+      ctx.fillRect(bx, y, barW, barH);
+      const fillW = Math.min(barW, barW * sp / topSp);
+      if (fillW > 0) {
+        ctx.fillStyle = rgbStr(e.color, 1);
+        ctx.fillRect(bx, y, fillW, barH);
+      }
+      ctx.fillStyle = 'rgba(220,220,220,0.85)';
+      ctx.fillText((sp*60).toFixed(0), bx + barW + 6, y);
+    }
+  }
+
+  // ── INIT ──
+  resize();
+  for (let i = 0; i < INITIAL_BALLS; i++) makeBall(rnd(W*0.1, W*0.9), rnd(H*0.1, H*0.5));
+  loop();
+
+  const hint = document.getElementById('hint');
+  setTimeout(() => hint.style.opacity = '0', 5000);
+  canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
+  </script>
+</body>
+</html>

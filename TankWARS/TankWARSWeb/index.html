@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>TankWARS</title>
+<style>
+  :root { --bar-height: 66px; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  #c { display: block; position: absolute; top: 0; left: 0; }
+
+  /* Barra inferior: botones de acción (misil / boost / reiniciar). Mismo bezel que Balls. */
+  #bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    padding: 0 16px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.85);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    z-index: 3;
+  }
+  #ui { display: flex; gap: 8px; }
+  #ui button {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+  }
+  #ui button:active, #ui button.held { background: rgba(255,255,255,0.22); transform: scale(0.92); }
+  #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
+
+  #btnDebug {
+    position: absolute; right: 6px; bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.6);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+  }
+  #btnDebug svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnDebug:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  #btnDebug.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
+    text-align: center; color: rgba(255,255,255,0.5);
+    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
+    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+  }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">WASD/stick izq mover · mouse/stick der apuntar y disparar · botones: misil, boost</div>
+  <div id="bar">
+    <div id="ui">
+      <button id="btnMissile" aria-label="misil" title="Misil">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2.5 2.5 3.5 6 3.5 10 0 2.5-1.5 5-3.5 7-2-2-3.5-4.5-3.5-7C8.5 8 9.5 4.5 12 2z"/><path d="M8.5 14 6 17l2 1M15.5 14 18 17l-2 1"/></svg>
+      </button>
+      <button id="btnBoost" aria-label="boost" title="Boost">
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+      </button>
+      <button id="btnReset" aria-label="reiniciar" title="Reiniciar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+      </button>
+    </div>
+    <button id="btnDebug" aria-label="debug" title="Info / debug">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+    </button>
+  </div>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  TankWARS — port web del shooter de tanques (Pygame → Canvas 2D).
+  //  Slice jugable: player, 4 enemigos básicos, oleadas, muros, monedas,
+  //  misiles stackeables, escudo auto, boost. Controles adaptativos
+  //  (teclado+mouse en desktop / twin-stick táctil en mobile).
+  // ════════════════════════════════════════════════════════════════════
+  const TAU = Math.PI * 2;
+  const mod = (a, n) => ((a % n) + n) % n;
+  const ri  = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  // ── TUNING KNOBS ──
+  const THRUST          = 0.0012;   // empuje por frame@60 (fracción sper)
+  const BOOST_MULT      = 1.9;
+  const TURN_RATE       = 0.000125; // giro del cuerpo por frame@60
+  const TURRET_RATE     = 0.00015;  // giro de la torreta
+  const VEL_FRICTION    = 0.99;     // por frame@60
+  const ANGVEL_FRICTION = 0.95;
+  const PRIMARY_AS      = 0.125;    // cooldown base cañón (= 4x más rápido que el original 0.5)
+  const PRIMARY_SCALE   = 0.25;     // daño por tiro del cañón (1/4; DPS igual)
+  const MISSILE_MAX     = 3;
+  const MISSILE_REGEN   = 10;       // seg por misil
+  const SHIELD_CAP      = 5;
+  const PLAYER_R        = 0.0128;   // radio en fracción sper
+  const SHOT_SPEED      = 0.8;
+  const MISSILE_SPEED   = 0.48;
+  const MAX_ENEMIES     = 14;
+
+  // ── CANVAS ──
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  let W = 0, H = 0, dpr = 1;
+  const barEl = document.getElementById('bar');
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const barH = barEl.offsetHeight;
+    W = window.innerWidth;
+    H = window.innerHeight - barH;
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+
+  // ── HELPERS (port de TankWARS.py) ──
+  const xper = p => p * W;
+  const yper = p => p * H;
+  const sper = p => p * (W + H) / 2;
+  const getDist  = (a, b) => Math.hypot(a[0]-b[0], a[1]-b[1]);
+  const getDistSq= (a, b) => { const dx=a[0]-b[0], dy=a[1]-b[1]; return dx*dx+dy*dy; };
+  const getAngle = (a, b) => Math.atan2(b[1]-a[1], b[0]-a[0]);
+  function getAngle2(prev, a, b) {
+    let ang = Math.atan2(b[1]-a[1], b[0]-a[0]);
+    if (ang - prev < -Math.PI) ang += TAU;
+    if (ang - prev >  Math.PI) ang -= TAU;
+    return ang;
+  }
+  function rectCollision(r1, r2) {
+    return r1[0]+r1[2] > r2[0] && r1[0] < r2[0]+r2[2] && r1[1]+r1[3] > r2[1] && r1[1] < r2[1]+r2[3];
+  }
+  function rectPointCollision(r, p) {
+    return p[0] >= r[0] && p[0] <= r[0]+r[2] && p[1] >= r[1] && p[1] <= r[1]+r[3];
+  }
+  const cl = v => Math.max(0, Math.min(255, v|0));
+  const modifyColor     = (c, o) => [cl(c[0]+o), cl(c[1]+o), cl(c[2]+o)];
+  const modifyColorPerc = (c, f) => [cl(c[0]*f), cl(c[1]*f), cl(c[2]*f)];
+  const randColorInRange= (rl,rh,gl,gh,bl,bh) => [ri(rl,rh), ri(gl,gh), ri(bl,bh)];
+  const randColorGray   = (lo, hi) => { const n = ri(lo,hi); return [n,n,n]; };
+  const randColor       = () => [ri(0,255), ri(0,255), ri(0,255)];
+  const rgb = c => `rgb(${cl(c[0])},${cl(c[1])},${cl(c[2])})`;
+
+  // primitivas de dibujo
+  function line(x1,y1,x2,y2,color,w) {
+    ctx.strokeStyle = rgb(color); ctx.lineWidth = Math.max(1, w); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+  }
+  function circle(x,y,r,color,w) {
+    ctx.beginPath(); ctx.arc(x,y,Math.max(0.5,r),0,TAU);
+    if (w) { ctx.strokeStyle = rgb(color); ctx.lineWidth = Math.max(1,w); ctx.stroke(); }
+    else   { ctx.fillStyle = rgb(color); ctx.fill(); }
+  }
+  function rectFill(x,y,w,h,color,stroke) {
+    if (stroke) { ctx.strokeStyle = rgb(color); ctx.lineWidth = Math.max(1,stroke); ctx.strokeRect(x,y,w,h); }
+    else { ctx.fillStyle = rgb(color); ctx.fillRect(x,y,w,h); }
+  }
+  function text(str, color, x, y, px, align='left') {
+    ctx.fillStyle = rgb(color); ctx.font = `${Math.round(px)}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(str, x, y);
+  }
+
+  // ── ESTADO GLOBAL (mimica los globals del original) ──
+  let dt = 0, fr = 1;            // fr = dt*60 → escala la acumulación "por frame" del original
+  let background = [0,0,0];
+  let tanks = [], enemies = [], shots = [], coins = [], walls = [], explosions = [];
+  let player = null;
+  const toRemove = new Set();
+  const decay = (val, perFrame) => val * Math.pow(perFrame, fr);
+
+  // ════════════════ TANK ════════════════
+  class Tank {
+    constructor() {
+      this.isPlayer = false;
+      this.radius = sper(0.0256);
+      this.color = [128,128,128];
+      this.drawRadius = this.radius;
+      this.drawColor = this.color;
+      this.ang = rnd(0, TAU);
+      this.turretAng = this.ang;
+      this.vel = 0; this.angVel = 0; this.turretAngVel = 0;
+      this.hitCD = 0; this.primaryShotCD = 0; this.secondaryShotCD = 0;
+      this.shieldCD = 0; this.shieldOverheat = 0;
+      this.shieldCapacity = SHIELD_CAP; this.shieldCharge = 0; this.shieldAugment = 0;
+      this.shieldChargeSpeed = 1; this.shielded = false;
+      this.health = 1; this.healthRegenCD = 1; this.healthRegenSpeed = 1;
+      this.attack = 1; this.defense = 1; this.moveSpeed = 1;
+      this.primaryShotAS = 1; this.secondaryShotAS = 1;
+      this.borderPushX = 0; this.borderPushY = 0;
+      this.drawAura = false;
+      tanks.push(this);
+    }
+    process() {
+      this.hitCD = Math.max(this.hitCD - dt, 0);
+      this.primaryShotCD = Math.max(this.primaryShotCD - dt, 0);
+      this.secondaryShotCD = Math.max(this.secondaryShotCD - dt, 0);
+      this.healthRegenCD = Math.max(this.healthRegenCD - dt, 0);
+      this.shieldCD = Math.max(this.shieldCD - dt, 0);
+      this.shieldOverheat = Math.max(this.shieldOverheat - dt/3, 0);
+      if (!this.shielded) {
+        const c = (this.shieldCharge > 0.2 ? dt*this.shieldChargeSpeed : dt);
+        this.shieldCharge = clampN(this.shieldCharge + c, 0, this.shieldCapacity + this.shieldAugment);
+      }
+
+      this.ang += this.angVel * this.moveSpeed * dt;
+      this.turretAng += this.turretAngVel * this.moveSpeed * dt;
+      this.x += ((Math.cos(this.ang)*this.vel) + this.borderPushX) * this.moveSpeed * dt;
+      this.y += ((Math.sin(this.ang)*this.vel) + this.borderPushY) * this.moveSpeed * dt;
+
+      this.angVel = decay(this.angVel, ANGVEL_FRICTION);
+      this.turretAngVel = decay(this.turretAngVel, ANGVEL_FRICTION);
+      this.vel = decay(this.vel, VEL_FRICTION);
+      this.borderPushX = decay(this.borderPushX, VEL_FRICTION);
+      this.borderPushY = decay(this.borderPushY, VEL_FRICTION);
+
+      this.ang = mod(this.ang, TAU);
+      this.turretAng = mod(this.turretAng, TAU);
+
+      // empuje tanque-tanque
+      for (const t of tanks) {
+        if (t === this) continue;
+        if (getDistSq([this.x,this.y],[t.x,t.y]) <= (this.radius+t.radius)**2) {
+          const bump = getAngle2(this.ang, [this.x,this.y], [t.x,t.y]);
+          this.x -= Math.cos(bump)*t.radius/4; this.y -= Math.sin(bump)*t.radius/4;
+          this.vel *= 1 - (t.radius/100);
+          t.x += Math.cos(bump)*this.radius/4; t.y += Math.sin(bump)*this.radius/4;
+          t.vel *= 1 - (this.radius/100);
+        }
+      }
+
+      if (this.health < 1 && this.health > 0 && this.healthRegenCD === 0) {
+        this.health = Math.min(this.health + 0.005, 1);
+        this.healthRegenCD = 10 * this.healthRegenSpeed;
+      }
+
+      // daño de disparos del bando contrario
+      for (const shot of shots) {
+        if (this.isPlayer === shot.isPlayerShot) continue;
+        const d = getDist([this.x,this.y],[shot.x,shot.y]);
+        if (this.shielded) {
+          if (d <= this.radius*1.5) toRemove.add(shot);
+          if (d <= this.radius*2.5 && !shot.missile) {
+            shot.x = shot.preX; shot.y = shot.preY;
+            shot.ang += Math.PI + rnd(-Math.PI/4, Math.PI/4);
+            shot.isPlayerShot = !shot.isPlayerShot;
+          }
+        } else if (d < this.radius) {
+          const isP = player && shot.isPlayerShot;
+          const atk = isP ? player.attack : shot.attack;
+          const pscale = (isP && !shot.missile) ? PRIMARY_SCALE : 1;
+          this.health = Math.max(this.health - 0.05*atk*this.defense*(shot.missile?10:1)*pscale, 0);
+          this.hitCD = 0.03;
+          if (shot.isPlayerShot && player) player.score += shot.missile ? 250 : 6;
+          toRemove.add(shot);
+        }
+      }
+
+      if (this.health <= 0 && !this.isPlayer) {
+        if (player) player.score += this.scoreValue || 0;
+        const amount = this.dropCoins || 0;
+        for (let i = 0; i < amount; i++) new Coin(this.x, this.y, ri(28,42) + (this.coinValue||0));
+        toRemove.add(this);
+      }
+
+      this.shielded = false;
+      this.drawRadius = this.hitCD > 0 ? rnd(this.radius*0.8, this.radius*1.2) : this.radius;
+    }
+    draw() {
+      this.drawColor = this.hitCD > 0 ? modifyColor(this.color,112) : this.color;
+      drawTankBody(this);
+      if (this.shielded) circle(this.x, this.y, this.drawRadius*2.5, [52,204,255], this.drawRadius/5);
+    }
+    shieldAction() {
+      if (this.shieldCharge > 0 && this.shieldCD === 0) {
+        this.shielded = true;
+        this.shieldCharge -= dt*1.5;
+        circle(this.x, this.y, this.drawRadius*2.5, [52,204,255], this.drawRadius/5);
+      } else if (this.shieldCD === 0) {
+        this.shieldOverheat += dt;
+      }
+      if (this.shieldOverheat >= 1) { this.shieldCD = 10; this.shieldOverheat = 0; }
+    }
+    primaryShotAction() {
+      if (this.primaryShotCD > 0) return;
+      new PrimaryShot(this);
+      const rec = this.turretAng + Math.PI;
+      this.x += Math.cos(rec)*sper(0.0016); this.y += Math.sin(rec)*sper(0.0016);
+      this.primaryShotCD = 1 * this.primaryShotAS;
+    }
+    secondaryShotAction() {
+      if (this.secondaryShotCD > 0) return;
+      new SecondaryShot(this);
+      const rec = this.turretAng + Math.PI;
+      this.x += Math.cos(rec)*sper(0.012); this.y += Math.sin(rec)*sper(0.012);
+      this.secondaryShotCD = 10 * this.secondaryShotAS;
+    }
+    getBorderPush() {
+      this.borderPushX += this.x < this.radius ? sper(0.0032) : this.x > W - this.radius ? -sper(0.0032) : 0;
+      this.borderPushY += this.y < this.radius ? sper(0.0032) : this.y > H - this.radius ? -sper(0.0032) : 0;
+    }
+  }
+
+  // dibujo base del cuerpo (treads + contorno), compartido por todos los tanques
+  function drawTankBody(t) {
+    const a = t.ang, dr = t.drawRadius, c = t.drawColor;
+    for (let i = 0; i < 10; i++) {
+      const o = 1 - i*0.2;
+      line(
+        t.x + Math.cos(a)*-dr*1.25 + Math.cos(a+Math.PI/2)*-dr*o,
+        t.y + Math.sin(a)*-dr*1.25 + Math.sin(a+Math.PI/2)*-dr*o,
+        t.x + Math.cos(a)*dr*1.25 + Math.cos(a+Math.PI/2)*-dr*o,
+        t.y + Math.sin(a)*dr*1.25 + Math.sin(a+Math.PI/2)*-dr*o,
+        modifyColorPerc(c,0.9), dr/2.5);
+    }
+    const pts = [
+      [t.x+Math.cos(a)*-dr*1.25+Math.cos(a+Math.PI/2)*-dr, t.y+Math.sin(a)*-dr*1.25+Math.sin(a+Math.PI/2)*-dr],
+      [t.x+Math.cos(a)*dr*1.25 +Math.cos(a+Math.PI/2)*-dr, t.y+Math.sin(a)*dr*1.25 +Math.sin(a+Math.PI/2)*-dr],
+      [t.x+Math.cos(a)*dr*1.25 +Math.cos(a+Math.PI/2)*dr,  t.y+Math.sin(a)*dr*1.25 +Math.sin(a+Math.PI/2)*dr],
+      [t.x+Math.cos(a)*-dr*1.25+Math.cos(a+Math.PI/2)*dr,  t.y+Math.sin(a)*-dr*1.25+Math.sin(a+Math.PI/2)*dr],
+    ];
+    for (let i = 0; i < 4; i++) line(pts[i][0],pts[i][1],pts[(i+1)%4][0],pts[(i+1)%4][1], c, dr/3.5);
+  }
+  // torreta genérica (cañón + centro), reutilizada por enemigos
+  function drawTurret(t, barrelLen=1.75, barrelW=4, coreF=0.6) {
+    const a = t.turretAng, dr = t.drawRadius, c = t.drawColor;
+    line(t.x, t.y, t.x+Math.cos(a)*dr*barrelLen, t.y+Math.sin(a)*dr*barrelLen, modifyColorPerc(c,2), dr/barrelW);
+    circle(t.x, t.y, dr*coreF, modifyColorPerc(c,2.5));
+  }
+
+  // ════════════════ PLAYER ════════════════
+  class Player extends Tank {
+    constructor() {
+      super();
+      this.isPlayer = true;
+      this.radius = sper(PLAYER_R);
+      this.drawRadius = this.radius;
+      this.x = xper(0.5); this.y = yper(0.5);
+      this.color = [0,0,120];
+      this.regAttack = 1; this.regDefense = 1; this.regPrimaryShotAS = PRIMARY_AS;
+      this.regSecondaryShotAS = 1; this.regMoveSpeed = 1; this.regHealthRegenSpeed = 1;
+      this.attack = 1; this.defense = 1; this.primaryShotAS = PRIMARY_AS;
+      this.secondaryShotAS = 1; this.moveSpeed = 1; this.healthRegenSpeed = 1;
+      this.missileMax = MISSILE_MAX; this.missileStack = MISSILE_MAX; this.missileRegenCD = 0;
+      this.boosting = false;
+      this.moneyToAdd = 0; this.moneyToAddCD = 0; this.coinGrabbedCD = 0;
+      this.money = 0; this.score = 0;
+      player = this;
+    }
+    process() {
+      super.process();
+      this.moneyToAddCD = Math.max(this.moneyToAddCD - dt, 0);
+      this.coinGrabbedCD = Math.max(this.coinGrabbedCD - dt, 0);
+
+      const inp = readInput();
+      // movimiento: teclado rota/empuja; stick fija rumbo + empuje por magnitud
+      this.boosting = inp.boost;
+      const thrust = sper(THRUST) * (this.boosting ? BOOST_MULT : 1);
+      if (inp.moveStick) {
+        const target = Math.atan2(inp.moveY, inp.moveX);
+        const diff = getAngle2(this.ang, [0,0], [Math.cos(target),Math.sin(target)]) - this.ang;
+        this.angVel += (diff > 0 ? TURN_RATE : -TURN_RATE) * sper(1) * fr * Math.min(1, Math.abs(diff)*2);
+        this.vel += thrust * fr * inp.moveMag;
+      } else {
+        if (inp.up)    this.vel += thrust * fr;
+        if (inp.down)  this.vel -= thrust * fr;
+        if (inp.left)  this.angVel -= sper(TURN_RATE) * fr;
+        if (inp.right) this.angVel += sper(TURN_RATE) * fr;
+      }
+      if (inp.primary) this.primaryShotAction();
+      if (inp.missile) this.secondaryShotAction();
+
+      // apuntado de torreta hacia el punto de mira
+      const aim = getAngle2(this.turretAng, [this.x,this.y], [inp.aimX, inp.aimY]);
+      this.turretAngVel += (aim > this.turretAng ? sper(TURRET_RATE) : -sper(TURRET_RATE)) * fr;
+
+      // escudo automático (como la IA): se activa si hay un disparo enemigo cerca
+      this.autoShield();
+
+      // regen de misiles
+      this.missileRegenCD = Math.max(this.missileRegenCD - dt, 0);
+      if (this.missileStack < this.missileMax && this.missileRegenCD === 0) {
+        this.missileStack++;
+        this.missileRegenCD = MISSILE_REGEN * this.regSecondaryShotAS;
+      }
+
+      this.getBorderPush();
+
+      // imán de monedas
+      for (const coin of coins) {
+        if (getDistSq([this.x,this.y],[coin.x,coin.y]) < sper(0.15)**2) {
+          coin.ang = getAngle2(coin.ang, [coin.x,coin.y], [this.x,this.y]);
+          coin.vel += sper(1) * dt;
+          coin.grabbed = true;
+          if (getDistSq([this.x,this.y],[coin.x,coin.y]) < (this.radius+coin.radius)**2 && !coin.accounted) {
+            this.moneyToAdd += coin.value; this.coinGrabbedCD = 0.03;
+            coin.accounted = true; toRemove.add(coin);
+          }
+        }
+      }
+
+      if (this.moneyToAdd > 0 && this.moneyToAddCD === 0) {
+        const tr = this.moneyToAdd > 1000 ? 10 : 1;
+        this.moneyToAdd -= tr; this.money += tr; this.moneyToAddCD = 0.01;
+      }
+
+      if (this.health <= 0) { manager.gameover = true; toRemove.add(this); player = null; }
+    }
+    autoShield() {
+      for (const shot of shots) {
+        if (!shot.isPlayerShot && getDistSq([this.x,this.y],[shot.x,shot.y]) < (this.radius*4)**2) {
+          this.shieldAction(); break;
+        }
+      }
+    }
+    secondaryShotAction() {
+      if (this.secondaryShotCD > 0 || this.missileStack <= 0) return;
+      new SecondaryShot(this);
+      const rec = this.turretAng + Math.PI;
+      this.x += Math.cos(rec)*sper(0.012); this.y += Math.sin(rec)*sper(0.012);
+      this.missileStack--; this.secondaryShotCD = 0.25;
+    }
+    draw() {
+      const flash = this.hitCD > 0;
+      this.drawColor = flash ? modifyColor(this.color,112) : this.color;
+      drawTankBody(this);
+      if (this.shielded) circle(this.x, this.y, this.drawRadius*2.5, [52,204,255], this.drawRadius/5);
+      const a = this.ang, dr = this.drawRadius, c = modifyColorPerc(this.drawColor,2);
+      // detalles del cuerpo
+      line(this.x+Math.cos(a)*-dr*0.4+Math.cos(a+Math.PI/2)*dr, this.y+Math.sin(a)*-dr*0.4+Math.sin(a+Math.PI/2)*dr,
+           this.x+Math.cos(a)*-dr+Math.cos(a+Math.PI/2)*-dr, this.y+Math.sin(a)*-dr+Math.sin(a+Math.PI/2)*-dr, c, dr/4);
+      line(this.x+Math.cos(a)*dr+Math.cos(a+Math.PI/2)*dr, this.y+Math.sin(a)*dr+Math.sin(a+Math.PI/2)*dr,
+           this.x+Math.cos(a)*dr*0.4+Math.cos(a+Math.PI/2)*-dr, this.y+Math.sin(a)*dr*0.4+Math.sin(a+Math.PI/2)*-dr, c, dr/4);
+      // torreta
+      const ta = this.turretAng;
+      line(this.x, this.y, this.x+Math.cos(ta)*dr*2, this.y+Math.sin(ta)*dr*2, c, dr/4);
+      line(this.x, this.y, this.x+Math.cos(ta)*dr*1.25, this.y+Math.sin(ta)*dr*1.25, c, dr/2);
+      circle(this.x, this.y, dr*0.7, modifyColorPerc(this.drawColor,3));
+    }
+  }
+
+  // ════════════════ ENEMY base ════════════════
+  class Enemy extends Tank {
+    constructor() {
+      super();
+      const side = ri(0,3);
+      const areas = [
+        [xper(-0.3),xper(1.3),yper(-0.1),yper(-0.3)],
+        [xper(1.1),xper(1.3),yper(-0.3),yper(1.3)],
+        [xper(-0.3),xper(1.3),yper(1.1),yper(1.3)],
+        [xper(-0.1),xper(-0.3),yper(-0.3),yper(1.3)],
+      ][side];
+      this.x = rnd(areas[0],areas[1]); this.y = rnd(areas[2],areas[3]);
+      this.maxDistToPlayer = rnd(sper(0.128), sper(0.512));
+      this.inScreen = false; this.playerLocked = true; this.scoutModeTimer = 0;
+      this.targetX = W/2; this.targetY = H/2; this.targetRadius = 0;
+      this.aimAngle = this.ang; this.aimPointX = 0; this.aimPointY = 0;
+      this.dropCoins = 0; this.coinValue = 0; this.scoreValue = 0;
+      // punto scout (deambular) fuera de muros
+      let tries = 0;
+      do {
+        this.scoutX = rnd(xper(0.1), W-xper(0.1)); this.scoutY = rnd(yper(0.1), H-yper(0.1));
+      } while (++tries < 30 && walls.some(w => rectCollision([this.scoutX-this.radius*2,this.scoutY-this.radius*2,this.radius*4,this.radius*4],[w.x,w.y,w.width,w.height])));
+      enemies.push(this);
+    }
+    process() {
+      super.process();
+      if (player) { this.targetX = player.x; this.targetY = player.y; this.targetRadius = player.radius; }
+      if (!player || this.scoutModeTimer > 15) this.playerLocked = false;
+
+      this.aimAngle = getAngle2(this.turretAng, [this.x,this.y], [this.targetX,this.targetY]);
+
+      if (this.shotAllowed()) {
+        this.playerLocked = true; this.scoutModeTimer = 0;
+        const d = getDist([this.x,this.y],[this.targetX,this.targetY]);
+        if (d > this.maxDistToPlayer || !this.inScreen) this.vel += sper(THRUST)*fr;
+        else if (d < this.maxDistToPlayer/3) this.vel -= sper(THRUST)*fr;
+      } else {
+        this.vel += sper(THRUST)*fr;
+        this.scoutModeTimer += dt;
+      }
+
+      const goal = this.playerLocked ? [this.targetX,this.targetY] : [this.scoutX,this.scoutY];
+      this.moveAngle = getAngle2(this.ang, [this.x,this.y], goal);
+
+      // esquiva de muros simple: si el frente está bloqueado, doblá hacia el lado libre
+      let dir = 0;
+      for (let i = 1; i < 8 && dir === 0; i++) {
+        const fx = this.x+Math.cos(this.moveAngle)*this.radius*i, fy = this.y+Math.sin(this.moveAngle)*this.radius*i;
+        if (walls.some(w => rectPointCollision([w.x,w.y,w.width,w.height],[fx,fy]))) {
+          const rx = this.x+Math.cos(this.moveAngle+Math.PI/2)*this.radius*i, ry = this.y+Math.sin(this.moveAngle+Math.PI/2)*this.radius*i;
+          const blockedR = walls.some(w => rectPointCollision([w.x,w.y,w.width,w.height],[rx,ry]));
+          dir = blockedR ? -Math.PI/2 : Math.PI/2;
+        }
+      }
+      this.moveAngle += dir;
+      this.angVel += (this.moveAngle > this.ang ? sper(TURN_RATE) : -sper(TURN_RATE)) * fr;
+      this.turretAngVel += (this.aimAngle > this.turretAng ? sper(TURRET_RATE) : -sper(TURRET_RATE)) * fr;
+      if (!this.playerLocked) this.turretAng = this.ang;
+
+      if (!this.inScreen && this.x < W-this.radius*2 && this.x > this.radius*2 && this.y < H-this.radius*2 && this.y > this.radius*2) this.inScreen = true;
+      if (this.inScreen) this.getBorderPush();
+
+      if (this.shotAllowed()) this.fire();
+    }
+    fire() { this.primaryShotAction(); }
+    shotAllowed() {
+      if (!player || !this.inScreen) return false;
+      for (let i = 0; i < 50; i++) {
+        this.aimPointX = this.x + Math.cos(this.aimAngle)*this.radius*i;
+        this.aimPointY = this.y + Math.sin(this.aimAngle)*this.radius*i;
+        if (rectPointCollision([this.targetX-this.targetRadius,this.targetY-this.targetRadius,this.targetRadius*2,this.targetRadius*2],[this.aimPointX,this.aimPointY])) return true;
+        if (walls.some(w => rectPointCollision([w.x,w.y,w.width,w.height],[this.aimPointX,this.aimPointY]))) return false;
+      }
+      return false;
+    }
+    draw() {
+      this.drawColor = this.hitCD > 0 ? modifyColor(this.color,112) : this.color;
+      drawTankBody(this);
+      if (this.shielded) circle(this.x, this.y, this.drawRadius*2.5, [52,204,255], this.drawRadius/5);
+      this.drawDetail();
+      if (this.health < 1) {
+        const dr = this.drawRadius;
+        const hc = [cl(Math.abs(255*(this.health-0.5)-255)), cl(255*this.health), 0];
+        line(this.x-dr*1.5, this.y-dr*1.75, this.x-dr*1.5+dr*3, this.y-dr*1.75, [0,0,0], dr/3);
+        line(this.x-dr*1.425, this.y-dr*1.76, this.x-dr*1.425+dr*2.925*this.health, this.y-dr*1.76, hc, dr/5);
+      }
+    }
+    drawDetail() { drawTurret(this); }
+  }
+
+  // ── tipos de enemigo (slice: 4 básicos) ──
+  class SmallPink extends Enemy {
+    constructor() { super();
+      this.color=[175,0,175]; this.radius=sper(0.0096); this.drawRadius=this.radius;
+      this.attack=0.1; this.defense=7; this.moveSpeed=1.2; this.primaryShotAS=0.3;
+      this.shieldAugment=-4.5; this.dropCoins=ri(0,2); this.scoreValue=60;
+    }
+    drawDetail() {
+      const a=this.ang, dr=this.drawRadius, c=modifyColorPerc(this.drawColor,1.25);
+      line(this.x+Math.cos(a)*-dr*1.25+Math.cos(a+Math.PI/2)*-dr, this.y+Math.sin(a)*-dr*1.25+Math.sin(a+Math.PI/2)*-dr,
+           this.x+Math.cos(a)*dr*1.25+Math.cos(a+Math.PI/2)*dr, this.y+Math.sin(a)*dr*1.25+Math.sin(a+Math.PI/2)*dr, c, dr/4);
+      drawTurret(this, 1.75, 4, 0.5);
+    }
+  }
+  class BasicRed extends Enemy {
+    constructor() { super();
+      this.radius=sper(0.0128); this.drawRadius=this.radius; this.color=[75,0,0];
+      this.attack=0.5; this.defense=3; this.moveSpeed=0.9; this.primaryShotAS=1;
+      this.shieldAugment=-4.5; this.dropCoins=ri(2,3); this.coinValue=5; this.scoreValue=105;
+    }
+  }
+  class BasicBlue extends Enemy {
+    constructor() { super();
+      this.radius=sper(0.0128); this.drawRadius=this.radius; this.color=[0,0,150];
+      this.attack=0.8; this.defense=2; this.moveSpeed=1; this.primaryShotAS=0.8;
+      this.shieldAugment=-4.5; this.dropCoins=ri(4,6); this.coinValue=5; this.scoreValue=210;
+    }
+    drawDetail() {
+      const a=this.ang, dr=this.drawRadius, c=modifyColorPerc(this.drawColor,2);
+      line(this.x+Math.cos(a)*-dr*0.4+Math.cos(a+Math.PI/2)*dr, this.y+Math.sin(a)*-dr*0.4+Math.sin(a+Math.PI/2)*dr,
+           this.x+Math.cos(a)*-dr+Math.cos(a+Math.PI/2)*-dr, this.y+Math.sin(a)*-dr+Math.sin(a+Math.PI/2)*-dr, c, dr/4);
+      drawTurret(this, 2, 4, 0.6);
+    }
+  }
+  class Rhomb extends Enemy {
+    constructor() { super();
+      this.startRadius=sper(0.01); this.radius=this.startRadius; this.drawRadius=this.radius;
+      this.startAttack=0.2; this.startDefense=3; this.attack=0.2; this.defense=3;
+      this.moveSpeed=1.3; this.primaryShotAS=0.2; this.shieldAugment=-4.5;
+      this.dropCoins=ri(6,9); this.coinValue=10; this.scoreValue=360; this.sRedInt=100; this.color=[100,50,50];
+    }
+    process() {
+      super.process();
+      this.defense = Math.max(this.startDefense*this.health, 0.1);
+      this.attack = this.startAttack + Math.abs(this.health-1);
+      this.radius = Math.min(this.startRadius*(1+Math.abs(this.health-1)), sper(0.02));
+      const red = this.sRedInt*(1+Math.abs(this.health-1));
+      this.color = [red, Math.max(50*this.health,0), Math.max(50*this.health,0)];
+    }
+    drawDetail() {
+      const a=this.ang, dr=this.drawRadius, c=modifyColorPerc(this.drawColor,1.5);
+      const p = [
+        [this.x-Math.cos(a+Math.PI/2)*dr, this.y-Math.sin(a+Math.PI/2)*dr],
+        [this.x+Math.cos(a)*dr*1.25, this.y+Math.sin(a)*dr*1.25],
+        [this.x+Math.cos(a+Math.PI/2)*dr, this.y+Math.sin(a+Math.PI/2)*dr],
+        [this.x-Math.cos(a)*dr*1.25, this.y-Math.sin(a)*dr*1.25],
+      ];
+      for (let i=0;i<4;i++) line(p[i][0],p[i][1],p[(i+1)%4][0],p[(i+1)%4][1], c, dr/4);
+      drawTurret(this, 2, 4, 0.6);
+    }
+  }
+  const ENEMY_TYPES = { SmallPink, BasicRed, BasicBlue, Rhomb };
+
+  // ════════════════ DISPAROS ════════════════
+  class PrimaryShot {
+    constructor(tank) {
+      this.color = modifyColor(tank.color,150);
+      this.radius = tank.radius*0.3;
+      this.ang = tank.turretAng;
+      this.x = tank.x + Math.cos(this.ang)*this.radius*7;
+      this.y = tank.y + Math.sin(this.ang)*this.radius*7;
+      this.preX = this.x; this.preY = this.y;
+      this.vel = sper(SHOT_SPEED);
+      this.missile = false;
+      this.isPlayerShot = tank.isPlayer;
+      this.attack = tank.attack;
+      shots.push(this);
+    }
+    process() {
+      this.preX = this.x; this.preY = this.y;
+      this.x += Math.cos(this.ang)*this.vel*dt;
+      this.y += Math.sin(this.ang)*this.vel*dt;
+      if (this.x > W+this.radius*4 || this.x < -this.radius*4 || this.y > H+this.radius*4 || this.y < -this.radius*4) toRemove.add(this);
+    }
+    draw() {
+      line(this.x-Math.cos(this.ang)*this.radius*2, this.y-Math.sin(this.ang)*this.radius*2, this.x, this.y, this.color, this.radius/2);
+    }
+  }
+  class SecondaryShot {
+    constructor(tank) {
+      this.color = tank.color.slice(); this.baseColor = tank.color.slice();
+      this.glowColor = modifyColorPerc(tank.color,2); this.colorTimer = 0;
+      this.radius = tank.radius*0.3;
+      this.ang = tank.turretAng;
+      this.x = tank.x + Math.cos(this.ang)*this.radius*4;
+      this.y = tank.y + Math.sin(this.ang)*this.radius*4;
+      this.preX = this.x; this.preY = this.y;
+      this.vel = sper(MISSILE_SPEED); this.angVel = sper(0.005);
+      this.lifeSpan = ri(7,10); this.missile = true;
+      this.isPlayerShot = tank.isPlayer; this.attack = tank.attack;
+      shots.push(this);
+    }
+    process() {
+      this.preX = this.x; this.preY = this.y;
+      this.lifeSpan -= dt; if (this.lifeSpan <= 0) toRemove.add(this);
+      let tx, ty;
+      if (player && this.isPlayerShot) { tx = readInput().aimX; ty = readInput().aimY; }
+      else if (player) { tx = player.x; ty = player.y; }
+      else { tx = rnd(0,W); ty = rnd(0,H); }
+      const aim = getAngle2(this.ang, [this.x,this.y], [tx,ty]);
+      this.ang += (aim > this.ang ? this.angVel : -this.angVel) * dt;
+      this.x += Math.cos(this.ang)*this.vel*dt;
+      this.y += Math.sin(this.ang)*this.vel*dt;
+      this.ang = mod(this.ang, TAU);
+      this.colorTimer += dt;
+      if (this.colorTimer > 0.075) {
+        this.color = (this.color === this.baseColor) ? this.glowColor : this.baseColor;
+        this.colorTimer = 0;
+      }
+    }
+    draw() {
+      line(this.x-Math.cos(this.ang)*this.radius*4, this.y-Math.sin(this.ang)*this.radius*4, this.x, this.y, this.color, this.radius*2);
+      circle(this.x, this.y, this.radius, this.color);
+    }
+  }
+
+  // ════════════════ MUROS ════════════════
+  class Wall {
+    constructor(color) {
+      this.color = color;
+      const sz = walls.length;
+      this.width = rnd(sz<2?xper(0.15):sz<5?xper(0.1):xper(0.05), sz<2?xper(0.175):sz<5?xper(0.125):xper(0.075));
+      this.height = rnd(sz<2?yper(0.275):sz<5?yper(0.175):yper(0.1), sz<2?yper(0.3):sz<5?yper(0.225):yper(0.15));
+      let tries = 0, ok = false;
+      while (!ok && tries++ < 60) {
+        this.x = rnd(xper(0.025), W); this.y = rnd(yper(0.042), H);
+        ok = true;
+        if (this.x+this.width > W-xper(0.025) || this.y+this.height > H-yper(0.042)) { ok = false; continue; }
+        for (const w of walls) if (rectCollision([w.x,w.y,w.width,w.height],[this.x,this.y,this.width,this.height])) { ok = false; break; }
+        if (ok && player && rectCollision([player.x-player.radius,player.y-player.radius,player.radius*2,player.radius*2],[this.x,this.y,this.width,this.height])) ok = false;
+      }
+      walls.push(this);
+    }
+    process() {
+      for (const t of tanks) {
+        if (rectCollision([t.x-t.radius,t.y-t.radius,t.radius*2,t.radius*2],[this.x,this.y,this.width,this.height])) {
+          const l = Math.abs(t.x+t.radius*2-this.x), r = Math.abs(t.x-t.radius*2-(this.x+this.width));
+          const tp = Math.abs(t.y+t.radius*2-this.y), b = Math.abs(t.y-t.radius*2-(this.y+this.height));
+          const m = Math.min(l,r,tp,b);
+          if (m===l) t.x = this.x-t.radius; else if (m===r) t.x = this.x+this.width+t.radius;
+          else if (m===tp) t.y = this.y-t.radius; else t.y = this.y+this.height+t.radius;
+        }
+      }
+      for (const shot of shots) {
+        if (rectCollision([shot.x-shot.radius*0.75,shot.y-shot.radius*0.75,shot.radius*1.5,shot.radius*1.5],[this.x,this.y,this.width,this.height])) toRemove.add(shot);
+      }
+    }
+    draw() {
+      for (let i = 0; i < 2; i++) {
+        rectFill(this.x+this.width/2*i/25, this.y+this.height/2*i/25, this.width-this.width*i/25, this.height-this.height*i/25, i%2===0?modifyColorPerc(this.color,0.8):this.color);
+      }
+    }
+  }
+
+  // ════════════════ MONEDA / EXPLOSIÓN ════════════════
+  class Coin {
+    constructor(x,y,value) {
+      this.x=x; this.y=y; this.ang=rnd(0,TAU); this.vel=rnd(sper(0.06),sper(0.08));
+      this.value=value; this.radius=value*sper(0.02)/90; this.lifeSpan=ri(15,25);
+      this.blinkCD=0; this.grabbed=false; this.accounted=false;
+      coins.push(this);
+    }
+    process() {
+      this.lifeSpan -= dt; if (this.lifeSpan <= 0) toRemove.add(this);
+      this.x += Math.cos(this.ang)*this.vel*dt; this.y += Math.sin(this.ang)*this.vel*dt;
+      this.vel = Math.max(this.vel - 50*dt, 0);
+      this.x = clampN(this.x, this.radius, W-this.radius);
+      this.y = clampN(this.y, this.radius, H-this.radius);
+      if (this.lifeSpan < 5) this.blinkCD += dt;
+      if (this.blinkCD > 0.2) this.blinkCD = 0;
+    }
+    draw() {
+      const c = this.blinkCD < 0.1 ? [255,255,0] : [64,64,0];
+      circle(this.x, this.y, this.radius, c);
+      circle(this.x, this.y, this.radius*0.6, modifyColorPerc(c,0.5), this.radius/4);
+    }
+  }
+  class Explosion {
+    constructor(x,y,radius) { this.x=x; this.y=y; this.startRadius=radius; this.radius=radius; this.repeat=false; explosions.push(this); }
+    process() {
+      this.radius += sper(0.3)*dt;
+      if (this.radius > this.startRadius*3 && this.startRadius > sper(0.01) && !this.repeat) { new Explosion(this.x,this.y,this.radius/5); this.repeat=true; }
+      if (this.radius > this.startRadius*6) toRemove.add(this);
+    }
+    draw() { circle(this.x, this.y, this.radius, [255, ri(128,255), 0], this.radius/8); }
+  }
+
+  // ════════════════ MANAGER / OLEADAS ════════════════
+  const manager = {
+    waveTime: 0, waveNumber: 0, gameover: false, wallColor: [120,120,120],
+    waveList: [
+      ['BasicRed',3,30],['BasicRed',4,25],['SmallPink',4,25],['BasicBlue',3,30],['BasicRed',5,25],
+      ['Rhomb',2,30],['BasicBlue',4,25],['SmallPink',6,20],['BasicRed',5,25],['Rhomb',3,30],
+      ['BasicBlue',5,25],['SmallPink',8,20],['BasicRed',6,25],['Rhomb',3,25],['BasicBlue',6,30],
+    ],
+    process() {
+      if (manager.gameover) return;
+      manager.waveTime = Math.max(manager.waveTime - dt, 0);
+      if (manager.waveTime === 0 || enemies.length === 0) {
+        const w = manager.waveList[manager.waveNumber];
+        manager.callWave(w[0], w[1], w[2]);
+      }
+    },
+    callWave(name, amount, waveTime) {
+      if (manager.waveNumber % 5 === 0) {     // cada 5 oleadas: arena nueva
+        walls.length = 0;
+        manager.wallColor = randColorInRange(50,255,50,255,50,255);
+        for (let i = 0; i < ri(5,7); i++) new Wall(manager.wallColor);
+      }
+      manager.waveNumber = (manager.waveNumber + 1) % manager.waveList.length;
+      manager.waveTime = waveTime;
+      for (let i = 0; i < amount; i++) {
+        if (enemies.length >= MAX_ENEMIES) break;
+        new ENEMY_TYPES[name]();
+      }
+    },
+  };
+
+  // ════════════════ INPUT (adaptativo) ════════════════
+  const keys = new Set();
+  let mouseX = 0, mouseY = 0, mouseLeft = false, mouseRight = false;
+  let touchMode = false;
+  // joysticks táctiles: cada uno guarda {id, cx, cy, dx, dy, active}
+  const stickMove = { id: null, cx: 0, cy: 0, dx: 0, dy: 0, active: false };
+  const stickAim  = { id: null, cx: 0, cy: 0, dx: 0, dy: 0, active: false };
+  const btnState = { missile: false, boost: false };
+  const STICK_R = () => sper(0.06);
+
+  function readInput() {
+    if (touchMode) {
+      const mMag = Math.min(1, Math.hypot(stickMove.dx, stickMove.dy) / STICK_R());
+      let aimX = player ? player.x + 1 : 1, aimY = player ? player.y : 0;
+      if (stickAim.active && player) {
+        const aa = Math.atan2(stickAim.dy, stickAim.dx);
+        aimX = player.x + Math.cos(aa)*sper(0.5); aimY = player.y + Math.sin(aa)*sper(0.5);
+      }
+      return {
+        moveStick: stickMove.active, moveX: stickMove.dx, moveY: stickMove.dy, moveMag: mMag,
+        up:false, down:false, left:false, right:false,
+        aimX, aimY,
+        primary: stickAim.active, missile: btnState.missile, boost: btnState.boost,
+      };
+    }
+    return {
+      moveStick: false, moveX:0, moveY:0, moveMag:0,
+      up: keys.has('w')||keys.has('arrowup'), down: keys.has('s')||keys.has('arrowdown'),
+      left: keys.has('a')||keys.has('arrowleft'), right: keys.has('d')||keys.has('arrowright'),
+      aimX: mouseX, aimY: mouseY,
+      primary: mouseLeft, missile: mouseRight || btnState.missile,
+      boost: keys.has('shift') || btnState.boost,
+    };
+  }
+
+  // teclado
+  addEventListener('keydown', e => { keys.add(e.key.toLowerCase()); if (e.key === ' ' || e.key.startsWith('Arrow')) e.preventDefault(); });
+  addEventListener('keyup',   e => keys.delete(e.key.toLowerCase()));
+  addEventListener('blur', () => keys.clear());
+
+  // mouse (desktop) + touch (mobile) sobre el canvas
+  function evtPos(e) { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+  canvas.addEventListener('pointerdown', e => {
+    canvas.setPointerCapture(e.pointerId);
+    const [px,py] = evtPos(e);
+    if (e.pointerType === 'touch') {
+      touchMode = true;
+      const st = px < W/2 ? stickMove : stickAim;
+      if (st.id === null) { st.id = e.pointerId; st.cx = px; st.cy = py; st.dx = 0; st.dy = 0; st.active = true; }
+    } else {
+      mouseX = px; mouseY = py;
+      if (e.button === 0) mouseLeft = true;
+      if (e.button === 2) mouseRight = true;
+    }
+  });
+  canvas.addEventListener('pointermove', e => {
+    const [px,py] = evtPos(e);
+    if (e.pointerType === 'touch') {
+      for (const st of [stickMove, stickAim]) if (st.id === e.pointerId) {
+        st.dx = clampN(px - st.cx, -STICK_R(), STICK_R());
+        st.dy = clampN(py - st.cy, -STICK_R(), STICK_R());
+      }
+    } else { mouseX = px; mouseY = py; }
+  });
+  function endPointer(e) {
+    if (e.pointerType === 'touch') {
+      for (const st of [stickMove, stickAim]) if (st.id === e.pointerId) { st.id = null; st.active = false; st.dx = 0; st.dy = 0; }
+    } else {
+      if (e.button === 0) mouseLeft = false;
+      if (e.button === 2) mouseRight = false;
+    }
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+
+  // botones de la barra
+  function holdBtn(id, key) {
+    const el = document.getElementById(id);
+    const down = e => { e.preventDefault(); btnState[key] = true; el.classList.add('held'); };
+    const up   = e => { btnState[key] = false; el.classList.remove('held'); };
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerleave', up);
+  }
+  holdBtn('btnMissile', 'missile');
+  holdBtn('btnBoost', 'boost');
+  document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); startGame(); });
+  let showDebug = false;
+  const btnDebug = document.getElementById('btnDebug');
+  btnDebug.addEventListener('pointerdown', e => { e.preventDefault(); showDebug = !showDebug; btnDebug.classList.toggle('on', showDebug); });
+
+  // ════════════════ HUD ════════════════
+  function drawHUD() {
+    if (player) {
+      const maxCharge = player.shieldCapacity + player.shieldAugment;
+      const charge = (player.shieldCharge/maxCharge) * (Math.abs(player.shieldCD-10)/10);
+      const hc = player.hitCD > 0 ? [255,255,255] : player.health < 0.25 ? [ri(175,225),0,0]
+               : [cl(Math.abs(255*(player.health-0.5)-255)), cl(255*player.health), 0];
+      const sc = player.shieldOverheat > 0 ? [ri(100,150),0,0] : player.shieldCD === 0 ? [52,204,255] : [26,102,127];
+
+      rectFill(xper(0.005), yper(0.01), xper(0.16), yper(0.025), modifyColorPerc(hc,0.3));
+      rectFill(xper(0.005), yper(0.01), xper(0.16)*player.health, yper(0.025), hc);
+      rectFill(xper(0.005), yper(0.01), xper(0.16), yper(0.025), modifyColorPerc(hc,1.7), sper(0.002));
+
+      rectFill(xper(0.005), yper(0.042), xper(0.14), yper(0.0175), modifyColorPerc(sc,0.3));
+      rectFill(xper(0.005), yper(0.042), xper(0.14)*Math.max(0,charge), yper(0.0175), sc);
+      for (let i = 1; i < maxCharge; i++) {
+        const dx = xper(0.005) + xper(0.14)/maxCharge*i;
+        line(dx, yper(0.044), dx, yper(0.052), [0,0,0], sper(0.001));
+      }
+      rectFill(xper(0.005), yper(0.042), xper(0.14), yper(0.0175), modifyColorPerc(sc,1.7), sper(0.002));
+
+      circle(xper(0.012), yper(0.08), sper(0.0105), [255,255,0]);
+      text(String(player.money), [255,255,0], xper(0.025), yper(0.082), sper(0.0256));
+      text('Score: ' + player.score, [255,255,255], xper(0.08), yper(0.082), sper(0.0192));
+      if (player.moneyToAdd > 0) text('+ ' + player.moneyToAdd, [128,128,0], xper(0.008), yper(0.108), sper(0.0192));
+
+      // pips de misiles, columna abajo-izquierda
+      for (let i = 0; i < player.missileMax; i++) {
+        const c = i < player.missileStack ? [52,204,255] : [50,50,50];
+        circle(xper(0.015), yper(0.95) - sper(0.02)*i, sper(0.007), c);
+      }
+
+      // crosshair (solo desktop)
+      if (!touchMode) {
+        const recoil = Math.max(player.primaryShotCD*150/player.primaryShotAS*0.01, 1);
+        const cc = player.secondaryShotCD > 0 ? [75,75,75] : modifyColorPerc(player.color,3);
+        circle(mouseX, mouseY, sper(0.0075)*recoil, cc, sper(0.01)/5);
+        line(mouseX-sper(0.0095)*recoil, mouseY, mouseX+sper(0.009)*recoil, mouseY, cc, sper(0.01)/5);
+        line(mouseX, mouseY-sper(0.0095)*recoil, mouseX, mouseY+sper(0.009)*recoil, cc, sper(0.01)/5);
+      }
+    }
+
+    // joysticks táctiles
+    if (touchMode) {
+      for (const st of [stickMove, stickAim]) if (st.active) {
+        circle(st.cx, st.cy, STICK_R(), [120,120,140], sper(0.004));
+        circle(st.cx+st.dx, st.cy+st.dy, STICK_R()*0.5, [180,180,200]);
+      }
+    }
+
+    if (manager.gameover) {
+      text('GAME OVER', [255,255,255], W/2, H*0.45, sper(0.09), 'center');
+      text('Score: ' + lastScore, [255,255,0], W/2, H*0.55, sper(0.045), 'center');
+      text('Reiniciar ↻', [200,200,200], W/2, H*0.62, sper(0.025), 'center');
+    }
+  }
+
+  function drawDebugHUD() {
+    const lines = [
+      'FPS: ' + Math.round(1/Math.max(1e-3, dtSmoothed)),
+      'Tanks: ' + tanks.length,
+      'Enemies: ' + enemies.length,
+      'Shots: ' + shots.length,
+      'Wave: ' + manager.waveNumber,
+      'WaveT: ' + Math.round(manager.waveTime),
+    ];
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(W-130, 8, 122, 18*lines.length+8);
+    lines.forEach((s,i) => text(s, [255,255,255], W-124, 18+i*18, 13));
+  }
+
+  // ════════════════ LOOP ════════════════
+  let lastScore = 0;
+  function startGame() {
+    tanks = []; enemies = []; shots = []; coins = []; walls = []; explosions = [];
+    toRemove.clear();
+    manager.waveTime = 0; manager.waveNumber = 0; manager.gameover = false;
+    player = null;
+    new Player();
+    manager.wallColor = randColorInRange(50,255,50,255,50,255);
+    for (let i = 0; i < ri(5,7); i++) new Wall(manager.wallColor);
+  }
+
+  function purge() {
+    if (toRemove.size === 0) return;
+    for (const s of toRemove) {
+      if (tanks.includes(s)) { tanks.splice(tanks.indexOf(s),1); new Explosion(s.x,s.y,s.radius); }
+      if (enemies.includes(s)) enemies.splice(enemies.indexOf(s),1);
+      if (shots.includes(s)) { shots.splice(shots.indexOf(s),1); new Explosion(s.x,s.y,s.missile?s.radius*2:s.radius/2); }
+      if (coins.includes(s)) coins.splice(coins.indexOf(s),1);
+      if (walls.includes(s)) walls.splice(walls.indexOf(s),1);
+      if (explosions.includes(s)) explosions.splice(explosions.indexOf(s),1);
+    }
+    toRemove.clear();
+  }
+
+  let lastT = performance.now();
+  let dtSmoothed = 1/60;
+  function loop(now) {
+    if (typeof now !== 'number') now = performance.now();
+    dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+    fr = dt * 60;
+    dtSmoothed = dtSmoothed*0.9 + dt*0.1;
+
+    background = walls.length ? modifyColorPerc(manager.wallColor,0.2) : randColorGray(0,5);
+    if (player) lastScore = player.score;
+
+    // Limpieza ANTES del update: el escudo se dibuja durante process() (igual que el
+    // original), así que el fill tiene que ir primero o lo borraría.
+    ctx.fillStyle = rgb(background); ctx.fillRect(0,0,W,H);
+
+    // update
+    manager.process();
+    for (const w of walls) w.process();
+    for (const t of tanks) t.process();
+    for (const s of shots) s.process();
+    for (const c of coins) c.process();
+    for (const e of explosions) e.process();
+    if (!player && !manager.gameover) new Player();
+    purge();
+
+    // draw
+    for (const c of coins) c.draw();
+    for (const w of walls) w.draw();
+    for (const t of tanks) t.draw();
+    for (const s of shots) s.draw();
+    for (const e of explosions) e.draw();
+    drawHUD();
+    if (showDebug) drawDebugHUD();
+
+    requestAnimationFrame(loop);
+  }
+
+  // ── INIT ──
+  resize();
+  startGame();
+  loop();
+
+  const hint = document.getElementById('hint');
+  setTimeout(() => hint.style.opacity = '0', 6000);
+  canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
+  </script>
+</body>
+</html>

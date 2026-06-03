@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Simón</title>
+<style>
+  :root { --bar-height: 66px; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #0e1016;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  /* Canvas ocupa sólo el espacio ARRIBA de la barra — mismo layout que BallsWeb/TatetiWeb. */
+  #c { display: block; position: absolute; top: 0; left: 0; }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
+    text-align: center; color: rgba(255,255,255,0.5);
+    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
+    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+  }
+
+  /* Barra inferior (mismo estilo que BallsWeb/TatetiWeb) */
+  #bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    padding: 0 16px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.85);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    z-index: 3;
+  }
+  #ui { display: flex; gap: 8px; }
+  #ui button {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    transition: background 0.1s, transform 0.08s;
+    padding: 0;
+  }
+  #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
+  #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
+  #ui #btnMute.off { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.4); }
+
+  /* Botón info, esquina abajo derecha — mismo patrón que BallsWeb */
+  #btnInfo {
+    position: absolute;
+    right: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.6);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+  }
+  #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnInfo:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">repetí la secuencia · tocá el centro para empezar</div>
+  <div id="bar">
+    <div id="ui">
+      <button id="btnReset" aria-label="reiniciar" title="Volver al menú">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+      </button>
+      <button id="btnMute" aria-label="sonido" title="Sonido on/off">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a3.5 3.5 0 0 1 0 6"/><path d="M18.5 7a7 7 0 0 1 0 10"/></svg>
+      </button>
+    </div>
+    <button id="btnInfo" aria-label="info" title="Info">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+    </button>
+  </div>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  SIMÓN — port web del Pygame SimonSays.py, mismo formato que BallsWeb.
+  //  El Pygame usaba 4 buffers PCM pre-grabados; acá los 4 tonos se
+  //  sintetizan con WebAudio (suena como el Simón clásico, sin assets).
+  // ════════════════════════════════════════════════════════════════════
+  const TAU = Math.PI * 2;
+
+  // ── COLORES ──
+  const COL_BG    = '#0e1016';
+  const COL_TEXT  = '#ebebf5';
+  const COL_DIM   = '#9094a4';
+
+  // 4 pads en disco. ang = [inicio, fin] en radianes (0=derecha, +=horario/abajo).
+  //  id0 rojo  → TL (arriba-izq)   id1 verde → TR (arriba-der)
+  //  id2 azul  → BR (abajo-der)    id3 amarillo → BL (abajo-izq)
+  // Tonos auténticos del Simón: verde 415, rojo 310, azul 209.7, amarillo 252.
+  const PADS = [
+    { base:[235, 50, 55],  tone:310.07, ang:[Math.PI,        1.5*Math.PI] },  // 0 rojo  TL
+    { base:[45, 205, 95],  tone:415.30, ang:[1.5*Math.PI,    TAU] },          // 1 verde TR
+    { base:[60, 120, 255], tone:209.70, ang:[0,              0.5*Math.PI] },  // 2 azul  BR
+    { base:[248, 216, 45], tone:252.00, ang:[0.5*Math.PI,    Math.PI] },      // 3 amar  BL
+  ];
+  const PAD_GAP = 0.05;   // gap angular entre pads (rad)
+
+  // ── STATE ──
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const barEl = document.getElementById('bar');
+  let W = 0, H = 0, dpr = 1;
+  let cx = 0, cy = 0, R = 0, holeR = 0, hubR = 0;
+
+  // phase: 'menu' | 'showing' | 'input' | 'wrong' | 'nice' | 'gameover'
+  let phase = 'menu';
+  let sequence = [];
+  let score = 0, mistakes = 0;
+
+  let litPad = -1;         // pad iluminado (showing/input)
+  let pressedPad = -1;     // pad que el dedo mantiene apretado
+  let showIdx = 0;         // índice en la secuencia que se está mostrando
+  let showSub = 'gap';     // 'gap' (todo apagado) → 'lit' (pad encendido)
+  let inputPos = 0;        // progreso del jugador dentro de la secuencia
+  let timer = 0;           // contador de la fase actual (seg)
+  let menuPad = 0, menuTimer = 0;
+
+  let soundOn = true;
+  let showInfo = false;
+
+  // ── TIMINGS (del original: dependen del score) ──
+  const gapDur = () => Math.max(0.4 - score * 0.01, 0.05);
+  const litDur = () => Math.max(0.6 - score * 0.01, 0.20);
+  const MENU_STEP = 0.18;
+  const WRONG_T = 1.0, NICE_T = 0.5;
+
+  // ── AUDIO (WebAudio, tonos sintetizados) ──
+  let actx = null;
+  let heldOsc = null, heldGain = null;
+  function audioResume() {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+  }
+  function playTone(freq, dur) {
+    if (!soundOn) return;
+    audioResume();
+    if (!actx) return;
+    const t = actx.currentTime;
+    const osc = actx.createOscillator(), g = actx.createGain();
+    osc.type = 'sine'; osc.frequency.value = freq;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(0.32, t + 0.012);
+    g.gain.setValueAtTime(0.32, t + Math.max(0.04, dur * 0.7));
+    g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    osc.connect(g).connect(actx.destination);
+    osc.start(t); osc.stop(t + dur + 0.03);
+  }
+  function startTone(freq) {            // tono sostenido mientras el dedo aprieta
+    if (!soundOn) return;
+    audioResume();
+    if (!actx) return;
+    stopTone();
+    const t = actx.currentTime;
+    heldOsc = actx.createOscillator(); heldGain = actx.createGain();
+    heldOsc.type = 'sine'; heldOsc.frequency.value = freq;
+    heldGain.gain.setValueAtTime(0, t);
+    heldGain.gain.linearRampToValueAtTime(0.32, t + 0.012);
+    heldOsc.connect(heldGain).connect(actx.destination);
+    heldOsc.start(t);
+  }
+  function stopTone() {
+    if (!heldOsc) return;
+    const t = actx.currentTime, o = heldOsc, gn = heldGain;
+    try {
+      gn.gain.cancelScheduledValues(t);
+      gn.gain.setValueAtTime(gn.gain.value, t);
+      gn.gain.exponentialRampToValueAtTime(0.0008, t + 0.07);
+      o.stop(t + 0.09);
+    } catch (_) {}
+    heldOsc = null; heldGain = null;
+  }
+  function playWrong() {                // buzzer grave del Simón
+    if (!soundOn) return;
+    audioResume();
+    if (!actx) return;
+    const t = actx.currentTime;
+    const osc = actx.createOscillator(), g = actx.createGain();
+    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(130, t);
+    osc.frequency.exponentialRampToValueAtTime(60, t + 0.5);
+    g.gain.setValueAtTime(0.3, t);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + 0.55);
+    osc.connect(g).connect(actx.destination);
+    osc.start(t); osc.stop(t + 0.6);
+  }
+
+  // ── LÓGICA ──
+  function startGame() {
+    sequence = []; score = 0; mistakes = 0;
+    addLevel();
+  }
+  function addLevel() {
+    sequence.push(Math.floor(Math.random() * 4));
+    showIdx = 0; showSub = 'gap'; timer = gapDur();
+    litPad = -1; pressedPad = -1; inputPos = 0;
+    phase = 'showing';
+  }
+  function backToMenu() {
+    phase = 'menu';
+    sequence = []; score = 0; mistakes = 0;
+    litPad = -1; pressedPad = -1;
+    stopTone();
+  }
+
+  // tap del jugador sobre un pad (presión)
+  function pressPad(id) {
+    if (phase !== 'input') return;
+    pressedPad = id; litPad = id;
+    startTone(PADS[id].tone);
+  }
+  // soltar → evaluar contra la secuencia
+  function releasePad() {
+    if (phase !== 'input' || pressedPad < 0) return;
+    const id = pressedPad;
+    pressedPad = -1; litPad = -1;
+    stopTone();
+
+    const expected = sequence[inputPos];
+    if (id !== expected) {
+      mistakes++;
+      playWrong();
+      if (mistakes >= 3) { phase = 'gameover'; }
+      else { phase = 'wrong'; timer = WRONG_T; }   // flashea todo y re-muestra
+      return;
+    }
+    inputPos++;
+    if (inputPos >= sequence.length) {             // secuencia completa
+      score++;
+      phase = 'nice'; timer = NICE_T;
+    }
+  }
+
+  // ── INPUT ──
+  function hitTest(mx, my) {
+    const dx = mx - cx, dy = my - cy;
+    const dist = Math.hypot(dx, dy);
+    if (dist <= hubR) return 'hub';
+    if (dist < holeR || dist > R) return null;
+    let a = Math.atan2(dy, dx);
+    if (a < 0) a += TAU;
+    for (let i = 0; i < 4; i++) {
+      const [a0, a1] = PADS[i].ang;
+      if (a >= a0 + PAD_GAP/2 && a <= a1 - PAD_GAP/2) return i;
+    }
+    return null;
+  }
+
+  canvas.addEventListener('pointerdown', e => {
+    canvas.setPointerCapture(e.pointerId);
+    audioResume();
+    hint.style.opacity = '0';
+    const r = canvas.getBoundingClientRect();
+    const hit = hitTest(e.clientX - r.left, e.clientY - r.top);
+    if (hit === 'hub') {
+      if (phase === 'menu') startGame();
+      else if (phase === 'gameover') backToMenu();
+      return;
+    }
+    if (typeof hit === 'number') pressPad(hit);
+  });
+  function endPointer() { releasePad(); }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('pointerleave', () => { if (pressedPad >= 0) releasePad(); });
+
+  // tap simple en pointerdown (helper de BallsWeb)
+  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
+
+  const btnReset = document.getElementById('btnReset');
+  const btnMute  = document.getElementById('btnMute');
+  const btnInfo  = document.getElementById('btnInfo');
+  tappable(btnReset, () => { backToMenu(); });
+  tappable(btnMute, () => {
+    soundOn = !soundOn;
+    btnMute.classList.toggle('off', !soundOn);
+    if (!soundOn) stopTone();
+  });
+  tappable(btnInfo, () => { showInfo = !showInfo; btnInfo.classList.toggle('on', showInfo); });
+
+  // ── RESIZE ──
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const barH = barEl.offsetHeight;
+    W = window.innerWidth;
+    H = window.innerHeight - barH;
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    layout();
+  }
+  function layout() {
+    const topReserved = H * 0.16;
+    const usableH = H - topReserved - H * 0.06;
+    R = Math.min(W * 0.88, usableH) / 2;
+    holeR = R * 0.34;
+    hubR  = R * 0.30;
+    cx = W / 2;
+    cy = topReserved + usableH / 2;
+  }
+  window.addEventListener('resize', resize);
+
+  // ── DRAW ──
+  function rgbStr(c, a) { return `rgba(${c[0]},${c[1]},${c[2]},${a==null?1:a})`; }
+  function scaleCol(c, f) { return [c[0]*f, c[1]*f, c[2]*f]; }
+
+  function drawPad(id, lit) {
+    const p = PADS[id];
+    const [a0, a1] = p.ang;
+    const s = a0 + PAD_GAP/2, e = a1 - PAD_GAP/2;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, s, e);
+    ctx.arc(cx, cy, holeR, e, s, true);
+    ctx.closePath();
+    ctx.fillStyle = rgbStr(lit ? p.base : scaleCol(p.base, 0.26));
+    ctx.fill();
+    if (lit) {
+      // halo interior suave para el "encendido"
+      ctx.save();
+      ctx.clip();
+      const mid = (s + e) / 2, rr = (R + holeR) / 2;
+      const gx = cx + Math.cos(mid) * rr, gy = cy + Math.sin(mid) * rr;
+      const grad = ctx.createRadialGradient(gx, gy, R*0.02, gx, gy, R*0.6);
+      grad.addColorStop(0, rgbStr(scaleCol(p.base, 1.35).map(v=>Math.min(255,v)), 0.55));
+      grad.addColorStop(1, rgbStr(p.base, 0));
+      ctx.fillStyle = grad;
+      ctx.fillRect(cx - R, cy - R, R*2, R*2);
+      ctx.restore();
+    }
+  }
+
+  function drawDisk() {
+    // anillo de fondo
+    ctx.beginPath();
+    ctx.arc(cx, cy, R + R*0.02, 0, TAU);
+    ctx.fillStyle = '#05060a';
+    ctx.fill();
+
+    const allLit = (phase === 'wrong');
+    const wrongBlink = allLit && (Math.sin(performance.now()/1000 * 12) > -0.3);
+    for (let i = 0; i < 4; i++) {
+      let lit = false;
+      if (phase === 'menu') lit = (i === menuPad);
+      else if (phase === 'showing' || phase === 'input') lit = (i === litPad);
+      else if (phase === 'wrong') lit = wrongBlink;
+      drawPad(i, lit);
+    }
+
+    // hub central
+    ctx.beginPath();
+    ctx.arc(cx, cy, hubR, 0, TAU);
+    let hubFill = '#15171f', hubLabel = '', hubCol = COL_TEXT, hubSub = '';
+    if (phase === 'menu') {
+      hubFill = '#f4f4fa'; hubLabel = 'START'; hubCol = '#15171f';
+    } else if (phase === 'gameover') {
+      hubFill = '#1b1d27'; hubLabel = 'MENÚ'; hubCol = '#ff5a64';
+    } else {
+      hubFill = '#12141c'; hubLabel = String(score); hubCol = COL_TEXT; hubSub = 'NIVEL';
+    }
+    ctx.fillStyle = hubFill;
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (hubSub) {
+      ctx.fillStyle = COL_DIM;
+      ctx.font = `600 ${Math.round(hubR*0.22)}px 'Segoe UI', system-ui, sans-serif`;
+      ctx.fillText(hubSub, cx, cy - hubR*0.42);
+      ctx.fillStyle = hubCol;
+      ctx.font = `700 ${Math.round(hubR*0.7)}px 'Segoe UI', system-ui, sans-serif`;
+      ctx.fillText(hubLabel, cx, cy + hubR*0.12);
+    } else {
+      ctx.fillStyle = hubCol;
+      ctx.font = `700 ${Math.round(hubR*0.46)}px 'Segoe UI', system-ui, sans-serif`;
+      ctx.fillText(hubLabel, cx, cy);
+    }
+  }
+
+  function drawHeader() {
+    const topY = cy - R - H * 0.07;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    let label = '', col = COL_TEXT, big = false;
+    if (phase === 'menu')          { label = 'SIMÓN'; col = COL_TEXT; big = true; }
+    else if (phase === 'showing')  { label = 'MIRÁ…'; col = COL_DIM; }
+    else if (phase === 'input')    { label = 'TU TURNO'; col = '#8fe3a0'; }
+    else if (phase === 'wrong')    { label = '¡MAL!'; col = '#ff5a64'; }
+    else if (phase === 'nice')     { label = '¡BIEN!'; col = '#6cd98a'; }
+    else if (phase === 'gameover') { label = 'GAME OVER'; col = '#ff5a64'; big = true; }
+    ctx.fillStyle = rgbStr2(col);
+    ctx.font = `${big?700:600} ${Math.round(Math.min(big?40:30, H*(big?0.05:0.036)))}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillText(label, W/2, topY);
+
+    // sub-línea: vidas (mistakes) durante el juego, score en gameover
+    const subY = topY + Math.min(30, H*0.04);
+    if (phase === 'gameover') {
+      ctx.fillStyle = COL_DIM;
+      ctx.font = `600 ${Math.round(Math.min(20, H*0.026))}px 'Segoe UI', system-ui, sans-serif`;
+      ctx.fillText(`SCORE  ${score}`, W/2, subY);
+    } else if (phase !== 'menu') {
+      // 3 corazones-de-vida (mistakes restantes)
+      const lives = 3 - mistakes;
+      const r = Math.min(6, H*0.008);
+      const gap = r * 3.2;
+      const total = (3 - 1) * gap;
+      for (let i = 0; i < 3; i++) {
+        const lx = W/2 - total/2 + i*gap;
+        ctx.beginPath(); ctx.arc(lx, subY, r, 0, TAU);
+        ctx.fillStyle = i < lives ? '#ff5a64' : 'rgba(255,255,255,0.14)';
+        ctx.fill();
+      }
+    }
+  }
+  function rgbStr2(c) { return typeof c === 'string' ? c : rgbStr(c); }
+
+  function drawInfoOverlay() {
+    if (!showInfo) return;
+    const lines = [
+      'SIMÓN',
+      '',
+      'Mirá la secuencia de colores que se',
+      'enciende y repetila tocando los pads.',
+      'Cada acierto suma un color más.',
+      '',
+      'Tenés 3 vidas — al 3er error, game over.',
+      '',
+      'Centro: empezar / volver al menú.',
+      'Botón ↻ : volver al menú',
+      'Botón 🔊 : sonido on/off',
+    ];
+    const fs = Math.round(Math.min(14, H*0.020));
+    const lh = fs * 1.5;
+    ctx.font = `500 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+    let maxW = 0;
+    for (const l of lines) maxW = Math.max(maxW, ctx.measureText(l).width);
+    const padX = 16, padY = 14;
+    const boxW = maxW + padX*2, boxH = lh*lines.length + padY*2;
+    const bx = (W - boxW)/2, by = (H - boxH)/2;
+    ctx.fillStyle = 'rgba(0,0,0,0.80)';
+    drawRoundedRect(bx, by, boxW, boxH, 12); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+    drawRoundedRect(bx, by, boxW, boxH, 12); ctx.stroke();
+    ctx.fillStyle = COL_TEXT; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    for (let i = 0; i < lines.length; i++) {
+      ctx.font = i === 0
+        ? `700 ${Math.round(fs*1.4)}px 'Segoe UI', system-ui, sans-serif`
+        : `500 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+      ctx.fillText(lines[i], bx + padX, by + padY + i*lh);
+    }
+  }
+  function drawRoundedRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+    ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+    ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+    ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
+    ctx.closePath();
+  }
+
+  // ── UPDATE ──
+  function update(dt) {
+    if (phase === 'menu') {
+      menuTimer -= dt;
+      if (menuTimer <= 0) { menuPad = (menuPad + 1) % 4; menuTimer = MENU_STEP; }
+      return;
+    }
+    if (phase === 'showing') {
+      timer -= dt;
+      if (timer <= 0) {
+        if (showSub === 'gap') {
+          showSub = 'lit';
+          litPad = sequence[showIdx];
+          playTone(PADS[litPad].tone, litDur());
+          timer = litDur();
+        } else {
+          litPad = -1; showIdx++;
+          if (showIdx >= sequence.length) { phase = 'input'; inputPos = 0; }
+          else { showSub = 'gap'; timer = gapDur(); }
+        }
+      }
+      return;
+    }
+    if (phase === 'wrong') {
+      timer -= dt;
+      if (timer <= 0) {                       // re-muestra la MISMA secuencia
+        showIdx = 0; showSub = 'gap'; timer = gapDur();
+        litPad = -1; inputPos = 0; phase = 'showing';
+      }
+      return;
+    }
+    if (phase === 'nice') {
+      timer -= dt;
+      if (timer <= 0) addLevel();
+      return;
+    }
+  }
+
+  // ── LOOP ──
+  let lastT = performance.now();
+  function loop(now) {
+    if (typeof now !== 'number') now = performance.now();
+    const dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+    update(dt);
+    ctx.fillStyle = COL_BG;
+    ctx.fillRect(0, 0, W, H);
+    drawHeader();
+    drawDisk();
+    drawInfoOverlay();
+    requestAnimationFrame(loop);
+  }
+
+  // ── INIT ──
+  resize();
+  loop();
+  const hint = document.getElementById('hint');
+  setTimeout(() => hint.style.opacity = '0', 6000);
+  </script>
+</body>
+</html>

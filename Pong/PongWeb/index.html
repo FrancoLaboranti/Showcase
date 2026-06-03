@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Pong</title>
+<style>
+  :root { --bar-height: 66px; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  /* Canvas ocupa el espacio ARRIBA de la barra — mismo layout que BallsWeb/TatetiWeb. */
+  #c { display: block; position: absolute; top: 0; left: 0; }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
+    text-align: center; color: rgba(255,255,255,0.5);
+    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
+    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+  }
+
+  /* Barra inferior — mismo bezel que el resto de los ports. */
+  #bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    padding: 0 16px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.85);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    z-index: 3;
+  }
+  #ui { display: flex; gap: 8px; }
+  #ui button {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    transition: background 0.1s, transform 0.08s;
+    padding: 0;
+    font-size: 17px; font-weight: 700; letter-spacing: 0.02em;
+  }
+  #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
+  #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
+  #ui #btnReset svg { width: 21px; height: 21px; }
+  /* botón de fuego encendido (tinte naranja) */
+  #ui #btnFire.on { background: rgba(255,140,0,0.30); border-color: rgba(255,150,0,0.6); color: #ffb347; }
+
+  /* Info, esquina abajo-derecha — mismo patrón que el resto. */
+  #btnInfo {
+    position: absolute;
+    right: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.6);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+  }
+  #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnInfo:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">arrastrá tu lado para mover la paleta · botones: jugadores · puntos · fuego · pausa</div>
+  <div id="bar">
+    <div id="ui">
+      <button id="btnMode"  aria-label="jugadores" title="1 / 2 jugadores">1P</button>
+      <button id="btnPoints" aria-label="puntos"   title="Puntos para ganar">10</button>
+      <button id="btnFire"  aria-label="fuego"     title="Modo fuego">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1 3-1 4.5-2.2 6C8.4 9.6 8 11 8 12.5 8 9 6.5 8 6.5 8 5.2 9.6 4 11.4 4 14a8 8 0 0 0 16 0c0-3.6-2.4-6-4.2-8.2C13.7 3.6 13 2.8 12 2zm0 17a3.2 3.2 0 0 1-3.2-3.2c0-1.8 1.3-2.8 2-4 .9 1.1 2 1.8 2.6 3 .3.6.4 1 .4 1.4A2.9 2.9 0 0 1 12 19z"/></svg>
+      </button>
+      <button id="btnPause" aria-label="pausa"     title="Pausa">
+        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+      </button>
+      <button id="btnReset" aria-label="reiniciar" title="Reiniciar partida">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+      </button>
+    </div>
+    <button id="btnInfo" aria-label="info" title="Info">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+    </button>
+  </div>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  PONG — port web del Pong.py (Pygame → Canvas 2D), mismo formato que
+  //  BallsWeb/TatetiWeb. Paletas izq/der (fiel al original), física
+  //  dt-based escalada a la resolución, modo fuego con rachas.
+  //
+  //  Mapeo de jugadores (igual que el original):
+  //   · Jugador 1 = paleta DERECHA  (teclado ↑/↓ · táctil: mitad derecha)
+  //   · Jugador 2 = paleta IZQUIERDA (teclado W/S · táctil: mitad izquierda
+  //                  · o CPU en modo 1 jugador)
+  // ════════════════════════════════════════════════════════════════════
+  const TAU = Math.PI * 2;
+  const rnd  = (a, b) => a + Math.random() * (b - a);
+  const clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
+  // ── TUNING KNOBS (todo en fracciones de pantalla / segundos) ──
+  const PADDLE_H_FRAC   = 0.18;    // alto paleta (fracción de H)
+  const PADDLE_W_FRAC   = 0.016;   // ancho paleta (fracción de W)
+  const PADDLE_MARGIN_FRAC = 0.025;// separación de la paleta al borde (fracción de W)
+  const BALL_R_FRAC     = 0.012;   // radio pelota (fracción de min(W,H))
+
+  const VX0_FRAC        = 0.55;    // vx inicial del saque (W/s)
+  const VX_MAX_FRAC     = 1.50;    // tope |vx| (W/s)
+  const VY0_FRAC        = 0.35;    // vy inicial del saque (H/s)
+  const VY_MAX_FRAC     = 1.25;    // tope |vy| (H/s)
+
+  const PADDLE_SPEED_FRAC = 1.20;  // velocidad máx de paleta (H/s)
+  const FIRE_SPEED_MULT = 1.45;    // paleta en llamas se mueve más rápido
+  const ACCEL_TC        = 0.07;    // constante de tiempo de aceleración (teclado)
+
+  const BOUNCE_ACCEL    = 1.05;    // vx ×1.05 en cada rebote con paleta
+  const FIRE_BALL_MULT  = 1.25;    // vx extra cuando pega una paleta en llamas
+  const WALL_ACCEL      = 1.10;    // vy ×1.10 al rebotar techo/piso (anti-estancamiento)
+  const SPIN_DIV        = 3;       // english: vy += velPaleta / SPIN_DIV
+  const FIRE_SPIN_DIV   = 4;       // english extra en llamas
+  const SLOW_PADDLE_FRAC= 0.25;    // si |velPaleta| < esto (H/s) → amansa el ángulo (vy ×0.5)
+
+  const FIRE_STREAK     = 3;       // racha para prenderse fuego
+  const SERVE_DELAY     = 0.7;     // pausa (s) antes de lanzar el saque
+  const SCORE_LABELS    = ['5', '10', '20', '40', '∞'];
+  const WIN_POINTS      = [5, 10, 20, 40, null];   // null = práctica (sin fin)
+
+  // ── ESTADO ──
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+  const barEl = document.getElementById('bar');
+  let W = 0, H = 0, dpr = 1;
+
+  // settings
+  let twoPlayers = false;          // false = 1 jugador (CPU paleta izq)
+  let ptsIdx = 1;                  // índice en WIN_POINTS (arranca en 10)
+  let fireEnabled = true;
+
+  // match
+  let state = 'play';              // 'play' | 'paused' | 'over'
+  let winner = 0;                  // 1 = jug.1 (der), 2 = jug.2 (izq)
+  let j1score = 0, j2score = 0;
+  let j1racha = 0, j2racha = 0;
+  let showInfo = false;
+
+  // paletas (cy = centro vertical en px, vel = velocidad px/s)
+  const right = { cy: 0, vel: 0, onFire: false, touchActive: false, touchY: 0 };  // jugador 1
+  const left  = { cy: 0, vel: 0, onFire: false, touchActive: false, touchY: 0 };  // jugador 2 / CPU
+
+  // pelota
+  let bx = 0, by = 0, bvx = 0, bvy = 0, serveCD = 0;
+  let fireball = false, firetrail = false, firenet = false;
+
+  // IA
+  let aiFailure = false, aiFailCD = 0;
+
+  // color de fuego que titila (se recomputa cada frame)
+  let FIRE = 'rgb(255,180,0)';
+
+  // ── GETTERS DE GEOMETRÍA (dependientes de la resolución actual) ──
+  const paddleH = () => PADDLE_H_FRAC * H;
+  const paddleW = () => Math.max(8, PADDLE_W_FRAC * W);
+  const paddleMargin = () => PADDLE_MARGIN_FRAC * W;
+  const ballR   = () => Math.max(5, BALL_R_FRAC * Math.min(W, H));
+  const vxMax   = () => VX_MAX_FRAC * W;
+  const vyMax   = () => VY_MAX_FRAC * H;
+  const paddleSpeed = () => PADDLE_SPEED_FRAC * H;
+  const leftX  = () => paddleMargin();                       // borde izq de la paleta izquierda
+  const rightX = () => W - paddleMargin() - paddleW();       // borde izq de la paleta derecha
+
+  // ── SAQUE / RESET ──
+  function serve(dir) {
+    bx = W / 2;
+    by = rnd(ballR(), H - ballR());
+    bvx = dir * VX0_FRAC * W * rnd(0.85, 1.15);
+    bvy = rnd(-1, 1) * VY0_FRAC * H * 0.6;
+    serveCD = SERVE_DELAY;
+    fireball = false; firetrail = false; firenet = false;
+  }
+  function newMatch() {
+    j1score = 0; j2score = 0; j1racha = 0; j2racha = 0;
+    right.cy = left.cy = H / 2;
+    right.vel = left.vel = 0;
+    updateFireStates();
+    winner = 0;
+    state = 'play';
+    serve(Math.random() < 0.5 ? -1 : 1);
+  }
+  function updateFireStates() {
+    right.onFire = fireEnabled && j1racha >= FIRE_STREAK;
+    left.onFire  = fireEnabled && j2racha >= FIRE_STREAK;
+  }
+
+  function scorePoint(scorer) {
+    if (scorer === 1) { j1score++; j1racha++; j2racha = 0; }
+    else              { j2score++; j2racha++; j1racha = 0; }
+    fireball = false; firetrail = false; firenet = false;
+    updateFireStates();
+    const cond = WIN_POINTS[ptsIdx];
+    if (cond != null && (j1score >= cond || j2score >= cond)) {
+      winner = scorer;
+      state = 'over';
+    } else {
+      // saque hacia el que recibió el punto en contra (jug. que falló)
+      serve(scorer === 1 ? -1 : 1);
+    }
+  }
+
+  // ── FÍSICA ──
+  function updatePaddle(p, dt, isCPU, isRight) {
+    const maxSpd = paddleSpeed() * (p.onFire ? FIRE_SPEED_MULT : 1);
+    let target = null;
+    if (isCPU) target = aiTarget;
+    else if (p.touchActive) target = p.touchY;
+
+    if (target != null) {
+      const want = target - p.cy;
+      const step = clampN(want, -maxSpd * dt, maxSpd * dt);
+      p.vel = step / dt;
+      p.cy += step;
+    } else {
+      // teclado
+      let dir = 0;
+      if (isRight) { if (keys.has('arrowup')) dir -= 1; if (keys.has('arrowdown')) dir += 1; }
+      else         { if (keys.has('w'))       dir -= 1; if (keys.has('s'))         dir += 1; }
+      const targetVel = dir * maxSpd;
+      const k = 1 - Math.exp(-dt / ACCEL_TC);
+      p.vel += (targetVel - p.vel) * k;
+      p.cy += p.vel * dt;
+    }
+    const half = paddleH() / 2;
+    if (p.cy < half)     { p.cy = half;     p.vel = 0; }
+    if (p.cy > H - half) { p.cy = H - half; p.vel = 0; }
+  }
+
+  // IA de la paleta izquierda (modo 1 jugador). Port del failtest del original:
+  // a veces "falla" y se queda quieta salvo que la pelota esté lejos.
+  let aiTarget = 0;
+  function updateAI(dt) {
+    aiFailCD -= dt;
+    if (aiFailCD <= 0) {
+      const ft = Math.random();
+      if (ft < 0.2) aiFailure = false;
+      else if (ft > 0.6) aiFailure = true;
+      aiFailCD = 0.4;
+    }
+    let t = by;
+    if (aiFailure && Math.abs(by - left.cy) < 0.18 * H) t = left.cy;   // vago: no se mueve
+    aiTarget = t;
+  }
+
+  function paddleHit(p, isRight) {
+    const pw = paddleW(), ph = paddleH(), r = ballR();
+    const px = isRight ? rightX() : leftX();
+    const movingInto = isRight ? bvx > 0 : bvx < 0;
+    if (!movingInto) return;
+    const overlapX = bx + r > px && bx - r < px + pw;
+    const overlapY = by + r > p.cy - ph / 2 && by - r < p.cy + ph / 2;
+    if (!(overlapX && overlapY)) return;
+
+    // sacar la pelota del cuerpo de la paleta (evita que se trabe en el borde)
+    bx = isRight ? px - r : px + pw + r;
+
+    if (p.onFire) {
+      bvx *= FIRE_BALL_MULT;
+      bvy += p.vel / FIRE_SPIN_DIV;
+      fireball = true; firetrail = true;
+    } else {
+      firetrail = false;
+    }
+    if (Math.abs(p.vel) < SLOW_PADDLE_FRAC * H) bvy *= 0.5;   // paleta casi quieta → rebote manso
+    bvx = -bvx * BOUNCE_ACCEL;
+    bvy += p.vel / SPIN_DIV;
+    bvx = clampN(bvx, -vxMax(), vxMax());
+  }
+
+  function updateBall(dt) {
+    if (serveCD > 0) { serveCD -= dt; return; }   // congelada en el saque
+    const r = ballR();
+    bx += bvx * dt;
+    by += bvy * dt;
+
+    // techo / piso
+    if (by > H - r) { by = H - r; bvy = -Math.abs(bvy) * WALL_ACCEL; }
+    if (by < r)     { by = r;     bvy =  Math.abs(bvy) * WALL_ACCEL; }
+
+    paddleHit(right, true);
+    paddleHit(left, false);
+    bvy = clampN(bvy, -vyMax(), vyMax());
+
+    // red de fuego: la pelota encendida cruza el centro
+    if (fireball && Math.abs(bx - W / 2) < 0.02 * W) firenet = true;
+    if (!fireball) firenet = false;
+
+    // puntos: la pelota sale por un borde
+    if (bx - r > W)  scorePoint(2);   // sale por la derecha → falló jug.1 → punto jug.2
+    else if (bx + r < 0) scorePoint(1); // sale por la izquierda → falló jug.2 → punto jug.1
+  }
+
+  // ── INPUT ──
+  const keys = new Set();
+  addEventListener('keydown', e => {
+    const k = e.key.toLowerCase();
+    keys.add(k);
+    if (k === 'arrowup' || k === 'arrowdown' || k === ' ') e.preventDefault();
+    if (k === 'p' || k === 'escape') togglePause();
+    if ((k === 'enter' || k === ' ') && state === 'over') newMatch();
+  });
+  addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+  addEventListener('blur', () => keys.clear());
+
+  // táctil: cada dedo se asigna a un lado según dónde toca. La mitad derecha mueve
+  // la paleta del jugador 1; la izquierda, la del jugador 2 (ignorada si es CPU).
+  const pointers = new Map();   // id → 'L' | 'R'
+  function evtY(e) { const r = canvas.getBoundingClientRect(); return e.clientY - r.top; }
+  function evtX(e) { const r = canvas.getBoundingClientRect(); return e.clientX - r.left; }
+
+  canvas.addEventListener('pointerdown', e => {
+    canvas.setPointerCapture(e.pointerId);
+    hint.style.opacity = '0';
+    if (state === 'over') { newMatch(); return; }
+    if (state === 'paused') { togglePause(); return; }
+    const side = evtX(e) < W / 2 ? 'L' : 'R';
+    if (side === 'L' && !twoPlayers) return;   // paleta izq es CPU en 1 jugador
+    pointers.set(e.pointerId, side);
+    syncTouch();
+    if (side === 'R') right.touchY = evtY(e);
+    else              left.touchY  = evtY(e);
+  });
+  canvas.addEventListener('pointermove', e => {
+    const side = pointers.get(e.pointerId);
+    if (!side) return;
+    if (side === 'R') right.touchY = evtY(e);
+    else              left.touchY  = evtY(e);
+  });
+  function endPointer(e) {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    syncTouch();
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
+  canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+  function syncTouch() {
+    let l = false, r = false;
+    for (const s of pointers.values()) { if (s === 'L') l = true; else r = true; }
+    left.touchActive = l;
+    right.touchActive = r;
+  }
+
+  // ── BOTONES ──
+  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
+  const btnMode = document.getElementById('btnMode');
+  const btnPoints = document.getElementById('btnPoints');
+  const btnFire = document.getElementById('btnFire');
+  const btnPause = document.getElementById('btnPause');
+  const btnInfo = document.getElementById('btnInfo');
+
+  function refreshButtons() {
+    btnMode.textContent = twoPlayers ? '2P' : '1P';
+    btnPoints.textContent = SCORE_LABELS[ptsIdx];
+    btnFire.classList.toggle('on', fireEnabled);
+  }
+  tappable(btnMode, () => { twoPlayers = !twoPlayers; refreshButtons(); newMatch(); });
+  tappable(btnPoints, () => { ptsIdx = (ptsIdx + 1) % WIN_POINTS.length; refreshButtons(); newMatch(); });
+  tappable(btnFire, () => { fireEnabled = !fireEnabled; refreshButtons(); updateFireStates(); });
+  tappable(btnPause, togglePause);
+  tappable(document.getElementById('btnReset'), () => newMatch());
+  tappable(btnInfo, () => { showInfo = !showInfo; btnInfo.classList.toggle('on', showInfo); });
+
+  function togglePause() {
+    if (state === 'play') state = 'paused';
+    else if (state === 'paused') state = 'play';
+  }
+
+  // ── RESIZE ──
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const barH = barEl.offsetHeight;
+    const oldH = H || 1;
+    W = window.innerWidth;
+    H = window.innerHeight - barH;
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // reubicar paletas/pelota proporcionalmente al alto nuevo
+    const f = H / oldH;
+    right.cy *= f; left.cy *= f; by *= f;
+  }
+  window.addEventListener('resize', resize);
+
+  // ── DRAW ──
+  function drawNet() {
+    const col = firenet ? FIRE : 'rgba(255,255,255,0.6)';
+    const w = firenet ? Math.max(4, 0.006 * W) : Math.max(2, 0.003 * W);
+    const dash = H * 0.03, gap = H * 0.022;
+    ctx.strokeStyle = col;
+    ctx.lineWidth = w;
+    ctx.lineCap = 'butt';
+    ctx.setLineDash([dash, gap]);
+    ctx.beginPath();
+    ctx.moveTo(W / 2, 0);
+    ctx.lineTo(W / 2, H);
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function drawPaddle(p, isRight) {
+    const pw = paddleW(), ph = paddleH();
+    const x = isRight ? rightX() : leftX();
+    const y = p.cy - ph / 2;
+    const r = Math.min(pw, ph) * 0.35;
+    ctx.fillStyle = p.onFire ? FIRE : '#fff';
+    if (p.onFire) { ctx.shadowColor = FIRE; ctx.shadowBlur = 0.04 * Math.min(W, H); }
+    roundRect(x, y, pw, ph, r); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  function drawBall() {
+    const r = ballR();
+    if (firetrail) {
+      // estela de fuego detrás de la pelota
+      for (let i = 1; i <= 4; i++) {
+        const tx = bx - (bvx / Math.abs(bvx || 1)) * r * 1.2 * i;
+        const ty = by - (bvy * 0.012) * i;   // leve curva siguiendo vy
+        ctx.fillStyle = FIRE;
+        ctx.globalAlpha = 0.5 - i * 0.1;
+        ctx.beginPath(); ctx.arc(tx, ty, Math.max(1, r - i * (r * 0.18)), 0, TAU); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = fireball ? FIRE : '#fff';
+    if (fireball) { ctx.shadowColor = FIRE; ctx.shadowBlur = 0.05 * Math.min(W, H); }
+    ctx.beginPath(); ctx.arc(bx, by, r, 0, TAU); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
+  function drawScores() {
+    if (WIN_POINTS[ptsIdx] == null) return;   // práctica: sin marcador
+    const col = firenet ? FIRE : '#fff';
+    ctx.fillStyle = col;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    const fs = Math.round(Math.min(64, H * 0.085));
+    ctx.font = `700 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillText(String(j2score), W / 2 - W * 0.10, H * 0.04);   // izq = jug.2
+    ctx.fillText(String(j1score), W / 2 + W * 0.10, H * 0.04);   // der = jug.1
+  }
+
+  function drawFireLabels() {
+    const fs = Math.round(Math.min(24, H * 0.03));
+    ctx.font = `700 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillStyle = FIRE;
+    ctx.textBaseline = 'top';
+    if (right.onFire) { ctx.textAlign = 'right';  ctx.fillText('ON FIRE!', W - W * 0.02, H * 0.02); }
+    if (left.onFire)  { ctx.textAlign = 'left';   ctx.fillText('ON FIRE!', W * 0.02, H * 0.02); }
+  }
+
+  function drawCenterMsg(big, small, col) {
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = col;
+    const bs = Math.round(Math.min(72, H * 0.10));
+    ctx.font = `800 ${bs}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.fillText(big, W / 2, H / 2);
+    if (small) {
+      const ss = Math.round(Math.min(20, H * 0.028));
+      const blink = (Math.sin(performance.now() / 1000 * 3) + 1) * 0.5;
+      ctx.fillStyle = `rgba(220,225,240,${0.55 + 0.35 * blink})`;
+      ctx.font = `500 ${ss}px 'Segoe UI', system-ui, sans-serif`;
+      ctx.fillText(small, W / 2, H / 2 + bs * 0.75);
+    }
+  }
+
+  function drawOver() {
+    let big;
+    if (twoPlayers) big = winner === 1 ? '¡GANA JUGADOR 1!' : '¡GANA JUGADOR 2!';
+    else            big = winner === 1 ? '¡GANASTE!' : 'GANA LA CPU';
+    const col = `rgb(${rndi(80,255)},${rndi(80,255)},${rndi(80,255)})`;
+    drawCenterMsg(big, 'TOCÁ PARA OTRA PARTIDA', col);
+  }
+
+  function drawInfoOverlay() {
+    if (!showInfo) return;
+    const lines = [
+      'PONG',
+      '',
+      'Jugador 1 (paleta derecha): ↑ / ↓  · táctil: mitad derecha',
+      'Jugador 2 (paleta izquierda): W / S · táctil: mitad izquierda',
+      'En 1 jugador la paleta izquierda es la CPU.',
+      '',
+      'Botón 1P/2P : 1 o 2 jugadores',
+      'Botón nº    : puntos para ganar (5/10/20/40/∞)',
+      'Botón 🔥    : modo fuego (racha de 3 prende la paleta)',
+      'Botón ‖     : pausa · P o ESC también',
+      'Botón ↻     : reiniciar partida',
+    ];
+    const fs = Math.round(Math.min(15, H * 0.022));
+    const lh = fs * 1.55;
+    ctx.font = `500 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+    let maxW = 0;
+    for (const l of lines) maxW = Math.max(maxW, ctx.measureText(l).width);
+    const padX = 18, padY = 16;
+    const boxW = maxW + padX * 2, boxH = lh * lines.length + padY * 2;
+    const x = (W - boxW) / 2, y = (H - boxH) / 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.82)';
+    roundRect(x, y, boxW, boxH, 12); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
+    roundRect(x, y, boxW, boxH, 12); ctx.stroke();
+    ctx.fillStyle = '#ebebf5';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'top';
+    for (let i = 0; i < lines.length; i++) {
+      ctx.font = i === 0 ? `800 ${Math.round(fs * 1.4)}px 'Segoe UI', system-ui, sans-serif`
+                         : `500 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+      ctx.fillText(lines[i], x + padX, y + padY + i * lh);
+    }
+  }
+
+  function rndi(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
+  function roundRect(x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  // ── LOOP ──
+  let lastT = performance.now();
+  function loop(now) {
+    if (typeof now !== 'number') now = performance.now();
+    const dt = Math.min(0.033, (now - lastT) / 1000);   // clamp a ~30fps mínimo
+    lastT = now;
+
+    FIRE = `rgb(255,${rndi(128, 255)},0)`;
+
+    if (state === 'play') {
+      if (!twoPlayers) updateAI(dt);
+      updatePaddle(right, dt, false, true);
+      updatePaddle(left, dt, !twoPlayers, false);
+      updateBall(dt);
+    }
+
+    // render
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+    drawNet();
+    drawScores();
+    drawFireLabels();
+    drawPaddle(left, false);
+    drawPaddle(right, true);
+    drawBall();
+
+    if (state === 'paused') drawCenterMsg('PAUSA', 'TOCÁ PARA SEGUIR · P', '#fff');
+    if (state === 'over') drawOver();
+    drawInfoOverlay();
+
+    requestAnimationFrame(loop);
+  }
+
+  // ── INIT ──
+  resize();
+  refreshButtons();
+  right.cy = left.cy = H / 2;
+  newMatch();
+  loop();
+
+  const hint = document.getElementById('hint');
+  setTimeout(() => hint.style.opacity = '0', 5000);
+  </script>
+</body>
+</html>

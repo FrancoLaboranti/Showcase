@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Tron</title>
+<style>
+  :root { --bar-height: 66px; }                                                  /* tweak to taste */
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+  }
+  /* El canvas ocupa sólo el área SOBRE la barra; ahí vive la pista (la grilla de colisiones se
+     dimensiona a este rect). Tamaños seteados explícito desde JS en cada resize. */
+  #c {
+    display: block; position: absolute;
+    top: 0; left: 0;
+  }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
+    text-align: center; color: rgba(255,255,255,0.5);
+    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
+    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+  }
+
+  /* Barra inferior: gira al jugador humano (◄ ►) y ▶ arranca / reinicia. Mismo shell que BallsWeb. */
+  #bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    padding: 0 16px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.85);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    z-index: 3;
+  }
+  #ui { display: flex; gap: 8px; }
+  #ui button {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    transition: background 0.1s, transform 0.08s;
+    padding: 0;
+  }
+  #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
+  #ui button svg { display: block; width: 24px; height: 24px; pointer-events: none; }
+
+  /* Home: chico, esquina abajo-derecha — vuelve al menú (= ESC). Fuera de #ui para que la fila quede centrada. */
+  #btnHome {
+    position: absolute; right: 6px; bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.6);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+  }
+  #btnHome svg { display: block; width: 15px; height: 15px; pointer-events: none; }
+  #btnHome:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">menú: tocá el texto para elegir · en juego: mitades de pantalla o ◄ ► para girar</div>
+  <div id="bar">
+    <div id="ui">
+      <button id="btnLeft"  aria-label="girar izquierda" title="Girar izquierda">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <button id="btnStart" aria-label="empezar" title="Empezar / Reiniciar">
+        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>
+      </button>
+      <button id="btnRight" aria-label="girar derecha" title="Girar derecha">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+    <button id="btnHome" aria-label="menú" title="Volver al menú (ESC)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/></svg>
+    </button>
+  </div>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  TRON (v1) — port web fiel de Tron/Tron.py, con el shell mobile de BallsWeb.
+  //  Light-cycles que dejan estela; morís si tu frente choca contra cualquier
+  //  estela (incluida la propia). El campo hace wrap toroidal — no hay paredes.
+  //
+  //  El original detecta colisiones leyendo píxeles (windowSurface.get_at).
+  //  Acá lo replicamos con una GRILLA DE OCUPACIÓN del tamaño del canvas
+  //  (lectura O(1); el canvas se pinta en paralelo sólo para mostrar).
+  // ════════════════════════════════════════════════════════════════════
+  const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));               // randint inclusivo (como random.randint)
+
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  // SCREEN_X/SCREEN_Y del original (1280×720) ahora son responsive = tamaño del canvas.
+  let W = 0, H = 0, dpr = 1, scl = 1;                                              // scl = factor de fuente (los px del original eran sobre 1280×720)
+  let grid = new Uint8Array(0);                                                    // ocupación: grid[y*W+x] = 1 si hay estela
+
+  const xper = p => p * W;
+  const yper = p => p * H;
+
+  // Lectura de ocupación con wrap toroidal y truncado tipo Python (floor + módulo positivo).
+  function occ(fx, fy) {
+    let xi = Math.floor(fx), yi = Math.floor(fy);
+    xi = ((xi % W) + W) % W;
+    yi = ((yi % H) + H) % H;
+    return grid[yi * W + xi];
+  }
+  // Estampa un punto de estela (≈ el círculo radio-1 del original): 3×3 en la grilla + cuadradito en canvas.
+  function stamp(x, y, color) {
+    const ix = Math.floor(x), iy = Math.floor(y);
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const xi = ((ix + dx) % W + W) % W, yi = ((iy + dy) % H + H) % H;
+        grid[yi * W + xi] = 1;
+      }
+    }
+    ctx.fillStyle = color;
+    ctx.fillRect(ix - 1, iy - 1, 3, 3);
+  }
+
+  function clearField() {
+    grid.fill(0);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  const barEl = document.getElementById('bar');
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const barH = barEl.offsetHeight;
+    W = Math.max(1, Math.floor(window.innerWidth));
+    H = Math.max(1, Math.floor(window.innerHeight - barH));
+    canvas.width  = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width  = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    scl = Math.min(W / 1280, H / 720);                                            // mantiene el texto adentro como en el original
+    grid = new Uint8Array(W * H);
+    // Cambiar de tamaño invalida la pista; volvemos al menú (la grilla vieja no sirve).
+    backToMenu();
+  }
+  window.addEventListener('resize', resize);
+
+  // ── COLORES (idénticos a Tron.py v1) ──
+  const PLAYER_COLORS = [ [255,100,100], [10,255,155], [225,10,255], [225,155,10] ];
+  const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
+  const randColorInRange = (rmin,rmax,gmin,gmax,bmin,bmax) =>
+    `rgb(${ri(rmin,rmax)},${ri(gmin,gmax)},${ri(bmin,bmax)})`;
+
+  // texto centrado (port de create_text; siempre center en el original). size en px del original → ×scl.
+  function createText(size, content, color, fx, fy) {
+    ctx.font = Math.round(size * scl) + "px 'Segoe UI', system-ui, sans-serif";
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = color;
+    ctx.fillText(content, xper(fx), yper(fy));
+  }
+
+  // ════════════════ PLAYER (port de la clase Player) ════════════════
+  // directions[dir] = [vx, vy,  dx2,dy2,  scoutDx,scoutDy]
+  //   [0,1] = velocidad (px/s, ×deltaT)         [2,3] = look-ahead inmediato (2 px) → muerte / IA
+  //   [4,5] = scout que la IA randomiza (5..50 px) cada 2 s
+  function dirTemplate() {
+    return {
+      0: [0,-150, 0,-2, 0,0],   // arriba
+      1: [150,0, 1,0, 0,0],     // derecha
+      2: [0,150, 0,1, 0,0],     // abajo
+      3: [-150,0, -2,0, 0,0],   // izquierda
+    };
+  }
+
+  class Player {
+    constructor(id, totalplayers, mode) {
+      this.id = id;
+      this.direction = 0;
+      this.directions = dirTemplate();
+      this.mode = mode;
+      this.leftpressed = false;
+      this.rightpressed = false;
+      this.stop = false;
+      this.alive = true;
+      this.aiturn_cdtime = 0.001;
+      this.aiturn_incd = 0;
+      this.dire_cdtime = 2;
+      this.dire_incd = 2;
+
+      const n = totalplayers;
+      const startpos = {
+        0: [ (n < 4 ? 0.75 : 0.8), 0.95 ],
+        1: [ (n < 4 ? 0.25 : 0.2), (n === 4 ? 0.65 : 0.95) ],
+        2: [ (n < 4 ? 0.5  : 0.6), (n === 4 ? 0.85 : 0.95) ],
+        3: [ 0.4, 0.75 ],
+      };
+      this.color = rgb(PLAYER_COLORS[id]);
+      this.x = xper(startpos[id][0]);
+      this.y = yper(startpos[id][1]);
+    }
+
+    // giro manual (botones / mitades de pantalla) — sólo el humano
+    turnLeft()  { this.direction = (this.direction - 1 + 4) % 4; }
+    turnRight() { this.direction = (this.direction + 1) % 4; }
+
+    process(dt) {
+      const d = this.directions;
+
+      if (this.id === 0 || this.mode === 1) {
+        // ── HUMANO ── latch igual que el original: un giro por pulsación.
+        if (!this.leftpressed && keys[this.left])  { this.direction = (this.direction - 1 + 4) % 4; this.leftpressed = true; }
+        if (!this.rightpressed && keys[this.right]) { this.direction = (this.direction + 1) % 4;     this.rightpressed = true; }
+        if (!keys[this.left])  this.leftpressed = false;
+        if (!keys[this.right]) this.rightpressed = false;
+      } else {
+        // ── IA ──
+        this.dire_incd += dt;
+        this.aiturn_incd += dt;
+
+        if (this.dire_incd > this.dire_cdtime) {
+          d[0][5] = ri(-50, -5);
+          d[1][4] = ri(5, 50);
+          d[2][5] = ri(5, 50);
+          d[3][4] = ri(-50, -5);
+          this.dire_incd = 0;
+        }
+
+        // si el frente (2 px) o el scout están ocupados → girar a un lado libre, al azar
+        if (this.aiturn_incd > this.aiturn_cdtime) {
+          const dir = this.direction;
+          if (occ(this.x + d[dir][2], this.y + d[dir][3]) || occ(this.x + d[dir][4], this.y + d[dir][5])) {
+            const dL = (dir - 1 + 4) % 4, dR = (dir + 1) % 4;
+            if (ri(0, 1) === 0 && occ(this.x + d[dL][2], this.y + d[dL][3]) === 0) {
+              this.direction = dL; this.aiturn_incd = 0;
+            } else if (occ(this.x + d[dR][2], this.y + d[dR][3]) === 0) {
+              this.direction = dR; this.aiturn_incd = 0;
+            }
+          }
+        }
+
+        // de vez en cuando (1/1500) un giro espontáneo hacia un lado libre
+        if (this.aiturn_incd > this.aiturn_cdtime) {
+          if (ri(0, 1500) === 0) {
+            const dir = this.direction, dL = (dir - 1 + 4) % 4, dR = (dir + 1) % 4;
+            if (ri(0, 1) === 0 && occ(this.x + d[dL][2], this.y + d[dL][3]) === 0) {
+              this.direction = dL; this.aiturn_incd = 0;
+            } else if (occ(this.x + d[dR][2], this.y + d[dR][3]) === 0) {
+              this.direction = dR; this.aiturn_incd = 0;
+            }
+          }
+        }
+      }
+
+      // wrap toroidal en los bordes (idéntico al original)
+      if (this.x > W) this.x = 0;
+      if (this.x < 0) this.x = W;
+      if (this.y > H) this.y = 0;
+      if (this.y < 0) this.y = H;
+
+      // muerte: si el frente (look-ahead 2 px) está ocupado
+      const dir = this.direction;
+      if (occ(this.x + d[dir][2], this.y + d[dir][3])) { this.alive = false; return; }
+
+      if (!this.stop) {
+        this.x += d[dir][0] * dt;
+        this.y += d[dir][1] * dt;
+      }
+    }
+
+    draw() { stamp(this.x, this.y, this.color); }
+  }
+
+  // ════════════════ DRIVER (menú + estado) ════════════════
+  const gh = {
+    menu: true,
+    option: 0,            // 0 = Start, 1 = N Players, 2 = modo
+    players: 0,           // +2 → 2..4
+    mode: 0,              // 0 = Player vs AI, 1 = Player vs Player
+    keypressed: false,
+  };
+  let players = [];
+
+  function aliveCount() { let n = 0; for (const p of players) if (p.alive) n++; return n; }
+
+  function startGame() {
+    const n = gh.players + 2;
+    clearField();
+    players = [];
+    for (let i = 0; i < n; i++) players.push(new Player(i, n, gh.mode));
+    bindControls();
+    gh.menu = false;
+  }
+  function restart() { startGame(); }
+  function backToMenu() {
+    clearField();
+    players = [];
+    gh.menu = true;
+    gh.keypressed = true;                                                          // evita que una tecla sostenida dispare el menú al instante
+  }
+
+  // mapeo de teclas por jugador (igual que el original): P1 ←/↓, P2 Q/W, P3 O/P, P4 V/B
+  const CONTROLS = [
+    ['ArrowLeft', 'ArrowDown'],
+    ['KeyQ', 'KeyW'],
+    ['KeyO', 'KeyP'],
+    ['KeyV', 'KeyB'],
+  ];
+  function bindControls() {
+    for (const p of players) { p.left = CONTROLS[p.id][0]; p.right = CONTROLS[p.id][1]; }
+  }
+
+  function processMenu() {
+    if (!gh.keypressed) {
+      if (keys.ArrowUp)   { gh.option = (gh.option - 1 + 3) % 3; gh.keypressed = true; }
+      if (keys.ArrowDown) { gh.option = (gh.option + 1) % 3;     gh.keypressed = true; }
+      if (keys.ArrowLeft) {
+        if (gh.option === 1) gh.players = (gh.players - 1 + 3) % 3;
+        if (gh.option === 2) gh.mode    = (gh.mode - 1 + 2) % 2;
+        gh.keypressed = true;
+      }
+      if (keys.ArrowRight) {
+        if (gh.option === 1) gh.players = (gh.players + 1) % 3;
+        if (gh.option === 2) gh.mode    = (gh.mode + 1) % 2;
+        gh.keypressed = true;
+      }
+      if (keys.Enter && gh.option === 0) startGame();                              // como el original: Enter arranca sólo con la opción Start elegida
+    }
+    if (!keys.ArrowLeft && !keys.ArrowRight && !keys.ArrowUp && !keys.ArrowDown) gh.keypressed = false;
+  }
+
+  function drawMenu() {
+    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    // título con color al azar cada frame (parpadeo, igual que randcolor_in_range(100,255,...))
+    createText(150, 'TRON', randColorInRange(100,255,100,255,100,255), 0.5, 0.15);
+    createText(60, 'Enter / ▶ to Start', gh.option === 0 ? 'rgb(255,255,255)' : 'rgb(128,128,128)', 0.5, 0.38);
+    createText(60, (gh.players + 2) + ' Players', gh.option === 1 ? 'rgb(255,255,255)' : 'rgb(128,128,128)', 0.5, 0.5);
+    createText(60, gh.mode === 0 ? 'Player vs AI' : 'Player vs Player', gh.option === 2 ? 'rgb(255,255,255)' : 'rgb(128,128,128)', 0.5, 0.62);
+    createText(60, 'tocá el texto para elegir', 'rgb(75,75,75)', 0.5, 0.85);
+  }
+
+  function drawWinner() {
+    const w = players.find(p => p.alive);
+    if (!w) return;
+    const name = 'Player ' + (w.id + 1);
+    createText(60, name + ' Wins!', w.color, 0.5, 0.5);
+    createText(60, 'Enter / ▶ to Restart', 'rgb(180,180,180)', 0.5, 0.58);
+  }
+
+  // ════════════════ INPUT ════════════════
+  const keys = {};                                                                // e.code → bool
+  function gameOver() { return !gh.menu && aliveCount() <= 1; }
+
+  window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (!gh.menu) {
+      if (e.code === 'Escape') backToMenu();
+      else if (e.code === 'Enter' && gameOver()) restart();
+    }
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Enter'].includes(e.code)) e.preventDefault();
+  });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  // Toque en el canvas: en menú elige según la zona vertical; en juego gira al humano (mitades) o reinicia.
+  canvas.addEventListener('pointerdown', e => {
+    const r = canvas.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / W, fy = (e.clientY - r.top) / H;
+    if (gh.menu) {
+      if (fy < 0.44)      { gh.option = 0; startGame(); }
+      else if (fy < 0.56) { gh.option = 1; gh.players = (gh.players + 1) % 3; }
+      else if (fy < 0.74) { gh.option = 2; gh.mode = (gh.mode + 1) % 2; }
+    } else if (gameOver()) {
+      restart();
+    } else {
+      const p0 = players.find(p => p.id === 0 && p.alive);
+      if (p0) (fx < 0.5 ? p0.turnLeft() : p0.turnRight());
+    }
+  });
+
+  // botones de la barra. pointerdown (no click) para que respondan aun con otro toque activo (estilo BallsWeb).
+  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
+  function menuChangeValue(delta) {
+    if (gh.option === 1) gh.players = (gh.players + delta + 3) % 3;
+    else if (gh.option === 2) gh.mode = (gh.mode + delta + 2) % 2;
+  }
+  function humanTurn(side) {
+    const p0 = players.find(p => p.id === 0 && p.alive);
+    if (p0) (side < 0 ? p0.turnLeft() : p0.turnRight());
+  }
+  tappable(document.getElementById('btnLeft'),  () => { gh.menu ? menuChangeValue(-1) : humanTurn(-1); });
+  tappable(document.getElementById('btnRight'), () => { gh.menu ? menuChangeValue(+1) : humanTurn(+1); });
+  tappable(document.getElementById('btnStart'), () => { gh.menu ? startGame() : (gameOver() && restart()); });
+  tappable(document.getElementById('btnHome'),  () => { if (!gh.menu) backToMenu(); });
+
+  // ════════════════ LOOP ════════════════
+  let lastT = performance.now();
+  function loop(now) {
+    if (typeof now !== 'number') now = performance.now();
+    const dt = Math.min((now - lastT) / 1000, 0.01);                              // deltaT = min(real, 0.01), igual que el original
+    lastT = now;
+
+    if (gh.menu) {
+      processMenu();
+      drawMenu();
+    } else {
+      for (const p of players) {
+        if (!p.alive) continue;
+        p.process(dt);
+        if (p.alive) p.draw();                                                    // estampa estela sólo si sigue vivo tras el chequeo
+      }
+      if (aliveCount() <= 1) {                                                     // game over: frenar a todos y mostrar ganador
+        for (const p of players) p.stop = true;
+        drawWinner();
+      }
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // ── INIT ──
+  resize();
+  loop();
+
+  const hint = document.getElementById('hint');
+  setTimeout(() => hint.style.opacity = '0', 6000);
+  canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
+  </script>
+</body>
+</html>

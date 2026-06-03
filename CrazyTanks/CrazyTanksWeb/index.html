@@ -1,0 +1,1640 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>CrazyTanks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
+  }
+  /* El canvas tiene resolución LÓGICA fija 1280×720 (igual que el pygame original) y se escala con
+     letterbox para entrar en la pantalla — así toda la geometría porcentual y los umbrales de física
+     dependientes de SCREEN_X se comportan idénticos al juego de escritorio. */
+  #c { display: block; position: absolute; top: 0; left: 0; }
+
+  #hint {
+    position: absolute; left: 0; right: 0; top: calc(8px + env(safe-area-inset-top));
+    text-align: center; color: rgba(255,255,255,0.5);
+    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
+    transition: opacity 0.8s; z-index: 5; padding: 0 16px;
+  }
+
+  /* ── Controles en pantalla (touch). En desktop el teclado sigue siendo el camino principal; estos
+     botones quedan disponibles igual. Cada botón es un elemento independiente con su propio pointer
+     capture, así el multi-touch (girar + acelerar al mismo tiempo) funciona. ── */
+  .pad { position: absolute; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 4; display: flex; gap: 8px; }
+  #padL { left: calc(12px + env(safe-area-inset-left)); flex-direction: row; align-items: flex-start; }
+  #padR { right: calc(12px + env(safe-area-inset-right)); align-items: flex-end; }
+  .col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .btn {
+    width: 38px; height: 38px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.08s, transform 0.06s, box-shadow 0.12s, border-color 0.12s;
+  }
+  /* se ilumina al pasar el mouse por encima */
+  .btn:hover { background: rgba(120,200,255,0.16); border-color: rgba(120,200,255,0.6); box-shadow: 0 0 14px rgba(120,200,255,0.6); }
+  .btn:active, .btn.on { background: rgba(120,200,255,0.30); border-color: rgba(120,200,255,0.55); transform: scale(0.93); }
+  .btn svg { display: block; width: 16px; height: 16px; pointer-events: none; }
+  .btn.fire { width: 30px; height: 30px; background: rgba(255,90,60,0.18); border-color: rgba(255,90,60,0.5); position: relative; overflow: hidden; }
+  .btn.fire svg { width: 13px; height: 13px; }
+  .btn.fire:hover { background: rgba(255,90,60,0.32); border-color: rgba(255,90,60,0.8); box-shadow: 0 0 14px rgba(255,90,60,0.65); }
+  .btn.fire:active { background: rgba(255,90,60,0.42); }
+  #cdRing { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
+  /* Palancas (levers): track + knob arrastrable. Vertical = acelerador, horizontal = dirección. */
+  .lever {
+    position: relative; touch-action: none; flex: none;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
+    border-radius: 999px;
+  }
+  .vlever { width: 52px; height: 150px; }
+  .hlever { width: 200px; height: 52px; }
+  .lever .knob {
+    position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; border-radius: 50%;
+    background: rgba(120,200,255,0.28); border: 1px solid rgba(120,200,255,0.55);
+    transform: translate(-50%, -50%); transition: transform 0.13s ease-out;
+    box-shadow: 0 0 10px rgba(120,200,255,0.35);
+  }
+  .lever.dragging .knob { transition: none; background: rgba(120,200,255,0.45); }
+  /* Botones de menú (esquina sup-der): Enter / Esc */
+  #padMenu { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); z-index: 4; display: flex; gap: 8px; }
+  #padMenu .btn { width: 30px; height: 30px; }
+  #padMenu .btn svg { width: 14px; height: 14px; }
+
+  /* Aviso de orientación: el juego es vertical. Se muestra (vía JS) cuando la pantalla está apaisada. */
+  #rotate {
+    position: absolute; inset: 0; z-index: 20; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    background: #05060a; color: rgba(255,255,255,0.85);
+    text-align: center; padding: 24px;
+  }
+  #rotate svg { width: 88px; height: 88px; color: #78c8ff; animation: rotatehint 2.2s ease-in-out infinite; }
+  #rotate p { font-size: 19px; letter-spacing: 0.06em; line-height: 1.5; }
+  @keyframes rotatehint { 0%, 55%, 100% { transform: rotate(0deg); } 25%, 40% { transform: rotate(-90deg); } }
+</style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+  <div id="hint">palancas: acelerar (izq) · dirección (der) · 🔴 disparar · teclado: flechas/WASD + espacio</div>
+
+  <!-- Pad izquierdo: palanca de acelerador (vertical) + disparar -->
+  <div id="padL" class="pad">
+    <div class="lever vlever" id="throttle" aria-label="acelerador"><div class="knob"></div></div>
+    <button class="btn fire" data-k="SPACE" aria-label="disparar"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="7"/></svg><span id="cdRing"></span></button>
+  </div>
+
+  <!-- Pad derecho: palanca de dirección (horizontal, proporcional) -->
+  <div id="padR" class="pad">
+    <div class="lever hlever" id="steer" aria-label="dirección"><div class="knob"></div></div>
+  </div>
+
+  <!-- Aviso: girá el teléfono a horizontal -->
+  <div id="rotate">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="10.5" y1="19" x2="13.5" y2="19" stroke-width="2"/></svg>
+    <p>Girá el teléfono<br>CrazyTanks se juega en horizontal</p>
+  </div>
+
+  <!-- Botón atrás / salir (el menú se opera tocando las opciones directamente) -->
+  <div id="padMenu">
+    <button class="btn" data-k="ESCAPE" aria-label="atrás"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+  </div>
+
+<script>
+// ════════════════════════════════════════════════════════════════════
+//  CRAZYTANKS — port web del juego de carreras. Se juega en LANDSCAPE (teléfono horizontal).
+// ════════════════════════════════════════════════════════════════════
+
+// ── DIMENSIÓN LÓGICA — 1280×720 (16:9, las dimensiones originales de los mapas) ──
+const SCREEN_X = 1280;
+const SCREEN_Y = 720;
+
+// ── TUNING ──
+// El pygame original corría SIN cap de FPS, así que sus incrementos de vel/ang_vel por-frame
+// (vel += 2.5, vel *= 0.9975, etc.) asumían cientos de frames/seg. En el navegador con rAF (~60fps)
+// eso hace que el tanque tarde segundos en acelerar. SIM_FPS es el framerate de referencia: los
+// incrementos se escalan por (deltaT * SIM_FPS), así la respuesta es ágil e INDEPENDIENTE del
+// framerate, manteniendo la misma velocidad terminal. Subilo = más ágil; bajalo = más pesado.
+const SIM_FPS = 200;
+// Multiplicador del giro (jugador + IA): qué tan RÁPIDO llega al giro máximo (respuesta/snappiness).
+const TURN_MULT = 1.5;
+// Tope de la velocidad de giro EFECTIVA. Evita que acumule rotación de más al mantener apretado el giro.
+// ~4 ≈ el giro tope del juego original. Bajalo si querés que doblen más suave. (No afecta el spin de bombas.)
+const ANG_VEL_MAX = 4;
+
+// ── HELPERS DE RESOLUCIÓN / COLOR / GEOMETRÍA (port directo) ──
+const xper = p => p * SCREEN_X;
+const yper = p => p * SCREEN_Y;
+const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));      // randint inclusivo
+const rnd = (a, b) => a + Math.random() * (b - a);                     // uniform
+const clamp255 = v => Math.max(0, Math.min(255, v));
+
+function randcolorGray(mincap, maxcap) { const v = ri(mincap, maxcap); return [v, v, v]; }
+function modifyColor(color, offset)     { return color.map(c => clamp255(c + offset)); }
+function modifyColorPerc(color, factor) { return color.map(c => clamp255(c * factor)); }
+const rgb = c => `rgb(${Math.round(clamp255(c[0]))},${Math.round(clamp255(c[1]))},${Math.round(clamp255(c[2]))})`;
+
+function getangle(p1, p2) { return Math.atan2(p2[1] - p1[1], p2[0] - p1[0]); }
+function getangle2(prevAng, p1, p2) {                                   // wrap continuo cruzando ±π
+  let angle = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]);
+  if (angle - prevAng < -Math.PI) angle += Math.PI * 2;
+  if (angle - prevAng >  Math.PI) angle -= Math.PI * 2;
+  return angle;
+}
+function getdist(p1, p2) { return Math.hypot(p1[0] - p2[0], p1[1] - p2[1]); }
+function rectColision(r1, r2) {
+  return (r1[0] + r1[2] > r2[0] && r1[0] < r2[0] + r2[2] &&
+          r1[1] + r1[3] > r2[1] && r1[1] < r2[1] + r2[3]);
+}
+
+// ── CANVAS ──
+// La pista llena toda la pantalla (escala no-uniforme). Como el juego es horizontal, en el celular
+// apaisado el estiramiento es mínimo. Si la pantalla está vertical se muestra el aviso "girá el teléfono".
+const canvas = document.getElementById('c');
+const mainCtx = canvas.getContext('2d');
+let ctx = mainCtx;                                                     // se intercambia temporalmente al hornear el fondo
+let dpr = 1, scaleX = 1, scaleY = 1, cssW = 0, cssH = 0;
+
+// Fondo estático horneado por pista (piso + deco + meta + paredes + motivos). Se dibuja una vez y se
+// blitea cada frame en vez de re-dibujar cientos de figuras — clave para los FPS en mobile.
+let bgCanvas = null, bgReady = false, bgTrack = -1, bgW = 0, bgH = 0;
+
+function resize() {
+  dpr  = Math.min(window.devicePixelRatio || 1, 2);
+  cssW = window.innerWidth;
+  cssH = window.innerHeight;
+  scaleX = cssW / SCREEN_X;
+  scaleY = cssH / SCREEN_Y;
+  canvas.width  = Math.floor(cssW * dpr);
+  canvas.height = Math.floor(cssH * dpr);
+  canvas.style.width  = cssW + 'px';
+  canvas.style.height = cssH + 'px';
+  document.getElementById('rotate').style.display = (cssH > cssW) ? 'flex' : 'none';
+}
+window.addEventListener('resize', resize);
+
+// ── TEXTO. Fuente arcade Orbitron + glow opcional + caja redondeada. ──
+const FONT_FAMILY = "'Orbitron', 'Segoe UI', sans-serif";
+const B_font = 112, M_font = 48, S_font = 22, RS_font = 14;            // px (Orbitron es más ancha que freesansbold)
+function roundRectPath(x, y, w, h, r) {
+  r = Math.min(r, h/2, w/2);
+  ctx.beginPath();
+  ctx.moveTo(x+r, y); ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r);
+  ctx.arcTo(x, y+h, x, y, r); ctx.arcTo(x, y, x+w, y, r); ctx.closePath();
+}
+function createText(fontPx, content, colorText, colorRect, posx, posy, glow = 0) {
+  content = String(content);
+  const weight = fontPx >= B_font ? 900 : 700;
+  ctx.font = `${weight} ${fontPx}px ${FONT_FAMILY}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.letterSpacing = (fontPx * 0.04).toFixed(1) + 'px';
+  if (colorRect) {                                                     // bgcolor del render de pygame, ahora redondeado
+    const w = ctx.measureText(content).width, pad = fontPx * 0.28;
+    ctx.fillStyle = rgb(colorRect);
+    roundRectPath(posx - w/2 - pad, posy - fontPx*0.62, w + pad*2, fontPx*1.24, fontPx*0.22);
+    ctx.fill();
+  }
+  if (glow > 0) { ctx.shadowColor = rgb(colorText); ctx.shadowBlur = glow; }
+  ctx.fillStyle = rgb(colorText);
+  ctx.fillText(content, posx, posy);
+  ctx.shadowBlur = 0;
+  ctx.letterSpacing = '0px';
+}
+
+// ── PALETAS DE TEMA (estables; el original re-randomizaba los índices 3/4 cada frame = basura: un alloc
+//    de array + 2 randoms por pared por frame, y un parpadeo feo. Acá son fijas y el "brillo" tecno/lava
+//    sale de los motivos animados, no de ruido RGB). theme = track // 2.
+const THEME_WALL  = [[20,110,45], [205,184,120], [236,240,248], [46,78,140], [62,50,54]];
+const THEME_FLOOR = [[58,60,64],  [34,31,16],    [40,42,48],    [10,15,30],  [28,18,16]];  // [0]=ASFALTO (pedido)
+
+// ════════════════ DATOS DE PISTAS (literales inline, port mecánico) ════════════════
+// Paredes: rectángulos [x, y, w, h] por pista.
+const WALL_MAPS = [
+  // 0 PARK
+  [[0,0,xper(0.01),yper(1)],[0,0,xper(1),xper(0.01)],[xper(1)-xper(0.01),0,xper(0.02),yper(1)],[0,yper(1)-xper(0.01),xper(1),xper(0.02)],[xper(0.15),yper(0.25),xper(0.7),yper(0.5)]],
+  // 1 HALLWAYS
+  [[0,0,xper(0.01),yper(1)],[0,0,xper(1),xper(0.01)],[xper(1)-xper(0.01),0,xper(0.02),yper(1)],[0,yper(1)-xper(0.01),xper(1),xper(0.02)],[xper(0.15),yper(0.25),xper(0.02),yper(0.5)],
+   [xper(0.15),yper(0.23),xper(0.7),xper(0.02)],[xper(0.3),yper(0.49),xper(0.7),xper(0.02)],[xper(0.15),yper(0.75),xper(0.7),xper(0.02)]],
+  // 2 MESSY
+  [[0,0,xper(0.01),yper(1)],[0,0,xper(1),xper(0.01)],[xper(1)-xper(0.01),0,xper(0.02),yper(1)],[0,yper(1)-xper(0.01),xper(1),xper(0.02)],[xper(0.15),yper(0.8),xper(0.7),xper(0.02)],
+   [xper(0.1),yper(0.6),xper(0.1),xper(0.05)],[xper(0.12),yper(0.22),xper(0.03),yper(0.2)],[xper(0.34),yper(0.38),xper(0.03),yper(0.4)],[xper(0.28),yper(0.08),xper(0.07),yper(0.15)],
+   [xper(0.49),yper(0.1),xper(0.03),yper(0.35)],[xper(0.52),yper(0.6),xper(0.2),xper(0.03)],[xper(0.71),yper(0.03),xper(0.06),yper(0.56)],[xper(0.83),yper(0.2),xper(0.05),yper(0.59)]],
+  // 3 PORTAL
+  [[-(xper(0.02)),0,xper(0.03),yper(0.4)],[-(xper(0.02)),yper(0.6),xper(0.03),yper(0.4)],[0,0,xper(1),xper(0.01)],[xper(1)-xper(0.01),0,xper(0.03),yper(0.4)],[xper(1)-xper(0.01),yper(0.6),xper(0.03),yper(0.4)],
+   [0,yper(1)-xper(0.01),xper(1),xper(0.02)],[0,yper(0.6),xper(0.12),xper(0.01)],[xper(0.12),yper(0.22),xper(0.01),yper(0.398)],[xper(0.5),0,xper(0.01),yper(0.8)],[xper(0.12),yper(0.22),xper(0.26),xper(0.01)],
+   [xper(0.38),yper(0.22),xper(0.01),yper(0.2)],[xper(0.25),yper(0.6),xper(0.25),xper(0.01)],[xper(0.25),yper(0.4),xper(0.01),yper(0.4)],[xper(0.12),yper(0.785),xper(0.14),xper(0.01)],
+   [xper(0.38),yper(0.77),xper(0.01),yper(0.3)],[xper(0.63),yper(0.2),xper(0.01),yper(0.8)],[xper(0.63),yper(0.2),xper(0.23),xper(0.01)],[xper(0.8),yper(0.4),xper(0.3),xper(0.01)],
+   [xper(0.8),yper(0.4),xper(0.01),yper(0.4)]],
+  // 4 ZIGZAG
+  [[0,0,xper(0.01),yper(1)],[0,0,xper(1),xper(0.01)],[xper(1)-xper(0.01),0,xper(0.02),yper(1)],[0,yper(1)-xper(0.01),xper(1),xper(0.02)],[xper(0.2),yper(0.2),xper(0.6),xper(0.01)],
+   [xper(0.2),yper(0.2),xper(0.01),yper(0.6)],[xper(0.35),yper(0.4),xper(0.01),yper(0.6)],[xper(0.5),yper(0.2),xper(0.01),yper(0.6)],[xper(0.65),yper(0.4),xper(0.01),yper(0.6)],[xper(0.8),yper(0.2),xper(0.01),yper(0.6)]],
+  // 5 SMILEY
+  [[0,0,xper(0.01),yper(1)],[0,0,xper(1),xper(0.01)],[xper(1)-xper(0.01),0,xper(0.02),yper(1)],[0,yper(1)-xper(0.01),xper(1),xper(0.02)],[xper(0.1),yper(0.19),xper(0.2),xper(0.02)],
+   [xper(0.3),yper(0.19),xper(0.02),yper(0.6)],[xper(0.49),0,xper(0.02),yper(0.5)],[xper(0.3),yper(0.79),xper(0.4),xper(0.02)],[xper(0.68),yper(0.19),xper(0.02),yper(0.6)],
+   [xper(0.7),yper(0.19),xper(0.2),xper(0.02)],[xper(0.11),yper(0.45),xper(0.08),xper(0.08)],[xper(0.81),yper(0.45),xper(0.08),xper(0.08)]],
+  // 6 TWAINPORTALS
+  [[-(xper(0.01)),yper(0.15),xper(0.02),yper(0.85)],[-(xper(0.01)),-(xper(0.01)),xper(0.48),xper(0.02)],[xper(1)-xper(0.01),yper(0.15),xper(0.04),yper(0.85)],[0,yper(1)-xper(0.01),xper(0.45),xper(0.06)],
+   [xper(0.55),yper(1)-xper(0.01),xper(0.45),xper(0.04)],[xper(0.55),(-xper(0.01)),xper(0.5),xper(0.02)],[xper(0.15),0,xper(0.01),yper(0.4)],[xper(0.15),yper(0.4),xper(0.2),yper(0.4)],[xper(0.3),yper(0.15),xper(0.25),xper(0.01)],
+   [xper(0.55),0,xper(0.01),yper(0.4)],[xper(0.45),yper(0.25),xper(0.02),yper(0.85)],[xper(0.47),yper(0.4),xper(0.38),xper(0.01)],[xper(0.7),yper(0.15),xper(0.3),xper(0.01)],[xper(0.85),yper(0.4),xper(0.01),yper(0.4)],
+   [xper(0.7),yper(0.57),xper(0.01),yper(0.43)],[xper(0.58),yper(0.57),xper(0.13),xper(0.01)],[xper(0.47),yper(0.8),xper(0.09),xper(0.01)]],
+  // 7 SNAIL
+  [[0,0,xper(0.01),yper(1)],[0,0,xper(1),xper(0.01)],[xper(1)-xper(0.01),0,xper(0.02),yper(1)],[0,yper(1)-xper(0.01),xper(1),xper(0.02)],[xper(0.15),yper(0.24),xper(0.7),xper(0.02)],[xper(0.14),yper(0.24),xper(0.02),yper(0.6)],
+   [xper(0.29),yper(0.5),xper(0.02),yper(0.5)],[xper(0.29),yper(0.5),xper(0.4),xper(0.02)],[xper(0.84),yper(0.24),xper(0.02),yper(0.5)],[xper(0.46),yper(0.74),xper(0.4),xper(0.02)]],
+  // 8 COMBINED
+  [[0,0,xper(0.01),yper(1)],[0,-(xper(0.01)),xper(0.9),xper(0.02)],[xper(1)-xper(0.01),-(xper(0.05)),xper(0.04),yper(1.2)],[0,yper(1)-xper(0.01),xper(0.9),xper(0.03)],[xper(0.2),yper(0.25),xper(0.8),xper(0.01)],
+   [0,yper(0.50),xper(0.4),xper(0.01)],[xper(0.55),yper(0.25),xper(0.01),yper(0.5)],[xper(0.2),yper(0.75),xper(0.6),xper(0.01)],[xper(0.7),yper(0.5),xper(0.2),xper(0.01)],[xper(0.9),yper(0.50),xper(0.01),yper(0.5)],
+   [xper(0.2),yper(0.75),xper(0.01),yper(0.12)],[xper(0.35),yper(0.87),xper(0.01),yper(0.13)],[xper(0.5),yper(0.75),xper(0.01),yper(0.12)],[xper(0.65),yper(0.87),xper(0.01),yper(0.13)],[xper(0.8),yper(0.75),xper(0.01),yper(0.12)]],
+  // 9 BOXES
+  [[0,0,xper(0.01),yper(1)],[0,0,xper(1),xper(0.01)],[xper(1)-xper(0.01),0,xper(0.02),yper(1)],[0,yper(1)-xper(0.01),xper(1),xper(0.02)],[xper(0.15),yper(0.3),xper(0.15),yper(0.2)],[xper(0.31),yper(0.35),xper(0.15),yper(0.2)],
+   [xper(0.47),yper(0.4),xper(0.15),yper(0.2)],[xper(0.63),yper(0.45),xper(0.15),yper(0.2)],[xper(0.5),yper(0.02),xper(0.15),yper(0.2)],[xper(0.1),yper(0.72),xper(0.15),yper(0.2)],[xper(0.65),yper(0.78),xper(0.15),yper(0.2)],[xper(0.75),yper(0.23),xper(0.15),yper(0.2)]],
+];
+
+// Trackpoints (centerline): construidos por loops por pista, igual que el original.
+function buildTrackpointMaps() {
+  const xConst = 0.02, yConst = 0.035;
+  const m = [[], [], [], [], [], [], [], [], [], []];
+
+  // PARK
+  for (let i = 0; i < 30; i++) m[0].push([xper(0.32 + i * xConst), yper(0.13)]);
+  for (let i = 0; i < 22; i++) m[0].push([xper(0.92), yper(0.13 + i * yConst)]);
+  for (let i = 0; i < 42; i++) m[0].push([xper(0.92 - i * xConst), yper(0.87)]);
+  for (let i = 0; i < 22; i++) m[0].push([xper(0.08), yper(0.87 - i * yConst)]);
+  for (let i = 0; i < 12; i++) m[0].push([xper(0.08 + i * xConst), yper(0.13)]);
+
+  // HALLWAYS
+  for (let i = 0; i < 10; i++) m[1].push([xper(0.74 + i * xConst), yper(0.95)]);
+  for (let i = 0; i < 8;  i++) m[1].push([xper(0.92), yper(0.92 - i * yConst)]);
+  for (let i = 0; i < 16; i++) m[1].push([xper(0.92 - i * xConst), yper(0.64)]);
+  for (let i = 0; i < 20; i++) m[1].push([xper(0.6 - i * xConst), yper(0.7)]);
+  for (let i = 0; i < 8;  i++) m[1].push([xper(0.22), yper(0.66 - i * yConst)]);
+  for (let i = 0; i < 16; i++) m[1].push([xper(0.22 + i * xConst), yper(0.37)]);
+  for (let i = 0; i < 20; i++) m[1].push([xper(0.54 + i * xConst), yper(0.43)]);
+  for (let i = 0; i < 8;  i++) m[1].push([xper(0.92), yper(0.4 - i * yConst)]);
+  for (let i = 0; i < 43; i++) m[1].push([xper(0.92 - i * xConst), yper(0.12)]);
+  for (let i = 0; i < 22; i++) m[1].push([xper(0.08), yper(0.15 + i * yConst)]);
+  for (let i = 0; i < 23; i++) m[1].push([xper(0.08 + i * xConst), yper(0.92)]);
+  for (let i = 0; i < 10; i++) m[1].push([xper(0.54 + i * xConst), yper(0.95)]);
+
+  // MESSY
+  for (let i = 0; i < 13; i++) m[2].push([xper(0.96), yper(0.51 + i * yConst)]);
+  for (let i = 0; i < 45; i++) m[2].push([xper(0.94 - i * xConst), yper(0.93)]);
+  for (let i = 0; i < 13; i++) m[2].push([xper(0.04), yper(0.93 - i * yConst)]);
+  for (let i = 0; i < 6;  i++) m[2].push([xper(0.06 + i * xConst), yper(0.51)]);
+  for (let i = 0; i < 10; i++) m[2].push([xper(0.18 + i * xConst), yper(0.51 - i * 0.025)]);
+  for (let i = 0; i < 3;  i++) m[2].push([xper(0.38 + i * xConst), yper(0.28)]);
+  for (let i = 0; i < 15; i++) m[2].push([xper(0.44), yper(0.28 + i * yConst)]);
+  for (let i = 0; i < 18; i++) m[2].push([xper(0.46 + i * xConst), yper(0.77)]);
+  for (let i = 0; i < 20; i++) m[2].push([xper(0.8), yper(0.74 - i * yConst)]);
+  for (let i = 0; i < 8;  i++) m[2].push([xper(0.82 + i * xConst), yper(0.07)]);
+  for (let i = 0; i < 12; i++) m[2].push([xper(0.96), yper(0.1 + i * yConst)]);
+
+  // PORTAL
+  for (let i = 0; i < 12; i++) m[3].push([xper(0.56), yper(0.5 - i * yConst)]);
+  for (let i = 0; i < 14; i++) m[3].push([xper(0.56 + i * xConst), yper(0.075)]);
+  for (let i = 0; i < 6;  i++) m[3].push([xper(0.84 + i * xConst), yper(0.035)]);
+  for (let i = 0; i < 8;  i++) m[3].push([xper(0.96), yper(0.035 + i * yConst)]);
+  for (let i = 0; i < 13; i++) m[3].push([xper(0.96 - i * xConst), yper(0.32)]);
+  for (let i = 0; i < 18; i++) m[3].push([xper(0.7), yper(0.32 + i * yConst)]);
+  for (let i = 0; i < 10; i++) m[3].push([xper(0.72 + i * xConst), yper(0.92)]);
+  for (let i = 0; i < 11; i++) m[3].push([xper(0.9), yper(0.89 - i * yConst)]);
+  for (let i = 0; i < 15; i++) m[3].push([xper(0.92 + i * xConst), yper(0.54)]);
+  for (let i = 0; i < 4;  i++) m[3].push([xper(0 + i * xConst), yper(0.54)]);
+  for (let i = 0; i < 12; i++) m[3].push([xper(0.06), yper(0.51 - i * yConst)]);
+  for (let i = 0; i < 14; i++) m[3].push([xper(0.08 + i * xConst), yper(0.11)]);
+  for (let i = 0; i < 6;  i++) m[3].push([xper(0.36 + i * xConst), yper(0.04)]);
+  for (let i = 0; i < 14; i++) m[3].push([xper(0.46), yper(0.07 + i * yConst)]);
+  for (let i = 0; i < 6;  i++) m[3].push([xper(0.46 - i * xConst), yper(0.55)]);
+  for (let i = 0; i < 7;  i++) m[3].push([xper(0.34), yper(0.55 - i * yConst)]);
+  for (let i = 0; i < 4;  i++) m[3].push([xper(0.34 - i * xConst), yper(0.31)]);
+  for (let i = 0; i < 6;  i++) m[3].push([xper(0.26), yper(0.31)]);
+  for (let i = 0; i < 4;  i++) m[3].push([xper(0.26 - i * xConst), yper(0.31)]);
+  for (let i = 0; i < 12; i++) m[3].push([xper(0.18), yper(0.31 + i * yConst)]);
+  for (let i = 0; i < 5;  i++) m[3].push([xper(0.18 - i * xConst), yper(0.72)]);
+  for (let i = 0; i < 6;  i++) m[3].push([xper(0.08), yper(0.72 + i * yConst)]);
+  for (let i = 0; i < 11; i++) m[3].push([xper(0.1 + i * xConst), yper(0.895)]);
+  for (let i = 0; i < 7;  i++) m[3].push([xper(0.32), yper(0.895 - i * yConst)]);
+  for (let i = 0; i < 6;  i++) m[3].push([xper(0.34 + i * xConst), yper(0.685)]);
+  for (let i = 0; i < 8;  i++) m[3].push([xper(0.46), yper(0.685 + i * yConst)]);
+  for (let i = 0; i < 5;  i++) m[3].push([xper(0.48 + i * xConst), yper(0.93)]);
+  for (let i = 0; i < 11; i++) m[3].push([xper(0.56), yper(0.9 - i * yConst)]);
+
+  // ZIGZAG
+  for (let i = 0; i < 20; i++) m[4].push([xper(0.5 - i * xConst), yper(0.09)]);
+  for (let i = 0; i < 24; i++) m[4].push([xper(0.1), yper(0.13 + i * yConst)]);
+  for (let i = 0; i < 8;  i++) m[4].push([xper(0.12 + i * xConst), yper(0.94)]);
+  for (let i = 0; i < 20; i++) m[4].push([xper(0.28), yper(0.94 - i * yConst)]);
+  for (let i = 0; i < 8;  i++) m[4].push([xper(0.3 + i * xConst), yper(0.27)]);
+  for (let i = 0; i < 19; i++) m[4].push([xper(0.44), yper(0.3 + i * yConst)]);
+  for (let i = 0; i < 7;  i++) m[4].push([xper(0.46 + i * xConst), yper(0.93)]);
+  for (let i = 0; i < 19; i++) m[4].push([xper(0.58), yper(0.9 - i * yConst)]);
+  for (let i = 0; i < 8;  i++) m[4].push([xper(0.6 + i * xConst), yper(0.27)]);
+  for (let i = 0; i < 19; i++) m[4].push([xper(0.74), yper(0.3 + i * yConst)]);
+  for (let i = 0; i < 8;  i++) m[4].push([xper(0.76 + i * xConst), yper(0.93)]);
+  for (let i = 0; i < 24; i++) m[4].push([xper(0.9), yper(0.9 - i * yConst)]);
+  for (let i = 0; i < 19; i++) m[4].push([xper(0.88 - i * xConst), yper(0.09)]);
+
+  // SMILEY
+  m[5].push([xper(0.32), yper(0.93)]);
+  for (let i = 0; i < 13; i++) m[5].push([xper(0.28 - i * xConst), yper(0.93 - i * 0.02)]);
+  for (let i = 0; i < 15; i++) m[5].push([xper(0.04), yper(0.63 - i * yConst)]);
+  for (let i = 0; i < 17; i++) m[5].push([xper(0.06 + i * xConst), yper(0.12)]);
+  for (let i = 0; i < 17; i++) m[5].push([xper(0.4), yper(0.12 + i * yConst)]);
+  for (let i = 0; i < 9;  i++) m[5].push([xper(0.42 + i * xConst), yper(0.69)]);
+  for (let i = 0; i < 18; i++) m[5].push([xper(0.58), yper(0.66 - i * yConst)]);
+  for (let i = 0; i < 18; i++) m[5].push([xper(0.6 + i * xConst), yper(0.06)]);
+  for (let i = 0; i < 17; i++) m[5].push([xper(0.96), yper(0.06 + i * yConst)]);
+  for (let i = 0; i < 13; i++) m[5].push([xper(0.96 - i * xConst), yper(0.69 + i * 0.02)]);
+  for (let i = 0; i < 20; i++) m[5].push([xper(0.7 - i * xConst), yper(0.93)]);
+
+  // TWAINPORTALS
+  for (let i = 0; i < 15; i++) m[6].push([xper(0.09), yper(0.55 - i * yConst)]);
+  for (let i = 0; i < 14; i++) m[6].push([xper(0.07 - i * xConst), yper(0.06)]);
+  for (let i = 0; i < 20; i++) m[6].push([xper(0.99 - i * xConst), yper(0.04)]);
+  for (let i = 0; i < 10; i++) m[6].push([xper(0.59), yper(0.04 + i * yConst)]);
+  for (let i = 0; i < 17; i++) m[6].push([xper(0.61 + i * xConst), yper(0.36 - i * 0.005)]);
+  for (let i = 0; i < 20; i++) m[6].push([xper(0.95), yper(0.27 + i * yConst)]);
+  for (let i = 0; i < 9;  i++) m[6].push([xper(0.935 - i * xConst), yper(0.935)]);
+  for (let i = 0; i < 13; i++) m[6].push([xper(0.775), yper(0.9 - i * yConst)]);
+  for (let i = 0; i < 14; i++) m[6].push([xper(0.755 - i * xConst), yper(0.48)]);
+  for (let i = 0; i < 6;  i++) m[6].push([xper(0.49), yper(0.51 + i * yConst)]);
+  for (let i = 0; i < 8;  i++) m[6].push([xper(0.51 + i * xConst), yper(0.69)]);
+  for (let i = 0; i < 6;  i++) m[6].push([xper(0.65), yper(0.72 + i * yConst)]);
+  for (let i = 0; i < 7;  i++) m[6].push([xper(0.63 - i * xConst), yper(0.9)]);
+  for (let i = 0; i < 5;  i++) m[6].push([xper(0.51), yper(0.9)]);
+  for (let i = 0; i < 13; i++) m[6].push([xper(0.51), yper(0.93 + i * yConst)]);
+  for (let i = 0; i < 2;  i++) m[6].push([xper(0.51), yper(0.02 + i * yConst)]);
+  for (let i = 0; i < 15; i++) m[6].push([xper(0.49 - i * xConst), yper(0.055)]);
+  for (let i = 0; i < 6;  i++) m[6].push([xper(0.21), yper(0.08 + i * yConst)]);
+  for (let i = 0; i < 10; i++) m[6].push([xper(0.23 + i * xConst), yper(0.255)]);
+  for (let i = 0; i < 14; i++) m[6].push([xper(0.43), yper(0.255 + i * yConst)]);
+  for (let i = 0; i < 6;  i++) m[6].push([xper(0.41), yper(0.745 + i * yConst)]);
+  for (let i = 0; i < 17; i++) m[6].push([xper(0.41 - i * xConst), yper(0.92)]);
+  for (let i = 0; i < 10; i++) m[6].push([xper(0.09), yper(0.9 - i * yConst)]);
+
+  // SNAIL
+  for (let i = 0; i < 14; i++) m[7].push([xper(0.51 + i * xConst), yper(0.37)]);
+  for (let i = 0; i < 8;  i++) m[7].push([xper(0.79), yper(0.37 + i * yConst)]);
+  for (let i = 0; i < 20; i++) m[7].push([xper(0.77 - i * xConst), yper(0.62)]);
+  for (let i = 0; i < 7;  i++) m[7].push([xper(0.39), yper(0.65 + i * yConst)]);
+  for (let i = 0; i < 28; i++) m[7].push([xper(0.39 + i * xConst), yper(0.9)]);
+  for (let i = 0; i < 23; i++) m[7].push([xper(0.93), yper(0.87 - i * yConst)]);
+  for (let i = 0; i < 43; i++) m[7].push([xper(0.91 - i * xConst), yper(0.09)]);
+  for (let i = 0; i < 23; i++) m[7].push([xper(0.07), yper(0.12 + i * yConst)]);
+  for (let i = 0; i < 8;  i++) m[7].push([xper(0.07 + i * xConst), yper(0.93)]);
+  for (let i = 0; i < 16; i++) m[7].push([xper(0.21), yper(0.9 - i * yConst)]);
+  for (let i = 0; i < 14; i++) m[7].push([xper(0.23 + i * xConst), yper(0.37)]);
+
+  // COMBINED
+  for (let i = 0; i < 35; i++) m[8].push([xper(0.86 - i * xConst), yper(0.12)]);
+  for (let i = 0; i < 5;  i++) m[8].push([xper(0.16 - i * xConst), yper(0.07)]);
+  for (let i = 0; i < 9;  i++) m[8].push([xper(0.06), yper(0.07 + i * yConst)]);
+  for (let i = 0; i < 20; i++) m[8].push([xper(0.08 + i * xConst), yper(0.37)]);
+  for (let i = 0; i < 8;  i++) m[8].push([xper(0.48), yper(0.37 + i * yConst)]);
+  for (let i = 0; i < 12; i++) m[8].push([xper(0.46 - i * xConst), yper(0.68)]);
+  for (let i = 0; i < 8;  i++) m[8].push([xper(0.22 - i * xConst), yper(0.62)]);
+  for (let i = 0; i < 9;  i++) m[8].push([xper(0.06), yper(0.62 + i * yConst)]);
+  for (let i = 0; i < 5;  i++) m[8].push([xper(0.08 + i * xConst), yper(0.93)]);
+  for (let i = 0; i < 5;  i++) m[8].push([xper(0.14), yper(0.93)]);
+  for (let i = 0; i < 5;  i++) m[8].push([xper(0.18 + i * xConst), yper(0.93)]);
+  for (let i = 0; i < 3;  i++) m[8].push([xper(0.26), yper(0.9 - i * yConst)]);
+  for (let i = 0; i < 4;  i++) m[8].push([xper(0.28 + i * xConst), yper(0.83)]);
+  for (let i = 0; i < 5;  i++) m[8].push([xper(0.32), yper(0.83)]);
+  for (let i = 0; i < 4;  i++) m[8].push([xper(0.36 + i * xConst), yper(0.83)]);
+  for (let i = 0; i < 3;  i++) m[8].push([xper(0.44), yper(0.83 + i * yConst)]);
+  for (let i = 0; i < 4;  i++) m[8].push([xper(0.44 + i * xConst), yper(0.93)]);
+  for (let i = 0; i < 5;  i++) m[8].push([xper(0.48), yper(0.93)]);
+  for (let i = 0; i < 3;  i++) m[8].push([xper(0.52 + i * xConst), yper(0.93)]);
+  for (let i = 0; i < 3;  i++) m[8].push([xper(0.56), yper(0.9 - i * yConst)]);
+  for (let i = 0; i < 4;  i++) m[8].push([xper(0.58 + i * xConst), yper(0.83)]);
+  for (let i = 0; i < 5;  i++) m[8].push([xper(0.62), yper(0.83)]);
+  for (let i = 0; i < 3;  i++) m[8].push([xper(0.66 + i * xConst), yper(0.83)]);
+  for (let i = 0; i < 3;  i++) m[8].push([xper(0.72), yper(0.83 + i * yConst)]);
+  for (let i = 0; i < 4;  i++) m[8].push([xper(0.72 + i * xConst), yper(0.93)]);
+  for (let i = 0; i < 5;  i++) m[8].push([xper(0.76), yper(0.93)]);
+  for (let i = 0; i < 3;  i++) m[8].push([xper(0.8 + i * xConst), yper(0.93)]);
+  for (let i = 0; i < 10; i++) m[8].push([xper(0.86), yper(0.93 - i * yConst)]);
+  for (let i = 0; i < 12; i++) m[8].push([xper(0.84 - i * xConst), yper(0.61)]);
+  for (let i = 0; i < 7;  i++) m[8].push([xper(0.62), yper(0.57 - i * yConst)]);
+  for (let i = 0; i < 16; i++) m[8].push([xper(0.64 + i * xConst), yper(0.36)]);
+  for (let i = 0; i < 29; i++) m[8].push([xper(0.96), yper(0.36 + i * yConst)]);
+  for (let i = 0; i < 3;  i++) m[8].push([xper(0.96), yper(0.02 + i * yConst)]);
+  for (let i = 0; i < 5;  i++) m[8].push([xper(0.96 - i * xConst), yper(0.12)]);
+
+  // BOXES
+  for (let i = 0; i < 20; i++) m[9].push([xper(0.7 - i * xConst), yper(0.72)]);
+  for (let i = 0; i < 13; i++) m[9].push([xper(0.3 - i * xConst), yper(0.72 - i * 0.02)]);
+  for (let i = 0; i < 7;  i++) m[9].push([xper(0.06), yper(0.44 - i * yConst)]);
+  for (let i = 0; i < 15; i++) m[9].push([xper(0.08 + i * xConst), yper(0.22)]);
+  for (let i = 0; i < 15; i++) m[9].push([xper(0.38 + i * xConst), yper(0.22 + i * 0.01)]);
+  for (let i = 0; i < 10; i++) m[9].push([xper(0.68), yper(0.37 - i * yConst)]);
+  for (let i = 0; i < 13; i++) m[9].push([xper(0.7 + i * xConst), yper(0.05)]);
+  for (let i = 0; i < 20; i++) m[9].push([xper(0.96), yper(0.05 + i * yConst)]);
+  for (let i = 0; i < 12; i++) m[9].push([xper(0.94 - i * xConst), yper(0.72)]);
+
+  return m;
+}
+const TRACKPOINT_MAPS = buildTrackpointMaps();
+
+// finishlines por pista (port directo de la tabla del original)
+const FINISHLINES = [
+  [yper(0.15), xper(0.0135), yper(0.12), xper(0.006), xper(0.012), xper(0.00625)],
+  [yper(0.2),  xper(0.0135), yper(0.2),  xper(0.006), xper(0.012), xper(0.00625)],
+  [xper(0.1),  yper(0.013),  xper(0.1),  yper(0.012), xper(0.00725)],
+  [xper(0.06), yper(0.013),  xper(0.06), yper(0.012), xper(0.00725)],
+  [yper(0.11), xper(0.013),  yper(0.11), xper(0.006), xper(0.012), xper(0.00625)],
+  [yper(0.11), xper(0.013),  yper(0.11), xper(0.006), xper(0.012), xper(0.00625)],
+  [xper(0.1),  yper(0.013),  xper(0.08), yper(0.012), xper(0.00725)],
+  [yper(0.13), xper(0.0135), yper(0.12), xper(0.006), xper(0.012), xper(0.00625)],
+  [yper(0.13), xper(0.0135), yper(0.12), xper(0.006), xper(0.012), xper(0.00625)],
+  [yper(0.13), xper(0.0135), yper(0.12), xper(0.006), xper(0.012), xper(0.00625)],
+];
+
+// posiciones de salida por pista/tanque [x, y, ang]
+function startposFor(track, id) {
+  const SP = [
+    [[xper(0.25),yper(0.07),0],[xper(0.21),yper(0.11),0],[xper(0.25),yper(0.15),0],[xper(0.21),yper(0.19),0]],
+    [[xper(0.68),yper(0.83),0],[xper(0.64),yper(0.87),0],[xper(0.68),yper(0.91),0],[xper(0.64),yper(0.95),0]],
+    [[xper(0.97),yper(0.4),Math.PI/2],[xper(0.95),yper(0.34),Math.PI/2],[xper(0.93),yper(0.4),Math.PI/2],[xper(0.91),yper(0.34),Math.PI/2]],
+    [[xper(0.54),yper(0.57),-Math.PI/2],[xper(0.56),yper(0.63),-Math.PI/2],[xper(0.58),yper(0.57),-Math.PI/2],[xper(0.6),yper(0.63),-Math.PI/2]],
+    [[xper(0.56),yper(0.05),Math.PI],[xper(0.6),yper(0.09),Math.PI],[xper(0.56),yper(0.13),Math.PI],[xper(0.6),yper(0.17),Math.PI]],
+    [[xper(0.36),yper(0.86),Math.PI],[xper(0.4),yper(0.89),Math.PI],[xper(0.36),yper(0.92),Math.PI],[xper(0.4),yper(0.95),Math.PI]],
+    [[xper(0.05),yper(0.65),-Math.PI/2],[xper(0.07),yper(0.72),-Math.PI/2],[xper(0.09),yper(0.65),-Math.PI/2],[xper(0.11),yper(0.72),-Math.PI/2]],
+    [[xper(0.46),yper(0.32),0],[xper(0.42),yper(0.36),0],[xper(0.46),yper(0.4),0],[xper(0.42),yper(0.44),0]],
+    [[xper(0.9),yper(0.07),Math.PI],[xper(0.94),yper(0.11),Math.PI],[xper(0.9),yper(0.15),Math.PI],[xper(0.94),yper(0.19),Math.PI]],
+    [[xper(0.75),yper(0.72),Math.PI],[xper(0.79),yper(0.72),Math.PI],[xper(0.83),yper(0.72),Math.PI],[xper(0.87),yper(0.72),Math.PI]],
+  ];
+  return SP[track][id];
+}
+
+const TANK_COLORS = [[150,0,0],[50,50,255],[75,0,75],[200,155,0]];
+const TANK_CONTROLS = [['UP','DOWN','LEFT','RIGHT','SPACE'], ['W','S','A','D','LCTRL']];
+const TRACK_NAMES = ['Park','Hallways','Messy','Portal','Zig Zag','Smiley','Twain Portals','Snail','Combined','Boxes'];
+const COLOR_NAMES = ['Red','Blue','Purple','Yellow'];
+
+// ════════════════ ESTADO GLOBAL + LISTAS DE SPRITES ════════════════
+let deltaT = 0;
+const keys = {};
+let sprites = [], trackpoints = [], walls = [], tanks = [], bombs = [];
+
+function addSprite(s) { sprites.push(s); return s; }
+function removeFromList(arr, item) { const i = arr.indexOf(item); if (i >= 0) arr.splice(i, 1); }
+
+// ════════════════ TANK ════════════════
+class Tank {
+  constructor(i, playermode, track, racelength, difficulty) {
+    this.id = i;
+    this.radius = xper(0.01);
+    this.vel = 0; this.ang_vel = 0;
+    this.shoot_cooling = 0;
+    this.lap_progress = 0; this.pre_lap_progress = 0;
+    this.lap_checkpoint = 0; this.laps = 0;
+    this.track = track; this.rank = 0; this.racetime = 0;
+    this.racelength = racelength === 0 ? 10 : racelength === 1 ? 20 : 40;
+    this.start = false; this.pause = false; this.finished = false;
+    this.wrongway = false;
+    this.wrongwayalert_timer = 1; this.wrongwayalert_cooling = 0; this.wrongwayalert_showing = 0;
+    this.ai = this.id === 0 ? false : (this.id === 1 && playermode === 1) ? false : true;
+    this.ai_difficulty = difficulty;
+    this.ai_timer = 1; this.ai_cooling = 1; this.ai_acel = 0; this.ai_turn = 0; this.ai_shoot = 0;
+    this.showhitbox = false;
+
+    [this.start_x, this.start_y, this.start_ang] = startposFor(this.track, this.id);
+    this.x = this.start_x; this.y = this.start_y; this.ang = this.start_ang;
+    this.color = TANK_COLORS[this.id];
+
+    if (!this.ai) [this.forward, this.reverse, this.left, this.right, this.shoot] = TANK_CONTROLS[this.id];
+
+    tanks.push(this);
+  }
+
+  process() {
+    if (!(this.start && !this.pause)) return;
+
+    this.pre_lap_progress = this.lap_progress;
+    this.shoot_cooling = Math.max(this.shoot_cooling - deltaT, 0);
+    const fs = deltaT * SIM_FPS;                                       // factor de compensación de framerate
+
+    if (!this.finished) { this.rank = tanks.length; this.racetime += deltaT; }
+
+    if (!this.ai) {
+      // Dirección: teclado da ±1 (full); la palanca (sólo jugador 1) suma su valor PROPORCIONAL.
+      let steer = (keys[this.right] ? 1 : 0) - (keys[this.left] ? 1 : 0);
+      let fwd = keys[this.forward], rev = keys[this.reverse];
+      if (this.id === 0) {                                             // el jugador 1 también maneja con las palancas
+        steer += lever.steer;
+        if (lever.throttle > 0.25) fwd = true;
+        else if (lever.throttle < -0.25) rev = true;
+      }
+      steer = Math.max(-1, Math.min(1, steer));
+      if (fwd) this.vel += 2.5 * fs;
+      if (rev) this.vel -= 1.5 * fs;
+      this.ang_vel += 0.2 * fs * TURN_MULT * steer;                    // giro proporcional a la palanca/tecla
+      if (keys[this.shoot] && this.shoot_cooling === 0) {
+        addSprite(new Bomb(this.color, this.radius, this.x, this.y, this.ang, this.vel));
+        this.shoot_cooling = 2;
+      }
+    } else {
+      this.ai_cooling += deltaT;
+      if (this.ai_cooling > this.ai_timer) {
+        const d = this.ai_difficulty;
+        this.ai_acel  = d === 0 ? rnd(2,2.15) : d === 1 ? rnd(2.15,2.35) : d === 2 ? rnd(2.35,2.5) : rnd(2.5,2.65);
+        this.ai_turn  = d === 0 ? rnd(0.1,0.125) : d === 1 ? rnd(0.125,0.175) : d === 2 ? rnd(0.175,0.2) : rnd(0.2,0.225);
+        this.ai_shoot = d === 0 ? ri(0,19) : d === 1 ? ri(0,9) : d === 2 ? ri(0,4) : ri(0,1);
+        this.ai_cooling = 0;
+      }
+    }
+
+    let closest_point = null, closest_dist = xper(0.3);
+
+    if (trackpoints.length) {
+      for (const point of trackpoints) {
+        const point_dist = getdist([this.x, this.y], [point.x, point.y]);
+        if (point_dist < closest_dist) { closest_dist = point_dist; closest_point = point; }
+      }
+
+      if (closest_point) {
+        closest_point.color = modifyColorPerc(this.color, 1.5);
+        this.lap_progress = closest_point.id * 100 / trackpoints.length;
+
+        if (this.ai) {
+          const target_point = trackpoints[(closest_point.id + 8) % trackpoints.length];
+          target_point.color = [0, 150, 0];
+          const point_ang = getangle2(this.ang, [this.x, this.y], [target_point.x, target_point.y]);
+
+          if (point_ang - this.ang > -Math.PI/12 && point_ang - this.ang < Math.PI/12)
+            this.vel += (this.finished ? this.ai_acel * 0.6 : this.ai_acel) * fs;
+          if (point_ang < this.ang) this.ang_vel -= this.ai_turn * fs * TURN_MULT;
+          if (point_ang > this.ang) this.ang_vel += this.ai_turn * fs * TURN_MULT;
+          if (this.ai_shoot === 0 && this.shoot_cooling === 0 && !this.finished) {
+            addSprite(new Bomb(this.color, this.radius, this.x, this.y, this.ang, this.vel));
+            this.shoot_cooling = 2;
+          }
+        }
+      }
+    }
+
+    // Integración (umbrales por SCREEN_X — a 1280 cae en la rama >=1000)
+    // El giro efectivo se topea en ANG_VEL_MAX → maniobra ágil sin acumular rotación de más. El valor
+    // crudo de ang_vel NO se topea, así el spin-out de las bombas (±300) sigue siendo violento.
+    const turnRate = Math.max(-ANG_VEL_MAX, Math.min(ANG_VEL_MAX, this.ang_vel));
+    this.ang += SCREEN_X >= 1000 ? turnRate * deltaT : turnRate * xper(0.0017) * deltaT;
+    const mv = SCREEN_X >= 1400 ? deltaT : SCREEN_X >= 1000 ? xper(0.0007) * deltaT : xper(0.0003) * deltaT;
+    this.x += Math.cos(this.ang) * this.vel * mv;
+    this.y += Math.sin(this.ang) * this.vel * mv;
+    // decay multiplicativo, también compensado por framerate (mantiene la misma velocidad terminal)
+    this.ang_vel *= Math.pow(SCREEN_X >= 1000 ? 0.95 : SCREEN_X >= 500 ? 0.92 : 0.9, fs);
+    this.vel *= Math.pow(SCREEN_X >= 1000 ? 0.9975 : 0.999, fs);
+
+    if (this.ang > Math.PI*2 || this.ang < -Math.PI*2) this.ang = 0;
+    if (this.x > SCREEN_X + this.radius) this.x = 0 - this.radius;
+    if (this.x < 0 - this.radius) this.x = SCREEN_X + this.radius;
+    if (this.y > SCREEN_Y + this.radius) this.y = 0 - this.radius;
+    if (this.y < 0 - this.radius) this.y = SCREEN_Y + this.radius;
+
+    if (this.lap_progress > 0 && this.lap_progress < 5) this.lap_checkpoint = 1;
+    if (this.lap_progress > 95 && this.lap_progress < 100 && this.lap_checkpoint === 1) this.lap_checkpoint = 2;
+    if (this.lap_progress === 0) {
+      if (this.lap_checkpoint === 2 && !this.finished) this.laps += 1;
+      this.lap_checkpoint = 0;
+    }
+
+    for (const tank of tanks) {
+      if (tank === this) continue;
+      if (!this.finished && !tank.finished) {
+        if (rectColision([tank.x-tank.radius*0.75, tank.y-tank.radius*0.75, tank.radius*1.5, tank.radius*1.5],
+                          [this.x-this.radius*0.75, this.y-this.radius*0.75, this.radius*1.5, this.radius*1.5])) {
+          const hit_ang = getangle([this.x, this.y], [tank.x, tank.y]);
+          this.x -= Math.cos(hit_ang) * 2;
+          this.y -= Math.sin(hit_ang) * 2;
+          this.vel *= 0.9;
+          tank.x += Math.cos(hit_ang) * 2;
+          tank.y += Math.sin(hit_ang) * 2;
+        }
+        if (this.laps > tank.laps) this.rank -= 1;
+        else if (this.laps === tank.laps && this.lap_progress > tank.lap_progress && this.lap_checkpoint !== 0) this.rank -= 1;
+        else if (this.laps === tank.laps && this.lap_progress <= tank.lap_progress && tank.lap_checkpoint === 0) this.rank -= 1;
+      }
+    }
+
+    if (closest_point !== null && closest_point.id !== 0) {
+      if (this.lap_progress < this.pre_lap_progress) this.wrongway = true;
+      if (this.lap_progress > this.pre_lap_progress) this.wrongway = false;
+    }
+
+    if (this.laps === this.racelength) { this.finished = true; this.ai = true; }
+  }
+
+  draw() {
+    const r = this.radius, fin = this.finished;
+
+    // sombra suave debajo del tanque → profundidad
+    ctx.save();
+    ctx.globalAlpha = 0.22; ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(this.x + r*0.12, this.y + r*0.22, r*1.05, r*0.92, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+
+    paintTank(this.x, this.y, this.ang, r, this.color, 1, fin);
+
+    if (this.showhitbox) strokeRect(this.x-r*0.75, this.y-r*0.75, r*1.5, r*1.5, [255,255,0]);
+
+    const rankFont = SCREEN_X < 1000 ? RS_font : S_font;
+    if (this.racetime > 1) {
+      const rk = this.rank === 1 ? '1st' : this.rank === 2 ? '2nd' : this.rank === 3 ? '3rd' : '4th';
+      createText(rankFont, `${rk} - ${Math.min(this.laps+1, this.racelength)}/${this.racelength}`, modifyColor(this.color,100), modifyColor(this.color,-50),
+        xper(0.07 + (this.rank-1)*0.135), yper(0.04));
+    }
+    if (fin) {
+      const rk = this.rank === 1 ? '1st!' : this.rank === 2 ? '2nd!' : this.rank === 3 ? '3rd' : '4th';
+      createText(rankFont, rk, modifyColor(this.color,150), null, this.x, this.y - r*2, 10);
+    }
+
+    if (this.wrongway) {
+      if (!this.pause) this.wrongwayalert_cooling += deltaT;
+      if (this.wrongwayalert_cooling > this.wrongwayalert_timer) {
+        createText(rankFont, 'Wrong Way!', modifyColor(this.color,150), null, this.x, this.y + r*1.5, 8);
+        if (!this.pause) this.wrongwayalert_showing += deltaT;
+        if (this.wrongwayalert_showing > this.wrongwayalert_timer) { this.wrongwayalert_cooling = 0; this.wrongwayalert_showing = 0; }
+      }
+    }
+  }
+}
+
+// ════════════════ BOMB ════════════════
+class Bomb {
+  constructor(tankColor, tankRadius, tankX, tankY, tankAng, tankVel) {
+    this.color = tankColor; this.radius = tankRadius * 0.3;
+    this.x = tankX; this.y = tankY; this.ang = tankAng;
+    this.vel = Math.max(tankVel * 2, 1000);
+    this.pause = false;
+    bombs.push(this);
+  }
+  process() {
+    if (this.pause) return;
+    this.x += Math.cos(this.ang) * this.vel * deltaT;
+    this.y += Math.sin(this.ang) * this.vel * deltaT;
+
+    for (const tank of tanks) {
+      if (tank.color !== this.color && !tank.finished &&
+          rectColision([this.x-this.radius*0.75, this.y-this.radius*0.75, this.radius*1.5, this.radius*1.5],
+                        [tank.x-tank.radius*0.75, tank.y-tank.radius*0.75, tank.radius*1.5, tank.radius*1.5])) {
+        if (ri(0,1) === 0) tank.ang_vel -= 300; else tank.ang_vel += 300;
+        tank.vel *= 0.1;
+        removeFromList(bombs, this); removeFromList(sprites, this);
+        return;
+      }
+    }
+    if (this.x > SCREEN_X+this.radius || this.x < 0-this.radius || this.y > SCREEN_Y+this.radius || this.y < 0-this.radius) {
+      removeFromList(bombs, this); removeFromList(sprites, this);
+    }
+  }
+  draw() {
+    const tx = Math.cos(this.ang), ty = Math.sin(this.ang), r = this.radius;
+    ctx.save();
+    // estela
+    for (let t = 4; t >= 1; t--) {
+      ctx.globalAlpha = 0.14 * (1 - t/5);
+      drawCircle(this.x - tx*r*t*1.5, this.y - ty*r*t*1.5, r*(1.1 - t*0.12), modifyColorPerc(this.color, 1.4));
+    }
+    // glow
+    ctx.globalAlpha = 0.35;
+    drawCircle(this.x, this.y, r*2.4, modifyColorPerc(this.color, 1.6));
+    ctx.globalAlpha = 1;
+    drawCircle(this.x, this.y, r, modifyColorPerc(this.color, 1.6));
+    drawCircle(this.x, this.y, r*0.5, [255, 255, 230]);                // núcleo brillante
+    ctx.restore();
+  }
+}
+
+// ════════════════ WALL ════════════════
+class Wall {
+  constructor(i, track, color) {
+    this.id = i; this.track = track; this.color = color;
+    [this.x, this.y, this.width, this.height] = WALL_MAPS[this.track][this.id];
+    walls.push(this);
+  }
+  process() {
+    for (const tank of tanks) {
+      if (!tank.finished && rectColision([this.x, this.y, this.width, this.height],
+          [tank.x-tank.radius*0.75, tank.y-tank.radius*0.75, tank.radius*1.5, tank.radius*1.5])) {
+        const wleft   = Math.abs(tank.x + tank.radius*1.5 - this.x);
+        const wright  = Math.abs(tank.x - tank.radius*1.5 - (this.x + this.width));
+        const wtop    = Math.abs(tank.y + tank.radius*1.5 - this.y);
+        const wbottom = Math.abs(tank.y - tank.radius*1.5 - (this.y + this.height));
+        const wclosest = Math.min(wleft, wright, wtop, wbottom);
+        if (wclosest === wleft)   tank.x = this.x - tank.radius*0.75;
+        if (wclosest === wright)  tank.x = this.x + this.width + tank.radius*0.75;
+        if (wclosest === wtop)    tank.y = this.y - tank.radius*0.75;
+        if (wclosest === wbottom) tank.y = this.y + this.height + tank.radius*0.75;
+        tank.vel *= 0.95;
+      }
+    }
+  }
+  draw() {
+    if (bgReady) return;                                               // ya está en el fondo horneado
+    const col = THEME_WALL[this.color];
+    fillRect(this.x, this.y, this.width, this.height, col);
+    decorateWall(this);                                                // motivos temáticos (árboles/cactus/cubos/lava/…)
+    // bevel: highlight arriba/izquierda + borde oscuro → las paredes leen como volumen
+    drawLine([this.x, this.y + 0.5], [this.x + this.width, this.y + 0.5], modifyColorPerc(col, 1.45), 1);
+    drawLine([this.x + 0.5, this.y], [this.x + 0.5, this.y + this.height], modifyColorPerc(col, 1.25), 1);
+    strokeRect(this.x + 0.5, this.y + 0.5, this.width - 1, this.height - 1, modifyColorPerc(col, 0.45), 1);
+  }
+}
+
+// ════════════════ TRACKPOINT ════════════════
+class TrackPoint {
+  constructor(i, track) {
+    this.id = i; this.track = track;
+    this.color = [50, 50, 50]; this.show = false;
+    [this.x, this.y] = TRACKPOINT_MAPS[this.track][this.id];
+    trackpoints.push(this);
+  }
+  process() {}
+  draw() {
+    if (this.show) drawCircle(this.x, this.y, xper(0.005), this.color);
+    this.color = [50, 50, 50];
+    if (bgReady) return;                                               // meta + largada ya están en el fondo horneado
+
+    // Bandera de meta/salida: damero que llena la banda completa y abarca TODA la raya (largo 2*fl[0]).
+    const fl = FINISHLINES[this.track];
+    if (this.id === 0) {
+      const W = [255, 255, 255];
+      if ([0,1,4,5,7,8,9].includes(this.track)) {                      // meta VERTICAL (la raya corre en y; ancho de banda = fl[1])
+        const x0 = this.x - fl[1], len = 2*fl[0], top = this.y - fl[0];
+        const sq = fl[1] / 2, rows = Math.max(1, Math.round(len / sq)), cell = len / rows;
+        for (let r = 0; r < rows; r++)
+          for (let c = 0; c < 2; c++)
+            if ((r + c) % 2 === 0) fillRect(x0 + c*sq, top + r*cell, sq, cell, W);
+        drawLine([this.x, top], [this.x, top + len], W, 2);
+        drawLine([x0, top], [x0, top + len], W, 2);
+      } else {                                                         // meta HORIZONTAL (la raya corre en x; alto de banda = 2*fl[1])
+        const y0 = this.y - fl[1], len = 2*fl[0], left = this.x - fl[0];
+        const sq = fl[1], cols = Math.max(1, Math.round(len / sq)), cell = len / cols;
+        for (let c = 0; c < cols; c++)
+          for (let r = 0; r < 2; r++)
+            if ((c + r) % 2 === 0) fillRect(left + c*cell, y0 + r*sq, cell, sq, W);
+        drawLine([left, this.y + fl[1]], [left + len, this.y + fl[1]], W, 2);
+        drawLine([left, this.y - fl[1]], [left + len, this.y - fl[1]], W, 2);
+      }
+    }
+
+    if (this.id === trackpoints.length - 1) {
+      for (const tank of tanks) {
+        const sx = tank.start_x, sy = tank.start_y, r = tank.radius, W = [255,255,255];
+        if (tank.start_ang === 0) {
+          drawLine([sx+r, sy-r], [sx+r, sy+r], W, 2);
+          drawLine([sx+r/2, sy+r], [sx+r, sy+r], W, 2);
+          drawLine([sx+r/2, sy-r], [sx+r, sy-r], W, 2);
+        }
+        if (tank.start_ang === Math.PI) {
+          drawLine([sx-r, sy-r], [sx-r, sy+r], W, 2);
+          drawLine([sx-r/2, sy+r], [sx-r, sy+r], W, 2);
+          drawLine([sx-r/2, sy-r], [sx-r, sy-r], W, 2);
+        }
+        if (tank.start_ang === Math.PI/2) {
+          drawLine([sx-r, sy+r], [sx+r, sy+r], W, 2);
+          drawLine([sx-r, sy+r], [sx-r, sy+r/2], W, 2);
+          drawLine([sx+r, sy+r], [sx+r, sy+r/2], W, 2);
+        }
+        if (tank.start_ang === -Math.PI/2) {
+          drawLine([sx-r, sy-r], [sx+r, sy-r], W, 2);
+          drawLine([sx-r, sy-r], [sx-r, sy-r/2], W, 2);
+          drawLine([sx+r, sy-r], [sx+r, sy-r/2], W, 2);
+        }
+      }
+    }
+  }
+}
+
+// ════════════════ MAIN HANDLER (menús + estado) ════════════════
+const MAP_COUNTS = [[5,128],[8,204],[13,163],[19,255],[10,203],[12,157],[17,257],[10,204],[15,264],[12,125]];
+
+class MainHandler {
+  constructor() {
+    this.menu = true; this.menulevel = 0; this.option = 0;
+    this.playermode = 0; this.laps = 1; this.difficulty = 1; this.track = 0;
+    this.choose_option = [0,1,2];
+    this.keypressed = false; this.f1_pressed = false; this.f2_pressed = false;
+    this.tournament = false;
+    this.confirmQuit = false;                                          // pide confirmación antes de salir al menú
+    this.tank_points = [0,0,0,0]; this.tank_times = [0,0,0,0];
+  }
+
+  process() {
+    [this.nWalls, this.nTrackpoints] = MAP_COUNTS[this.track];
+
+    if (this.menu) {
+      if (this.menulevel === 0) this.choose_option = [0,1,2];
+      if (this.menulevel === 1 && !this.tournament) this.choose_option = [0,1,2,3];
+
+      if (!this.keypressed) {
+        if (keys.UP)   { this.option = (this.option - 1 + this.choose_option.length) % this.choose_option.length; this.keypressed = true; }
+        if (keys.DOWN) { this.option = (this.option + 1) % this.choose_option.length; this.keypressed = true; }
+        if (keys.LEFT) {
+          if (this.menulevel === 1) {
+            if (this.option === 0) this.playermode = (this.playermode - 1 + 2) % 2;
+            if (this.option === 1) this.laps = (this.laps - 1 + 3) % 3;
+            if (this.option === 2) this.difficulty = (this.difficulty - 1 + 4) % 4;
+            if (this.option === 3) this.track = (this.track - 1 + 10) % 10;
+          }
+          this.keypressed = true;
+        }
+        if (keys.RIGHT) {
+          if (this.menulevel === 1) {
+            if (this.option === 0) this.playermode = (this.playermode + 1) % 2;
+            if (this.option === 1) this.laps = (this.laps + 1) % 3;
+            if (this.option === 2) this.difficulty = (this.difficulty + 1) % 4;
+            if (this.option === 3) this.track = (this.track + 1) % 10;
+          }
+          this.keypressed = true;
+        }
+        if (keys.RETURN) {
+          if (this.menulevel === 0) this.pickOption0(this.option);
+          else if (this.menulevel === 1) this.startRace();
+          this.keypressed = true;
+        }
+        if (keys.ESCAPE) {
+          if (this.menulevel === 1) {
+            this.menulevel = 0; this.option = this.tournament ? 1 : 0;
+            this.playermode = 0; this.laps = 1; this.difficulty = 1; this.track = 0;
+            this.keypressed = true;
+          }
+          // menulevel 0 ESC = quit (no-op en web)
+        }
+      }
+      if (!keys.LEFT && !keys.RIGHT && !keys.UP && !keys.DOWN && !keys.ESCAPE && !keys.RETURN) this.keypressed = false;
+
+    } else {
+      if (!this.keypressed) {
+        if (!this.confirmQuit && keys.ESCAPE) {
+          this.confirmQuit = true; this.keypressed = true;             // ESC abre el cartel de confirmación
+        } else if (this.confirmQuit && keys.ESCAPE) {
+          this.confirmQuit = false; this.keypressed = true;            // ESC de nuevo = cancelar (seguir jugando)
+        } else if (this.confirmQuit && keys.RETURN) {                  // ENTER = confirmar salida al menú
+          this.confirmExit();
+          this.keypressed = true;
+        }
+      }
+      if (!this.f1_pressed && keys.F1) { for (const t of tanks) t.showhitbox = !t.showhitbox; this.f1_pressed = true; }
+      if (!this.f2_pressed && keys.F2) { for (const p of trackpoints) p.show = !p.show; this.f2_pressed = true; }
+      if (!keys.F1) this.f1_pressed = false;
+      if (!keys.F2) this.f2_pressed = false;
+      if (!keys.ESCAPE && !keys.RETURN) this.keypressed = false;
+    }
+  }
+
+  // — acciones reutilizables (teclado y toque comparten estas) —
+  pickOption0(opt) {                                                   // menulevel 0: elegir New Race / Tournament / Exit
+    this.option = opt;
+    if (opt === 0) { this.menulevel = 1; this.tournament = false; }
+    if (opt === 1) { this.menulevel = 1; this.tournament = true; this.option = 0; }
+    // opt 2 = Exit (no-op en web)
+  }
+  startRace() {                                                        // menulevel 1: arrancar la carrera
+    const [nW, nT] = MAP_COUNTS[this.track];
+    for (let i = 0; i < nT; i++) addSprite(new TrackPoint(i, this.track));
+    for (let i = 0; i < nW; i++) addSprite(new Wall(i, this.track, Math.floor(this.track/2)));
+    for (let i = 0; i < 4; i++) addSprite(new Tank(i, this.playermode, this.track, this.laps, this.difficulty));
+    addSprite(new AuxiliaryHandler(this.playermode, this.laps, this.track, this.difficulty, this.tournament, this.tank_points, this.tank_times));
+    this.menu = false;
+  }
+  confirmExit() {                                                      // confirmar salida de carrera al menú
+    for (const s of sprites.slice()) if (s !== this) removeFromList(sprites, s);
+    trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0;
+    if (sprites.length === 1) {
+      this.menulevel = 0; this.option = 0; this.playermode = 0; this.laps = 1; this.difficulty = 1; this.track = 0;
+      this.menu = true; this.confirmQuit = false;
+      this.tank_points = [0,0,0,0]; this.tank_times = [0,0,0,0];
+    }
+  }
+  // hover del mouse → mueve la selección a la opción debajo del cursor (mismo mapa de filas que tapMenu)
+  hoverFocus(ly) {
+    const near = (f) => Math.abs(ly - yper(f)) < yper(0.05);
+    if (this.menulevel === 0) {
+      if (near(0.5)) this.option = 0; else if (near(0.6)) this.option = 1; else if (near(0.7)) this.option = 2;
+    } else {
+      if (near(0.45)) this.option = 0; else if (near(0.55)) this.option = 1;
+      else if (near(0.65)) this.option = 2; else if (near(0.75)) this.option = 3;
+    }
+  }
+  // toque/click sobre el menú (coords lógicas)
+  tapMenu(lx, ly) {
+    const near = (frac) => Math.abs(ly - yper(frac)) < yper(0.05);
+    const dir = lx < xper(0.5) ? -1 : 1;                               // mitad izq/der = anterior/siguiente
+    if (this.menulevel === 0) {
+      if (near(0.5)) this.pickOption0(0);
+      else if (near(0.6)) this.pickOption0(1);
+      else if (near(0.7)) this.pickOption0(2);
+    } else {
+      if (near(0.45))      { this.option = 0; this.playermode = (this.playermode + dir + 2) % 2; }
+      else if (near(0.55)) { this.option = 1; this.laps = (this.laps + dir + 3) % 3; }
+      else if (near(0.65)) { this.option = 2; this.difficulty = (this.difficulty + dir + 4) % 4; }
+      else if (near(0.75)) { this.option = 3; if (!this.tournament) this.track = (this.track + dir + 10) % 10; }
+      else if (near(0.88)) this.startRace();                           // botón JUGAR
+    }
+  }
+
+  draw() {
+    if (this.menu) {
+      // color neón que pulsa suave (antes parpadeaba random cada frame)
+      const pulse = 0.5 + 0.5*Math.sin(T*2.2);
+      const menucolor = [150 + 105*pulse, 12 + 26*pulse, 205 + 50*(0.5 + 0.5*Math.sin(T*2.2 + 2))];
+      fillScreen(modifyColorPerc(menucolor, 0.08));
+
+      // tanques fantasma orbitando de fondo (boludez ambiente para los 4 colores)
+      for (let i = 0; i < 4; i++) {
+        const a = T*0.35 + i*Math.PI/2;
+        const cx = SCREEN_X*0.5 + Math.cos(a)*SCREEN_X*0.33;
+        const cy = SCREEN_Y*0.5 + Math.sin(a)*SCREEN_Y*0.34;
+        paintTank(cx, cy, a + Math.PI/2, xper(0.022), TANK_COLORS[i], 0.16);
+      }
+
+      const dim = [140, 80, 150], lock = [70, 70, 80];
+      // el hover ya mueve la selección (hoverFocus), así que basta con estilar la opción seleccionada:
+      // así el hover dispara EXACTAMENTE los mismos efectos que la selección (color, glow y los < >).
+      const sel = on => on ? menucolor : dim;
+      const gl  = on => on ? 14 : 5;
+      if (this.menulevel === 0) {
+        createText(B_font, 'CrazyTanks', menucolor, null, xper(0.5), yper(0.22), 28);
+        createText(M_font, 'New Race',   sel(this.option === 0), null, xper(0.5), yper(0.5), gl(this.option === 0));
+        createText(M_font, 'Tournament', sel(this.option === 1), null, xper(0.5), yper(0.6), gl(this.option === 1));
+        createText(M_font, 'Exit',       sel(this.option === 2), null, xper(0.5), yper(0.7), gl(this.option === 2));
+      }
+      if (this.menulevel === 1) {
+        const tn = TRACK_NAMES[this.track], diffNames = ['Easy','Normal','Hard','Very Hard'];
+        const lapsName = this.laps === 0 ? 'Short (10 laps)' : this.laps === 1 ? 'Normal (20 laps)' : 'Long (40 laps)';
+        const wrap = (on, s) => on ? `< ${s} >` : s;
+        createText(B_font, 'CrazyTanks', menucolor, null, xper(0.5), yper(0.2), 28);
+        createText(M_font, wrap(this.option === 0, this.playermode === 0 ? 'Single Player' : 'Two Players'), sel(this.option === 0), null, xper(0.5), yper(0.45), gl(this.option === 0));
+        createText(M_font, wrap(this.option === 1, lapsName), sel(this.option === 1), null, xper(0.5), yper(0.55), gl(this.option === 1));
+        createText(M_font, wrap(this.option === 2, `Difficulty: ${diffNames[this.difficulty]}`), sel(this.option === 2), null, xper(0.5), yper(0.65), gl(this.option === 2));
+        createText(M_font, wrap(this.option === 3, `Map: ${tn}`), this.option === 3 ? menucolor : (this.tournament ? lock : dim), null, xper(0.5), yper(0.75), gl(this.option === 3));
+        // botón JUGAR (tocá/click para arrancar) — pulsa, y se ilumina al hover
+        const hj = rowHover(0.88), playPulse = 0.6 + 0.4*Math.sin(T*4);
+        createText(M_font, '▶ JUGAR', [120 + 120*playPulse, 230, 150], modifyColorPerc(menucolor, hj ? 0.32 : 0.12), xper(0.5), yper(0.88), hj ? 30 : 16);
+      }
+    }
+    // en carrera el fondo (piso+deco+meta+paredes) se blitea horneado desde el loop — nada que hacer acá
+  }
+}
+
+// ════════════════ AUXILIARY HANDLER (cuenta regresiva, pausa, scoring) ════════════════
+class AuxiliaryHandler {
+  constructor(playermode, laps, track, difficulty, tournament, tankpoints, tanktimes) {
+    this.playermode = playermode; this.laps = laps; this.track = track; this.difficulty = difficulty;
+    this.racestart_timer = 5; this.racestart_cooling = 0;
+    this.playerfinished = [false, false, false, false];
+    this.racefinished = false; this.post_race_option = 0;
+    this.p_pressed = false; this.enter_pressed = false; this.pause = false;
+    this.tournament = tournament;
+    this.points_for_rank = [4,3,2,1];
+    this.tank_points = tankpoints; this.tank_times = tanktimes;
+    this.table_timer = 3; this.table_cooldown = 0;
+    this.pointsaccounted = false; this.randombool = false; this.tournamentfinished = false;
+  }
+
+  process() {
+    [this.nWalls, this.nTrackpoints] = MAP_COUNTS[this.track];
+
+    if (!this.racefinished) {
+      this.racestart_cooling += deltaT;
+      if (this.racestart_cooling > this.racestart_timer - 1) {
+        for (const tank of tanks) { tank.start = true; if (tank.finished) this.playerfinished[tank.id] = tank.finished; }
+      }
+
+      if (this.playermode === 0 && this.playerfinished[0]) for (const tank of tanks) { tank.finished = true; tank.ai = true; }
+      if (this.playermode === 0 && this.playerfinished[1] && this.playerfinished[2] && this.playerfinished[3]) for (const tank of tanks) { tank.finished = true; tank.ai = true; }
+      if (this.playermode === 1 && this.playerfinished[0] && this.playerfinished[1]) for (const tank of tanks) { tank.finished = true; tank.ai = true; }
+      if (this.playermode === 1 && this.playerfinished[0] && this.playerfinished[2] && this.playerfinished[3]) for (const tank of tanks) { tank.finished = true; tank.ai = true; }
+      if (this.playermode === 1 && this.playerfinished[1] && this.playerfinished[2] && this.playerfinished[3]) for (const tank of tanks) { tank.finished = true; tank.ai = true; }
+
+      if (this.playerfinished[0] && this.playerfinished[1] && this.playerfinished[2] && this.playerfinished[3]) this.racefinished = true;
+
+      if (this.racestart_cooling > this.racestart_timer) {
+        if (!this.p_pressed && keys.P) {
+          for (const tank of tanks) tank.pause = !tank.pause;
+          for (const bomb of bombs) bomb.pause = !bomb.pause;
+          this.pause = !this.pause; this.p_pressed = true;
+        }
+        if (!keys.P) this.p_pressed = false;
+      }
+
+    } else {
+      if (!this.tournament) {
+        if (keys.UP) this.post_race_option = 0;
+        if (keys.DOWN) this.post_race_option = 1;
+        if (keys.RETURN) {
+          if (this.post_race_option === 0) this._rebuildRace();
+          if (this.post_race_option === 1) this._backToMenu(false);
+        }
+      } else {
+        this.table_cooldown += deltaT;
+
+        if (this.table_cooldown > this.table_timer && !this.pointsaccounted) {
+          if (keys.RETURN) {
+            for (const tank of tanks) {
+              this.tank_points[tank.id] += this.points_for_rank[tank.rank - 1];
+              this.tank_times[tank.id] += tank.racetime + tank.racetime * 0.01 * (tank.rank - 1);
+            }
+            this.pointsaccounted = true; this.enter_pressed = true;
+          }
+        }
+
+        if (this.pointsaccounted) {
+          if (this.track === 9) { this.tournamentfinished = true; this.post_race_option = 1; }
+          if (keys.UP && !this.tournamentfinished) this.post_race_option = 0;
+          if (keys.DOWN) this.post_race_option = 1;
+          if (!this.enter_pressed && keys.RETURN) {
+            if (this.post_race_option === 0) this._tournamentNext();
+            if (this.post_race_option === 1) this._backToMenu(true);
+          }
+          if (!keys.RETURN) this.enter_pressed = false;
+        }
+      }
+    }
+  }
+
+  // Rematch (carrera simple): limpia todo salvo MainHandler+self, re-crea, se remueve.
+  _rebuildRace() {
+    const main = sprites[0];
+    for (const s of sprites.slice()) if (s !== main && s !== this) removeFromList(sprites, s);
+    trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0;
+    if (sprites.length === 2) {
+      for (let i = 0; i < this.nTrackpoints; i++) addSprite(new TrackPoint(i, this.track));
+      for (let i = 0; i < this.nWalls; i++) addSprite(new Wall(i, this.track, Math.floor(this.track/2)));
+      for (let i = 0; i < 4; i++) addSprite(new Tank(i, this.playermode, this.track, this.laps, this.difficulty));
+      addSprite(new AuxiliaryHandler(this.playermode, this.laps, this.track, this.difficulty, this.tournament, this.tank_points, this.tank_times));
+      removeFromList(sprites, this);
+    }
+  }
+
+  _backToMenu(tournament) {
+    const main = sprites[0];
+    for (const s of sprites.slice()) if (s !== main && s !== this) removeFromList(sprites, s);
+    trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0;
+    if (sprites.length === 2) {
+      main.menulevel = 0; main.option = 0; main.playermode = 0; main.laps = 1; main.difficulty = 1; main.track = 0;
+      main.menu = true; main.keypressed = true;
+      if (tournament) { main.tank_points = [0,0,0,0]; main.tank_times = [0,0,0,0]; }
+      removeFromList(sprites, this);
+    }
+  }
+
+  _tournamentNext() {
+    const main = sprites[0];
+    if (!this.randombool) { main.track += 1; this.randombool = true; }
+    for (const s of sprites.slice()) if (s !== main && s !== this) removeFromList(sprites, s);
+    trackpoints.length = 0; walls.length = 0; tanks.length = 0;
+    if (sprites.length === 2) {
+      [this.nWalls, this.nTrackpoints] = MAP_COUNTS[this.track + 1];
+      for (let i = 0; i < this.nTrackpoints; i++) addSprite(new TrackPoint(i, this.track + 1));
+      for (let i = 0; i < this.nWalls; i++) addSprite(new Wall(i, this.track + 1, Math.floor((this.track+1)/2)));
+      for (let i = 0; i < 4; i++) addSprite(new Tank(i, this.playermode, this.track + 1, this.laps, this.difficulty));
+      addSprite(new AuxiliaryHandler(this.playermode, this.laps, this.track + 1, this.difficulty, this.tournament, this.tank_points, this.tank_times));
+      removeFromList(sprites, this);
+    }
+  }
+
+  // hover del mouse → mueve la selección post-carrera a la opción debajo del cursor
+  hoverFocus(ly) {
+    if (!this.racefinished) return;
+    const near = (f) => Math.abs(ly - yper(f)) < yper(0.05);
+    if (!this.tournament) {
+      if (near(0.55)) this.post_race_option = 0; else if (near(0.65)) this.post_race_option = 1;
+    } else if (this.pointsaccounted && !this.tournamentfinished) {
+      if (near(0.75)) this.post_race_option = 0; else if (near(0.85)) this.post_race_option = 1;
+    }
+  }
+  // toque/click sobre la pantalla de fin de carrera (coords lógicas)
+  tap(lx, ly) {
+    if (!this.racefinished) return;
+    const near = (frac) => Math.abs(ly - yper(frac)) < yper(0.05);
+    if (!this.tournament) {
+      if (near(0.55)) { this.post_race_option = 0; this._rebuildRace(); }
+      else if (near(0.65)) { this.post_race_option = 1; this._backToMenu(false); }
+    } else if (!this.pointsaccounted) {
+      if (this.table_cooldown > this.table_timer) {                    // tocar = anotar puntos (= ENTER)
+        for (const tank of tanks) {
+          this.tank_points[tank.id] += this.points_for_rank[tank.rank - 1];
+          this.tank_times[tank.id] += tank.racetime + tank.racetime * 0.01 * (tank.rank - 1);
+        }
+        this.pointsaccounted = true; this.enter_pressed = true;
+      }
+    } else {
+      if (this.tournamentfinished) { if (near(0.85)) this._backToMenu(true); }
+      else if (near(0.75)) { this.post_race_option = 0; this._tournamentNext(); }
+      else if (near(0.85)) { this.post_race_option = 1; this._backToMenu(true); }
+    }
+  }
+
+  draw() {
+    const c = this.racestart_cooling;
+    if (c > 1 && c < this.racestart_timer) {
+      let txt = '', seg = 0;
+      if (c < 1.7)              { txt = '3!';   seg = 1; }
+      else if (c > 2 && c < 2.7) { txt = '2!';  seg = 2; }
+      else if (c > 3 && c < 3.7) { txt = '1!';  seg = 3; }
+      else if (c > 4 && c < 5)   { txt = 'GO!!'; seg = 4; }
+      if (txt) {
+        const into = c - seg, scale = 1 + 0.35 * Math.max(0, 1 - into/0.28), isGo = txt === 'GO!!';
+        ctx.save();
+        ctx.translate(xper(0.5), yper(0.5)); ctx.scale(scale, scale);
+        createText(B_font, txt, isGo ? [120,255,140] : [255,255,255], null, 0, 0, isGo ? 44 : 30);
+        ctx.restore();
+      }
+    }
+
+    // el hover mueve la selección (hoverFocus), así la opción bajo el mouse muestra el estilo seleccionado
+    const selGlow = on => on ? 12 : 0;
+
+    if (this.racefinished) {
+      if (!this.tournament) {
+        for (const tank of tanks) if (tank.rank === 1)
+          createText(B_font, `¡${COLOR_NAMES[tank.id]} Wins!`, modifyColor(tank.color,75), null, xper(0.5), yper(0.35), 30);
+        createText(M_font, 'Rematch',      this.post_race_option === 0 ? [255,255,255] : [150,150,150], null, xper(0.5), yper(0.55), selGlow(this.post_race_option === 0));
+        createText(M_font, 'Back to Menu', this.post_race_option === 1 ? [255,255,255] : [150,150,150], null, xper(0.5), yper(0.65), selGlow(this.post_race_option === 1));
+      } else {
+        if (this.table_cooldown < this.table_timer) {
+          for (const tank of tanks) if (tank.rank === 1)
+            createText(B_font, `¡${COLOR_NAMES[tank.id]} Wins!`, modifyColor(tank.color,75), null, xper(0.5), yper(0.5), 30);
+        } else {
+          // panel redondeado semi-transparente
+          ctx.save();
+          ctx.globalAlpha = 0.84;
+          roundRectPath(xper(0.25), yper(0.25), xper(0.5), yper(0.4), 18); ctx.fillStyle = rgb([10,10,18]); ctx.fill();
+          ctx.restore();
+          roundRectPath(xper(0.25), yper(0.25), xper(0.5), yper(0.4), 18); ctx.strokeStyle = rgb([255,255,255]); ctx.lineWidth = 3; ctx.stroke();
+          for (let i = 0; i < 3; i++) {
+            const yy = yper(0.35 + (i === 1 ? 0.1 : i === 2 ? 0.2 : 0));
+            ctx.globalAlpha = 0.35; drawLine([xper(0.27), yy], [xper(0.73), yy], [200,200,220], 1); ctx.globalAlpha = 1;
+          }
+
+          const tf = 32;
+          for (const tank of tanks) {
+            let tourneyrank = tanks.length;
+            let pos_in_table = yper(0.6);
+            let points;
+
+            if (this.tank_points[tank.id] > 0) {
+              for (const tank2 of tanks) {
+                if (tank2 !== tank) {
+                  if (this.tank_points[tank.id] > this.tank_points[tank2.id]) { tourneyrank -= 1; pos_in_table -= yper(0.1); }
+                  if (this.tank_points[tank.id] === this.tank_points[tank2.id] && this.tank_times[tank.id] < this.tank_times[tank2.id]) { tourneyrank -= 1; pos_in_table -= yper(0.1); }
+                }
+              }
+              points = !this.pointsaccounted ? `${this.tank_points[tank.id]} + ${this.points_for_rank[tank.rank-1]}` : this.tank_points[tank.id];
+            } else {
+              tourneyrank = tank.id === 0 ? '1' : tank.id === 1 ? '2' : tank.id === 2 ? '3' : '4';
+              pos_in_table = tank.id === 0 ? yper(0.3) : tank.id === 1 ? yper(0.4) : tank.id === 2 ? yper(0.5) : yper(0.6);
+              points = `0 + ${this.points_for_rank[tank.rank-1]}`;
+            }
+
+            createText(tf, `${tourneyrank}°`, this.pointsaccounted ? modifyColor(tank.color,75) : [255,255,255], null, xper(0.31), pos_in_table);
+            createText(tf, `${points} pts.`, modifyColor(tank.color,75), null, xper(0.67), pos_in_table);
+            if (this.pointsaccounted && this.tournamentfinished && tourneyrank === 1)
+              createText(M_font, `¡${COLOR_NAMES[tank.id]} is the Champion!`, randcolorGray(55,255), null, xper(0.5), yper(0.16), 22);
+            if (!this.pointsaccounted) {
+              const rk = tank.rank === 1 ? '1st!' : tank.rank === 2 ? '2nd!' : tank.rank === 3 ? '3rd' : '4th';
+              createText(28, rk, modifyColor(tank.color,75), null, xper(0.55), pos_in_table);
+            }
+
+            paintTank(xper(0.42), pos_in_table, -Math.PI/2, tank.radius, tank.color, 1, false);
+          }
+        }
+
+        if (this.pointsaccounted) {
+          createText(M_font, this.tournamentfinished ? '' : 'Continue', this.post_race_option === 0 ? [255,255,255] : [150,150,150], null, xper(0.5), yper(0.75), selGlow(this.post_race_option === 0));
+          createText(M_font, this.tournamentfinished ? 'Back to Menu' : 'Exit Tournament', this.post_race_option === 1 ? [255,255,255] : [150,150,150], null, xper(0.5), yper(0.85), selGlow(this.post_race_option === 1));
+        }
+      }
+    }
+
+    if (this.pause) {
+      ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, SCREEN_X, SCREEN_Y); ctx.restore();
+      createText(B_font, 'PAUSE', randcolorGray(155,255), null, xper(0.5), yper(0.5), 22);
+    }
+  }
+}
+
+// ════════════════ PRIMITIVAS DE DIBUJO (en coords lógicas) ════════════════
+function fillScreen(color) { ctx.fillStyle = rgb(color); ctx.fillRect(0, 0, SCREEN_X, SCREEN_Y); }
+function fillRect(x, y, w, h, color) { ctx.fillStyle = rgb(color); ctx.fillRect(x, y, w, h); }
+function strokeRect(x, y, w, h, color, lw = 1) { ctx.strokeStyle = rgb(color); ctx.lineWidth = lw; ctx.strokeRect(x, y, w, h); }
+function drawCircle(x, y, r, color, lw = 0) {
+  ctx.beginPath(); ctx.arc(x, y, Math.max(0, r), 0, Math.PI*2);
+  if (lw > 0) { ctx.strokeStyle = rgb(color); ctx.lineWidth = lw; ctx.stroke(); }
+  else { ctx.fillStyle = rgb(color); ctx.fill(); }
+}
+function drawLine(p1, p2, color, lw = 1) {
+  ctx.strokeStyle = rgb(color); ctx.lineWidth = Math.max(1, lw); ctx.lineCap = 'butt';
+  ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.stroke();
+}
+
+// ════════════════ TANQUE REUTILIZABLE (carrera, tabla de torneo, menú ambiente) ════════════════
+// Mismo render de treads+cuerpo del original, extraído para no duplicarlo. `alpha` permite fantasmas
+// translúcidos (tanques de fondo en el menú); `finished` aplica el tinte apagado.
+function paintTank(x, y, ang, r, color, alpha = 1, finished = false) {
+  ctx.save();
+  if (alpha !== 1) ctx.globalAlpha = alpha;
+  const lines = 17;
+  for (let layer = 0; layer < 2; layer++) {
+    for (let i = 0; i < lines; i++) {
+      const px = x + Math.cos(ang + Math.PI/2) * (-r + 2*r*(i/lines) + ((r*2)/lines - 1)/2);
+      const py = y + Math.sin(ang + Math.PI/2) * (-r + 2*r*(i/lines) + ((r*2)/lines - 1)/2);
+      const length = Math.abs(i - Math.floor(lines/2)) < lines*0.2 ? r*0.7 : r;
+      if (layer === 0) {
+        const col = finished ? modifyColorPerc(modifyColor(color,-50),0.35) : modifyColor(color,-50);
+        drawLine([px + Math.cos(ang)*-length, py + Math.sin(ang)*-length], [px + Math.cos(ang)*length, py + Math.sin(ang)*length], col, Math.max(Math.trunc((r*5)/lines - 1), 1));
+      } else {
+        const col = finished ? modifyColorPerc(color,0.35) : color;
+        drawLine([px + Math.cos(ang)*-length, py + Math.sin(ang)*-length], [px + Math.cos(ang)*length, py + Math.sin(ang)*length], col, Math.max(Math.trunc((r*2)/lines - 1), 1));
+      }
+    }
+  }
+  drawCircle(x, y, r*0.7, finished ? modifyColorPerc(modifyColor(color,-25),0.35) : modifyColor(color,-25));
+  drawLine([x, y], [x + Math.cos(ang)*r*1.5, y + Math.sin(ang)*r*1.5], finished ? modifyColorPerc(modifyColor(color,25),0.35) : modifyColor(color,25), Math.trunc(r*0.3));
+  drawCircle(x, y, r*0.5, finished ? modifyColorPerc(modifyColor(color,75),0.35) : modifyColor(color,75));
+  drawCircle(x, y, r*0.5, finished ? modifyColorPerc(modifyColor(color,25),0.35) : modifyColor(color,25), 1);
+  ctx.restore();
+}
+
+// ════════════════ DECORACIÓN AMBIENTE (rellena los espacios vacíos de cada pista) ════════════════
+// Generada UNA vez por pista con un PRNG sembrado → posiciones estables (no parpadea entre frames).
+// El "tema" (track//2) define el flavor: pasto, arena, nieve, tecno, lava.
+const TAU = Math.PI * 2;
+const BASE_THEME = [[70,72,78], [200,185,110], [235,235,245], [60,110,190], [180,70,30]];  // [0]=gris asfalto
+const decoCache = {};
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function getDeco(track) {
+  if (decoCache[track]) return decoCache[track];
+  const rng = mulberry32(((track + 1) * 2654435761) >>> 0);
+  const theme = Math.floor(track / 2);
+  const items = [];
+  for (let i = 0; i < 80; i++) {
+    const x = rng() * SCREEN_X, y = rng() * SCREEN_Y, s = 0.5 + rng();
+    let shape, col, alpha, r, extra = 0;
+    if (theme === 0) {                                                // ASFALTO: grava, grietas, manchas de aceite (nada de pasto)
+      const k = rng();
+      if (k < 0.5)       { shape = 'gravel'; col = [80+rng()*45, 82+rng()*45, 88+rng()*45]; alpha = 0.10 + rng()*0.12; r = xper(0.003)*s; }
+      else if (k < 0.82) { shape = 'crack';  col = [28+rng()*16, 29+rng()*16, 33+rng()*16]; alpha = 0.22 + rng()*0.2;  r = xper(0.02)*s;  extra = rng()*TAU; }
+      else               { shape = 'oil';    col = [18+rng()*12, 19+rng()*12, 22+rng()*12]; alpha = 0.16 + rng()*0.14; r = xper(0.013)*s; extra = rng()*TAU; }
+    }
+    else if (theme === 1) { shape = 'dot';   col = modifyColor([180,165,95], -Math.floor(rng()*45)); alpha = 0.20 + rng()*0.18; r = xper(0.004)*s; }
+    else if (theme === 2) { shape = 'cross'; col = [205+rng()*45, 205+rng()*45, 220]; alpha = 0.10 + rng()*0.12; r = xper(0.004)*s; }
+    else if (theme === 3) { shape = 'ring';  col = [50+rng()*60, 120+rng()*60, 200+rng()*55]; alpha = 0.12 + rng()*0.16; r = xper(0.007)*s; }
+    else                  { shape = 'ember'; col = [205+rng()*50, 80+rng()*60, 20+rng()*40]; alpha = 0.14 + rng()*0.18; r = xper(0.004)*s; }
+    items.push({ x, y, r, shape, col, alpha, extra });
+  }
+  decoCache[track] = { theme, items };
+  return decoCache[track];
+}
+function drawDeco(track) {
+  const { theme, items } = getDeco(track);
+  // grilla tenue para dar sensación de "arena"
+  const g = BASE_THEME[theme];
+  ctx.globalAlpha = 0.05;
+  ctx.strokeStyle = rgb(theme === 2 ? [120,120,140] : modifyColorPerc(g, 1.6));
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let gx = 0; gx <= SCREEN_X; gx += xper(0.0625)) { ctx.moveTo(gx, 0); ctx.lineTo(gx, SCREEN_Y); }
+  for (let gy = 0; gy <= SCREEN_Y; gy += yper(0.111)) { ctx.moveTo(0, gy); ctx.lineTo(SCREEN_X, gy); }
+  ctx.stroke();
+  // scatter temático
+  for (const it of items) {
+    ctx.globalAlpha = it.alpha;
+    if (it.shape === 'gravel') {
+      drawCircle(it.x, it.y, it.r, it.col);
+    } else if (it.shape === 'crack') {
+      ctx.strokeStyle = rgb(it.col); ctx.lineWidth = Math.max(1, it.r*0.1); ctx.lineCap = 'round';
+      const a = it.extra, dx = Math.cos(a)*it.r, dy = Math.sin(a)*it.r;
+      ctx.beginPath();
+      ctx.moveTo(it.x - dx, it.y - dy);
+      ctx.lineTo(it.x - dx*0.2 - dy*0.18, it.y - dy*0.2 + dx*0.18);
+      ctx.lineTo(it.x + dx*0.3 + dy*0.12, it.y + dy*0.3 - dx*0.12);
+      ctx.lineTo(it.x + dx, it.y + dy);
+      ctx.stroke();
+    } else if (it.shape === 'oil') {
+      ctx.fillStyle = rgb(it.col);
+      ctx.beginPath(); ctx.ellipse(it.x, it.y, it.r, it.r*0.7, it.extra, 0, TAU); ctx.fill();
+    } else if (it.shape === 'dot') {
+      drawCircle(it.x, it.y, it.r, it.col);
+    } else if (it.shape === 'cross') {
+      ctx.strokeStyle = rgb(it.col); ctx.lineWidth = Math.max(1, it.r*0.4); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(it.x-it.r, it.y); ctx.lineTo(it.x+it.r, it.y); ctx.moveTo(it.x, it.y-it.r); ctx.lineTo(it.x, it.y+it.r); ctx.stroke();
+    } else if (it.shape === 'ring') {
+      ctx.strokeStyle = rgb(it.col); ctx.lineWidth = Math.max(1, it.r*0.32);
+      ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, TAU); ctx.stroke();
+    } else {
+      drawCircle(it.x, it.y, it.r*1.9, it.col);
+      drawCircle(it.x, it.y, it.r*0.6, modifyColorPerc(it.col, 1.5));
+    }
+  }
+  ctx.globalAlpha = 1; ctx.lineCap = 'butt';
+  // viñeta: oscurece sutilmente los bordes del piso → profundidad
+  const vg = ctx.createRadialGradient(SCREEN_X/2, SCREEN_Y/2, SCREEN_Y*0.32, SCREEN_X/2, SCREEN_Y/2, SCREEN_Y*0.95);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.34)');
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, SCREEN_X, SCREEN_Y);
+}
+
+// ════════════════ MOTIVOS SOBRE LOS OBSTÁCULOS (temática por bioma) ════════════════
+// Posiciones generadas una vez por pared (PRNG sembrado, cacheado en w._motifs). El tamaño del motivo
+// escala con el grosor de la pared, así los bordes finos quedan como textura y los bloques como "bosque".
+function getWallMotifs(w) {
+  if (w._motifs) return w._motifs;
+  const theme = Math.floor(w.track / 2);
+  const rng = mulberry32(((w.track*131 + w.id*977 + 7) >>> 0));
+  const thick = Math.min(w.width, w.height);
+  const mr = Math.min(thick * 0.42, xper(0.02));
+  const cell = mr * 2.6, CAP = 40;                                     // tope de motivos/pared (perf en mobile)
+  let cols = Math.max(1, Math.round(w.width / cell));
+  let rows = Math.max(1, Math.round(w.height / cell));
+  cols = Math.min(cols, CAP);
+  rows = Math.min(rows, Math.max(1, Math.floor(CAP / cols)));
+  const list = [];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    list.push({
+      x: w.x + (c + 0.5) * w.width / cols + (rng()-0.5) * (w.width/cols) * 0.4,
+      y: w.y + (r + 0.5) * w.height / rows + (rng()-0.5) * (w.height/rows) * 0.4,
+      r: mr * (0.75 + rng()*0.5), k: rng(), ph: rng()*TAU,
+    });
+  }
+  w._motifs = { theme, list };
+  return w._motifs;
+}
+function drawWallMotif(m, theme) {
+  const r = m.r;
+  if (theme === 0) {                                                   // PARQUE: árboles y arbustos
+    drawCircle(m.x + r*0.18, m.y + r*0.2, r*1.05, [12,45,22]);
+    if (m.k < 0.55) {
+      drawCircle(m.x, m.y, r, [30,88,42]);
+      drawCircle(m.x - r*0.28, m.y - r*0.28, r*0.52, [70,150,82]);
+      drawCircle(m.x, m.y, r*0.16, [80,55,35]);
+    } else {
+      for (let i = 0; i < 4; i++) { const a = i*1.7 + m.ph; drawCircle(m.x + Math.cos(a)*r*0.45, m.y + Math.sin(a)*r*0.45, r*0.5, i%2 ? [40,110,55] : [55,135,68]); }
+    }
+  } else if (theme === 1) {                                            // DESIERTO: pirámides, cactus, dunas
+    if (m.k < 0.4) {
+      ctx.fillStyle = rgb([205,175,115]); ctx.beginPath(); ctx.moveTo(m.x-r, m.y+r); ctx.lineTo(m.x+r, m.y+r); ctx.lineTo(m.x, m.y-r); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = rgb([150,118,68]);  ctx.beginPath(); ctx.moveTo(m.x-r, m.y+r); ctx.lineTo(m.x, m.y-r); ctx.lineTo(m.x, m.y+r); ctx.closePath(); ctx.fill();
+    } else if (m.k < 0.72) {
+      ctx.strokeStyle = rgb([70,120,55]); ctx.lineCap = 'round'; ctx.lineWidth = Math.max(1, r*0.5);
+      ctx.beginPath();
+      ctx.moveTo(m.x, m.y+r*0.85); ctx.lineTo(m.x, m.y-r*0.85);
+      ctx.moveTo(m.x, m.y); ctx.lineTo(m.x-r*0.55, m.y-r*0.25);
+      ctx.moveTo(m.x, m.y+r*0.25); ctx.lineTo(m.x+r*0.55, m.y-r*0.15);
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = rgb([175,150,95]); ctx.lineWidth = Math.max(1, r*0.22); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(m.x, m.y + r*0.6, r, Math.PI*1.15, Math.PI*1.85); ctx.stroke();
+    }
+  } else if (theme === 2) {                                            // NIEVE: tótems, árboles secos, fogatas
+    if (m.k < 0.4) {
+      const cols = [[200,70,60], [70,150,160], [210,180,90]];
+      for (let i = 0; i < 3; i++) {
+        ctx.fillStyle = rgb(cols[i]); ctx.fillRect(m.x-r*0.55, m.y-r + i*r*0.7, r*1.1, r*0.62);
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1; ctx.strokeRect(m.x-r*0.55, m.y-r + i*r*0.7, r*1.1, r*0.62);
+      }
+    } else if (m.k < 0.72) {
+      ctx.strokeStyle = rgb([90,70,55]); ctx.lineWidth = Math.max(1, r*0.18); ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(m.x, m.y+r); ctx.lineTo(m.x, m.y-r*0.4);
+      for (let i = 0; i < 4; i++) { const a = -Math.PI/2 + (i-1.5)*0.7; ctx.moveTo(m.x, m.y-r*0.1); ctx.lineTo(m.x + Math.cos(a)*r*0.9, m.y + Math.sin(a)*r*0.9); }
+      ctx.stroke();
+    } else {
+      ctx.strokeStyle = rgb([90,60,40]); ctx.lineWidth = Math.max(1, r*0.18);
+      ctx.beginPath(); ctx.moveTo(m.x-r*0.6, m.y+r*0.4); ctx.lineTo(m.x+r*0.6, m.y+r*0.5); ctx.moveTo(m.x-r*0.6, m.y+r*0.5); ctx.lineTo(m.x+r*0.6, m.y+r*0.4); ctx.stroke();
+      const fl = 0.8 + 0.2*Math.sin(T*9 + m.ph);
+      ctx.globalAlpha = 0.85; drawCircle(m.x, m.y, r*0.55*fl, [255,150,40]); drawCircle(m.x, m.y-r*0.15, r*0.3*fl, [255,230,140]); ctx.globalAlpha = 1;
+    }
+  } else if (theme === 3) {                                            // TECNO: cubos con detalles luminosos
+    const pulse = 0.55 + 0.45*Math.sin(T*3 + m.ph), edge = [80 + 120*pulse, 200, 255];
+    ctx.fillStyle = rgb([18,34,70]); ctx.fillRect(m.x-r*0.8, m.y-r*0.8, r*1.6, r*1.6);
+    ctx.globalAlpha = 0.30*pulse; ctx.strokeStyle = rgb(edge); ctx.lineWidth = r*0.5;   // halo (glow barato, sin shadowBlur)
+    ctx.strokeRect(m.x-r*0.8, m.y-r*0.8, r*1.6, r*1.6);
+    ctx.globalAlpha = 1; ctx.lineWidth = Math.max(1, r*0.16);
+    ctx.strokeRect(m.x-r*0.8, m.y-r*0.8, r*1.6, r*1.6);
+    ctx.beginPath(); ctx.moveTo(m.x-r*0.8, m.y); ctx.lineTo(m.x+r*0.8, m.y); ctx.moveTo(m.x, m.y-r*0.8); ctx.lineTo(m.x, m.y+r*0.8); ctx.stroke();
+  } else {                                                             // LAVA: roca con hollín + vetas de lava/fuego
+    drawCircle(m.x, m.y, r, [55,50,50]);
+    ctx.globalAlpha = 0.6; drawCircle(m.x - r*0.3, m.y - r*0.3, r*0.4, [25,22,22]); ctx.globalAlpha = 1;
+    const glow = 0.6 + 0.4*Math.sin(T*5 + m.ph);
+    const vein = () => { ctx.beginPath(); ctx.moveTo(m.x-r*0.7, m.y+r*0.5); ctx.lineTo(m.x-r*0.1, m.y-r*0.1); ctx.lineTo(m.x+r*0.3, m.y+r*0.2); ctx.lineTo(m.x+r*0.8, m.y-r*0.5); ctx.stroke(); };
+    ctx.lineCap = 'round';
+    ctx.globalAlpha = 0.35*glow; ctx.strokeStyle = rgb([255,120,30]); ctx.lineWidth = Math.max(1, r*0.5); vein();   // halo
+    ctx.globalAlpha = 1; ctx.strokeStyle = rgb([255, 90 + 60*glow, 20]); ctx.lineWidth = Math.max(1, r*0.18); vein();
+  }
+}
+function decorateWall(w) {
+  const { theme, list } = getWallMotifs(w);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(w.x, w.y, w.width, w.height); ctx.clip();   // recorta los motivos a la pared
+  for (const m of list) drawWallMotif(m, theme);
+  ctx.restore();
+}
+
+// ════════════════ INPUT (teclado + botones touch) ════════════════
+const KEYMAP = {
+  ArrowUp: 'UP', ArrowDown: 'DOWN', ArrowLeft: 'LEFT', ArrowRight: 'RIGHT',
+  Space: 'SPACE', KeyW: 'W', KeyS: 'S', KeyA: 'A', KeyD: 'D',
+  ControlLeft: 'LCTRL', Enter: 'RETURN', Escape: 'ESCAPE', KeyP: 'P', KeyF: 'F', F1: 'F1', F2: 'F2',
+};
+window.addEventListener('keydown', e => {
+  const name = KEYMAP[e.code];
+  if (name) { keys[name] = true; if (['UP','DOWN','LEFT','RIGHT','SPACE','F1','F2'].includes(name)) e.preventDefault(); }
+});
+window.addEventListener('keyup', e => { const name = KEYMAP[e.code]; if (name) keys[name] = false; });
+
+// Botones en pantalla → mismo objeto `keys`. Cada botón captura su propio puntero (multi-touch).
+for (const el of document.querySelectorAll('[data-k]')) {
+  const name = el.dataset.k;
+  const press   = e => { e.preventDefault(); keys[name] = true;  el.classList.add('on'); try { el.setPointerCapture(e.pointerId); } catch {} };
+  const release = e => { e.preventDefault(); keys[name] = false; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', press);
+  el.addEventListener('pointerup', release);
+  el.addEventListener('pointercancel', release);
+  el.addEventListener('pointerleave', release);
+}
+
+// ── PALANCAS (analógicas) → alimentan al jugador 1. throttle/steer ∈ [-1, 1]; vuelven a 0 al soltar. ──
+const lever = { throttle: 0, steer: 0 };
+function setupLever(id, axis, onValue) {
+  const el = document.getElementById(id), knob = el.querySelector('.knob');
+  let pid = null;
+  const travel = () => Math.max(1, (axis === 'y' ? el.clientHeight - knob.offsetHeight : el.clientWidth - knob.offsetWidth) / 2);
+  const apply = (cx, cy) => {
+    const r = el.getBoundingClientRect(), t = travel();
+    let v = axis === 'y' ? (r.top + r.height/2 - cy) / t : (cx - (r.left + r.width/2)) / t;
+    v = Math.max(-1, Math.min(1, v));
+    onValue(v);
+    const off = v * t * (axis === 'y' ? -1 : 1);                       // y invertido (arriba = +)
+    knob.style.transform = axis === 'y' ? `translate(-50%, calc(-50% + ${off}px))` : `translate(calc(-50% + ${off}px), -50%)`;
+  };
+  el.addEventListener('pointerdown', e => { e.preventDefault(); pid = e.pointerId; el.classList.add('dragging'); try { el.setPointerCapture(pid); } catch {} apply(e.clientX, e.clientY); });
+  el.addEventListener('pointermove', e => { if (e.pointerId === pid) apply(e.clientX, e.clientY); });
+  const end = () => { if (pid === null) return; pid = null; el.classList.remove('dragging'); onValue(0); knob.style.transform = ''; };
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointercancel', end);
+}
+setupLever('throttle', 'y', v => lever.throttle = v);
+setupLever('steer', 'x', v => lever.steer = v);
+
+// Toque/click directo sobre el canvas → opera el menú, el cartel de confirmación y la pantalla de
+// fin de carrera. (El teclado sigue funcionando en paralelo en desktop.)
+canvas.addEventListener('pointerdown', e => {
+  const rect = canvas.getBoundingClientRect();
+  const lx = (e.clientX - rect.left) / scaleX;
+  const ly = (e.clientY - rect.top) / scaleY;
+  const main = sprites[0];
+  if (!main) return;
+  if (main.menu) { main.tapMenu(lx, ly); return; }
+  if (main.confirmQuit) {                                              // mitad izq = Sí (salir), mitad der = No
+    if (Math.abs(ly - yper(0.56)) < yper(0.08)) {
+      if (lx < xper(0.5)) main.confirmExit(); else main.confirmQuit = false;
+    }
+    return;
+  }
+  const aux = sprites[sprites.length - 1];                            // AuxiliaryHandler (fin de carrera)
+  if (aux && aux.tap) aux.tap(lx, ly);
+});
+
+// Hover del mouse sobre el canvas (coords lógicas) → ilumina la opción debajo del cursor.
+// Sólo con mouse (en touch no hay hover persistente).
+const hover = { x: -1, y: -1, on: false };
+canvas.addEventListener('pointermove', e => {
+  if (e.pointerType && e.pointerType !== 'mouse') { hover.on = false; return; }
+  const rect = canvas.getBoundingClientRect();
+  hover.x = (e.clientX - rect.left) / scaleX;
+  hover.y = (e.clientY - rect.top) / scaleY;
+  hover.on = true;
+  // hover = foco: la opción debajo del mouse pasa a estar "seleccionada" (dispara todos sus efectos)
+  const main = sprites[0];
+  if (!main) return;
+  if (main.menu) main.hoverFocus(hover.y);
+  else { const aux = sprites[sprites.length - 1]; if (aux && aux.hoverFocus) aux.hoverFocus(hover.y); }
+});
+canvas.addEventListener('pointerleave', () => { hover.on = false; });
+function rowHover(frac) { return hover.on && Math.abs(hover.y - yper(frac)) < yper(0.05); }
+
+// Hornea el fondo estático de la pista en un canvas offscreen (una vez por pista). Intercambia el ctx
+// global temporalmente para reusar fillScreen/drawDeco/Wall.draw/TrackPoint.draw tal cual.
+function bakeBackground(track) {
+  bgReady = false;                                                     // mientras está en false, Wall/TrackPoint SÍ dibujan
+  bgW = canvas.width; bgH = canvas.height;
+  if (!bgCanvas) bgCanvas = document.createElement('canvas');
+  bgCanvas.width = bgW; bgCanvas.height = bgH;
+  const bc = bgCanvas.getContext('2d');
+  bc.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, 0, 0);
+  ctx = bc;
+  fillScreen(THEME_FLOOR[Math.floor(track / 2)]);
+  drawDeco(track);
+  for (const tp of trackpoints) tp.draw();                             // meta + grilla de largada (debajo)
+  for (const w of walls) w.draw();                                     // paredes + motivos (encima)
+  ctx = mainCtx;
+  bgTrack = track; bgReady = true;
+}
+
+// ════════════════ LOOP PRINCIPAL ════════════════
+let lastT = performance.now();
+let showFPS = false, fKeyPrev = false, dtSmoothed = 1/60;              // overlay de FPS (tecla F)
+let T = 0;                                                             // tiempo acumulado para animaciones (menú, cuenta regresiva)
+const padL = document.getElementById('padL'), padR = document.getElementById('padR');
+let padsHidden = false;
+function loop(now) {
+  if (typeof now !== 'number') now = performance.now();
+  deltaT = Math.min((now - lastT) / 1000, 0.05);                       // clamp 50ms, igual que el original
+  lastT = now;
+  T += deltaT;
+  dtSmoothed = dtSmoothed * 0.9 + deltaT * 0.1;
+  if (keys.F && !fKeyPrev) showFPS = !showFPS;                         // toggle por flanco
+  fKeyPrev = !!keys.F;
+
+  // Auto-resize: algunos navegadores móviles no disparan 'resize' al rotar y el aviso "girá el teléfono"
+  // quedaba pegado. Re-evaluar acá lo arregla de forma robusta (también ajusta address-bar, etc).
+  if (window.innerWidth !== cssW || window.innerHeight !== cssH) resize();
+
+  // Limpiar a negro
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, cssW, cssH);
+
+  const main0 = sprites[0];
+  if (main0 && !main0.menu) {
+    // fondo estático horneado (se re-hornea sólo si cambió la pista o el tamaño del canvas)
+    if (!bgReady || bgTrack !== main0.track || bgW !== canvas.width || bgH !== canvas.height) bakeBackground(main0.track);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(bgCanvas, 0, 0);                                     // blit 1:1 en píxeles de dispositivo
+  } else {
+    bgReady = false;                                                   // en menú: invalidar para re-hornear al volver a carrera
+  }
+
+  // Transform a coords lógicas, escala para llenar la pantalla (landscape)
+  ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, 0, 0);
+
+  // process + draw por sprite. Paredes y trackpoints ya están en el fondo horneado → su draw es no-op.
+  for (const sprite of sprites.slice()) { sprite.process(); sprite.draw(); }
+
+  if (showFPS) createText(S_font, 'FPS: ' + Math.round(1 / Math.max(1e-3, dtSmoothed)), [255,255,0], null, xper(0.93), yper(0.03));
+
+  // Confirmación de salida al menú (ESC en carrera) — encima de todo. Tocá Sí / No.
+  if (sprites[0] && sprites[0].confirmQuit) {
+    ctx.save(); ctx.globalAlpha = 0.62; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, SCREEN_X, SCREEN_Y); ctx.restore();
+    const overSi = hover.on && Math.abs(hover.y - yper(0.56)) < yper(0.08) && hover.x < xper(0.5);
+    const overNo = hover.on && Math.abs(hover.y - yper(0.56)) < yper(0.08) && hover.x >= xper(0.5);
+    createText(M_font, '¿Volver al menú?', [255,255,255], null, xper(0.5), yper(0.4), 18);
+    createText(M_font, 'SÍ', [255,150,140], modifyColorPerc([255,90,60], overSi ? 0.5 : 0.25), xper(0.38), yper(0.56), overSi ? 26 : 14);
+    createText(M_font, 'NO', [150,210,255], modifyColorPerc([120,200,255], overNo ? 0.45 : 0.22), xper(0.62), yper(0.56), overNo ? 26 : 14);
+  }
+
+  // Los pads de manejo se ocultan en el menú (el menú se opera tocando las opciones)
+  const inMenu = !!(sprites[0] && sprites[0].menu);
+  if (inMenu !== padsHidden) {
+    padsHidden = inMenu;
+    padL.style.display = inMenu ? 'none' : 'flex';
+    padR.style.display = inMenu ? 'none' : 'flex';
+  }
+
+  updateFireCooldown();
+  requestAnimationFrame(loop);
+}
+
+// Cooldown circular en el botón de disparar (jugador 1): sector oscuro que se achica al recargar.
+const cdRing = document.getElementById('cdRing');
+function updateFireCooldown() {
+  const p = tanks[0];
+  const cd = (p && !p.ai) ? p.shoot_cooling / 2 : 0;                   // 0..1 restante (cooldown = 2s)
+  cdRing.style.background = cd > 0.001
+    ? `conic-gradient(rgba(0,0,0,0.55) ${cd*360}deg, rgba(0,0,0,0) 0deg)`
+    : 'transparent';
+}
+
+// ── INIT ──
+resize();
+addSprite(new MainHandler());
+loop();
+
+const hint = document.getElementById('hint');
+setTimeout(() => hint.style.opacity = '0', 6000);
+window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true });
+</script>
+</body>
+</html>
