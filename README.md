@@ -1,61 +1,68 @@
-# Marbles
+# Showcase
 
-A browser-based marble physics sandbox. Drag, throw, pile up and shake a bag of
-procedurally-generated glass marbles, with real recorded marble sound effects.
-Built for touch (multi-touch aware) but works with a mouse too.
+A collection of standalone games, simulations and visual toys. Each one started as
+a [Pygame](https://www.pygame.org/) prototype and most also have a hand-rolled
+**browser port** (plain HTML + Canvas 2D, no build step) living in a `<Folder>Web/`
+subfolder next to the Python original.
 
-Physics run on [Matter.js](https://brm.io/matter-js/) (vendored locally as
-`matter.min.js`, so no CDN dependency at load); rendering, marble art and audio are
-hand-rolled on a plain `<canvas>`. It's just [Marbles/index.html](Marbles/index.html),
-`matter.min.js` and the sound samples in [Marbles/sounds/](Marbles/sounds/) — no
-build step, works fully offline.
+A landing page at [index.html](index.html) ties them together: a grid of cards that
+links straight to each game's web version. It's published with GitHub Pages at:
 
-## Features
+**https://francolaboranti.github.io/Showcase/**
 
-- **Throw & grab** — drag any marble to fling it; each finger can hold and throw
-  its own marble independently.
-- **Procedural marbles** — every marble gets a random size, color and pattern
-  (striped, sphere-striped, spiral, diamond, pinwheel, dotted, candy, hex or
-  plain), baked once into a translucent glass-look sprite with a specular hotspot.
-- **Wall modes** — cycle between a closed box, a side tunnel (top/bottom wrap), and
-  full wrap-around (no walls).
-- **Pin** — nail a held marble in place so others bounce off it.
-- **Jump & shake** — make all loose marbles hop, either with the button or by
-  physically shaking the device (accelerometer).
-- **Real sound** — recorded marble clicks, rolls and bag-rummaging samples, pitched
-  by marble size and gated so collisions don't saturate.
-- **Debug HUD** — optional overlay with FPS, marble/pinned counts and a top-speed
-  bar chart.
+> The URL is case-sensitive — it's `Showcase` (capital `S`, the rest lowercase).
 
-## Controls
+## Games
 
-| Control | Action |
-|---------|--------|
-| **Drag a marble** | Grab and throw it (release to fling) |
-| **↑ button** | Make all loose marbles jump |
-| **Shake device** | Same as jump (needs accelerometer access) |
-| **Pin button** | Pin / unpin the currently held marble(s) |
-| **Wall button** | Cycle wall mode: box → side tunnel → full wrap |
-| **+ / − buttons** | Add / remove a marble (hold to repeat) |
-| **Reset button** | Regenerate the current set of marbles |
-| **ⓘ button** | Toggle the debug HUD |
+| Game | Python | Web |
+|------|--------|-----|
+| Canicas (marble physics sandbox) | — | [Balls/BallsWeb](Balls/BallsWeb/index.html) |
+| Ajedrez | [Chess](Chess/Chess.py) | [Chess/ChessWeb](Chess/ChessWeb/index.html) |
+| Reloj | [Clock](Clock/Clock.py) | [Clock/ClockWeb](Clock/ClockWeb/index.html) |
+| Crazy Tanks | [CrazyTanks](CrazyTanks/CrazyTanks.py) | [CrazyTanks/CrazyTanksWeb](CrazyTanks/CrazyTanksWeb/index.html) |
+| Fuegos Artificiales | [Fireworks](Fireworks/Fireworks.py) | [Fireworks/FireworksWeb](Fireworks/FireworksWeb/index.html) |
+| Fuegos Artificiales V2 | [FireworksV2](FireworksV2/FireworksV2.py) | [FireworksV2/FireworksV2Web](FireworksV2/FireworksV2Web/index.html) |
+| Ahorcado | [Hangman](Hangman/Hangman.py) | [Hangman/HangmanWeb](Hangman/HangmanWeb/index.html) |
+| Buscaminas | [MineSweeperGPT](MineSweeperGPT/MineSweeperGPT.py) | [MineSweeperGPT/MineSweeperWeb](MineSweeperGPT/MineSweeperWeb/index.html) |
+| Mini Canicas | [MiniBalls](MiniBalls/MiniBalls.py) | [MiniBalls/MiniBallsWeb](MiniBalls/MiniBallsWeb/index.html) |
+| Péndulo de Newton | [Newton's Cradle](Newton's%20Cradle/Newton's%20Cradle.py) | [Newton's Cradle/NewtonsCradleWeb](Newton's%20Cradle/NewtonsCradleWeb/index.html) |
+| Póker | [Poker](Poker/Poker.py) | [Poker/PokerWeb](Poker/PokerWeb/index.html) |
+| Pong | [Pong](Pong/Pong.py) | [Pong/PongWeb](Pong/PongWeb/index.html) |
+| Simón Dice | [SimonSays](SimonSays/SimonSays.py) | [SimonSays/SimonSaysWeb](SimonSays/SimonSaysWeb/index.html) |
+| Snake | [Snake](Snake/Snake.py) | [Snake/SnakeWeb](Snake/SnakeWeb/index.html) |
+| Tank Wars | [TankWARS](TankWARS/TankWARS.py) | [TankWARS/TankWARSWeb](TankWARS/TankWARSWeb/index.html) |
+| Ta-Te-Ti | [Tateti](Tateti/Tateti.py) | [Tateti/TatetiWeb](Tateti/TatetiWeb/index.html) |
+| Tron | [Tron](Tron/Tron.py) | [Tron/TronWeb](Tron/TronWeb/index.html) |
+| Tron V2 | [TronV2](TronV2/TronV2.py) | [TronV2/TronV2Web](TronV2/TronV2Web/index.html) |
 
-Up to 100 marbles at once.
+## Running the web version
 
-## Running
-
-Because the page fetches the `.mp3` samples, open it through a local web server
-rather than `file://`:
+The browser ports are static files, but some fetch assets (sounds, etc.), so open
+them through a local web server rather than `file://`:
 
 ```powershell
 # from the repo root
-cd Marbles
 python -m http.server 8000
 # then open http://localhost:8000 in a browser
 ```
 
-Any static server works. On a phone, the shake-to-jump accelerometer only fires
-over **HTTPS** (or inside an app WebView); the rest works over plain HTTP.
+Any static server works. The landing page and every game are reachable from there.
 
-> Matter.js ships in the repo as `matter.min.js`, so there's no network dependency
-> at startup and the app runs offline / inside a packaged WebView (e.g. Capacitor).
+## Running the Python version
+
+The only dependency is `pygame` (install with `pip install pygame`). Each project is
+launched directly — there is no entry-point script:
+
+```powershell
+python <Folder>\<Folder>.py
+```
+
+The folder `Newton's Cradle` contains an apostrophe — quote the path when running it.
+
+## Notes
+
+- The web ports are faithful reimplementations of the Pygame originals, **not**
+  transpiled from the `.py` — the two are edited independently.
+- [Balls/BallsWeb](Balls/BallsWeb/index.html) (the marble sandbox) is the reference
+  port and the only one with a vendored dependency (`matter.min.js` for physics);
+  every other port is dependency-free hand-rolled JS.
