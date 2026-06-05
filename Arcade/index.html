@@ -123,9 +123,45 @@
     #player { position: fixed; inset: 0; z-index: 1000; display: none; background: #000; }
     #player.show { display: block; }
     #frame { width: 100%; height: 100%; border: 0; display: block; }
+
+    /* Botón "salir de la app" (cierra la PWA). Sólo visible en el menú. */
+    #exitApp {
+      position: fixed; z-index: 50;
+      top: calc(env(safe-area-inset-top) + 10px);
+      right: calc(env(safe-area-inset-right) + 12px);
+      width: 36px; height: 36px; border-radius: 50%; padding: 0;
+      border: 1px solid #3a4154; background: rgba(20,22,30,0.82); color: #9aa3b6;
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.08s, border-color 0.15s, color 0.15s;
+    }
+    #exitApp:active { transform: scale(0.92); border-color: #ff8a8e; color: #ff8a8e; }
+    #exitApp svg { width: 18px; height: 18px; display: block; }
+
+    /* Pantalla de entrada: el toque acá es el gesto que activa fullscreen al abrir la app
+       (un gesto NO se puede simular por código — isTrusted/activation lo impiden). */
+    #enter {
+      position: fixed; inset: 0; z-index: 500; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+      background: #0d0e14; color: #e6e9ef; text-align: center; padding: 24px;
+    }
+    #enter.hide { display: none; }
+    #enter .et { font-size: 30px; font-weight: 700; letter-spacing: 0.24em; color: #fff; }
+    #enter .es { font-size: 13px; letter-spacing: 0.24em; color: #7d8493; animation: blink 1.4s steps(2, start) infinite; }
+    @keyframes blink { 50% { opacity: 0.25; } }
   </style>
 </head>
 <body>
+  <!-- Pantalla de entrada (gesto inicial → fullscreen al abrir la app) -->
+  <div id="enter">
+    <div class="et">ARCADE</div>
+    <div class="es">▶ TOCÁ PARA ENTRAR</div>
+  </div>
+
+  <button id="exitApp" aria-label="salir de la app" title="Salir de la app">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/></svg>
+  </button>
+
   <header>
     <h1>ARCADE</h1>
     <div class="subtitle">PROTOTIPOS</div>
@@ -151,8 +187,8 @@
 
   <footer>v0.1 · prototipo</footer>
 
-  <!-- Reproductor: el juego vive acá adentro, sin navegar (mantiene el fullscreen) -->
-  <div id="player"><iframe id="frame" allow="fullscreen; accelerometer; gyroscope; autoplay" allowfullscreen></iframe></div>
+  <!-- Reproductor: el juego vive acá adentro (iframe creado por JS), sin navegar -->
+  <div id="player"></div>
 
   <script>
     // Registrar service worker (necesario para que la PWA sea "instalable")
@@ -181,10 +217,16 @@
     // Si ya está instalada (o se instala), ocultar el botón.
     window.addEventListener('appinstalled', () => installBtn.classList.remove('show'));
 
+    // Salir de la app: en una PWA instalada (ventana de app) window.close() la cierra.
+    // En una pestaña común el navegador no deja cerrarla por script y no pasa nada.
+    document.getElementById('exitApp').addEventListener('click', () => {
+      try { window.close(); } catch (e) {}
+    });
+
     // ── ORIENTACIÓN + REPRODUCTOR (shell) ─────────────────────────────────────
     const player = document.getElementById('player');
-    const frame  = document.getElementById('frame');
     const root   = document.documentElement;
+    let frame = null;   // se crea uno nuevo por juego y se destruye al salir
 
     function lockOrient(o) {
       try {
@@ -199,20 +241,52 @@
     lockOrient('portrait');
     window.addEventListener('pageshow', () => { if (!player.classList.contains('show')) lockOrient('portrait'); });
 
+    // Fullscreen real: requiere un gesto, así que no se puede en la carga. Lo pedimos en el
+    // PRIMER toque dentro del menú → el menú ya queda inmersivo y, al abrir un juego, no se
+    // vuelve a pedir. Resultado: el aviso nativo de Chrome aparece una sola vez, al empezar
+    // a usar la app, en vez de al abrir el primer juego.
+    let fsAsked = false;
+    function requestFs() {
+      if (fsAsked || document.fullscreenElement || !root.requestFullscreen) return;
+      fsAsked = true;
+      try { const p = root.requestFullscreen(); if (p && p.catch) p.catch(() => { fsAsked = false; }); }
+      catch (e) { fsAsked = false; }
+    }
+    // si en algún momento salimos de fullscreen, permitir volver a pedirlo
+    document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) fsAsked = false; });
+    // el primer gesto en el menú lo dispara (capture: corre antes que el click del tile)
+    document.addEventListener('pointerdown', requestFs, true);
+
+    // Pantalla de entrada: el toque acá es el gesto inicial → activa fullscreen al abrir la
+    // app (y deja el aviso de Chrome en este punto, no al abrir el primer juego).
+    const enterEl = document.getElementById('enter');
+    enterEl.addEventListener('pointerdown', () => {
+      requestFs();
+      lockOrient('portrait');
+      enterEl.classList.add('hide');
+    });
+
     // Lanzar un juego: el TAP del tile es un gesto válido → pedimos Fullscreen API real
-    // (gana el notch + oculta la barra de estado) y bloqueamos la orientación del juego,
-    // y lo cargamos en el iframe SIN navegar, así el fullscreen se mantiene toda la sesión.
+    // (gana el notch + oculta la barra de estado) y bloqueamos la orientación del juego.
+    // Creamos un IFRAME NUEVO por juego: su carga inicial NO agrega entrada al historial
+    // (cambiar .src de un iframe existente sí lo hace, y eso rompía el back en el 2º ciclo).
     function launch(src, orient) {
-      try { const p = root.requestFullscreen && root.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+      requestFs();   // normalmente ya se pidió en el primer toque del menú → acá es no-op
       lockOrient(orient || 'landscape');
+      frame = document.createElement('iframe');
+      frame.id = 'frame';
+      frame.allow = 'fullscreen; accelerometer; gyroscope; autoplay';
+      frame.setAttribute('allowfullscreen', '');
       frame.src = src;
+      player.appendChild(frame);
       player.classList.add('show');
       history.pushState({ arcadeGame: true }, '');   // el "atrás" de Android cierra el juego
     }
     function closeGame() {
+      if (!player.classList.contains('show')) return;   // evita doble cierre
       player.classList.remove('show');
-      frame.src = 'about:blank';        // descarga el juego (se recrea al volver a entrar)
-      lockOrient('portrait');           // menú vertical — NO salimos de fullscreen
+      if (frame) { frame.remove(); frame = null; }       // destruye el juego (y su historial)
+      lockOrient('portrait');                            // menú vertical — NO salimos de fullscreen
     }
 
     // Cada tile con data-src lanza su juego (preventDefault del <a>, que queda de fallback
@@ -225,7 +299,7 @@
     });
 
     // El juego pide salir (botón ✕ in-game) vía postMessage. Pasa por history.back para
-    // compartir el camino con el botón "atrás" de Android.
+    // compartir el camino con el botón "atrás" de Android (popstate → closeGame).
     window.addEventListener('message', (e) => {
       if (e.data && e.data.type === 'arcade:exit') {
         if (history.state && history.state.arcadeGame) history.back();
