@@ -621,21 +621,40 @@
   const _reqFs  = fsTarget.requestFullscreen || fsTarget.webkitRequestFullscreen;
   const _exitFs = document.exitFullscreen || document.webkitExitFullscreen;
   const isFs    = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
-  const enterFs = () => { if (_reqFs)  { const p = _reqFs.call(fsTarget); if (p && p.catch) p.catch(() => {}); } };
-  const exitFs  = () => { if (_exitFs) _exitFs.call(document); };
+  // Lock de orientación: en Android Chrome SOLO funciona estando en pantalla completa.
+  // iOS Safari no lo soporta (falla en silencio). Lo intentamos tras entrar a fullscreen.
+  const lockLandscape = () => {
+    try {
+      const so = screen.orientation;
+      if (so && so.lock) { const p = so.lock('landscape'); if (p && p.catch) p.catch(() => {}); }
+    } catch {}
+  };
+  const unlockOrient = () => { try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch {} };
+  const enterFs = () => {
+    if (!_reqFs) { lockLandscape(); return; }
+    const p = _reqFs.call(fsTarget);
+    // Intentar el lock pase lo que pase: si ya estamos fullscreen (PWA instalada) el
+    // requestFullscreen puede rechazar, pero el lock de orientación igual debe correr.
+    if (p && p.then) p.then(lockLandscape, lockLandscape);
+    else lockLandscape();
+  };
+  const exitFs  = () => { unlockOrient(); if (_exitFs) _exitFs.call(document); };
   function syncFsIcon() { document.body.classList.toggle('fs-on', isFs()); }
   document.addEventListener('fullscreenchange', syncFsIcon);
   document.addEventListener('webkitfullscreenchange', syncFsIcon);
   tappable(document.getElementById('btnFull'), () => { isFs() ? exitFs() : enterFs(); });
 
-  // Auto pantalla completa en el primer toque del canvas (sólo touch; en desktop no se fuerza).
+  // Auto pantalla completa + landscape en el primer toque (sólo touch; en desktop no se fuerza).
   let autoFsDone = false;
   function tryAutoFs(e) {
     if (autoFsDone) return;
     autoFsDone = true;
     if (e && e.pointerType === 'mouse') return;
-    if (!isFs()) enterFs();
+    if (!isFs()) enterFs(); else lockLandscape();
   }
+  // El primer toque en CUALQUIER lugar (canvas o botones) cuenta como gesto válido para
+  // pedir fullscreen — así también dispara si entrás tocando un control en vez del canvas.
+  document.addEventListener('pointerdown', tryAutoFs, { capture: true, once: true });
 
   function togglePause() {
     if (state === 'play') state = 'paused';

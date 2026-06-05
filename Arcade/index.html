@@ -102,12 +102,27 @@
       font-size: 11px; color: #4a525f; letter-spacing: 0.1em;
     }
     footer a { color: #6a7185; text-decoration: none; }
+    #installBtn {
+      display: none;
+      margin: 12px auto 0;
+      padding: 10px 22px;
+      border: 1px solid #4a536b;
+      border-radius: 999px;
+      background: linear-gradient(160deg, #1a1d28, #11131b);
+      color: #ffd95a;
+      font-size: 13px; font-weight: 700; letter-spacing: 0.16em;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #installBtn:active { transform: scale(0.96); border-color: #ffd95a; }
+    #installBtn.show { display: inline-block; }
   </style>
 </head>
 <body>
   <header>
     <h1>ARCADE</h1>
     <div class="subtitle">PROTOTIPOS</div>
+    <button id="installBtn">⬇ INSTALAR APP</button>
   </header>
 
   <main>
@@ -135,6 +150,25 @@
         navigator.serviceWorker.register('sw.js').catch(() => {});
       });
     }
+
+    // Instalación: Chrome ya no muestra banner automático. Capturamos el evento,
+    // mostramos un botón propio y disparamos el prompt nativo al tocarlo.
+    let deferredPrompt = null;
+    const installBtn = document.getElementById('installBtn');
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();            // evita el mini-infobar; lo controlamos nosotros
+      deferredPrompt = e;
+      installBtn.classList.add('show');
+    });
+    installBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      installBtn.classList.remove('show');
+    });
+    // Si ya está instalada (o se instala), ocultar el botón.
+    window.addEventListener('appinstalled', () => installBtn.classList.remove('show'));
 
     // Al volver del juego (Android back), si la página fue cacheada por bfcache,
     // resetear cualquier orientation lock que el juego haya dejado puesto.
