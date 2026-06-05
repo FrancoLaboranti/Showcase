@@ -4,16 +4,23 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Pong</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
 <style>
-  :root { --bar-height: 66px; }
+  :root {
+    --bar-height: 66px;
+    /* fuente display (arcade/geométrica) con fallback al stack de sistema si no hay red */
+    --font: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
+  }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     width: 100%; height: 100%;
-    background: #000;
+    background: #03040a;
     overflow: hidden;
     touch-action: none;
     user-select: none; -webkit-user-select: none;
-    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-family: var(--font);
   }
   /* Canvas ocupa el espacio ARRIBA de la barra — mismo layout que BallsWeb/TatetiWeb. */
   #c { display: block; position: absolute; top: 0; left: 0; }
@@ -21,6 +28,7 @@
   #hint {
     position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
     text-align: center; color: rgba(255,255,255,0.5);
+    font-family: 'Segoe UI', system-ui, sans-serif;   /* sans legible para la frase larga */
     font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
     transition: opacity 0.8s; z-index: 2; padding: 0 16px;
   }
@@ -53,29 +61,109 @@
   /* botón de fuego encendido (tinte naranja) */
   #ui #btnFire.on { background: rgba(255,140,0,0.30); border-color: rgba(255,150,0,0.6); color: #ffb347; }
 
+  /* Pads de control (mobile): dos botones APILADOS (arriba = subir, abajo = bajar), en las
+     esquinas inferiores sobre la barra. padR = jugador 1 (derecha) · padL = jugador 2 (izq, sólo 2P). */
+  .pad {
+    position: absolute; z-index: 5; touch-action: none;
+    display: flex; flex-direction: column; gap: 8px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);   /* pegados al margen inferior, en la esquina */
+  }
+  #padL { left: calc(6px + env(safe-area-inset-left)); display: none; }   /* esquina abajo-izquierda (P2, sólo 2P) */
+  body.two #padL { display: flex; }            /* la izquierda sólo aparece en 2 jugadores */
+  #padR { right: calc(6px + env(safe-area-inset-right)); }                /* esquina abajo-derecha (P1) */
+  .ctl {
+    width: 104px; height: 54px; border-radius: 14px;
+    border: 1px solid rgba(255,255,255,0.2);
+    background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.08s, transform 0.06s;
+  }
+  .ctl svg { display: block; width: 28px; height: 28px; pointer-events: none; }
+  .ctl.held { background: rgba(120,200,255,0.30); border-color: rgba(120,200,255,0.6); transform: scale(0.94); }
+
   /* Info, esquina abajo-derecha — mismo patrón que el resto. */
-  #btnInfo {
+  /* Info y pantalla completa: chicos, esquina abajo-derecha (btnFull a la izquierda de btnInfo),
+     mismo patrón que FireworksWeb. */
+  #btnInfo, #btnFull {
     position: absolute;
-    right: 6px;
     bottom: calc(env(safe-area-inset-bottom) + 4px);
     width: 28px; height: 28px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.16);
     background: rgba(255,255,255,0.04);
     color: rgba(255,255,255,0.6);
     display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
+    cursor: pointer; touch-action: none; padding: 0; z-index: 4;
     transition: background 0.1s, transform 0.08s;
   }
-  #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnInfo:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  /* a la izquierda del pad de mover (104px + 6 borde + 10 gap = 120) */
+  #btnInfo { right: calc(120px + env(safe-area-inset-right)); }
+  #btnFull { right: calc(154px + env(safe-area-inset-right)); }   /* + 28 del de info + 6 gap */
+  #btnInfo svg, #btnFull svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnInfo:active, #btnFull:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
   #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+  /* Pantalla completa: muestra "expandir" o "contraer" según body.fs-on (igual que CrazyTanks) */
+  #btnFull .ic-exit { display: none; }
+  body.fs-on #btnFull .ic-enter { display: none; }
+  body.fs-on #btnFull .ic-exit  { display: block; }
+
+  /* Aviso de orientación: Pong se juega en HORIZONTAL. Se muestra (vía JS) cuando la pantalla está vertical. */
+  #rotate {
+    position: absolute; inset: 0; z-index: 50; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    background: #05060a; color: rgba(255,255,255,0.85);
+    text-align: center; padding: 24px;
+  }
+  #rotate svg { width: 88px; height: 88px; color: #78c8ff; animation: rotatehint 2.2s ease-in-out infinite; }
+  #rotate p { font-size: 18px; letter-spacing: 0.05em; line-height: 1.6; }
+  @keyframes rotatehint { 0%, 55%, 100% { transform: rotate(0deg); } 25%, 40% { transform: rotate(-90deg); } }
+  /* Exit button — vuelta al menú raíz */
+  #btnExit {
+    position: absolute;
+    left: calc(6px + env(safe-area-inset-left));
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
+  body.two #btnExit { left: calc(120px + env(safe-area-inset-left)); }   /* en 2P, a la derecha del pad de P2 */
+  /* === Bar layout: exit-left, main-center, info/debug-right (refactor) === */
+  #bar {
+    display: grid !important;
+    grid-template-columns: 1fr auto 1fr !important;
+    justify-content: stretch !important;
+  }
+  #bar > #btnExit {
+    position: static !important;
+    left: auto !important; right: auto !important;
+    top: auto !important; bottom: auto !important;
+    justify-self: start;
+  }
+  #bar > #ui { justify-self: center; }
+  #bar > #btnInfo, #bar > #btnDebug, #bar > #btnHome {
+    position: static !important;
+    left: auto !important; right: auto !important;
+    top: auto !important; bottom: auto !important;
+    justify-self: end;
+  }
+
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">arrastrá tu lado para mover la paleta · botones: jugadores · puntos · fuego · pausa</div>
+  <div id="hint">▲ sube · ▼ baja · botones: jugadores · puntos · fuego · pausa</div>
   <div id="bar">
-    <div id="ui">
+  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+<div id="ui">
       <button id="btnMode"  aria-label="jugadores" title="1 / 2 jugadores">1P</button>
       <button id="btnPoints" aria-label="puntos"   title="Puntos para ganar">10</button>
       <button id="btnFire"  aria-label="fuego"     title="Modo fuego">
@@ -88,9 +176,29 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
       </button>
     </div>
+    <button id="btnFull" aria-label="pantalla completa" title="Pantalla completa">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+    </button>
     <button id="btnInfo" aria-label="info" title="Info">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
+  </div>
+
+  <!-- Controles, alineados a los extremos de la barra (no centrados con los botones de juego).
+       izq sube · der baja. padR = jugador 1 (derecha) · padL = jugador 2 (izquierda, sólo 2P). -->
+  <div class="pad" id="padL" aria-label="control jugador 2">
+    <button class="ctl" data-side="L" data-dir="up" aria-label="subir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg></button>
+    <button class="ctl" data-side="L" data-dir="dn" aria-label="bajar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg></button>
+  </div>
+  <div class="pad" id="padR" aria-label="control jugador 1">
+    <button class="ctl" data-side="R" data-dir="up" aria-label="subir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg></button>
+    <button class="ctl" data-side="R" data-dir="dn" aria-label="bajar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg></button>
+  </div>
+
+  <!-- Aviso: girá el teléfono a horizontal -->
+  <div id="rotate">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="10.5" y1="19" x2="13.5" y2="19" stroke-width="2"/></svg>
+    <p>Girá el teléfono<br>Pong se juega en horizontal</p>
   </div>
 
   <script>
@@ -109,10 +217,11 @@
   const clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
   // ── TUNING KNOBS (todo en fracciones de pantalla / segundos) ──
-  const PADDLE_H_FRAC   = 0.18;    // alto paleta (fracción de H)
-  const PADDLE_W_FRAC   = 0.016;   // ancho paleta (fracción de W)
+  const PADDLE_H_FRAC   = 0.25;    // alto paleta (fracción de H)
+  const PADDLE_H_MAX_FRAC = 0.25;  // tope de alto relativo a min(W,H) — evita paletas larguísimas en celu/portrait
+  const PADDLE_W_FRAC   = 0.02;   // ancho paleta (fracción de W)
   const PADDLE_MARGIN_FRAC = 0.025;// separación de la paleta al borde (fracción de W)
-  const BALL_R_FRAC     = 0.012;   // radio pelota (fracción de min(W,H))
+  const BALL_R_FRAC     = 0.017;   // radio pelota (fracción de min(W,H))
 
   const VX0_FRAC        = 0.55;    // vx inicial del saque (W/s)
   const VX_MAX_FRAC     = 1.50;    // tope |vx| (W/s)
@@ -126,12 +235,37 @@
   const BOUNCE_ACCEL    = 1.05;    // vx ×1.05 en cada rebote con paleta
   const FIRE_BALL_MULT  = 1.25;    // vx extra cuando pega una paleta en llamas
   const WALL_ACCEL      = 1.10;    // vy ×1.10 al rebotar techo/piso (anti-estancamiento)
-  const SPIN_DIV        = 3;       // english: vy += velPaleta / SPIN_DIV
-  const FIRE_SPIN_DIV   = 4;       // english extra en llamas
+  const SPIN_DIV        = 2.1;     // english: vy += velPaleta / SPIN_DIV (más chico = más ángulo con el golpe; igual lo capa VY_MAX)
+  const FIRE_SPIN_DIV   = 2.8;     // english extra en llamas
   const SLOW_PADDLE_FRAC= 0.25;    // si |velPaleta| < esto (H/s) → amansa el ángulo (vy ×0.5)
 
   const FIRE_STREAK     = 3;       // racha para prenderse fuego
   const SERVE_DELAY     = 0.7;     // pausa (s) antes de lanzar el saque
+
+  // IA (modo 1 jugador) — juega con intención: predice el rebote, se posiciona y "tira" angulando
+  // la pelota lejos del rival. Buena pero no perfecta (error de puntería + despistes ocasionales).
+  const AI_SPEED_MULT   = 0.98;    // velocidad de la CPU vs el jugador (<1 = un poco más lenta)
+  const AI_ERROR_FRAC   = 0.06;    // error de puntería (fracción de H) que se suma al objetivo
+  const AI_REACT_FRAC   = 0.80;    // reacciona apenas la pelota cruza esta fracción de W hacia ella (proactiva)
+  const AI_FLICK_TIME   = 0.18;    // seg antes del impacto en que empieza a "barrer" la paleta para angular el tiro
+  const AI_AIM_FRAC     = 0.30;    // durante el barrido, cuánto se permite alejar del punto de impacto (fracción de paleta) → sigue cubriendo la pelota
+  const AI_MIX_CHANCE   = 0.30;    // a veces apunta al lado random en vez de lejos del rival (impredecible)
+  // Ciclos de juego: alterna períodos "smart" (predice + angula) con períodos "dumb" (juega mal, como
+  // el failtest del Pong original). El timer garantiza que cada tanto baje el nivel → humana y ganable.
+  const AI_SMART_MIN    = 2.5;     // duración (s) mínima de un período bueno
+  const AI_SMART_MAX    = 5.0;     // máxima → pasado esto SIEMPRE entra a un período malo
+  const AI_DUMB_MIN     = 0.7;     // duración (s) de un período malo
+  const AI_DUMB_MAX     = 1.8;
+  const AI_DUMB_SPEED   = 0.55;    // qué tan lenta se vuelve durante un período malo
+  const AI_DUMB_DEADZONE= 0.11;    // dead-zone (fracción de H): en período malo sólo se mueve si la pelota está lejos
+  const AI_IDLE_AMP     = 0.045;   // amplitud del vaivén suave (fracción de min(W,H)) para no quedarse muerta
+  const AI_IDLE_FREQ    = 2.2;     // velocidad del vaivén suave (rad/s)
+  // Siesta: cada tanto la IA se queda LITERALMENTE dormida sin moverse. Sobreescribe el movimiento,
+  // pero el resto de la lógica (ciclos, predicción) sigue procesándose por debajo.
+  const AI_AWAKE_MIN    = 4.5;     // seg despierta entre siestas
+  const AI_AWAKE_MAX    = 10;
+  const AI_SLEEP_MIN    = 0.6;     // duración de la siesta (no hace NADA)
+  const AI_SLEEP_MAX    = 1.6;
   const SCORE_LABELS    = ['5', '10', '20', '40', '∞'];
   const WIN_POINTS      = [5, 10, 20, 40, null];   // null = práctica (sin fin)
 
@@ -140,6 +274,7 @@
   const ctx = canvas.getContext('2d');
   const barEl = document.getElementById('bar');
   let W = 0, H = 0, dpr = 1;
+  let portrait = false;   // true = pantalla vertical → se muestra el aviso y se congela el juego (Pong va en horizontal)
 
   // settings
   let twoPlayers = false;          // false = 1 jugador (CPU paleta izq)
@@ -151,24 +286,40 @@
   let winner = 0;                  // 1 = jug.1 (der), 2 = jug.2 (izq)
   let j1score = 0, j2score = 0;
   let j1racha = 0, j2racha = 0;
-  let showInfo = false;
+  let showDebug = false;
 
   // paletas (cy = centro vertical en px, vel = velocidad px/s)
-  const right = { cy: 0, vel: 0, onFire: false, touchActive: false, touchY: 0 };  // jugador 1
-  const left  = { cy: 0, vel: 0, onFire: false, touchActive: false, touchY: 0 };  // jugador 2 / CPU
+  const right = { cy: 0, vel: 0, onFire: false };  // jugador 1
+  const left  = { cy: 0, vel: 0, onFire: false };  // jugador 2 / CPU
 
   // pelota
   let bx = 0, by = 0, bvx = 0, bvy = 0, serveCD = 0;
-  let fireball = false, firetrail = false, firenet = false;
-
-  // IA
-  let aiFailure = false, aiFailCD = 0;
+  let fireball = false, firetrail = false;
+  // 3 elementos que se prenden fuego independientemente cuando la pelota encendida los toca:
+  let fireTop = false, fireBot = false, fireNet = false;   // borde arriba · borde abajo · red del centro
 
   // color de fuego que titila (se recomputa cada frame)
   let FIRE = 'rgb(255,180,0)';
 
+  // fuentes: display (arcade) para títulos/marcador, sans legible para texto denso
+  const FONT    = "'Orbitron', 'Segoe UI', system-ui, sans-serif";
+  const FONT_UI = "'Segoe UI', system-ui, sans-serif";
+
+  // partículas de fuego (brasas + chispas) — se emiten desde la pelota y paletas encendidas
+  const embers = [];
+  const sparks = [];                       // chispas neón de impacto (rebotes), con color propio
+  const ballTrail = [];                    // posiciones recientes de la pelota para la estela
+  const TRAIL_LEN = 26;   // más puntos: la física ahora corre a 120 Hz, así la estela mantiene su largo
+
+  // ── PALETA NEÓN (look futurista) ──
+  const NEON_P1   = [90, 225, 255];        // cian — jugador 1 (paleta derecha)
+  const NEON_P2   = [255, 95, 205];        // magenta — jugador 2 / CPU (paleta izquierda)
+  const NEON_BALL = [195, 245, 255];       // pelota
+  const NEON_GRID = [70, 140, 210];        // grilla de fondo
+  const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a == null ? 1 : a})`;
+
   // ── GETTERS DE GEOMETRÍA (dependientes de la resolución actual) ──
-  const paddleH = () => PADDLE_H_FRAC * H;
+  const paddleH = () => Math.min(PADDLE_H_FRAC * H, PADDLE_H_MAX_FRAC * Math.min(W, H));
   const paddleW = () => Math.max(8, PADDLE_W_FRAC * W);
   const paddleMargin = () => PADDLE_MARGIN_FRAC * W;
   const ballR   = () => Math.max(5, BALL_R_FRAC * Math.min(W, H));
@@ -185,7 +336,9 @@
     bvx = dir * VX0_FRAC * W * rnd(0.85, 1.15);
     bvy = rnd(-1, 1) * VY0_FRAC * H * 0.6;
     serveCD = SERVE_DELAY;
-    fireball = false; firetrail = false; firenet = false;
+    fireball = false; firetrail = false; fireTop = false; fireBot = false; fireNet = false;
+    ballTrail.length = 0;                              // sin estela cruzando la cancha al sacar
+    prevBx = bx; prevBy = by; rbx = bx; rby = by;      // sin streak de interpolación tras el reset
   }
   function newMatch() {
     j1score = 0; j2score = 0; j1racha = 0; j2racha = 0;
@@ -204,7 +357,7 @@
   function scorePoint(scorer) {
     if (scorer === 1) { j1score++; j1racha++; j2racha = 0; }
     else              { j2score++; j2racha++; j1racha = 0; }
-    fireball = false; firetrail = false; firenet = false;
+    fireball = false; firetrail = false; fireTop = false; fireBot = false; fireNet = false;
     updateFireStates();
     const cond = WIN_POINTS[ptsIdx];
     if (cond != null && (j1score >= cond || j2score >= cond)) {
@@ -218,21 +371,31 @@
 
   // ── FÍSICA ──
   function updatePaddle(p, dt, isCPU, isRight) {
-    const maxSpd = paddleSpeed() * (p.onFire ? FIRE_SPEED_MULT : 1);
-    let target = null;
-    if (isCPU) target = aiTarget;
-    else if (p.touchActive) target = p.touchY;
-
-    if (target != null) {
-      const want = target - p.cy;
-      const step = clampN(want, -maxSpd * dt, maxSpd * dt);
-      p.vel = step / dt;
-      p.cy += step;
+    let maxSpd = paddleSpeed() * (p.onFire ? FIRE_SPEED_MULT : 1);
+    if (isCPU) maxSpd *= AI_SPEED_MULT * aiSpeedScale;
+    if (isCPU && aiSleeping) { p.vel = 0; return; }   // dormida: no hace NADA (sobreescribe el resto)
+    if (isCPU) {
+      if (aiFlickVel !== 0) {
+        // BARRIDO del tiro: velocidad fija en la dirección elegida, manteniéndose dentro de una
+        // ventana alrededor del punto de impacto para no dejar pasar la pelota. Garantiza que la
+        // paleta esté en movimiento en el contacto → la pelota sale angulada (no plana).
+        p.vel = aiFlickVel;
+        p.cy += p.vel * dt;
+        const span = paddleH() * AI_AIM_FRAC;
+        p.cy = clampN(p.cy, aiBaseY - span, aiBaseY + span);
+      } else {
+        // CPU posicionándose: persigue aiTarget
+        const want = aiTarget - p.cy;
+        const step = clampN(want, -maxSpd * dt, maxSpd * dt);
+        p.vel = step / dt;
+        p.cy += step;
+      }
     } else {
-      // teclado
+      // humano: botones de hold (sube/baja) + teclado, con aceleración suave
+      const b = isRight ? pad.R : pad.L;
       let dir = 0;
-      if (isRight) { if (keys.has('arrowup')) dir -= 1; if (keys.has('arrowdown')) dir += 1; }
-      else         { if (keys.has('w'))       dir -= 1; if (keys.has('s'))         dir += 1; }
+      if (isRight) { if (keys.has('arrowup') || b.up) dir -= 1; if (keys.has('arrowdown') || b.dn) dir += 1; }
+      else         { if (keys.has('w')       || b.up) dir -= 1; if (keys.has('s')         || b.dn) dir += 1; }
       const targetVel = dir * maxSpd;
       const k = 1 - Math.exp(-dt / ACCEL_TC);
       p.vel += (targetVel - p.vel) * k;
@@ -243,20 +406,97 @@
     if (p.cy > H - half) { p.cy = H - half; p.vel = 0; }
   }
 
-  // IA de la paleta izquierda (modo 1 jugador). Port del failtest del original:
-  // a veces "falla" y se queda quieta salvo que la pelota esté lejos.
-  let aiTarget = 0;
-  function updateAI(dt) {
-    aiFailCD -= dt;
-    if (aiFailCD <= 0) {
-      const ft = Math.random();
-      if (ft < 0.2) aiFailure = false;
-      else if (ft > 0.6) aiFailure = true;
-      aiFailCD = 0.4;
+  // IA de la paleta izquierda (modo 1 jugador). Predice dónde va a llegar la pelota reflejando
+  // los rebotes en techo/piso y la devuelve CON INTENCIÓN: se posiciona y, justo antes del impacto,
+  // barre la paleta para mandar la pelota lejos del rival. No juega perfecto (error + despistes).
+  let aiTarget = 0, aiError = 0, aiAimDir = 1, aiWasApproaching = false;
+  let aiFlickVel = 0, aiBaseY = 0;        // barrido del tiro: velocidad fija + centro alrededor del cual cubre
+  let aiMode = 'smart', aiModeCD = 3;     // ciclo bueno/malo (ver constantes AI_SMART/AI_DUMB)
+  let aiSpeedScale = 1;                   // 1 normal, <1 durante período malo (lo lee updatePaddle)
+  let aiSleeping = false, aiSleepCD = 5;  // siesta: dormida sin moverse (sobreescribe el movimiento)
+
+  // extrapola la y de la pelota hasta la cara de la paleta izquierda, reflejando en techo/piso.
+  function predictBallY() {
+    const r = ballR();
+    const faceX = leftX() + paddleW() + r;
+    if (bvx >= 0) return null;                 // no viene hacia la CPU
+    const dx = bx - faceX;
+    if (dx <= 0) return by;
+    const tHit = dx / Math.abs(bvx);
+    let y = by + bvy * tHit;
+    const lo = r, hi = H - r, span = hi - lo;  // reflejar dentro de [r, H-r] (rebote triangular)
+    if (span > 0) {
+      let m = (y - lo) % (2 * span);
+      if (m < 0) m += 2 * span;
+      y = m <= span ? lo + m : lo + (2 * span - m);
     }
-    let t = by;
-    if (aiFailure && Math.abs(by - left.cy) < 0.18 * H) t = left.cy;   // vago: no se mueve
-    aiTarget = t;
+    return y;
+  }
+
+  // vaivén suave (seno) para que la paleta respire sin teletransportarse — amplitud chica.
+  function idleSway() {
+    return Math.sin(performance.now() / 1000 * AI_IDLE_FREQ) * AI_IDLE_AMP * Math.min(W, H);
+  }
+
+  function updateAI(dt) {
+    // SIESTA: alterna períodos despierta/dormida. Sólo togglea el flag; el resto de la lógica
+    // (ciclos, predicción, posicionamiento) sigue procesándose igual — updatePaddle es quien
+    // sobreescribe el movimiento a 0 mientras duerme.
+    aiSleepCD -= dt;
+    if (aiSleepCD <= 0) {
+      aiSleeping = !aiSleeping;
+      aiSleepCD = aiSleeping ? rnd(AI_SLEEP_MIN, AI_SLEEP_MAX) : rnd(AI_AWAKE_MIN, AI_AWAKE_MAX);
+    }
+
+    // CICLO bueno/malo: el timer fuerza un período "dumb" cada tanto (juega mal como el original).
+    aiModeCD -= dt;
+    if (aiModeCD <= 0) {
+      if (aiMode === 'smart') { aiMode = 'dumb';  aiModeCD = rnd(AI_DUMB_MIN, AI_DUMB_MAX); }
+      else                    { aiMode = 'smart'; aiModeCD = rnd(AI_SMART_MIN, AI_SMART_MAX); }
+    }
+    aiFlickVel = 0;
+
+    if (aiMode === 'dumb') {
+      // PERÍODO MALO: no predice, sigue la y ACTUAL de la pelota con dead-zone y lento, sin angular.
+      // Contra una pelota que rebota llega tarde/al lugar equivocado → pierde puntos, bien humano.
+      aiSpeedScale = AI_DUMB_SPEED;
+      aiWasApproaching = false;
+      if (bvx < 0 && Math.abs(by - left.cy) > AI_DUMB_DEADZONE * H) aiTarget = by;
+      else aiTarget = left.cy + idleSway();                  // si no, se queda (apenas respira)
+      return;
+    }
+
+    // PERÍODO BUENO
+    aiSpeedScale = 1;
+    const approaching = bvx < 0 && bx < W * AI_REACT_FRAC;   // viene y ya cruzó el umbral de reacción
+    if (approaching) {
+      // al empezar un intercambio entrante, elige hacia dónde devolver: lejos del rival (intención),
+      // con una chance de tirar al azar para no ser predecible.
+      if (!aiWasApproaching) {
+        aiAimDir = right.cy < H / 2 ? 1 : -1;                // rival arriba → manda abajo (y viceversa)
+        if (Math.random() < AI_MIX_CHANCE) aiAimDir = Math.random() < 0.5 ? -1 : 1;
+        aiError = rnd(-1, 1) * AI_ERROR_FRAC * Math.min(W, H);  // sesgo de puntería fijo para este intercambio
+      }
+      aiWasApproaching = true;
+      const pred = predictBallY();
+      aiBaseY = (pred == null ? by : pred) + aiError;
+      const faceX = leftX() + paddleW() + ballR();
+      const tHit = Math.max(0, (bx - faceX) / Math.abs(bvx || 1));
+      const span = paddleH() * AI_AIM_FRAC;
+      if (tHit < AI_FLICK_TIME && Math.abs(left.cy - aiBaseY) <= span) {
+        // YA posicionada y a punto de pegar: BARRE la paleta a velocidad fija en la dirección del tiro.
+        // Como el spin sale de la velocidad de la paleta, la pelota sale angulada y fuerte (no plana).
+        // Sólo si ya llegó: si está lejos, sigue persiguiendo (abajo) — sin teletransporte.
+        aiFlickVel = aiAimDir * paddleSpeed() * AI_SPEED_MULT;
+      } else {
+        aiTarget = aiBaseY;                                  // posicionarse (si no llega a tiempo, pierde: justo)
+      }
+    } else {
+      aiWasApproaching = false;
+      // pelota alejándose → se adelanta hacia el centro pero del lado al que tiró, con vaivén suave.
+      const anchor = bvx > 0 ? H / 2 + aiAimDir * H * 0.12 : left.cy;
+      aiTarget = anchor + idleSway();
+    }
   }
 
   function paddleHit(p, isRight) {
@@ -282,6 +522,9 @@
     bvx = -bvx * BOUNCE_ACCEL;
     bvy += p.vel / SPIN_DIV;
     bvx = clampN(bvx, -vxMax(), vxMax());
+    // chispas en el color de la paleta (naranja si está en llamas)
+    const col = p.onFire ? [255, 170, 40] : (isRight ? NEON_P1 : NEON_P2);
+    burst(bx, by, col, 12, Math.min(W, H) * 0.6, ballR() * 0.5, 0.4);
   }
 
   function updateBall(dt) {
@@ -289,20 +532,22 @@
     const r = ballR();
     bx += bvx * dt;
     by += bvy * dt;
+    ballTrail.push({ x: bx, y: by });                 // estela
+    if (ballTrail.length > TRAIL_LEN) ballTrail.shift();
 
-    // techo / piso
-    if (by > H - r) { by = H - r; bvy = -Math.abs(bvy) * WALL_ACCEL; }
-    if (by < r)     { by = r;     bvy =  Math.abs(bvy) * WALL_ACCEL; }
+    // techo / piso — si la pelota viene encendida, prende ese borde
+    if (by > H - r) { by = H - r; bvy = -Math.abs(bvy) * WALL_ACCEL; burst(bx, H, fireball ? [255, 170, 40] : NEON_P1, 7, Math.min(W, H) * 0.5, r * 0.4, 0.3); if (fireball) fireBot = true; }
+    if (by < r)     { by = r;     bvy =  Math.abs(bvy) * WALL_ACCEL; burst(bx, 0, fireball ? [255, 170, 40] : NEON_P1, 7, Math.min(W, H) * 0.5, r * 0.4, 0.3); if (fireball) fireTop = true; }
 
     paddleHit(right, true);
     paddleHit(left, false);
     bvy = clampN(bvy, -vyMax(), vyMax());
 
     // red de fuego: la pelota encendida cruza el centro
-    if (fireball && Math.abs(bx - W / 2) < 0.02 * W) firenet = true;
-    if (!fireball) firenet = false;
+    if (fireball && Math.abs(bx - W / 2) < 0.02 * W) fireNet = true;
+    if (!fireball) { fireTop = false; fireBot = false; fireNet = false; }
 
-    // puntos: la pelota sale por un borde
+    // puntos: la pelota sale por un borde (sin chispas: no es un rebote, la pelota se va)
     if (bx - r > W)  scorePoint(2);   // sale por la derecha → falló jug.1 → punto jug.2
     else if (bx + r < 0) scorePoint(1); // sale por la izquierda → falló jug.2 → punto jug.1
   }
@@ -319,45 +564,34 @@
   addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
   addEventListener('blur', () => keys.clear());
 
-  // táctil: cada dedo se asigna a un lado según dónde toca. La mitad derecha mueve
-  // la paleta del jugador 1; la izquierda, la del jugador 2 (ignorada si es CPU).
-  const pointers = new Map();   // id → 'L' | 'R'
-  function evtY(e) { const r = canvas.getBoundingClientRect(); return e.clientY - r.top; }
-  function evtX(e) { const r = canvas.getBoundingClientRect(); return e.clientX - r.left; }
+  // Botones de control (hold): izquierda = sube, derecha = baja. R = jugador 1, L = jugador 2.
+  const pad = { R: { up: false, dn: false }, L: { up: false, dn: false } };
+  function holdCtl(el) {
+    const side = el.dataset.side, dir = el.dataset.dir === 'up' ? 'up' : 'dn';
+    const set = v => { pad[side][dir] = v; el.classList.toggle('held', v); };
+    el.addEventListener('pointerdown', e => { e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch {} set(true); });
+    el.addEventListener('pointerup', () => set(false));
+    el.addEventListener('pointercancel', () => set(false));
+  }
+  document.querySelectorAll('.ctl').forEach(holdCtl);
 
+  // Detección de PC (sin pantalla táctil): ahí se juega con teclado, así que ocultamos los pads.
+  const isTouch = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
+                  || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+  if (!isTouch) {
+    document.getElementById('padR').style.display = 'none';
+    document.getElementById('padL').style.display = 'none';
+  }
+
+  // Toque directo en el canvas: reinicia (fin de partida) o reanuda (pausa). El juego se maneja
+  // con los botones de control, así que acá sólo viven esos atajos + descartar el hint.
   canvas.addEventListener('pointerdown', e => {
-    canvas.setPointerCapture(e.pointerId);
+    tryAutoFs(e);                          // primer toque en mobile → pantalla completa
     hint.style.opacity = '0';
-    if (state === 'over') { newMatch(); return; }
-    if (state === 'paused') { togglePause(); return; }
-    const side = evtX(e) < W / 2 ? 'L' : 'R';
-    if (side === 'L' && !twoPlayers) return;   // paleta izq es CPU en 1 jugador
-    pointers.set(e.pointerId, side);
-    syncTouch();
-    if (side === 'R') right.touchY = evtY(e);
-    else              left.touchY  = evtY(e);
+    if (state === 'over') newMatch();
+    else if (state === 'paused') togglePause();
   });
-  canvas.addEventListener('pointermove', e => {
-    const side = pointers.get(e.pointerId);
-    if (!side) return;
-    if (side === 'R') right.touchY = evtY(e);
-    else              left.touchY  = evtY(e);
-  });
-  function endPointer(e) {
-    if (!pointers.has(e.pointerId)) return;
-    pointers.delete(e.pointerId);
-    syncTouch();
-  }
-  canvas.addEventListener('pointerup', endPointer);
-  canvas.addEventListener('pointercancel', endPointer);
   canvas.addEventListener('contextmenu', e => e.preventDefault());
-
-  function syncTouch() {
-    let l = false, r = false;
-    for (const s of pointers.values()) { if (s === 'L') l = true; else r = true; }
-    left.touchActive = l;
-    right.touchActive = r;
-  }
 
   // ── BOTONES ──
   function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
@@ -371,13 +605,37 @@
     btnMode.textContent = twoPlayers ? '2P' : '1P';
     btnPoints.textContent = SCORE_LABELS[ptsIdx];
     btnFire.classList.toggle('on', fireEnabled);
+    document.body.classList.toggle('two', twoPlayers);   // muestra la palanca izquierda en 2P
   }
   tappable(btnMode, () => { twoPlayers = !twoPlayers; refreshButtons(); newMatch(); });
   tappable(btnPoints, () => { ptsIdx = (ptsIdx + 1) % WIN_POINTS.length; refreshButtons(); newMatch(); });
   tappable(btnFire, () => { fireEnabled = !fireEnabled; refreshButtons(); updateFireStates(); });
   tappable(btnPause, togglePause);
   tappable(document.getElementById('btnReset'), () => newMatch());
-  tappable(btnInfo, () => { showInfo = !showInfo; btnInfo.classList.toggle('on', showInfo); });
+  tappable(btnInfo, () => { showDebug = !showDebug; btnInfo.classList.toggle('on', showDebug); });
+
+  // ── PANTALLA COMPLETA (como CrazyTanks) ──
+  // En mobile saca la barra del navegador. iOS Safari no soporta la Fullscreen API en elementos
+  // arbitrarios → ahí falla en silencio (queda la alternativa de "agregar a pantalla de inicio").
+  const fsTarget = document.documentElement;
+  const _reqFs  = fsTarget.requestFullscreen || fsTarget.webkitRequestFullscreen;
+  const _exitFs = document.exitFullscreen || document.webkitExitFullscreen;
+  const isFs    = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
+  const enterFs = () => { if (_reqFs)  { const p = _reqFs.call(fsTarget); if (p && p.catch) p.catch(() => {}); } };
+  const exitFs  = () => { if (_exitFs) _exitFs.call(document); };
+  function syncFsIcon() { document.body.classList.toggle('fs-on', isFs()); }
+  document.addEventListener('fullscreenchange', syncFsIcon);
+  document.addEventListener('webkitfullscreenchange', syncFsIcon);
+  tappable(document.getElementById('btnFull'), () => { isFs() ? exitFs() : enterFs(); });
+
+  // Auto pantalla completa en el primer toque del canvas (sólo touch; en desktop no se fuerza).
+  let autoFsDone = false;
+  function tryAutoFs(e) {
+    if (autoFsDone) return;
+    autoFsDone = true;
+    if (e && e.pointerType === 'mouse') return;
+    if (!isFs()) enterFs();
+  }
 
   function togglePause() {
     if (state === 'play') state = 'paused';
@@ -399,135 +657,356 @@
     // reubicar paletas/pelota proporcionalmente al alto nuevo
     const f = H / oldH;
     right.cy *= f; left.cy *= f; by *= f;
+    // Pong se juega en horizontal: si la pantalla está vertical, mostrar el aviso de rotar.
+    portrait = window.innerHeight > window.innerWidth;
+    document.getElementById('rotate').style.display = portrait ? 'flex' : 'none';
   }
   window.addEventListener('resize', resize);
 
   // ── DRAW ──
+  function drawBackground() {
+    // gradiente radial: centro azulado, bordes casi negros → profundidad/viñeteado
+    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.05, W / 2, H / 2, Math.max(W, H) * 0.72);
+    g.addColorStop(0, '#0d1830');
+    g.addColorStop(0.6, '#070b18');
+    g.addColorStop(1, '#020308');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    // grilla tenue (futurista), centrada
+    const step = Math.max(26, Math.min(W, H) * 0.06);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = rgba(NEON_GRID, 0.10);
+    ctx.beginPath();
+    for (let x = (W / 2) % step; x <= W; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
+    for (let y = (H / 2) % step; y <= H; y += step) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
+    ctx.stroke();
+
+    // marco neón arriba/abajo (las "paredes"). Cada borde se prende fuego por separado.
+    drawFrameLine(1.5, fireTop);
+    drawFrameLine(H - 1.5, fireBot);
+  }
+  function drawFrameLine(y, lit) {
+    const col = lit ? FIRE : rgba(NEON_P1, 0.55);
+    ctx.save();
+    ctx.strokeStyle = col;
+    ctx.lineWidth = Math.max(2, H * 0.004) * (lit ? 1.8 : 1);
+    ctx.shadowColor = col; ctx.shadowBlur = Math.min(W, H) * (lit ? 0.04 : 0.02);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    ctx.restore();
+  }
+
   function drawNet() {
-    const col = firenet ? FIRE : 'rgba(255,255,255,0.6)';
-    const w = firenet ? Math.max(4, 0.006 * W) : Math.max(2, 0.003 * W);
+    const col = fireNet ? FIRE : rgba(NEON_P1, 0.22);
+    const w = fireNet ? Math.max(4, 0.006 * W) : Math.max(2, 0.0028 * W);
     const dash = H * 0.03, gap = H * 0.022;
+    ctx.save();
     ctx.strokeStyle = col;
     ctx.lineWidth = w;
-    ctx.lineCap = 'butt';
+    ctx.lineCap = 'round';
+    ctx.shadowColor = fireNet ? FIRE : rgba(NEON_P1, 0.7);
+    ctx.shadowBlur = Math.min(W, H) * (fireNet ? 0.03 : 0.013);
     ctx.setLineDash([dash, gap]);
     ctx.beginPath();
     ctx.moveTo(W / 2, 0);
     ctx.lineTo(W / 2, H);
     ctx.stroke();
-    ctx.setLineDash([]);
+    ctx.restore();
   }
 
   function drawPaddle(p, isRight) {
     const pw = paddleW(), ph = paddleH();
     const x = isRight ? rightX() : leftX();
     const y = p.cy - ph / 2;
-    const r = Math.min(pw, ph) * 0.35;
-    ctx.fillStyle = p.onFire ? FIRE : '#fff';
-    if (p.onFire) { ctx.shadowColor = FIRE; ctx.shadowBlur = 0.04 * Math.min(W, H); }
-    roundRect(x, y, pw, ph, r); ctx.fill();
-    ctx.shadowBlur = 0;
+    const r = Math.min(pw, ph) * 0.45, s = Math.min(W, H);
+    const onF = p.onFire;
+    const col = onF ? [255, 140, 30] : (isRight ? NEON_P1 : NEON_P2);
+    // glow exterior: en fuego es naranja pero con blur contenido para no desdibujar el cuerpo
+    ctx.save();
+    ctx.shadowColor = rgba(col, 0.95);
+    ctx.shadowBlur = s * (onF ? 0.042 : 0.05);
+    ctx.fillStyle = rgba(col, 0.9);
+    roundRect(x, y, pw, ph, r); ctx.fill(); ctx.fill();
+    ctx.restore();
+    // núcleo claro con sheen vertical (glossy): más brillante arriba — define bien la paleta
+    const inset = pw * 0.30;
+    const cg = ctx.createLinearGradient(0, y, 0, y + ph);
+    cg.addColorStop(0,   onF ? 'rgba(255,250,232,0.99)' : 'rgba(255,255,255,0.98)');
+    cg.addColorStop(0.5, onF ? 'rgba(255,205,120,0.92)' : 'rgba(230,248,255,0.85)');
+    cg.addColorStop(1,   onF ? 'rgba(255,160,60,0.82)'  : rgba(col, 0.7));
+    ctx.fillStyle = cg;
+    roundRect(x + inset * 0.5, y + ph * 0.05, pw - inset, ph * 0.9, r * 0.5); ctx.fill();
   }
 
   function drawBall() {
     const r = ballR();
-    if (firetrail) {
-      // estela de fuego detrás de la pelota
-      for (let i = 1; i <= 4; i++) {
-        const tx = bx - (bvx / Math.abs(bvx || 1)) * r * 1.2 * i;
-        const ty = by - (bvy * 0.012) * i;   // leve curva siguiendo vy
-        ctx.fillStyle = FIRE;
-        ctx.globalAlpha = 0.5 - i * 0.1;
-        ctx.beginPath(); ctx.arc(tx, ty, Math.max(1, r - i * (r * 0.18)), 0, TAU); ctx.fill();
-      }
-      ctx.globalAlpha = 1;
+    const bx = rbx, by = rby;                    // posición interpolada (sombrea la física → render suave)
+    const col = fireball ? [255, 180, 50] : NEON_BALL;
+    ctx.globalCompositeOperation = 'lighter';
+    // estela: segmentos que UNEN las posiciones recientes (línea continua, sin huecos aunque la
+    // pelota vaya rápida), con ancho cónico + caps redondos. El segmento final se extiende hasta
+    // la posición actual para que no quede separada del último punto guardado.
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (let i = 1; i < ballTrail.length; i++) {
+      const t = i / ballTrail.length;             // 0 viejo → 1 nuevo
+      const a = ballTrail[i - 1], b = ballTrail[i];
+      ctx.strokeStyle = rgba(col, 0.13 * t);
+      ctx.lineWidth = r * 2 * (0.25 + 0.75 * t);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
     }
-    ctx.fillStyle = fireball ? FIRE : '#fff';
-    if (fireball) { ctx.shadowColor = FIRE; ctx.shadowBlur = 0.05 * Math.min(W, H); }
+    if (ballTrail.length) {                        // une el último punto con la pelota actual
+      const a = ballTrail[ballTrail.length - 1];
+      ctx.strokeStyle = rgba(col, 0.13);
+      ctx.lineWidth = r * 2;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(bx, by); ctx.stroke();
+    }
+    // resplandor radial (pulsa en fuego)
+    const gr = r * (fireball ? (3.2 + 0.8 * Math.sin(performance.now() / 70)) : 2.4);
+    const g = ctx.createRadialGradient(bx, by, 0, bx, by, gr);
+    if (fireball) {
+      g.addColorStop(0, 'rgba(255,240,170,0.7)');
+      g.addColorStop(0.35, 'rgba(255,120,0,0.35)');
+      g.addColorStop(1, 'rgba(255,40,0,0)');
+    } else {
+      g.addColorStop(0, rgba(NEON_BALL, 0.6));
+      g.addColorStop(0.5, rgba(NEON_P1, 0.22));
+      g.addColorStop(1, rgba(NEON_P1, 0));
+    }
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(bx, by, gr, 0, TAU); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    // núcleo: esfera glossy. Degradé con luz arriba-izquierda, color medio y borde más oscuro
+    // (da volumen) — sin cortes secos contra el glow.
+    const lx = bx - r * 0.36, ly = by - r * 0.36;
+    const cg = ctx.createRadialGradient(lx, ly, r * 0.04, bx, by, r * 1.02);
+    if (fireball) {
+      cg.addColorStop(0, '#fffdf2');
+      cg.addColorStop(0.5, 'rgba(255,196,80,1)');
+      cg.addColorStop(1, 'rgba(214,96,12,1)');
+    } else {
+      cg.addColorStop(0, '#ffffff');
+      cg.addColorStop(0.5, rgba(NEON_BALL, 1));
+      cg.addColorStop(1, 'rgba(64,150,200,1)');           // borde cian más oscuro = sombra de la esfera
+    }
+    ctx.fillStyle = cg;
     ctx.beginPath(); ctx.arc(bx, by, r, 0, TAU); ctx.fill();
-    ctx.shadowBlur = 0;
+    // brillo especular SUAVE (radial → transparente, no un disco plano)
+    const hx = bx - r * 0.33, hy = by - r * 0.33, hr = r * 0.6;
+    const hg = ctx.createRadialGradient(hx, hy, 0, hx, hy, hr);
+    hg.addColorStop(0, 'rgba(255,255,255,0.95)');
+    hg.addColorStop(0.6, 'rgba(255,255,255,0.35)');
+    hg.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = hg;
+    ctx.beginPath(); ctx.arc(hx, hy, hr, 0, TAU); ctx.fill();
+  }
+
+  // ── FUEGO (partículas: kind 0 = brasa, 1 = chispa rápida) ──
+  function spawnEmber(x, y, vx, vy, life, size, kind) {
+    if (embers.length > 340) return;
+    embers.push({ x, y, vx, vy, life, max: life, size, kind: kind || 0 });
+  }
+  function emitFire() {
+    const r = ballR(), s = Math.min(W, H);
+    if (fireball) {
+      for (let i = 0; i < 4; i++)                 // brasas (cuerpo del fuego)
+        spawnEmber(bx + rnd(-r, r) * 0.6, by + rnd(-r, r) * 0.6,
+          -bvx * 0.12 + rnd(-1, 1) * s * 0.25, -bvy * 0.12 + rnd(-1, 1) * s * 0.25,
+          rnd(0.25, 0.55), rnd(r * 0.4, r * 0.9), 0);
+      for (let i = 0; i < 2; i++)                 // chispas (rápidas, blancas, cortas)
+        spawnEmber(bx, by,
+          -bvx * 0.05 + rnd(-1, 1) * s * 0.55, -bvy * 0.05 + rnd(-1, 1) * s * 0.55,
+          rnd(0.12, 0.3), rnd(r * 0.12, r * 0.32), 1);
+    }
+    for (const [p, isR] of [[right, true], [left, false]]) {
+      if (!p.onFire) continue;
+      const ph = paddleH(), pw = paddleW();
+      const cx = (isR ? rightX() : leftX()) + pw / 2;   // centro de la paleta
+      for (let i = 0; i < 2; i++)                 // brasas: suben desde el centro, repartidas a lo alto
+        spawnEmber(cx + rnd(-1, 1) * pw * 0.4, p.cy + rnd(-ph / 2, ph / 2),
+          rnd(-1, 1) * s * 0.05, -rnd(s * 0.1, s * 0.3),
+          rnd(0.3, 0.6), rnd(pw * 0.5, pw * 1.2), 0);
+      if (Math.random() < 0.5)                    // alguna chispa saltando hacia el campo
+        spawnEmber(cx, p.cy + rnd(-ph / 2, ph / 2),
+          (isR ? -1 : 1) * rnd(s * 0.1, s * 0.4), rnd(-1, 1) * s * 0.2,
+          rnd(0.12, 0.28), rnd(pw * 0.2, pw * 0.45), 1);
+    }
+    // llamas a lo largo de los elementos prendidos (bordes y red)
+    const fsz = () => rnd(r * 0.35, r * 0.8);
+    if (fireBot) for (let i = 0; i < 2; i++)       // piso → llamas que suben
+      spawnEmber(rnd(0, W), H - rnd(0, r), rnd(-1, 1) * s * 0.06, -rnd(s * 0.12, s * 0.3), rnd(0.3, 0.6), fsz(), 0);
+    if (fireTop) for (let i = 0; i < 2; i++)       // techo → llamas que cuelgan hacia adentro
+      spawnEmber(rnd(0, W), rnd(0, r), rnd(-1, 1) * s * 0.06, rnd(s * 0.04, s * 0.12), rnd(0.3, 0.55), fsz(), 0);
+    if (fireNet) for (let i = 0; i < 2; i++)       // red → llamas a lo largo del centro
+      spawnEmber(W / 2 + rnd(-r, r) * 0.6, rnd(0, H), rnd(-1, 1) * s * 0.05, -rnd(s * 0.08, s * 0.22), rnd(0.3, 0.55), fsz(), 0);
+  }
+  function updateEmbers(dt) {
+    const buoy = 0.6 * Math.min(W, H);
+    for (let i = embers.length - 1; i >= 0; i--) {
+      const e = embers[i];
+      e.vy -= (e.kind === 1 ? buoy * 0.3 : buoy) * dt;   // las brasas flotan; las chispas casi van rectas
+      const drag = e.kind === 1 ? 2.4 : 1.6;
+      e.vx *= (1 - drag * dt); e.vy *= (1 - (e.kind === 1 ? 1.6 : 0.7) * dt);
+      e.x += e.vx * dt; e.y += e.vy * dt;
+      e.life -= dt;
+      if (e.life <= 0) embers.splice(i, 1);
+    }
+  }
+  function drawEmbers() {
+    if (!embers.length) return;
+    ctx.globalCompositeOperation = 'lighter';
+    for (const e of embers) {
+      const t = Math.max(0, e.life / e.max);   // 1 reciente → 0 muerta
+      if (e.kind === 1) {                       // chispa: blanco-amarillo brillante
+        ctx.fillStyle = `rgba(255,255,${Math.round(200 * t)},${0.85 * t})`;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.size * (0.4 + 0.6 * t), 0, TAU); ctx.fill();
+      } else {                                  // brasa: amarillo → rojo profundo
+        const g = Math.round(70 + 165 * t);
+        const b = Math.round(40 * t * t);
+        ctx.fillStyle = `rgba(255,${g},${b},${0.5 * t})`;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.size * (0.35 + 0.65 * t), 0, TAU); ctx.fill();
+      }
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // ── CHISPAS DE IMPACTO (rebotes) ──
+  function burst(x, y, col, n, spd, sz, life) {
+    for (let i = 0; i < n; i++) {
+      const a = Math.random() * TAU, v = spd * (0.3 + 0.7 * Math.random());
+      sparks.push({
+        x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v,
+        life: life * (0.6 + 0.6 * Math.random()), max: life,
+        size: sz * (0.5 + 0.8 * Math.random()), col,
+      });
+    }
+  }
+  function updateSparks(dt) {
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const p = sparks[i];
+      p.vx *= (1 - 3 * dt); p.vy *= (1 - 3 * dt);
+      p.x += p.vx * dt; p.y += p.vy * dt;
+      p.life -= dt;
+      if (p.life <= 0) sparks.splice(i, 1);
+    }
+  }
+  function drawSparks() {
+    if (!sparks.length) return;
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of sparks) {
+      const t = Math.max(0, p.life / p.max);
+      ctx.fillStyle = rgba(p.col, 0.85 * t);
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (0.3 + 0.7 * t), 0, TAU); ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
   }
 
   function drawScores() {
     if (WIN_POINTS[ptsIdx] == null) return;   // práctica: sin marcador
-    const col = firenet ? FIRE : '#fff';
-    ctx.fillStyle = col;
+    const fs = Math.round(Math.min(60, H * 0.082));
+    ctx.font = `700 ${fs}px ${FONT}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    const fs = Math.round(Math.min(64, H * 0.085));
-    ctx.font = `700 ${fs}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillText(String(j2score), W / 2 - W * 0.10, H * 0.04);   // izq = jug.2
-    ctx.fillText(String(j1score), W / 2 + W * 0.10, H * 0.04);   // der = jug.1
+    const c2 = fireNet ? [255, 180, 50] : NEON_P2;   // izq = jug.2 (magenta)
+    const c1 = fireNet ? [255, 180, 50] : NEON_P1;   // der = jug.1 (cian)
+    ctx.save();
+    ctx.shadowBlur = fs * 0.45;
+    ctx.shadowColor = rgba(c2, 0.85); ctx.fillStyle = rgba(c2, 0.95);
+    ctx.fillText(String(j2score), W / 2 - W * 0.12, H * 0.045);
+    ctx.shadowColor = rgba(c1, 0.85); ctx.fillStyle = rgba(c1, 0.95);
+    ctx.fillText(String(j1score), W / 2 + W * 0.12, H * 0.045);
+    ctx.restore();
   }
 
   function drawFireLabels() {
-    const fs = Math.round(Math.min(24, H * 0.03));
-    ctx.font = `700 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+    if (!right.onFire && !left.onFire) return;
+    const fs = Math.round(Math.min(20, H * 0.026));
+    ctx.font = `900 ${fs}px ${FONT}`;
     ctx.fillStyle = FIRE;
     ctx.textBaseline = 'top';
-    if (right.onFire) { ctx.textAlign = 'right';  ctx.fillText('ON FIRE!', W - W * 0.02, H * 0.02); }
-    if (left.onFire)  { ctx.textAlign = 'left';   ctx.fillText('ON FIRE!', W * 0.02, H * 0.02); }
+    ctx.letterSpacing = '0.08em';
+    ctx.shadowColor = FIRE; ctx.shadowBlur = fs * 0.7;
+    if (right.onFire) { ctx.textAlign = 'right'; ctx.fillText('ON FIRE', W - W * 0.03, H * 0.02); }
+    if (left.onFire)  { ctx.textAlign = 'left';  ctx.fillText('ON FIRE', W * 0.03, H * 0.02); }
+    ctx.shadowBlur = 0;
+    ctx.letterSpacing = '0px';
   }
 
-  function drawCenterMsg(big, small, col) {
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = col;
-    const bs = Math.round(Math.min(72, H * 0.10));
-    ctx.font = `800 ${bs}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillText(big, W / 2, H / 2);
-    if (small) {
-      const ss = Math.round(Math.min(20, H * 0.028));
-      const blink = (Math.sin(performance.now() / 1000 * 3) + 1) * 0.5;
-      ctx.fillStyle = `rgba(220,225,240,${0.55 + 0.35 * blink})`;
-      ctx.font = `500 ${ss}px 'Segoe UI', system-ui, sans-serif`;
-      ctx.fillText(small, W / 2, H / 2 + bs * 0.75);
-    }
+  // PAUSA: overlay oscuro + glifo de pausa con glow + "PAUSA". Sin texto parpadeante.
+  function drawPause() {
+    ctx.fillStyle = 'rgba(8,10,16,0.62)';
+    ctx.fillRect(0, 0, W, H);
+    const cx = W / 2, s = Math.min(W, H);
+    const bw = s * 0.045, bh = s * 0.155, gap = s * 0.038, r = bw * 0.4;
+    const top = H / 2 - bh / 2 - s * 0.045;
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.shadowColor = 'rgba(120,200,255,0.55)'; ctx.shadowBlur = s * 0.035;
+    roundRect(cx - gap / 2 - bw, top, bw, bh, r); ctx.fill();
+    roundRect(cx + gap / 2,      top, bw, bh, r); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(235,238,250,0.9)';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const fs = Math.round(Math.min(32, s * 0.066));
+    ctx.font = `700 ${fs}px ${FONT}`;
+    ctx.letterSpacing = '0.22em';
+    ctx.fillText('PAUSA', cx, top + bh + s * 0.07);
+    ctx.letterSpacing = '0px';
   }
 
   function drawOver() {
+    ctx.fillStyle = 'rgba(6,8,14,0.58)';
+    ctx.fillRect(0, 0, W, H);
     let big;
-    if (twoPlayers) big = winner === 1 ? '¡GANA JUGADOR 1!' : '¡GANA JUGADOR 2!';
+    if (twoPlayers) big = winner === 1 ? 'GANA JUGADOR 1' : 'GANA JUGADOR 2';
     else            big = winner === 1 ? '¡GANASTE!' : 'GANA LA CPU';
-    const col = `rgb(${rndi(80,255)},${rndi(80,255)},${rndi(80,255)})`;
-    drawCenterMsg(big, 'TOCÁ PARA OTRA PARTIDA', col);
+    const s = Math.min(W, H);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    // glow según gane por fuego o no
+    const fireWin = winner === 1 ? right.onFire : left.onFire;
+    const glow = fireWin ? FIRE : 'rgba(120,200,255,0.6)';
+    const bs = Math.round(Math.min(54, s * 0.105));
+    ctx.font = `900 ${bs}px ${FONT}`;
+    ctx.shadowColor = glow; ctx.shadowBlur = s * 0.055;
+    ctx.fillStyle = '#fff';
+    ctx.letterSpacing = '0.04em';
+    ctx.fillText(big, W / 2, H / 2 - s * 0.025);
+    ctx.shadowBlur = 0;
+    const ss = Math.round(Math.min(15, s * 0.03));
+    ctx.font = `500 ${ss}px ${FONT}`;
+    ctx.fillStyle = 'rgba(200,210,230,0.7)';
+    ctx.letterSpacing = '0.16em';
+    ctx.fillText('TOCÁ PARA JUGAR DE NUEVO', W / 2, H / 2 + bs * 0.7);
+    ctx.letterSpacing = '0px';
   }
 
-  function drawInfoOverlay() {
-    if (!showInfo) return;
+  // HUD de FPS, estilo BallsWeb: panel monoespaciado arriba a la izquierda.
+  function drawDebugHUD() {
+    if (!showDebug) return;
     const lines = [
-      'PONG',
-      '',
-      'Jugador 1 (paleta derecha): ↑ / ↓  · táctil: mitad derecha',
-      'Jugador 2 (paleta izquierda): W / S · táctil: mitad izquierda',
-      'En 1 jugador la paleta izquierda es la CPU.',
-      '',
-      'Botón 1P/2P : 1 o 2 jugadores',
-      'Botón nº    : puntos para ganar (5/10/20/40/∞)',
-      'Botón 🔥    : modo fuego (racha de 3 prende la paleta)',
-      'Botón ‖     : pausa · P o ESC también',
-      'Botón ↻     : reiniciar partida',
+      'FPS: ' + Math.round(1 / Math.max(1e-3, dtSmoothed)),
+      'Bola: ' + Math.round(Math.hypot(bvx, bvy)) + ' px/s',
     ];
-    const fs = Math.round(Math.min(15, H * 0.022));
-    const lh = fs * 1.55;
-    ctx.font = `500 ${fs}px 'Segoe UI', system-ui, sans-serif`;
-    let maxW = 0;
-    for (const l of lines) maxW = Math.max(maxW, ctx.measureText(l).width);
-    const padX = 18, padY = 16;
-    const boxW = maxW + padX * 2, boxH = lh * lines.length + padY * 2;
-    const x = (W - boxW) / 2, y = (H - boxH) / 2;
-    ctx.fillStyle = 'rgba(0,0,0,0.82)';
-    roundRect(x, y, boxW, boxH, 12); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1;
-    roundRect(x, y, boxW, boxH, 12); ctx.stroke();
-    ctx.fillStyle = '#ebebf5';
+    const lh = 18, padX = 8, padY = 8, boxW = 132;
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(padX, padY, boxW, lh * lines.length + 8);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.font = '13px ui-monospace, Menlo, Consolas, monospace';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    for (let i = 0; i < lines.length; i++) {
-      ctx.font = i === 0 ? `800 ${Math.round(fs * 1.4)}px 'Segoe UI', system-ui, sans-serif`
-                         : `500 ${fs}px 'Segoe UI', system-ui, sans-serif`;
-      ctx.fillText(lines[i], x + padX, y + padY + i * lh);
-    }
+    lines.forEach((s, i) => ctx.fillText(s, padX + 6, padY + 4 + i * lh));
+  }
+
+  // "Zzz" sobre la paleta de la CPU mientras duerme (sólo en 1 jugador).
+  function drawAISleep() {
+    if (twoPlayers || !aiSleeping) return;
+    const s = Math.min(W, H);
+    ctx.save();
+    ctx.fillStyle = rgba(NEON_P2, 0.85);
+    ctx.shadowColor = rgba(NEON_P2, 0.6); ctx.shadowBlur = s * 0.02;
+    ctx.font = `700 ${Math.round(s * 0.05)}px ${FONT}`;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('Zzz', leftX() + paddleW() + s * 0.02, left.cy - paddleH() / 2 - s * 0.015);
+    ctx.restore();
   }
 
   function rndi(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
@@ -542,35 +1021,57 @@
     ctx.closePath();
   }
 
-  // ── LOOP ──
+  // ── LOOP ── timestep fijo + interpolación (independiente del refresh, sin saltos)
+  const FIXED_DT = 1 / 120;                            // física a 120 Hz constante
   let lastT = performance.now();
+  let dtSmoothed = 1 / 60;                              // para el lector de FPS (suavizado, como Balls)
+  let acc = 0;                                         // tiempo real pendiente de simular
+  let prevBx = 0, prevBy = 0, rbx = 0, rby = 0;        // pos. anterior/interpolada de la pelota (render)
   function loop(now) {
     if (typeof now !== 'number') now = performance.now();
-    const dt = Math.min(0.033, (now - lastT) / 1000);   // clamp a ~30fps mínimo
+    const dt = Math.min(0.1, (now - lastT) / 1000);    // hasta 0.1s de catch-up tras un hipo
     lastT = now;
+    dtSmoothed = dtSmoothed * 0.9 + dt * 0.1;
 
     FIRE = `rgb(255,${rndi(128, 255)},0)`;
 
-    if (state === 'play') {
-      if (!twoPlayers) updateAI(dt);
-      updatePaddle(right, dt, false, true);
-      updatePaddle(left, dt, !twoPlayers, false);
-      updateBall(dt);
+    if (state === 'play' && !portrait) {   // en vertical el juego queda congelado tras el aviso
+      acc += dt;
+      let steps = 0;
+      while (acc >= FIXED_DT && steps < 8) {            // pasos fijos; "recupera" varios si hubo lag
+        prevBx = bx; prevBy = by;                       // estado previo para interpolar el render
+        if (!twoPlayers) updateAI(FIXED_DT);
+        updatePaddle(right, FIXED_DT, false, true);
+        updatePaddle(left, FIXED_DT, !twoPlayers, false);
+        updateBall(FIXED_DT);
+        acc -= FIXED_DT;
+        steps++;
+      }
+      if (acc > FIXED_DT) acc %= FIXED_DT;              // si se capó el catch-up, descartar el exceso
+      const alpha = acc / FIXED_DT;                     // fracción no simulada → render interpolado
+      rbx = prevBx + (bx - prevBx) * alpha;
+      rby = prevBy + (by - prevBy) * alpha;
+      emitFire();
+    } else {
+      rbx = bx; rby = by;
     }
+    if (state !== 'paused') { updateEmbers(dt); updateSparks(dt); }   // siguen extinguiéndose salvo en pausa
 
     // render
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
+    drawBackground();
     drawNet();
     drawScores();
     drawFireLabels();
     drawPaddle(left, false);
     drawPaddle(right, true);
+    drawAISleep();
+    drawEmbers();
+    drawSparks();
     drawBall();
 
-    if (state === 'paused') drawCenterMsg('PAUSA', 'TOCÁ PARA SEGUIR · P', '#fff');
+    if (state === 'paused') drawPause();
     if (state === 'over') drawOver();
-    drawInfoOverlay();
+    drawDebugHUD();
 
     requestAnimationFrame(loop);
   }
@@ -583,7 +1084,13 @@
   loop();
 
   const hint = document.getElementById('hint');
+  if (!isTouch) hint.textContent = 'movés con ↑ / ↓ (y W / S en 2 jugadores) · botones: jugadores · puntos · fuego · pausa';
   setTimeout(() => hint.style.opacity = '0', 5000);
+  </script>
+  <script>
+    document.getElementById('btnExit').addEventListener('click', () => {
+      if (confirm('¿Salir al menú?')) location.href = '../../';
+    });
   </script>
 </body>
 </html>

@@ -3,9 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#05060a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="TankWARS">
 <title>TankWARS</title>
 <style>
-  :root { --bar-height: 66px; }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     width: 100%; height: 100%;
@@ -15,79 +19,134 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Segoe UI', system-ui, sans-serif;
   }
-  #c { display: block; position: absolute; top: 0; left: 0; }
+  /* Resolución LÓGICA fija 1280×720 (igual que el pygame original); el canvas se estira para llenar la
+     pantalla (escala no-uniforme). El juego es horizontal → en celular apaisado el estiramiento es mínimo. */
+  #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
 
-  /* Barra inferior: botones de acción (misil / boost / reiniciar). Mismo bezel que Balls. */
-  #bar {
-    position: absolute; left: 0; right: 0; bottom: 0;
-    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
-    padding: 0 16px env(safe-area-inset-bottom);
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.85);
-    border-top: 1px solid rgba(255,255,255,0.08);
-    z-index: 3;
+  #hint {
+    position: absolute; left: 0; right: 0; top: calc(8px + env(safe-area-inset-top));
+    text-align: center; color: rgba(255,255,255,0.5);
+    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
+    transition: opacity 0.8s; z-index: 5; padding: 0 16px;
   }
-  #ui { display: flex; gap: 8px; }
-  #ui button {
-    width: 48px; height: 48px; border-radius: 50%;
+
+  /* ── Controles táctiles (joysticks nipplejs + botones), copiados de CrazyTanks. En desktop se ocultan
+     (teclado+mouse). Cada control es un elemento independiente con su pointer capture → multi-touch. ── */
+  .pad { position: absolute; bottom: calc(6px + env(safe-area-inset-bottom)); z-index: 4; display: flex; gap: 10px; align-items: flex-end; }
+  #padL { left: 10px; flex-direction: row; }
+  #padR { right: 10px; flex-direction: row; }
+  .btn {
+    width: 44px; height: 44px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.22);
     background: rgba(255,255,255,0.08);
     color: #fff;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
+    transition: background 0.08s, transform 0.06s, box-shadow 0.12s, border-color 0.12s;
   }
-  #ui button:active, #ui button.held { background: rgba(255,255,255,0.22); transform: scale(0.92); }
-  #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
+  .btn:hover { background: rgba(120,200,255,0.16); border-color: rgba(120,200,255,0.6); box-shadow: 0 0 14px rgba(120,200,255,0.6); }
+  .btn:active, .btn.on { background: rgba(120,200,255,0.30); border-color: rgba(120,200,255,0.55); transform: scale(0.93); }
+  .btn svg { display: block; width: 18px; height: 18px; pointer-events: none; }
+  .btn.boost { background: rgba(255,210,60,0.16); border-color: rgba(255,210,60,0.5); }
+  .btn.boost:active, .btn.boost.on { background: rgba(255,210,60,0.4); }
+  .btn.missile { background: rgba(255,90,60,0.16); border-color: rgba(255,90,60,0.5); }
+  .btn.missile:active, .btn.missile.on { background: rgba(255,90,60,0.42); }
 
-  #btnDebug {
-    position: absolute; right: 6px; bottom: calc(env(safe-area-inset-bottom) + 4px);
+  /* Joysticks nipplejs. Contenedor NO-flex (.joywrap) para que nipplejs no calcule mal el centro. */
+  .joywrap { display: block; width: 84px; height: 84px; }
+  .joy { width: 84px; height: 84px; position: relative; touch-action: none; }
+  .nipple .back {
+    background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.10), rgba(255,255,255,0.03) 70%) !important;
+    border: 1px solid rgba(120,200,255,0.35);
+    box-shadow: inset 0 2px 14px rgba(0,0,0,0.5), 0 0 16px rgba(120,200,255,0.25);
+    opacity: 1 !important;
+  }
+  .nipple .front {
+    background: radial-gradient(circle at 50% 35%, rgba(160,220,255,0.95), rgba(120,200,255,0.55) 70%) !important;
+    border: 1px solid rgba(180,228,255,0.8);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5), 0 0 16px rgba(120,200,255,0.6);
+    opacity: 1 !important;
+  }
+
+  /* Botones de esquina sup-der: pantalla completa / reiniciar / debug */
+  #padMenu { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); z-index: 4; display: flex; gap: 8px; }
+  #padMenu .btn { width: 32px; height: 32px; }
+  #padMenu .btn svg { width: 15px; height: 15px; }
+  #padMenu .btn.on { background: rgba(120,200,255,0.30); }
+  #btnFs .ic-exit { display: none; }
+  body.fs-on #btnFs .ic-enter { display: none; }
+  body.fs-on #btnFs .ic-exit  { display: block; }
+
+  /* Aviso de orientación: el juego es horizontal. Se muestra (vía JS) cuando la pantalla está vertical. */
+  #rotate {
+    position: absolute; inset: 0; z-index: 20; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+    background: #05060a; color: rgba(255,255,255,0.85);
+    text-align: center; padding: 24px;
+  }
+  #rotate svg { width: 88px; height: 88px; color: #78c8ff; animation: rotatehint 2.2s ease-in-out infinite; }
+  #rotate p { font-size: 19px; letter-spacing: 0.06em; line-height: 1.5; }
+  @keyframes rotatehint { 0%, 55%, 100% { transform: rotate(0deg); } 25%, 40% { transform: rotate(90deg); } }
+  /* Exit button — vuelta al menú raíz */
+  #btnExit {
+    position: absolute;
+    left: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
     width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.16);
-    background: rgba(255,255,255,0.04);
-    color: rgba(255,255,255,0.6);
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: none; padding: 0;
     transition: background 0.1s, transform 0.08s;
+    z-index: 10;
   }
-  #btnDebug svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnDebug:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
-  #btnDebug.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
-
-  #hint {
-    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
-    text-align: center; color: rgba(255,255,255,0.5);
-    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
-    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
-  }
+  #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">WASD/stick izq mover · mouse/stick der apuntar y disparar · botones: misil, boost</div>
-  <div id="bar">
-    <div id="ui">
-      <button id="btnMissile" aria-label="misil" title="Misil">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2.5 2.5 3.5 6 3.5 10 0 2.5-1.5 5-3.5 7-2-2-3.5-4.5-3.5-7C8.5 8 9.5 4.5 12 2z"/><path d="M8.5 14 6 17l2 1M15.5 14 18 17l-2 1"/></svg>
-      </button>
-      <button id="btnBoost" aria-label="boost" title="Boost">
-        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
-      </button>
-      <button id="btnReset" aria-label="reiniciar" title="Reiniciar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
-      </button>
-    </div>
-    <button id="btnDebug" aria-label="debug" title="Info / debug">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+  <div id="hint">palanca (izq) = mover en cualquier dirección · tocá la pantalla para apuntar y disparar · 🚀 misil · ⚡ boost</div>
+
+  <!-- Pad izquierdo: palanca de movimiento omnidireccional + botón boost -->
+  <div id="padL" class="pad">
+    <div class="joywrap"><div class="joy" id="jMove" aria-label="mover"></div></div>
+    <button class="btn boost" id="btnBoost" aria-label="boost" title="Boost">
+      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
     </button>
   </div>
 
+  <!-- Pad derecho: botón misil (el apuntado/disparo del cañón es tocando la pantalla) -->
+  <div id="padR" class="pad">
+    <button class="btn missile" id="btnMissile" aria-label="misil" title="Misil">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2.5 2.5 3.5 6 3.5 10 0 2.5-1.5 5-3.5 7-2-2-3.5-4.5-3.5-7C8.5 8 9.5 4.5 12 2z"/><path d="M8.5 14 6 17l2 1M15.5 14 18 17l-2 1"/></svg>
+    </button>
+  </div>
+
+  <div id="rotate">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="10.5" y1="19" x2="13.5" y2="19" stroke-width="2"/></svg>
+    <p>Girá el teléfono<br>TankWARS se juega en horizontal</p>
+  </div>
+
+  <div id="padMenu">
+    <button class="btn" id="btnFs" aria-label="pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
+    <button class="btn" id="btnReset" aria-label="reiniciar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></button>
+    <button class="btn" id="btnDebug" aria-label="debug"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg></button>
+  </div>
+
+  <!-- Física rígida (matter-js 0.19.0, vendorizado) para los cuerpos: tanques (dinámicos) y muros
+       (estáticos). El manejo/apuntado/disparo/IA/daño siguen siendo hand-rolled. -->
+  <script src="matter.min.js"></script>
+  <script src="nipplejs.min.js"></script>
   <script>
   // ════════════════════════════════════════════════════════════════════
   //  TankWARS — port web del shooter de tanques (Pygame → Canvas 2D).
   //  Slice jugable: player, 4 enemigos básicos, oleadas, muros, monedas,
-  //  misiles stackeables, escudo auto, boost. Controles adaptativos
-  //  (teclado+mouse en desktop / twin-stick táctil en mobile).
+  //  misiles stackeables, escudo auto, boost. Se juega en HORIZONTAL.
+  //  Controles: desktop = WASD/flechas (mover) + mouse (apuntar/disparar).
+  //  Mobile = una palanca omnidireccional (mover) + tocar la pantalla
+  //  (apuntar/disparar) + botones de misil/boost.
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
   const mod = (a, n) => ((a % n) + n) % n;
@@ -96,16 +155,19 @@
   const clampN = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
   // ── TUNING KNOBS ──
-  const THRUST          = 0.0012;   // empuje por frame@60 (fracción sper)
+  const MOVE_SPEED      = 0.12;     // velocidad tope del PLAYER (fracción sper, px/s) — palanca omnidireccional, directa
+  const THRUST          = 0.0096;   // empuje de los ENEMIGOS por frame@60
   const BOOST_MULT      = 1.9;
-  const TURN_RATE       = 0.000125; // giro del cuerpo por frame@60
-  const TURRET_RATE     = 0.00015;  // giro de la torreta
-  const VEL_FRICTION    = 0.99;     // por frame@60
+  const TURN_RATE       = 0.000125; // giro del cuerpo de los ENEMIGOS (con inercia)
+  const TURRET_RATE     = 0.00015;  // giro de la torreta de los ENEMIGOS (con inercia)
+  const VEL_FRICTION    = 0.92;     // fricción de la vel de los ENEMIGOS por frame@60
   const ANGVEL_FRICTION = 0.95;
+  const TURRET_TURN     = 14;       // seguimiento de la torreta del PLAYER hacia la mira (rad/s) → apuntado responsivo
   const PRIMARY_AS      = 0.125;    // cooldown base cañón (= 4x más rápido que el original 0.5)
   const PRIMARY_SCALE   = 0.25;     // daño por tiro del cañón (1/4; DPS igual)
   const MISSILE_MAX     = 3;
   const MISSILE_REGEN   = 10;       // seg por misil
+  const MISSILE_CONE    = Math.PI/5; // semi-ángulo del cono de auto-apuntado del misil (~36°)
   const SHIELD_CAP      = 5;
   const PLAYER_R        = 0.0128;   // radio en fracción sper
   const SHOT_SPEED      = 0.8;
@@ -113,20 +175,23 @@
   const MAX_ENEMIES     = 14;
 
   // ── CANVAS ──
+  // Resolución lógica fija 1280×720 (W/H constantes): toda la geometría porcentual (xper/yper/sper) y la
+  // física se comportan idénticas al original. El canvas se estira a la pantalla vía la transform del loop.
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
-  let W = 0, H = 0, dpr = 1;
-  const barEl = document.getElementById('bar');
+  const W = 1280, H = 720;
+  let dpr = 1, scaleX = 1, scaleY = 1, cssW = 0, cssH = 0, lastVW = 0, lastVH = 0;
+  // Heurística táctil estándar (puntero grueso + sin hover). Decide si mostrar joysticks/botones.
+  const IS_TOUCH = (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches) || 'ontouchstart' in window;
   function resize() {
+    lastVW = window.innerWidth; lastVH = window.innerHeight;
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const barH = barEl.offsetHeight;
-    W = window.innerWidth;
-    H = window.innerHeight - barH;
-    canvas.width = Math.floor(W * dpr);
-    canvas.height = Math.floor(H * dpr);
-    canvas.style.width = W + 'px';
-    canvas.style.height = H + 'px';
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cssW = canvas.clientWidth || window.innerWidth;
+    cssH = canvas.clientHeight || window.innerHeight;
+    scaleX = cssW / W; scaleY = cssH / H;
+    canvas.width = Math.floor(cssW * dpr);
+    canvas.height = Math.floor(cssH * dpr);
+    document.getElementById('rotate').style.display = (IS_TOUCH && cssH > cssW) ? 'flex' : 'none';
   }
   window.addEventListener('resize', resize);
 
@@ -184,6 +249,30 @@
   const toRemove = new Set();
   const decay = (val, perFrame) => val * Math.pow(perFrame, fr);
 
+  // ── MATTER.JS (cuerpos rígidos) ──
+  // Top-down → sin gravedad. matter resuelve SOLO las colisiones de cuerpos: tanque↔muro (estático) y
+  // tanque↔tanque. El resto (manejo, apuntado, disparo, daño por distancia, IA, monedas) sigue hand-rolled.
+  // Cada frame seteamos la velocidad del cuerpo desde el `vel`/`ang` hand-rolled, matter integra+resuelve, y
+  // leemos la posición corregida de vuelta. Velocidad de matter ≈ px/step; px/s ÷ 60 = unidad de matter.
+  const { Engine, World, Bodies, Body, Composite } = Matter;
+  const engine = Engine.create();
+  engine.gravity.x = 0; engine.gravity.y = 0;
+  const world = engine.world;
+  const MATTER_VEL = 1/60;                                   // px/s → velocidad de matter (1 step = 1/60 s)
+  const PHYS_STEP = 1000/60;
+  let physAcc = 0;
+  function stepPhysics(dtSec) {
+    physAcc += dtSec * 1000;
+    let n = 0;
+    while (physAcc >= PHYS_STEP && n < 5) { Engine.update(engine, PHYS_STEP); physAcc -= PHYS_STEP; n++; }
+    if (n >= 5) physAcc = 0;                                 // anti espiral si hubo lag
+  }
+  const TANK_BODY_OPTS = { restitution: 0, friction: 0, frictionAir: 0, frictionStatic: 0, inertia: Infinity };
+  function clearWalls() {
+    for (const w of walls) if (w.body) World.remove(world, w.body);
+    walls.length = 0;
+  }
+
   // ════════════════ TANK ════════════════
   class Tank {
     constructor() {
@@ -218,10 +307,15 @@
         this.shieldCharge = clampN(this.shieldCharge + c, 0, this.shieldCapacity + this.shieldAugment);
       }
 
+      // Creación perezosa del cuerpo: el radio ya es definitivo tras el constructor de la subclase.
+      if (!this.body) {
+        this.body = Bodies.circle(this.x, this.y, this.radius, TANK_BODY_OPTS);
+        this.body.gameRef = this;
+        World.add(world, this.body);
+      }
+
       this.ang += this.angVel * this.moveSpeed * dt;
       this.turretAng += this.turretAngVel * this.moveSpeed * dt;
-      this.x += ((Math.cos(this.ang)*this.vel) + this.borderPushX) * this.moveSpeed * dt;
-      this.y += ((Math.sin(this.ang)*this.vel) + this.borderPushY) * this.moveSpeed * dt;
 
       this.angVel = decay(this.angVel, ANGVEL_FRICTION);
       this.turretAngVel = decay(this.turretAngVel, ANGVEL_FRICTION);
@@ -232,17 +326,14 @@
       this.ang = mod(this.ang, TAU);
       this.turretAng = mod(this.turretAng, TAU);
 
-      // empuje tanque-tanque
-      for (const t of tanks) {
-        if (t === this) continue;
-        if (getDistSq([this.x,this.y],[t.x,t.y]) <= (this.radius+t.radius)**2) {
-          const bump = getAngle2(this.ang, [this.x,this.y], [t.x,t.y]);
-          this.x -= Math.cos(bump)*t.radius/4; this.y -= Math.sin(bump)*t.radius/4;
-          this.vel *= 1 - (t.radius/100);
-          t.x += Math.cos(bump)*this.radius/4; t.y += Math.sin(bump)*this.radius/4;
-          t.vel *= 1 - (this.radius/100);
-        }
-      }
+      // Manejo vía matter: en vez de integrar la posición a mano (y empujar tanque-tanque a mano), seteamos
+      // la velocidad del cuerpo; matter integra y resuelve choques contra muros y otros tanques. La posición
+      // corregida se lee de vuelta en el loop (readbackBodies). borderPush sigue conteniendo al tanque en pantalla.
+      const mv = this.moveSpeed * MATTER_VEL;
+      Body.setVelocity(this.body, {
+        x: (Math.cos(this.ang)*this.vel + this.borderPushX) * mv,
+        y: (Math.sin(this.ang)*this.vel + this.borderPushY) * mv,
+      });
 
       if (this.health < 1 && this.health > 0 && this.healthRegenCD === 0) {
         this.health = Math.min(this.health + 0.005, 1);
@@ -296,18 +387,20 @@
       }
       if (this.shieldOverheat >= 1) { this.shieldCD = 10; this.shieldOverheat = 0; }
     }
+    recoil(amount) {
+      const rec = this.turretAng + Math.PI;
+      if (this.body) Body.translate(this.body, { x: Math.cos(rec)*amount, y: Math.sin(rec)*amount });
+    }
     primaryShotAction() {
       if (this.primaryShotCD > 0) return;
       new PrimaryShot(this);
-      const rec = this.turretAng + Math.PI;
-      this.x += Math.cos(rec)*sper(0.0016); this.y += Math.sin(rec)*sper(0.0016);
+      this.recoil(sper(0.0016));
       this.primaryShotCD = 1 * this.primaryShotAS;
     }
     secondaryShotAction() {
       if (this.secondaryShotCD > 0) return;
       new SecondaryShot(this);
-      const rec = this.turretAng + Math.PI;
-      this.x += Math.cos(rec)*sper(0.012); this.y += Math.sin(rec)*sper(0.012);
+      this.recoil(sper(0.012));
       this.secondaryShotCD = 10 * this.secondaryShotAS;
     }
     getBorderPush() {
@@ -368,26 +461,24 @@
       this.coinGrabbedCD = Math.max(this.coinGrabbedCD - dt, 0);
 
       const inp = readInput();
-      // movimiento: teclado rota/empuja; stick fija rumbo + empuje por magnitud
+      // Movimiento OMNIDIRECCIONAL: una sola palanca. La dirección de la palanca es la dirección de
+      // movimiento; el cuerpo apunta hacia ahí. Velocidad directa (máxima tracción): arranca y frena al
+      // instante. Seteamos la velocidad del cuerpo de matter acá (pisa la que puso Tank.process).
       this.boosting = inp.boost;
-      const thrust = sper(THRUST) * (this.boosting ? BOOST_MULT : 1);
-      if (inp.moveStick) {
-        const target = Math.atan2(inp.moveY, inp.moveX);
-        const diff = getAngle2(this.ang, [0,0], [Math.cos(target),Math.sin(target)]) - this.ang;
-        this.angVel += (diff > 0 ? TURN_RATE : -TURN_RATE) * sper(1) * fr * Math.min(1, Math.abs(diff)*2);
-        this.vel += thrust * fr * inp.moveMag;
-      } else {
-        if (inp.up)    this.vel += thrust * fr;
-        if (inp.down)  this.vel -= thrust * fr;
-        if (inp.left)  this.angVel -= sper(TURN_RATE) * fr;
-        if (inp.right) this.angVel += sper(TURN_RATE) * fr;
-      }
+      const mag = Math.min(1, Math.hypot(inp.moveX, inp.moveY));
+      const spd = sper(MOVE_SPEED) * (this.boosting ? BOOST_MULT : 1) * mag;
+      if (mag > 0.05) this.ang = Math.atan2(inp.moveY, inp.moveX);   // el cuerpo mira hacia donde se mueve
+      if (this.body) Body.setVelocity(this.body, {
+        x: (Math.cos(this.ang)*spd + this.borderPushX) * MATTER_VEL,
+        y: (Math.sin(this.ang)*spd + this.borderPushY) * MATTER_VEL,
+      });
       if (inp.primary) this.primaryShotAction();
       if (inp.missile) this.secondaryShotAction();
 
-      // apuntado de torreta hacia el punto de mira
-      const aim = getAngle2(this.turretAng, [this.x,this.y], [inp.aimX, inp.aimY]);
-      this.turretAngVel += (aim > this.turretAng ? sper(TURRET_RATE) : -sper(TURRET_RATE)) * fr;
+      // Torreta: seguimiento DIRECTO hacia la mira con tope TURRET_TURN rad/s → responde apenas cambiás de
+      // objetivo, sin el lag de acumular turretAngVel.
+      const tdiff = getAngle2(this.turretAng, [this.x,this.y], [inp.aimX, inp.aimY]) - this.turretAng;
+      this.turretAng = mod(this.turretAng + clampN(tdiff, -TURRET_TURN*dt, TURRET_TURN*dt), TAU);
 
       // escudo automático (como la IA): se activa si hay un disparo enemigo cerca
       this.autoShield();
@@ -431,8 +522,7 @@
     secondaryShotAction() {
       if (this.secondaryShotCD > 0 || this.missileStack <= 0) return;
       new SecondaryShot(this);
-      const rec = this.turretAng + Math.PI;
-      this.x += Math.cos(rec)*sper(0.012); this.y += Math.sin(rec)*sper(0.012);
+      this.recoil(sper(0.012));
       this.missileStack--; this.secondaryShotCD = 0.25;
     }
     draw() {
@@ -649,12 +739,24 @@
     process() {
       this.preX = this.x; this.preY = this.y;
       this.lifeSpan -= dt; if (this.lifeSpan <= 0) toRemove.add(this);
-      let tx, ty;
-      if (player && this.isPlayerShot) { tx = readInput().aimX; ty = readInput().aimY; }
-      else if (player) { tx = player.x; ty = player.y; }
-      else { tx = rnd(0,W); ty = rnd(0,H); }
-      const aim = getAngle2(this.ang, [this.x,this.y], [tx,ty]);
-      this.ang += (aim > this.ang ? this.angVel : -this.angVel) * dt;
+
+      // Auto-apuntado por CONO: el misil sale en la dirección que lo lanzaron (turretAng) y busca, dentro de
+      // un cono MISSILE_CONE hacia adelante, el blanco de MAYOR importancia (scoreValue); a igual importancia,
+      // el más cercano. Si no hay nada en el cono, vuela derecho (no le pega a nada).
+      const targets = this.isPlayerShot ? enemies : (player ? [player] : []);
+      let best = null, bestImp = -Infinity, bestDist = Infinity;
+      for (const t of targets) {
+        let da = Math.atan2(t.y-this.y, t.x-this.x) - this.ang;
+        da = mod(da + Math.PI, TAU) - Math.PI;                 // diferencia angular en [-PI, PI]
+        if (Math.abs(da) > MISSILE_CONE) continue;             // fuera del cono → ignorar
+        const d = Math.hypot(t.x-this.x, t.y-this.y);
+        const imp = t.scoreValue || 1;                         // "importancia" del blanco
+        if (imp > bestImp || (imp === bestImp && d < bestDist)) { best = t; bestImp = imp; bestDist = d; }
+      }
+      if (best) {                                              // hay blanco en el cono → girar hacia él
+        const aim = getAngle2(this.ang, [this.x,this.y], [best.x,best.y]);
+        this.ang += (aim > this.ang ? this.angVel : -this.angVel) * dt;
+      }
       this.x += Math.cos(this.ang)*this.vel*dt;
       this.y += Math.sin(this.ang)*this.vel*dt;
       this.ang = mod(this.ang, TAU);
@@ -685,18 +787,13 @@
         for (const w of walls) if (rectCollision([w.x,w.y,w.width,w.height],[this.x,this.y,this.width,this.height])) { ok = false; break; }
         if (ok && player && rectCollision([player.x-player.radius,player.y-player.radius,player.radius*2,player.radius*2],[this.x,this.y,this.width,this.height])) ok = false;
       }
+      // Cuerpo estático en matter (rect centrado). El bloqueo de tanques lo resuelve el solver.
+      this.body = Bodies.rectangle(this.x+this.width/2, this.y+this.height/2, this.width, this.height, { isStatic: true });
+      World.add(world, this.body);
       walls.push(this);
     }
     process() {
-      for (const t of tanks) {
-        if (rectCollision([t.x-t.radius,t.y-t.radius,t.radius*2,t.radius*2],[this.x,this.y,this.width,this.height])) {
-          const l = Math.abs(t.x+t.radius*2-this.x), r = Math.abs(t.x-t.radius*2-(this.x+this.width));
-          const tp = Math.abs(t.y+t.radius*2-this.y), b = Math.abs(t.y-t.radius*2-(this.y+this.height));
-          const m = Math.min(l,r,tp,b);
-          if (m===l) t.x = this.x-t.radius; else if (m===r) t.x = this.x+this.width+t.radius;
-          else if (m===tp) t.y = this.y-t.radius; else t.y = this.y+this.height+t.radius;
-        }
-      }
+      // El bloqueo tanque↔muro lo hace matter; acá solo destruimos los disparos que pegan en el muro.
       for (const shot of shots) {
         if (rectCollision([shot.x-shot.radius*0.75,shot.y-shot.radius*0.75,shot.radius*1.5,shot.radius*1.5],[this.x,this.y,this.width,this.height])) toRemove.add(shot);
       }
@@ -759,7 +856,7 @@
     },
     callWave(name, amount, waveTime) {
       if (manager.waveNumber % 5 === 0) {     // cada 5 oleadas: arena nueva
-        walls.length = 0;
+        clearWalls();
         manager.wallColor = randColorInRange(50,255,50,255,50,255);
         for (let i = 0; i < ri(5,7); i++) new Wall(manager.wallColor);
       }
@@ -772,37 +869,29 @@
     },
   };
 
-  // ════════════════ INPUT (adaptativo) ════════════════
+  // ════════════════ INPUT ════════════════
+  // Movimiento = UNA palanca omnidireccional (joystick izq en mobile, WASD/flechas en desktop): su dirección
+  // es la dirección en que se mueve el tanque y hacia donde apunta el cuerpo.
+  // Apuntado/disparo aparte: mouse en desktop, tocar la pantalla en mobile.
+  // Boost/misil por botones. El joystick suma al teclado; el touch suma al mouse.
   const keys = new Set();
-  let mouseX = 0, mouseY = 0, mouseLeft = false, mouseRight = false;
-  let touchMode = false;
-  // joysticks táctiles: cada uno guarda {id, cx, cy, dx, dy, active}
-  const stickMove = { id: null, cx: 0, cy: 0, dx: 0, dy: 0, active: false };
-  const stickAim  = { id: null, cx: 0, cy: 0, dx: 0, dy: 0, active: false };
+  let aimX = W*0.7, aimY = H*0.5;                 // punto de mira (coords lógicas) — mouse o último toque
+  let mouseLeft = false, mouseRight = false;
+  const canvasPointers = new Map();               // pointers táctiles sobre el canvas → disparan apuntando
   const btnState = { missile: false, boost: false };
-  const STICK_R = () => sper(0.06);
+  const moveVec = { x: 0, y: 0 };                 // palanca de movimiento (nipplejs), y en coords pantalla (+ abajo)
 
   function readInput() {
-    if (touchMode) {
-      const mMag = Math.min(1, Math.hypot(stickMove.dx, stickMove.dy) / STICK_R());
-      let aimX = player ? player.x + 1 : 1, aimY = player ? player.y : 0;
-      if (stickAim.active && player) {
-        const aa = Math.atan2(stickAim.dy, stickAim.dx);
-        aimX = player.x + Math.cos(aa)*sper(0.5); aimY = player.y + Math.sin(aa)*sper(0.5);
-      }
-      return {
-        moveStick: stickMove.active, moveX: stickMove.dx, moveY: stickMove.dy, moveMag: mMag,
-        up:false, down:false, left:false, right:false,
-        aimX, aimY,
-        primary: stickAim.active, missile: btnState.missile, boost: btnState.boost,
-      };
-    }
+    // vector de movimiento: teclado (4 direcciones) + palanca, clampeado a magnitud 1
+    let mx = (keys.has('d')||keys.has('arrowright')?1:0) - (keys.has('a')||keys.has('arrowleft')?1:0) + moveVec.x;
+    let my = (keys.has('s')||keys.has('arrowdown')?1:0)  - (keys.has('w')||keys.has('arrowup')?1:0)   + moveVec.y;
+    const m = Math.hypot(mx, my);
+    if (m > 1) { mx /= m; my /= m; }
     return {
-      moveStick: false, moveX:0, moveY:0, moveMag:0,
-      up: keys.has('w')||keys.has('arrowup'), down: keys.has('s')||keys.has('arrowdown'),
-      left: keys.has('a')||keys.has('arrowleft'), right: keys.has('d')||keys.has('arrowright'),
-      aimX: mouseX, aimY: mouseY,
-      primary: mouseLeft, missile: mouseRight || btnState.missile,
+      moveX: mx, moveY: my,
+      aimX, aimY,
+      primary: mouseLeft || canvasPointers.size > 0,
+      missile: mouseRight || btnState.missile,
       boost: keys.has('shift') || btnState.boost,
     };
   }
@@ -812,47 +901,38 @@
   addEventListener('keyup',   e => keys.delete(e.key.toLowerCase()));
   addEventListener('blur', () => keys.clear());
 
-  // mouse (desktop) + touch (mobile) sobre el canvas
-  function evtPos(e) { const r = canvas.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+  // canvas: mouse (desktop) apunta+dispara; touch (mobile) apunta+dispara donde tocás. Coords → lógicas.
+  function logicalPos(e) { const r = canvas.getBoundingClientRect(); return [(e.clientX-r.left)/scaleX, (e.clientY-r.top)/scaleY]; }
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('pointerdown', e => {
-    canvas.setPointerCapture(e.pointerId);
-    const [px,py] = evtPos(e);
-    if (e.pointerType === 'touch') {
-      touchMode = true;
-      const st = px < W/2 ? stickMove : stickAim;
-      if (st.id === null) { st.id = e.pointerId; st.cx = px; st.cy = py; st.dx = 0; st.dy = 0; st.active = true; }
-    } else {
-      mouseX = px; mouseY = py;
+    tryAutoFs(e);
+    const [px,py] = logicalPos(e);
+    if (e.pointerType === 'mouse') {
+      aimX = px; aimY = py;
       if (e.button === 0) mouseLeft = true;
       if (e.button === 2) mouseRight = true;
+    } else {
+      canvas.setPointerCapture(e.pointerId);
+      canvasPointers.set(e.pointerId, [px,py]); aimX = px; aimY = py;
     }
   });
   canvas.addEventListener('pointermove', e => {
-    const [px,py] = evtPos(e);
-    if (e.pointerType === 'touch') {
-      for (const st of [stickMove, stickAim]) if (st.id === e.pointerId) {
-        st.dx = clampN(px - st.cx, -STICK_R(), STICK_R());
-        st.dy = clampN(py - st.cy, -STICK_R(), STICK_R());
-      }
-    } else { mouseX = px; mouseY = py; }
+    const [px,py] = logicalPos(e);
+    if (e.pointerType === 'mouse') { aimX = px; aimY = py; }
+    else if (canvasPointers.has(e.pointerId)) { canvasPointers.set(e.pointerId, [px,py]); aimX = px; aimY = py; }
   });
   function endPointer(e) {
-    if (e.pointerType === 'touch') {
-      for (const st of [stickMove, stickAim]) if (st.id === e.pointerId) { st.id = null; st.active = false; st.dx = 0; st.dy = 0; }
-    } else {
-      if (e.button === 0) mouseLeft = false;
-      if (e.button === 2) mouseRight = false;
-    }
+    if (e.pointerType === 'mouse') { if (e.button === 0) mouseLeft = false; if (e.button === 2) mouseRight = false; }
+    else canvasPointers.delete(e.pointerId);
   }
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
 
-  // botones de la barra
+  // botones (mantener-apretado): misil / boost
   function holdBtn(id, key) {
     const el = document.getElementById(id);
-    const down = e => { e.preventDefault(); btnState[key] = true; el.classList.add('held'); };
-    const up   = e => { btnState[key] = false; el.classList.remove('held'); };
+    const down = e => { e.preventDefault(); btnState[key] = true; el.classList.add('on'); };
+    const up   = e => { btnState[key] = false; el.classList.remove('on'); };
     el.addEventListener('pointerdown', down);
     el.addEventListener('pointerup', up);
     el.addEventListener('pointercancel', up);
@@ -864,6 +944,39 @@
   let showDebug = false;
   const btnDebug = document.getElementById('btnDebug');
   btnDebug.addEventListener('pointerdown', e => { e.preventDefault(); showDebug = !showDebug; btnDebug.classList.toggle('on', showDebug); });
+
+  // ── JOYSTICK de movimiento (nipplejs). UNA sola palanca omnidireccional: data.vector es la dirección
+  //    desde el centro (magnitud 0..1). y de nipplejs es + hacia arriba → invierto a coords pantalla (+ abajo). ──
+  const JOY_OPTS = { mode: 'static', position: { left: '50%', top: '50%' }, size: 80, restJoystick: true, fadeTime: 0, dynamicPage: true, color: 'rgba(120,200,255,0.7)' };
+  let jMove = null;
+  function setupJoysticks() {
+    if (!IS_TOUCH || typeof nipplejs === 'undefined') return;
+    if (jMove) { try { jMove.destroy(); } catch {} }
+    moveVec.x = 0; moveVec.y = 0;
+    jMove = nipplejs.create({ ...JOY_OPTS, zone: document.getElementById('jMove') });
+    jMove.on('move', (e, d) => { moveVec.x = d.vector.x; moveVec.y = -d.vector.y; });
+    jMove.on('end',  () => { moveVec.x = 0; moveVec.y = 0; });
+  }
+
+  // ── PANTALLA COMPLETA (saca la barra del navegador en mobile). iOS Safari falla en silencio. ──
+  const fsTarget = document.documentElement;
+  const _reqFs  = fsTarget.requestFullscreen || fsTarget.webkitRequestFullscreen;
+  const _exitFs = document.exitFullscreen || document.webkitExitFullscreen;
+  function isFs()    { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  function enterFs() { if (_reqFs)  { const p = _reqFs.call(fsTarget); if (p && p.catch) p.catch(() => {}); } }
+  function exitFs()  { if (_exitFs) _exitFs.call(document); }
+  function toggleFs(){ isFs() ? exitFs() : enterFs(); }
+  function syncFsIcon() { document.body.classList.toggle('fs-on', isFs()); }
+  function onViewportChange() { syncFsIcon(); requestAnimationFrame(() => { resize(); setupJoysticks(); }); }
+  document.addEventListener('fullscreenchange', onViewportChange);
+  document.addEventListener('webkitfullscreenchange', onViewportChange);
+  window.addEventListener('orientationchange', onViewportChange);
+  document.getElementById('btnFs').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); toggleFs(); });
+  let autoFsDone = false;
+  function tryAutoFs(e) { if (autoFsDone) return; autoFsDone = true; if (e && e.pointerType === 'mouse') return; if (!isFs()) enterFs(); }
+
+  // En desktop ocultamos los pads táctiles (se juega con teclado + mouse).
+  if (!IS_TOUCH) { document.getElementById('padL').style.display = 'none'; document.getElementById('padR').style.display = 'none'; }
 
   // ════════════════ HUD ════════════════
   function drawHUD() {
@@ -897,22 +1010,12 @@
         circle(xper(0.015), yper(0.95) - sper(0.02)*i, sper(0.007), c);
       }
 
-      // crosshair (solo desktop)
-      if (!touchMode) {
-        const recoil = Math.max(player.primaryShotCD*150/player.primaryShotAS*0.01, 1);
-        const cc = player.secondaryShotCD > 0 ? [75,75,75] : modifyColorPerc(player.color,3);
-        circle(mouseX, mouseY, sper(0.0075)*recoil, cc, sper(0.01)/5);
-        line(mouseX-sper(0.0095)*recoil, mouseY, mouseX+sper(0.009)*recoil, mouseY, cc, sper(0.01)/5);
-        line(mouseX, mouseY-sper(0.0095)*recoil, mouseX, mouseY+sper(0.009)*recoil, cc, sper(0.01)/5);
-      }
-    }
-
-    // joysticks táctiles
-    if (touchMode) {
-      for (const st of [stickMove, stickAim]) if (st.active) {
-        circle(st.cx, st.cy, STICK_R(), [120,120,140], sper(0.004));
-        circle(st.cx+st.dx, st.cy+st.dy, STICK_R()*0.5, [180,180,200]);
-      }
+      // crosshair en el punto de mira (mouse en desktop, último toque en mobile)
+      const recoil = Math.max(player.primaryShotCD*150/player.primaryShotAS*0.01, 1);
+      const cc = player.secondaryShotCD > 0 ? [75,75,75] : modifyColorPerc(player.color,3);
+      circle(aimX, aimY, sper(0.0075)*recoil, cc, sper(0.01)/5);
+      line(aimX-sper(0.0095)*recoil, aimY, aimX+sper(0.009)*recoil, aimY, cc, sper(0.01)/5);
+      line(aimX, aimY-sper(0.0095)*recoil, aimX, aimY+sper(0.009)*recoil, cc, sper(0.01)/5);
     }
 
     if (manager.gameover) {
@@ -938,6 +1041,8 @@
   // ════════════════ LOOP ════════════════
   let lastScore = 0;
   function startGame() {
+    Composite.clear(world, false);                 // saca todos los cuerpos (tanques + muros) del mundo
+    physAcc = 0;
     tanks = []; enemies = []; shots = []; coins = []; walls = []; explosions = [];
     toRemove.clear();
     manager.waveTime = 0; manager.waveNumber = 0; manager.gameover = false;
@@ -950,11 +1055,11 @@
   function purge() {
     if (toRemove.size === 0) return;
     for (const s of toRemove) {
-      if (tanks.includes(s)) { tanks.splice(tanks.indexOf(s),1); new Explosion(s.x,s.y,s.radius); }
+      if (tanks.includes(s)) { tanks.splice(tanks.indexOf(s),1); if (s.body) World.remove(world, s.body); new Explosion(s.x,s.y,s.radius); }
       if (enemies.includes(s)) enemies.splice(enemies.indexOf(s),1);
       if (shots.includes(s)) { shots.splice(shots.indexOf(s),1); new Explosion(s.x,s.y,s.missile?s.radius*2:s.radius/2); }
       if (coins.includes(s)) coins.splice(coins.indexOf(s),1);
-      if (walls.includes(s)) walls.splice(walls.indexOf(s),1);
+      if (walls.includes(s)) { walls.splice(walls.indexOf(s),1); if (s.body) World.remove(world, s.body); }
       if (explosions.includes(s)) explosions.splice(explosions.indexOf(s),1);
     }
     toRemove.clear();
@@ -969,17 +1074,27 @@
     fr = dt * 60;
     dtSmoothed = dtSmoothed*0.9 + dt*0.1;
 
+    // Algunos navegadores móviles no disparan 'resize' al rotar → re-evaluar acá (también ajusta el aviso
+    // de orientación y la address-bar).
+    if (window.innerWidth !== lastVW || window.innerHeight !== lastVH) resize();
+
     background = walls.length ? modifyColorPerc(manager.wallColor,0.2) : randColorGray(0,5);
     if (player) lastScore = player.score;
 
-    // Limpieza ANTES del update: el escudo se dibuja durante process() (igual que el
-    // original), así que el fill tiene que ir primero o lo borraría.
+    // Transform a coords lógicas 1280×720, estirado para llenar la pantalla (landscape). Se setea ANTES
+    // del update porque el escudo se dibuja durante process() (igual que el original) y si no lo borraría.
+    ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, 0, 0);
     ctx.fillStyle = rgb(background); ctx.fillRect(0,0,W,H);
 
     // update
     manager.process();
     for (const w of walls) w.process();
+    // Control hand-rolled de cada tanque (setea la velocidad de su cuerpo de matter)…
     for (const t of tanks) t.process();
+    // …matter integra y resuelve choques (tanque↔muro, tanque↔tanque)…
+    stepPhysics(dt);
+    // …y leemos las posiciones corregidas de vuelta a los objetos del juego.
+    for (const t of tanks) if (t.body) { t.x = t.body.position.x; t.y = t.body.position.y; }
     for (const s of shots) s.process();
     for (const c of coins) c.process();
     for (const e of explosions) e.process();
@@ -1000,12 +1115,21 @@
 
   // ── INIT ──
   resize();
+  setupJoysticks();
   startGame();
   loop();
 
   const hint = document.getElementById('hint');
   setTimeout(() => hint.style.opacity = '0', 6000);
   canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
+  </script>
+  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <script>
+    document.getElementById('btnExit').addEventListener('click', () => {
+      if (confirm('¿Salir al menú?')) location.href = '../../';
+    });
   </script>
 </body>
 </html>

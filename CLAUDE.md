@@ -37,7 +37,7 @@ When a project diverges from this skeleton, note it in that folder's CLAUDE.md r
 
 ## Web ports
 
-Many folders carry a `<Folder>Web/` subfolder with a browser version of the game — a single self-contained `index.html` (HTML + CSS + JS, Canvas 2D). No build step, no framework: open the file in a browser. [Balls/BallsWeb/index.html](Balls/BallsWeb/index.html) is the **reference port** that established the format, and the only one with an external dependency (`matter.min.js`, vendored locally for physics); every other port is dependency-free hand-rolled JS. These are faithful reimplementations of the Pygame originals, **not** transpiled from the `.py` — edit the two independently.
+Many folders carry a `<Folder>Web/` subfolder with a browser version of the game — a single self-contained `index.html` (HTML + CSS + JS, Canvas 2D). No build step, no framework: open the file in a browser. [Balls/BallsWeb/index.html](Balls/BallsWeb/index.html) is the **reference port** that established the format. Most ports are dependency-free hand-rolled JS, but a couple vendor libraries locally: Balls and [CrazyTanks/CrazyTanksWeb/index.html](CrazyTanks/CrazyTanksWeb/index.html) use `matter.min.js` (rigid-body physics), and CrazyTanks also uses `nipplejs.min.js` (touch joysticks). These are faithful reimplementations of the Pygame originals, **not** transpiled from the `.py` — edit the two independently.
 
 Shared format across all ports (mirror it when adding or editing one):
 

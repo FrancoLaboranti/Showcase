@@ -30,96 +30,169 @@
     transition: opacity 0.8s; z-index: 2; padding: 0 16px;
   }
 
-  /* Bottom bar: holds the action buttons. Same shell as BallsWeb. */
-  #bar {
-    position: absolute; left: 0; right: 0; bottom: 0;
-    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
-    padding: 0 16px env(safe-area-inset-bottom);
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.85);
-    border-top: 1px solid rgba(0,255,0,0.12);
-    z-index: 3;
-  }
-  #ui {
-    display: flex; gap: 8px;
-  }
-  #ui button {
-    width: 48px; height: 48px; border-radius: 50%;
-    border: 1px solid rgba(0,255,0,0.28);
-    background: rgba(0,255,0,0.06);
-    color: rgb(0,220,0);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none;
-    transition: background 0.1s, transform 0.08s;
-    padding: 0;
-  }
-  #ui button:active { background: rgba(0,255,0,0.20); transform: scale(0.92); }
-  #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
-  #ui #btnSprint svg { width: 24px; height: 24px; }
-  /* visual indicator for toggled-on / held state */
-  #ui button.on { background: rgba(0,255,0,0.28); border-color: rgba(0,255,0,0.6); color: #fff; }
+  /* ── Controles FLOTANTES sobre el canvas, sin barra (estilo TankWARS/CrazyTanks) ── */
 
-  /* Info: chico, en la esquina abajo-derecha. Lives outside #ui so the main row stays centered. */
-  #btnDebug {
+  /* Menú chico arriba-derecha: pausa / reiniciar / debug / pantalla completa */
+  #padMenu {
+    position: absolute; top: calc(env(safe-area-inset-top) + 8px);
+    right: calc(env(safe-area-inset-right) + 8px);
+    z-index: 10; display: flex; gap: 8px;
+  }
+  #padMenu button {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid rgba(0,255,140,0.3);
+    background: rgba(0,40,25,0.5);
+    color: rgba(180,255,210,0.9);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s, border-color 0.12s;
+  }
+  #padMenu button svg { display: block; width: 16px; height: 16px; pointer-events: none; }
+  #padMenu button:active { background: rgba(0,255,140,0.28); transform: scale(0.9); }
+  #padMenu button.on { background: rgba(0,255,140,0.3); border-color: rgba(0,255,140,0.6); color: #fff; }
+  #btnFs .ic-exit { display: none; }
+  body.fs-on #btnFs .ic-enter { display: none; }
+  body.fs-on #btnFs .ic-exit  { display: block; }
+
+  /* Exit — esquina arriba-izquierda, vuelta al menú raíz */
+  #btnExit {
     position: absolute;
-    right: 6px;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(0,255,0,0.18);
-    background: rgba(0,255,0,0.04);
-    color: rgba(0,220,0,0.6);
+    left: calc(env(safe-area-inset-left) + 8px);
+    top: calc(env(safe-area-inset-top) + 8px);
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.4);
+    background: rgba(0,0,0,0.5);
+    color: rgba(255,255,255,0.85);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: none; padding: 0;
     transition: background 0.1s, transform 0.08s;
+    z-index: 10;
   }
-  #btnDebug svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnDebug:active { background: rgba(0,255,0,0.22); transform: scale(0.9); }
-  #btnDebug.on { background: rgba(0,255,0,0.28); border-color: rgba(0,255,0,0.6); color: #fff; }
+  #btnExit svg { display: block; width: 16px; height: 16px; pointer-events: none; }
+  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
+
+  /* Palanca de dirección (nipplejs) — abajo-izquierda, sobre el canvas. Sólo touch. */
+  /* La zona es 128 pero el joystick visible va donde estaba antes (centro ≈ 60px del borde, como con la
+     zona de 88 y left/bottom:16): corro #padL para compensar el agrandado y la zona extra se extiende
+     hacia arriba/derecha (área natural del pulgar). */
+  #padL { position: absolute; left: -4px; bottom: calc(env(safe-area-inset-bottom) - 4px); z-index: 4; }
+  /* La zona táctil (.joy) es MÁS GRANDE que el joystick visible (size 84): así el agarre es más sólido y
+     toma el toque aunque caigas un poco afuera. El joystick visual queda centrado en esta zona. */
+  .joywrap { display: block; width: 128px; height: 128px; }
+  .joy { width: 128px; height: 128px; position: relative; touch-action: none; }
+  .nipple .back {
+    background: radial-gradient(circle at 50% 38%, rgba(0,255,140,0.12), rgba(0,255,140,0.03) 70%) !important;
+    border: 1px solid rgba(0,255,140,0.35);
+    box-shadow: inset 0 2px 14px rgba(0,0,0,0.5), 0 0 16px rgba(0,255,140,0.22);
+    opacity: 1 !important;
+  }
+  .nipple .front {
+    background: radial-gradient(circle at 50% 35%, rgba(160,255,200,0.95), rgba(0,230,140,0.55) 70%) !important;
+    border: 1px solid rgba(190,255,220,0.8);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5), 0 0 16px rgba(0,255,140,0.6);
+    opacity: 1 !important;
+  }
+
+  /* Boost: botón de acción grande y flotante, abajo-derecha, ARRIBA del botón de info. Orbe verde que
+     brilla fuerte al mantenerlo (.on). Simétrico al joystick de la izquierda. */
+  #btnSprint {
+    position: absolute;
+    right: 16px;
+    bottom: calc(env(safe-area-inset-bottom) + 16px);
+    width: 88px; height: 88px; border-radius: 50%;                               /* mismo tamaño que la palanca (.joywrap = 88px) */
+    z-index: 4; padding: 0; cursor: pointer; touch-action: none;
+    display: flex; align-items: center; justify-content: center;
+    color: #eafff2;
+    border: 1px solid rgba(120,255,180,0.55);
+    background:
+      radial-gradient(circle at 50% 32%, rgba(170,255,210,0.30), rgba(0,200,120,0.10) 60%, rgba(0,40,25,0.20) 100%),
+      linear-gradient(160deg, rgba(0,95,58,0.55), rgba(0,28,18,0.6));
+    box-shadow: inset 0 2px 16px rgba(0,0,0,0.45), inset 0 0 18px rgba(0,255,150,0.18),
+                0 6px 22px -6px rgba(0,255,150,0.5), 0 0 22px rgba(0,255,150,0.22);
+    transition: transform 0.08s ease, box-shadow 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+  }
+  #btnSprint svg { width: 44px; height: 44px; pointer-events: none; filter: drop-shadow(0 0 6px rgba(140,255,190,0.85)); }
+  #btnSprint:active, #btnSprint.on {
+    transform: scale(0.94);
+    border-color: rgba(180,255,215,0.95);
+    background:
+      radial-gradient(circle at 50% 35%, rgba(205,255,228,0.65), rgba(0,255,150,0.32) 60%, rgba(0,80,50,0.35) 100%),
+      linear-gradient(160deg, rgba(0,165,98,0.7), rgba(0,60,40,0.6));
+    box-shadow: inset 0 0 22px rgba(0,255,160,0.45), 0 0 34px rgba(0,255,150,0.7), 0 0 72px rgba(0,255,150,0.35);
+  }
+
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">movés el dedo/mouse para dirigir · ⚡ para acelerar · comé las estrellas, evitá el cuerpo</div>
-  <div id="bar">
-    <div id="ui">
-      <button id="btnSprint" aria-label="acelerar" title="Acelerar (mantener)">
-        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
-      </button>
-      <button id="btnPause" aria-label="pausa" title="Pausa">
-        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
-      </button>
-      <button id="btnReset" aria-label="reiniciar" title="Reiniciar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
-      </button>
-    </div>
+  <div id="hint">dirigí con la palanca (mantiene el rumbo) · acelerá con ⚡ · comé las estrellas · las minas te achican · no choques tu cuerpo</div>
+  <div id="padMenu">
+    <button id="btnPause" aria-label="pausa" title="Pausa">
+      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+    </button>
+    <button id="btnReset" aria-label="reiniciar" title="Reiniciar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+    </button>
     <button id="btnDebug" aria-label="debug" title="Info / debug">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
+    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+    </button>
   </div>
+  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
 
+  <!-- Palanca de dirección (touch): su dirección fija el rumbo de la cabeza. Misma de TankWARS. -->
+  <div id="padL"><div class="joywrap"><div class="joy" id="jMove" aria-label="dirección"></div></div></div>
+
+  <!-- Boost: botón de acción grande y flotante (abajo-derecha, arriba del de info), simétrico al joystick -->
+  <button id="btnSprint" aria-label="acelerar" title="Acelerar (mantener)">
+    <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+  </button>
+
+  <script src="nipplejs.min.js"></script>
   <script>
   // ════════════════════════════════════════════════════════════════════
   //  SNAKE — port web fiel de Snake.py, con el mismo shell mobile que BallsWeb.
   //  Snake no-grid: la cabeza persigue el puntero, cada segmento persigue al
   //  anterior. Comés estrellas (crece +10), chocar un segmento "brillante"
   //  (cada 4º, id>5) es game over.
+  //
+  //  Notas de performance (el cuerpo puede llegar a cientos de segmentos):
+  //   · sin sort por frame — el z-orden es fijo (cola→cabeza→comida→manager).
+  //   · el radio se calcula 1 vez por frame (curR), no por pieza.
+  //   · geometría con escalares (cero arrays por llamada) y distancia² (sin sqrt).
+  //   · cada segmento cachea su string rgb() — no se reconstruye por círculo.
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
+  const MAX_HAZARDS = 10;                                                         // tope de minas (obstáculos no comestibles)
+  const WIG_AMP = 0.35, WIG_SPEED = 9, WIG_DENSITY = 0.55;                        // wiggle visual del cuerpo: amplitud (× radio), velocidad (rad/s), fase por segmento
+  const HAZARD_PENALTY = 6;                                                       // segmentos que te saca una mina al chocarla
+  const HAZARD_FLASH_TIME = 0.4;                                                  // segundos de destello rojo al chocar una mina
+  const FOOD_SPAWN_DELAY = 0.7, HAZARD_SPAWN_DELAY = 1.1;                         // delay entre apariciones (escalonado, no todas de golpe)
+  const SPAWN_ANIM_TIME = 0.45;                                                   // duración de la animación de aparición
+  const easeOutBack = t => { const c1 = 1.70158, c3 = c1 + 1, u = t - 1; return 1 + c3*u*u*u + c1*u*u; }; // pop con leve rebote
+  const DEATH_FADE = 1.3, DEATH_DRAG_TC = 0.7, DEATH_TEXT_DELAY = 0.55;           // game over: fade de los pedazos, freno al volar, y delay del texto
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
 
   // ── ESTADO GLOBAL (al estilo del esqueleto del repo: los sprites lo leen directo) ──
   let W = 0, H = 0, dpr = 1;
+  let bgGrad = null;                                                              // gradiente de fondo (se rearma en resize)
   let screenX = 0, screenY = 0;                                                   // = W, H (alias para que las fórmulas de Snake.py calcen)
   let deltaT = 0, lastT = performance.now(), dtSmoothed = 1/60;
+  let waveClock = 0;                                                              // reloj acumulado para la fase del wiggle visual
+  let curR = 0;                                                                   // radio base por frame (= sper(0.01)); idéntico para toda pieza
   let mouseX = 0, mouseY = 0;                                                     // punto de dirección (último puntero conocido)
-  let sprint = false;                                                             // ×1.5 a la velocidad de la cabeza (port de "mouseLeft")
+  let sprint = false;                                                             // ×1.5 a la velocidad de TODA la serpiente (port de "mouseLeft")
   let showDebug = false;
 
-  let sprites = [];                                                               // todo lo procesable/dibujable, ordenado por z
-  let snake = [];
+  let snake = [];                                                                 // index === id; cola = último, cabeza = [0]
   let food = [];
+  let hazards = [];                                                               // minas no comestibles: tocarlas = game over
   let spritesToRemove = [];
   let manager = null;
 
@@ -129,19 +202,19 @@
   const sper = p => p * (screenX + screenY) / 2;
   const tscale = () => (screenX + screenY) / 2000;                               // los tamaños de texto eran absolutos a 1280×720 (suma 2000); acá escalan
 
-  // ── HELPERS DE COLOR / GEOMETRÍA (port directo) ──
+  // ── HELPERS DE COLOR / GEOMETRÍA (port directo, con escalares para no asignar arrays) ──
+  const clamp = v => Math.max(0, Math.min(255, v|0));
   const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));              // randint inclusivo
   function randColorInRange(rL, rH, gL, gH, bL, bH) { return [ri(rL,rH), ri(gL,gH), ri(bL,bH)]; }
   function modifyColorPerc(c, off) { return [clamp(c[0]*off), clamp(c[1]*off), clamp(c[2]*off)]; }
-  const clamp = v => Math.max(0, Math.min(255, v|0));
   const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
-  function getAngle2(prevAng, p1, p2) {
-    let a = Math.atan2(p2[1]-p1[1], p2[0]-p1[0]);
+  function getAngle2(prevAng, x1, y1, x2, y2) {
+    let a = Math.atan2(y2-y1, x2-x1);
     if (a - prevAng < -Math.PI) a += TAU;
     if (a - prevAng >  Math.PI) a -= TAU;
     return a;
   }
-  const getDist = (p1, p2) => Math.hypot(p1[0]-p2[0], p1[1]-p2[1]);
+  const rndRange = (a, b) => a + Math.random()*(b-a);
 
   // texto centrado / alineado (port de createText). alignment: 'center' | 'topleft' | 'topright'
   function createText(size, content, alignment, color, posX, posY) {
@@ -153,14 +226,23 @@
     ctx.fillText(content, posX, posY);
   }
 
-  function addSprite(s) { sprites.push(s); return s; }
   function removeSprites() {
     if (!spritesToRemove.length) return;
     const dead = new Set(spritesToRemove);
-    sprites = sprites.filter(s => !dead.has(s));
-    snake = snake.filter(s => !dead.has(s));
     food = food.filter(s => !dead.has(s));
+    hazards = hazards.filter(s => !dead.has(s));
     spritesToRemove = [];
+  }
+
+  // ── primitivas de dibujo (style = color CSS ya armado, no se reconstruye por círculo) ──
+  const WHITE = 'rgb(255,255,255)', DARKRED = 'rgb(100,0,0)';
+  function circle(style, x, y, r) {
+    ctx.fillStyle = style;
+    ctx.beginPath(); ctx.arc(x, y, Math.max(0.5, r), 0, TAU); ctx.fill();
+  }
+  function line(style, x1, y1, x2, y2, w) {
+    ctx.strokeStyle = style; ctx.lineWidth = w; ctx.lineCap = 'butt';
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   }
 
   // ════════════════ SNAKE PIECE ════════════════
@@ -170,40 +252,52 @@
       this.vel = sper(0.3);
       this.angVel = sper(0.01);
       this.ang = (this.id === 0) ? Math.random()*TAU : snake[this.id-1].ang;
+      this.targetAng = this.ang;                                                 // dirección objetivo de la cabeza (control por rumbo)
       this.x = (this.id === 0) ? xper(0.5) : snake[this.id-1].x;
       this.y = (this.id === 0) ? yper(0.5) : snake[this.id-1].y;
       this.wave_time = 0;
       this.wave_time_total = 0.2;
-      // cada 4º segmento usa un verde más brillante (y son los que matan)
-      this.color = (this.id % 4 === 0) ? randColorInRange(10,40,225,255,10,40)
-                                       : randColorInRange(10,40,75,125,10,40);
+      // color FIJO por id (no depende del largo → comer NO recalcula color de toda la víbora). Gradiente
+      // verde→cian que satura hacia la cola. Los 3 strings hsl se arman 1 sola vez acá, nunca por frame.
+      const ct = Math.min(1, this.id / 60), chue = 145 + ct*55;
+      this._glowStr  = `hsla(${chue},100%,55%,0.16)`;
+      this._bodyStr  = `hsl(${chue},90%,56%)`;
+      this._sheenStr = `hsla(${chue},100%,90%,0.5)`;
       snake.push(this);
     }
 
-    get radius() { return sper(0.01); }                                          // live para ser responsive ante resize
-
     process() {
       if (manager.gameOver || manager.pause) return;
-      const r = this.radius;
-      const targetX = (this.id === 0) ? mouseX : snake[this.id-1].x;
-      const targetY = (this.id === 0) ? mouseY : snake[this.id-1].y;
-
-      const targetAng  = getAngle2(this.ang, [this.x,this.y], [targetX,targetY]);
-      const targetDist = getDist([this.x,this.y], [targetX,targetY]);
 
       if (this.id === 0) {
+        // CABEZA: control por DIRECCIÓN persistente. targetAng se fija SÓLO en cada input (ver aimAt en
+        // los handlers de puntero); entre inputs la cabeza conserva el rumbo y va derecho — no orbita ni
+        // recalcula hacia el punto, que queda sólo como guía visual. Para girar, das un nuevo input.
         this.vel = sper(0.3); this.angVel = sper(0.01);
+        // girar hacia targetAng por el camino corto, clavando cuando ya está alineada
+        let diff = this.targetAng - this.ang;
+        diff = ((diff + Math.PI) % TAU + TAU) % TAU - Math.PI;
+        const step = this.angVel * deltaT;
+        this.ang += Math.abs(diff) <= step ? diff : Math.sign(diff) * step;
+        this.ang = ((this.ang % TAU) + TAU) % TAU;
+        const boost = sprint ? 1.5 : 1;
+        this.x += Math.cos(this.ang) * this.vel * deltaT * boost;
+        this.y += Math.sin(this.ang) * this.vel * deltaT * boost;
         this.checkHeadCol();
       } else {
-        this.vel    = targetDist > r*0.75 ? sper(0.4) : targetDist < r*0.75 ? sper(0.2) : sper(0.3);
-        this.angVel = (targetDist > r*0.75 || targetDist < r*0.75) ? sper(0.02) : sper(0.01);
+        // CUERPO: seguidor de distancia FIJA. Se ubica a `link` detrás del segmento de adelante, en la
+        // dirección actual. El espacio entre segmentos no depende de la velocidad (no se separa al
+        // acelerar) ni del framerate, no puede colapsar y no serpentea. Como proceso cabeza→cola, toda
+        // la cadena se reacomoda en un solo frame (incluidos los 10 que nacen apilados al comer).
+        const ahead = snake[this.id-1];
+        const link = curR * 0.8;
+        let dx = this.x - ahead.x, dy = this.y - ahead.y;
+        let d = Math.hypot(dx, dy);
+        if (d < 1e-4) { dx = Math.cos(this.ang); dy = Math.sin(this.ang); d = 1; } // recién nacido apilado: separar según su ángulo
+        this.x = ahead.x + dx/d * link;
+        this.y = ahead.y + dy/d * link;
+        this.ang = Math.atan2(-dy, -dx);                                          // mirando hacia el de adelante
       }
-
-      this.ang += (targetAng > this.ang ? this.angVel : -this.angVel) * deltaT;
-      this.ang = ((this.ang % TAU) + TAU) % TAU;
-      const boost = (this.id === 0 && sprint) ? 1.5 : 1;                         // sólo la cabeza acelera; el cuerpo la sigue
-      this.x += Math.cos(this.ang) * this.vel * deltaT * boost;
-      this.y += Math.sin(this.ang) * this.vel * deltaT * boost;
 
       // onda "respiración" que se propaga hacia la cola
       if (this.wave_time > 0) {
@@ -217,51 +311,106 @@
     }
 
     draw() {
-      let color = this.color;
-      const baseR = this.radius;
+      const dAlpha = manager.dying ? this.deathAlpha : 1;                        // fade al romperse en game over
+      if (dAlpha <= 0) return;                                                    // pedazo ya desvanecido
+      ctx.globalAlpha = dAlpha;
+      const baseR = curR;
       let radius;
-      if (this.id === 0 && snake.length > 80)      radius = baseR * 1.4;
-      else if (this.id === 0 && snake.length > 40) radius = baseR * 1.2;
+      if (this.id === 0 && snake.length > 80)      radius = baseR * 1.45;
+      else if (this.id === 0 && snake.length > 40) radius = baseR * 1.25;
+      else if (this.id === 0)                       radius = baseR * 1.12;        // cabeza siempre un toque más grande
       else                                          radius = baseR;
 
+      // afinado progresivo hacia la cola
       const limit = snake.length - Math.min(snake.length/2, 20);
       if (this.id > limit) {
         const last = snake[snake.length-1];
-        radius -= radius * ((this.id - limit) / (last.id - limit) * 0.6);
+        radius -= radius * ((this.id - limit) / (last.id - limit) * 0.55);
       }
 
+      // pulso de "respiración" (al comer o al chocar una mina)
+      let wavePulse = 0;
       if (this.wave_time > 0) {
         const wf = (this.wave_time_total - this.wave_time) / this.wave_time_total;
-        radius += baseR * (Math.sin(Math.PI*wf) * (this.id === 0 ? 3 : 1));
-        color = modifyColorPerc(color, 1 + (Math.sin(Math.PI*wf)*3));
+        wavePulse = Math.sin(Math.PI*wf);
+        radius += baseR * (wavePulse * (this.id === 0 ? 3 : 1));
       }
 
-      circle(color, this.x, this.y, radius);
+      // wiggle visual lateral (NO toca this.x/this.y ni la colisión); atenuado cerca de la cabeza
+      let drawX = this.x, drawY = this.y;
+      if (this.id > 0 && !manager.dying) {
+        const amp = baseR * WIG_AMP * Math.min(1, this.id / 4);
+        const off = Math.sin(waveClock * WIG_SPEED - this.id * WIG_DENSITY) * amp;
+        drawX += Math.cos(this.ang + Math.PI/2) * off;
+        drawY += Math.sin(this.ang + Math.PI/2) * off;
+      }
+
+      // COLOR: los 3 strings hsl están pre-armados por id en el constructor (no dependen del largo, así
+      // comer NO recalcula color de toda la víbora). Sólo el pulso (comer) y el destello (mina) arman
+      // strings dinámicos, y eso afecta a pocos segmentos a la vez.
+      const flash = manager.hitFlash > 0 ? manager.hitFlash / HAZARD_FLASH_TIME : 0;
+      let glowStr = this._glowStr, bodyStr = this._bodyStr, sheenStr = this._sheenStr;
+      if (flash > 0 || wavePulse > 0) {
+        let hue = 145 + Math.min(1, this.id/60)*55, sat = 90, light = 56 + wavePulse*22;
+        if (flash > 0) { hue = 0; sat = 95; light = 50 + flash*18; }
+        glowStr  = `hsla(${hue},100%,55%,0.16)`;
+        bodyStr  = `hsl(${hue},${sat}%,${light}%)`;
+        sheenStr = `hsla(${hue},100%,90%,0.5)`;
+      }
+
+      // cuerpo + brillo glossy. El glow ya NO es por segmento (era el mayor costo en mobile): ahora es
+      // un solo stroke a lo largo de toda la víbora, dibujado en el loop antes de los cuerpos.
+      ctx.fillStyle = bodyStr;
+      ctx.beginPath(); ctx.arc(drawX, drawY, radius, 0, TAU); ctx.fill();
+      ctx.fillStyle = sheenStr;
+      ctx.beginPath(); ctx.arc(drawX - radius*0.3, drawY - radius*0.3, radius*0.34, 0, TAU); ctx.fill();
 
       if (this.id === 0) {
+        // ojos con reflejo + pupila mirando hacia adelante
         const ca = Math.cos(this.ang), sa = Math.sin(this.ang);
         const px = Math.cos(this.ang + Math.PI/2), py = Math.sin(this.ang + Math.PI/2);
-        // ojos (blanco) + pupilas (rojo oscuro)
-        circle([255,255,255], this.x + ca*radius*0.4 + px*radius*0.5, this.y + sa*radius*0.4 + py*radius*0.5, radius*0.4);
-        circle([255,255,255], this.x + ca*radius*0.4 - px*radius*0.5, this.y + sa*radius*0.4 - py*radius*0.5, radius*0.4);
-        circle([100,0,0],     this.x + ca*radius*0.55 + px*radius*0.5, this.y + sa*radius*0.55 + py*radius*0.5, radius*0.2);
-        circle([100,0,0],     this.x + ca*radius*0.55 - px*radius*0.5, this.y + sa*radius*0.55 - py*radius*0.5, radius*0.2);
+        const eyeR = radius*0.42, pupR = radius*0.2;
+        for (const sgn of [1, -1]) {
+          const ex = drawX + ca*radius*0.36 + px*radius*0.5*sgn, ey = drawY + sa*radius*0.36 + py*radius*0.5*sgn;
+          ctx.fillStyle = '#fff';            ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, TAU); ctx.fill();
+          const lx = ex + ca*pupR*0.9, ly = ey + sa*pupR*0.9;
+          ctx.fillStyle = '#0c1014';         ctx.beginPath(); ctx.arc(lx, ly, pupR, 0, TAU); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.arc(lx - pupR*0.3, ly - pupR*0.3, pupR*0.36, 0, TAU); ctx.fill();
+        }
       }
+      ctx.globalAlpha = 1;
     }
 
     checkHeadCol() {
-      const r = this.radius;
-      for (const piece of snake) {
-        if (piece.id > 5 && piece.id % 4 === 0) {
-          if (getDist([piece.x,piece.y], [this.x,this.y]) < r*2) manager.gameOver = true;
+      const hx = this.x, hy = this.y, thr = curR*2, thr2 = thr*thr;
+      // sin paredes ni wrap: si la cabeza se fue muy lejos del campo, muerte. Margen uniforme = 2× el
+      // lado corto de la ventana activa (no depende del aspecto, así es testeable en monitor ancho).
+      const m = 1 * Math.min(W, H);
+      if (hx < -m || hx > W + m || hy < -m || hy > H + m) { manager.die(); return; }
+      if (manager.immunity <= 0) {                                               // inmunidad inicial: no muere por su propio cuerpo
+        for (const piece of snake) {
+          if (piece.id > 5 && piece.id % 4 === 0) {
+            const dx = piece.x-hx, dy = piece.y-hy;
+            if (dx*dx + dy*dy < thr2) manager.die();
+          }
         }
       }
-      for (const f of food) {
-        if (getDist([f.x,f.y], [this.x,this.y]) < r*2 && !f.grabbed) {
+      for (const f of food) {                                                    // sólo comestible una vez materializada (appear===1)
+        if (f.appear < 1) continue;
+        const dx = f.x-hx, dy = f.y-hy;
+        if (dx*dx + dy*dy < thr2 && !f.grabbed) {
           f.grabbed = true;
-          manager.score += 110;
-          for (let i = 0; i < 10; i++) addSprite(new SnakePiece(snake.length));
+          manager.score += 100;
+          for (let i = 0; i < 10; i++) new SnakePiece(snake.length);             // el constructor se autoagrega a snake[]
           this.wave_time = this.wave_time_total;
+        }
+      }
+      for (const h of hazards) {                                                 // minas: no se comen ni matan; te sacan un poco de cola
+        if (h.appear < 1) continue;                                             // no lastima mientras se materializa (telegrafía)
+        const dx = h.x-hx, dy = h.y-hy;
+        if (dx*dx + dy*dy < thr2) {
+          spritesToRemove.push(h);                                              // la mina se consume (el manager respawnea otra lejos)
+          manager.onHazardHit();
         }
       }
     }
@@ -272,26 +421,28 @@
     constructor() {
       this.z = -1;
       this.ang = Math.random()*TAU;
-      this.angVel = sper(0.03);
       this.glowCD = 1;
       this.grabbed = false;
       this.timer = 10;
+      this.angVel = 1.8;                                                          // giro suave y constante (la estrella es 4-simétrica: si gira rápido estroboscopía)
+      this.appear = 0;                                                           // animación de aparición (0→1)
       // posición lejos del cuerpo
+      const minD = curR*10, minD2 = minD*minD;
       let reroll = true, guard = 0;
-      while (reroll && guard++ < 200) {
+      while (reroll && guard++ < 40) {
         this.x = rndRange(xper(0.1), screenX - xper(0.1));
         this.y = rndRange(yper(0.1), screenY - yper(0.1));
         reroll = false;
-        for (const piece of snake) {
-          if (getDist([piece.x,piece.y], [this.x,this.y]) < this.radius*10) { reroll = true; break; }
+        for (let i = 0; i < snake.length; i += 3) {                              // 1 de cada 3 (se solapan): evita O(N) caro al spawnear con cuerpo largo
+          const dx = snake[i].x-this.x, dy = snake[i].y-this.y;
+          if (dx*dx + dy*dy < minD2) { reroll = true; break; }
         }
       }
       food.push(this);
     }
 
-    get radius() { return sper(0.01); }
-
     process() {
+      this.appear = Math.min(1, this.appear + deltaT / SPAWN_ANIM_TIME);
       if (!manager.gameOver && !manager.pause) this.timer = Math.max(this.timer - deltaT, 0);
       this.glowCD = Math.max(this.glowCD - deltaT, 0);
       if (this.glowCD === 0) this.glowCD = this.timer <= 2 ? 0.2 : this.timer <= 5 ? 0.5 : 1;
@@ -300,20 +451,111 @@
     }
 
     draw() {
-      const r = this.radius, a = this.ang;
-      const color = this.glowCD <= 0.1 ? [255,255,255] : [100,0,0];
-      const lw = Math.max(1, r/4);
-      const C = (off, scl=1) => [this.x + Math.cos(a+off)*r*scl, this.y + Math.sin(a+off)*r*scl];
-      // abanico interior (brillante)
-      for (let i = 0; i < 10; i++) {
-        const s = 1 - i*0.2;
-        line(modifyColorPerc(color,2), C(-Math.PI/2, s), C(0, s), lw);
+      const cx = this.x, cy = this.y, a = this.ang;
+      const breath = 1 + Math.sin(waveClock*5 + this.ang)*0.12;
+      const r = curR * 1.2 * breath * easeOutBack(this.appear);                  // escala de aparición (pop)
+
+      // urgencia: cuando está por expirar PARPADEA OSCURECIÉNDOSE (más rápido y más oscuro cuanto
+      // menos tiempo queda) — contra el fondo negro se nota mucho más que aclarándose.
+      let dim = 0;
+      if (this.timer <= 5) {
+        const urg = 1 - this.timer/5;                                            // 0 (5s) .. 1 (0s)
+        dim = (0.5 + 0.5*Math.sin(waveClock*(7 + urg*18))) * (0.4 + urg*0.55);    // amplitud y frecuencia crecen con la urgencia
       }
-      // contorno de estrella (4 trazos)
-      line(color, C(0),          C(Math.PI/2),  lw);
-      line(color, C(Math.PI/2),  C(Math.PI),    lw);
-      line(color, C(Math.PI),    C(-Math.PI/2), lw);
-      line(color, C(-Math.PI/2), C(0),          lw);
+      const hue = 45;                                                            // gema ámbar
+      const light = 64 - dim*54;                                                 // baja hacia oscuro al parpadear
+      const fade  = (1 - dim*0.85) * Math.min(1, this.appear*1.4);               // incluye el fade-in de aparición
+
+      // glow aditivo barato (SIN shadowBlur, que es carísimo en mobile y se redibuja cada frame):
+      // 2 discos translúcidos con 'lighter'
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `hsla(${hue},100%,55%,${0.20*fade})`;
+      ctx.beginPath(); ctx.arc(cx, cy, r*1.5, 0, TAU); ctx.fill();
+      ctx.fillStyle = `hsla(${hue},100%,62%,${0.30*fade})`;
+      ctx.beginPath(); ctx.arc(cx, cy, r*0.9, 0, TAU); ctx.fill();
+      // destellos (4 puntas giratorias)
+      ctx.strokeStyle = `hsla(${hue},100%,${Math.max(28,light+18)}%,${0.95*fade})`;
+      ctx.lineCap = 'round';
+      ctx.lineWidth = Math.max(2, r*0.16);
+      for (let i = 0; i < 4; i++) {
+        const ang = a + i*Math.PI/2;
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(ang)*r*1.3, cy + Math.sin(ang)*r*1.3); ctx.stroke();
+      }
+      // orbe
+      ctx.fillStyle = `hsl(${hue},100%,${light}%)`;
+      ctx.beginPath(); ctx.arc(cx, cy, r*0.5, 0, TAU); ctx.fill();
+      // brillo central (se apaga al oscurecer)
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = `rgba(255,255,255,${0.95*fade})`;
+      ctx.beginPath(); ctx.arc(cx, cy, r*0.2, 0, TAU); ctx.fill();
+    }
+  }
+
+  // ════════════════ HAZARD (mina — tocarla te achica y resta score, no mata) ════════════════
+  class Hazard {
+    constructor() {
+      this.z = -1;
+      this.ang = Math.random()*TAU;
+      this.angVel = 2.0 * (Math.random() < 0.5 ? -1 : 1);                        // giro suave (8-simétrica: lento para no estroboscopiar)
+      this.pulse = Math.random()*TAU;
+      this.appear = 0;                                                           // animación de aparición (0→1)
+      // aparece lejos de la cabeza (para no matar de una) y separada del cuerpo y de otras minas
+      const head = snake[0];
+      const safe = curR*14, safe2 = safe*safe;
+      const body = curR*4,  body2 = body*body;
+      let ok = false, guard = 0;
+      while (!ok && guard++ < 50) {
+        this.x = rndRange(xper(0.08), screenX - xper(0.08));
+        this.y = rndRange(yper(0.08), screenY - yper(0.08));
+        ok = true;
+        if (head) { const dx = head.x-this.x, dy = head.y-this.y; if (dx*dx+dy*dy < safe2) { ok = false; continue; } }
+        for (let i = 0; i < snake.length; i += 3) { const p = snake[i], dx = p.x-this.x, dy = p.y-this.y; if (dx*dx+dy*dy < body2) { ok = false; break; } } // 1 de cada 3
+        if (!ok) continue;
+        for (const h of hazards) { const dx = h.x-this.x, dy = h.y-this.y; if (dx*dx+dy*dy < safe2) { ok = false; break; } }
+      }
+      hazards.push(this);
+    }
+    process() {
+      if (manager.pause) return;                                                 // sigue girando aun en game over (sólo se frena en pausa)
+      this.appear = Math.min(1, this.appear + deltaT / SPAWN_ANIM_TIME);
+      this.ang += this.angVel * deltaT;
+      this.pulse += deltaT * 4;
+    }
+    draw() {
+      const cx = this.x, cy = this.y, a = this.ang;
+      const sp = easeOutBack(this.appear);                                       // escala de aparición (pop)
+      const spFade = Math.min(1, this.appear*1.4);
+      const pulse = 1 + Math.sin(this.pulse)*0.12;
+      const R0 = curR*1.55*pulse*sp, Ri = curR*0.8*sp;                           // punta y base de los pinchos
+      const spikes = 8;
+      ctx.save();
+      ctx.globalAlpha = spFade;                                                  // fade-in de aparición sobre toda la mina
+      // glow aditivo barato detrás de la mina (SIN shadowBlur, carísimo en mobile)
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(220,40,170,0.22)';
+      ctx.beginPath(); ctx.arc(cx, cy, R0*1.15, 0, TAU); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.beginPath();
+      for (let i = 0; i < spikes*2; i++) {
+        const rad = (i % 2 === 0) ? R0 : Ri;
+        const ang = a + i*Math.PI/spikes;
+        const x = cx + Math.cos(ang)*rad, y = cy + Math.sin(ang)*rad;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.closePath();
+      const g = ctx.createRadialGradient(cx, cy, curR*0.2*sp, cx, cy, Math.max(0.01, R0)); // cuerpo oscuro
+      g.addColorStop(0,   'rgb(110,28,110)');                                     // centro: magenta apagado
+      g.addColorStop(0.55,'rgb(48,8,54)');                                        // medio: violeta oscuro
+      g.addColorStop(1,   'rgb(10,2,16)');                                        // borde: casi negro
+      ctx.fillStyle = g; ctx.fill();
+      ctx.lineWidth = Math.max(1, curR*0.07*sp);                                  // borde brillante (con bloom) → mucho contraste sobre el cuerpo oscuro
+      ctx.strokeStyle = 'rgba(255,110,215,0.9)'; ctx.stroke();
+      // núcleo casi negro + "ojo" rojo palpitante + reflejo
+      const eye = 0.85 + Math.sin(this.pulse)*0.15;
+      ctx.fillStyle = 'rgb(14,3,18)'; ctx.beginPath(); ctx.arc(cx, cy, curR*0.52*sp, 0, TAU); ctx.fill();
+      ctx.fillStyle = `rgb(255,${(40*eye)|0},${(70*eye)|0})`; ctx.beginPath(); ctx.arc(cx, cy, curR*0.24*sp, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(255,225,240,0.95)'; ctx.beginPath(); ctx.arc(cx - curR*0.08*sp, cy - curR*0.08*sp, curR*0.09*sp, 0, TAU); ctx.fill();
+      ctx.restore();
     }
   }
 
@@ -326,17 +568,69 @@
       this.pause = false;
       this.pauseBlinkCD = 0;
       this.initCD = 4;
+      this.hitFlash = 0;                                                          // timer del destello rojo al chocar una mina
+      this.pendingShrink = 0;                                                     // segmentos a sacar (se aplican fuera del for de proceso)
+      this.foodCD = 0;                                                            // delay hasta el próximo spawn de comida
+      this.hazCD = HAZARD_SPAWN_DELAY;                                            // delay hasta el próximo spawn de mina
+      this.dying = false;                                                         // animación de "rotura" en curso
+      this.deathT = 0;                                                            // tiempo desde la muerte
+      this.deathGroups = [];                                                      // pedazos voladores (grupos de segmentos)
+      this.immunity = 0;                                                          // inmunidad (no muere por su cuerpo) al arrancar
+    }
+    die() {
+      if (this.gameOver) return;                                                  // una sola vez
+      this.gameOver = true; this.dying = true; this.deathT = 0;
+      this.deathGroups = [];
+      // romper la víbora en grupos de segmentos consecutivos; cada grupo vuela en una dirección al azar
+      // y GIRA sobre su propio centro mientras se desvanece.
+      let i = 0;
+      while (i < snake.length) {
+        const groupSize = ri(3, 6), members = [];
+        let cx = 0, cy = 0;
+        for (let k = 0; k < groupSize && i < snake.length; k++, i++) { members.push(snake[i]); cx += snake[i].x; cy += snake[i].y; }
+        cx /= members.length; cy /= members.length;
+        const ang = Math.random()*TAU, speed = sper(0.3) + Math.random()*sper(0.6);
+        for (const e of members) { e.ox = e.x - cx; e.oy = e.y - cy; e.deathAlpha = 1; } // offset respecto del centro del grupo
+        this.deathGroups.push({ cx, cy, vx: Math.cos(ang)*speed, vy: Math.sin(ang)*speed, rot: 0, vrot: (Math.random()*2-1)*8, alpha: 1, members });
+      }
+    }
+    onHazardHit() {
+      this.hitFlash = HAZARD_FLASH_TIME;
+      this.pendingShrink += HAZARD_PENALTY;
+      this.score = Math.max(0, this.score - ri(20, 30));                          // mina: -20..30 al score (al azar)
+      if (snake[0]) snake[0].wave_time = snake[0].wave_time_total;               // misma animación que al comer
     }
     process() {
+      if (this.hitFlash > 0) this.hitFlash = Math.max(this.hitFlash - deltaT, 0);
+      if (this.immunity > 0) this.immunity = Math.max(this.immunity - deltaT, 0);
+      if (this.gameOver) { this.deathT += deltaT; return; }                      // durante la muerte: avanzar timer, no spawnear nada
       if (this.initCD > 0) this.initCD = Math.max(this.initCD - deltaT, 0);
-      if (!snake.length) for (let i = 0; i < 5; i++) addSprite(new SnakePiece(i));
-      if (food.length < 3 && this.initCD === 0) addSprite(new Food());
+      if (!snake.length) { for (let i = 0; i < 10; i++) new SnakePiece(i); this.immunity = 1; } // largo inicial + 1s de inmunidad
+      if (this.initCD > 0) return;                                               // nada aparece hasta pasar el initCD inicial
+
+      // comida: aparece de a una con un delay entre spawns (no todas de golpe)
+      if (food.length < 3) {
+        this.foodCD -= deltaT;
+        if (this.foodCD <= 0) { new Food(); this.foodCD = FOOD_SPAWN_DELAY; }
+      } else this.foodCD = FOOD_SPAWN_DELAY;
+
+      // minas: ídem, con dificultad creciente (arranca en 2, +1 cada 4 estrellas)
+      const targetHaz = Math.min(MAX_HAZARDS, 2 + Math.floor(this.score / 440));
+      if (hazards.length < targetHaz) {
+        this.hazCD -= deltaT;
+        if (this.hazCD <= 0) { new Hazard(); this.hazCD = HAZARD_SPAWN_DELAY; }
+      } else this.hazCD = HAZARD_SPAWN_DELAY;
     }
     draw() {
       if (this.gameOver) {
-        createText(100, 'GAME OVER',        'center', [255,255,255], xper(0.5), yper(0.47));
-        createText(50,  'SCORE: '+this.score,'center', [255,255,255], xper(0.5), yper(0.6));
-        createText(24,  'TOCÁ PARA REINICIAR','center',[255,0,0],     xper(0.5), yper(0.67));
+        const t = Math.min(1, Math.max(0, (this.deathT - DEATH_TEXT_DELAY) / 0.7)); // aparición suave tras la rotura
+        if (t > 0) {
+          ctx.globalAlpha = t;
+          createText(100, 'GAME OVER',          'center', [255,255,255], xper(0.5), yper(0.47));
+          createText(50,  'SCORE: '+this.score, 'center', [255,255,255], xper(0.5), yper(0.6));
+          createText(24,  'TOCÁ PARA REINICIAR','center', [255,0,0],     xper(0.5), yper(0.67));
+          ctx.globalAlpha = 1;
+        }
       } else {
         createText(24, String(this.score), 'topleft', [0,255,0], xper(0.02), yper(0.02));
       }
@@ -348,59 +642,75 @@
       if (showDebug) {
         createText(14, 'FPS: '+Math.round(1/Math.max(1e-3,dtSmoothed)), 'topright', [255,255,255], xper(0.98), yper(0.02));
         createText(14, 'len: '+snake.length, 'topright', [255,255,255], xper(0.98), yper(0.05));
+        createText(14, 'minas: '+hazards.length, 'topright', [255,255,255], xper(0.98), yper(0.08));
       }
     }
     reset() {
-      for (const s of sprites) if (s !== this) spritesToRemove.push(s);
-      removeSprites();
-      this.gameOver = false; this.score = 0; this.initCD = 4; this.pause = false;
+      snake = []; food = []; hazards = []; spritesToRemove = [];
+      this.gameOver = false; this.dying = false; this.deathT = 0; this.deathGroups = [];
+      this.score = 0; this.initCD = 4; this.pause = false;
     }
   }
 
-  // ── primitivas de dibujo ──
-  function circle(color, x, y, r) {
-    ctx.fillStyle = rgb(color);
-    ctx.beginPath(); ctx.arc(x, y, Math.max(0.5, r), 0, TAU); ctx.fill();
-  }
-  function line(color, p1, p2, w) {
-    ctx.strokeStyle = rgb(color); ctx.lineWidth = w; ctx.lineCap = 'butt';
-    ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.stroke();
-  }
-  const rndRange = (a, b) => a + Math.random()*(b-a);
-
   // ════════════════ RESIZE ════════════════
-  const barEl = document.getElementById('bar');
   function resize() {
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const barH = barEl.offsetHeight;
+    dpr = Math.min(window.devicePixelRatio || 1, 1.5);                           // capeado a 1.5: el render está limitado por fillrate; en celus 3× esto casi duplica FPS
     W = screenX = window.innerWidth;
-    H = screenY = window.innerHeight - barH;
+    H = screenY = window.innerHeight;                                            // pantalla completa: sin barra, los controles flotan sobre el canvas
     canvas.width  = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    bgGrad = ctx.createRadialGradient(W*0.5, H*0.42, 0, W*0.5, H*0.5, Math.max(W,H)*0.78);
+    bgGrad.addColorStop(0,   'rgb(11,28,30)');                                   // centro: teal muy oscuro
+    bgGrad.addColorStop(0.6, 'rgb(4,11,13)');
+    bgGrad.addColorStop(1,   'rgb(0,0,0)');                                      // borde: negro (viñeta)
   }
   window.addEventListener('resize', resize);
 
   // ════════════════ INPUT ════════════════
-  // La posición del puntero dirige a la cabeza. En desktop, además, mantener el botón del mouse
-  // acelera (port de "LMB held = sprint"); en touch usás el botón ⚡ porque el dedo ya está ocupado
-  // dirigiendo.
+  // En TOUCH la dirección la da la PALANCA (ver setupJoystick); tocar el campo NO dirige — sólo sirve para
+  // acelerar con 2+ dedos y para reiniciar en game over. En DESKTOP el mouse dirige (la cabeza va hacia el
+  // puntero) y mantener el botón acelera (port de "LMB held = sprint").
   function evtPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-  let mousePressed = false;
-  function updateSprint() { sprint = sprintBtnHeld || mousePressed; }
+  const canvasPointers = new Map();                                              // dedos sobre el canvas (sólo para el sprint multi-touch)
+  let mousePressed = false;                                                      // desktop: botón del mouse = acelerar
+  function updateSprint() {
+    sprint = sprintBtnHeld || mousePressed || canvasPointers.size > 1;           // 2+ dedos (o botón, o mouse en desktop) = acelerar
+    const b = document.getElementById('btnSprint');                              // el orbe se enciende cuando estás acelerando (incl. clic del mouse en desktop)
+    if (b) b.classList.toggle('on', sprint);
+  }
+  function aimAt(px, py) {                                                       // fija el RUMBO de la cabeza hacia (px,py) — sólo mouse (desktop)
+    const head = snake[0];
+    if (!head || manager.gameOver) return;
+    const dx = px - head.x, dy = py - head.y, dz = curR * 1.5;
+    if (dx*dx + dy*dy > dz*dz) head.targetAng = Math.atan2(dy, dx);              // ignora inputs pegados a la cabeza (dirección ambigua)
+  }
 
-  canvas.addEventListener('pointermove', e => { const p = evtPos(e); mouseX = p.x; mouseY = p.y; });
   canvas.addEventListener('pointerdown', e => {
-    const p = evtPos(e); mouseX = p.x; mouseY = p.y;
-    if (manager.gameOver) { manager.reset(); return; }                           // tocá para reiniciar
-    if (e.pointerType === 'mouse') { mousePressed = true; updateSprint(); }
+    const p = evtPos(e);
+    if (manager.gameOver) { manager.reset(); btnPause.classList.remove('on'); return; }  // tocá para reiniciar
     hint.style.opacity = '0';
+    if (e.pointerType === 'mouse') {
+      mouseX = p.x; mouseY = p.y; aimAt(p.x, p.y);                               // desktop: el mouse dirige
+      mousePressed = true;
+    } else {
+      canvasPointers.set(e.pointerId, p);                                        // touch: sólo cuenta para el sprint (la palanca dirige)
+    }
+    updateSprint();
   });
-  function endMouse(e) { if (e.pointerType === 'mouse') { mousePressed = false; updateSprint(); } }
-  canvas.addEventListener('pointerup', endMouse);
-  canvas.addEventListener('pointercancel', endMouse);
+  canvas.addEventListener('pointermove', e => {
+    if (e.pointerType === 'mouse') { const p = evtPos(e); mouseX = p.x; mouseY = p.y; aimAt(p.x, p.y); return; }
+    if (canvasPointers.has(e.pointerId)) canvasPointers.set(e.pointerId, evtPos(e));
+  });
+  function endPointer(e) {
+    if (e.pointerType === 'mouse') { mousePressed = false; updateSprint(); return; }
+    canvasPointers.delete(e.pointerId);
+    updateSprint();
+  }
+  canvas.addEventListener('pointerup', endPointer);
+  canvas.addEventListener('pointercancel', endPointer);
   canvas.addEventListener('contextmenu', e => e.preventDefault());
 
   // ── BOTONES ──
@@ -433,8 +743,8 @@
 
   const btnSprint = document.getElementById('btnSprint');
   pressable(btnSprint,
-    () => { sprintBtnHeld = true;  updateSprint(); btnSprint.classList.add('on'); },
-    () => { sprintBtnHeld = false; updateSprint(); btnSprint.classList.remove('on'); });
+    () => { sprintBtnHeld = true;  updateSprint(); },
+    () => { sprintBtnHeld = false; updateSprint(); });
 
   const btnPause = document.getElementById('btnPause');
   tappable(btnPause, () => {
@@ -448,34 +758,146 @@
   const btnDebug = document.getElementById('btnDebug');
   tappable(btnDebug, () => { showDebug = !showDebug; btnDebug.classList.toggle('on', showDebug); });
 
+  // ── PALANCA DE DIRECCIÓN (nipplejs) — misma de TankWARS ──
+  // Una sola palanca omnidireccional: su dirección fija el RUMBO de la cabeza (head.targetAng), igual que
+  // marcar un punto con el dedo. Mantiene el rumbo entre inputs (no hace falta sostenerla). Sólo en touch;
+  // en desktop se oculta y se sigue dirigiendo con el mouse. Coexiste con el toque-en-pantalla.
+  const IS_TOUCH = (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches) || 'ontouchstart' in window;
+  const JOY_OPTS = { mode: 'static', position: { left: '50%', top: '50%' }, size: 84, restJoystick: true, fadeTime: 0, dynamicPage: true, color: 'rgba(0,255,140,0.7)' };
+  let jMove = null;
+  function setupJoystick() {
+    if (!IS_TOUCH || typeof nipplejs === 'undefined') return;
+    if (jMove) { try { jMove.destroy(); } catch {} }
+    jMove = nipplejs.create({ ...JOY_OPTS, zone: document.getElementById('jMove') });
+    jMove.on('move', (e, d) => {
+      const head = snake[0];
+      if (!head || manager.gameOver) return;
+      const ang = Math.atan2(-d.vector.y, d.vector.x);   // nipplejs y es + arriba → invierto a coords pantalla
+      head.targetAng = ang;                               // sólo fija el rumbo; el punto-guía se calcula por frame en el draw (suave)
+      hint.style.opacity = '0';
+    });
+  }
+  if (!IS_TOUCH) document.getElementById('padL').style.display = 'none';
+  window.addEventListener('orientationchange', () => requestAnimationFrame(setupJoystick));
+
   // ════════════════ LOOP ════════════════
   function loop(now) {
     if (typeof now !== 'number') now = performance.now();
     deltaT = Math.min(0.05, (now - lastT) / 1000);                               // dt real, clamp 50ms (igual que Snake.py)
     lastT = now;
     dtSmoothed = dtSmoothed*0.9 + deltaT*0.1;
+    if (!manager.gameOver && !manager.pause) waveClock += deltaT;                // avanza la fase del wiggle solo en juego activo
+    curR = sper(0.01);                                                           // radio base, 1 sola vez por frame
 
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = bgGrad || '#000'; ctx.fillRect(0, 0, W, H);
 
-    // z-orden como el original: cola (z alto) → cabeza → comida → manager (encima)
-    sprites.sort((a, b) => b.z - a.z);
-    for (const s of sprites) { s.process(); s.draw(); }
+    // PROCESO cabeza→cola: cada segmento lee la posición YA actualizada del de adelante, así el
+    // movimiento de la cabeza se propaga por TODA la cadena en un solo frame (independiente del fps).
+    // Procesar cola→cabeza como el original propaga 1 segmento por frame → a 60/75 fps la cola queda
+    // ~medio segundo atrás y el cuerpo se "separa"; esa era la dependencia del framerate. Cacheo n para
+    // no procesar este mismo frame las piezas que crea la cabeza al comer.
+    if (!manager.gameOver) {
+      const n = snake.length;
+      for (let i = 0; i < n; i++) snake[i].process();
+    } else {
+      // cada grupo vuela, frena y GIRA alrededor de su propio centro, desvaneciéndose
+      const drag = Math.exp(-deltaT / DEATH_DRAG_TC);
+      for (const g of manager.deathGroups) {
+        g.cx += g.vx * deltaT; g.cy += g.vy * deltaT;
+        g.vx *= drag; g.vy *= drag;
+        g.rot += g.vrot * deltaT;
+        g.alpha = Math.max(0, g.alpha - deltaT / DEATH_FADE);
+        const cos = Math.cos(g.rot), sin = Math.sin(g.rot);
+        for (const e of g.members) {
+          e.x = g.cx + e.ox*cos - e.oy*sin;
+          e.y = g.cy + e.ox*sin + e.oy*cos;
+          e.deathAlpha = g.alpha;
+        }
+      }
+    }
+    for (const f of food) f.process();
+    for (const h of hazards) h.process();
+    manager.process();
+
+    // mina: sacar segmentos de la cola DESPUÉS de procesar (el for de arriba cacheó snake.length;
+    // popear durante ese loop dejaría índices undefined). Nunca por debajo de los 5 iniciales.
+    if (manager.pendingShrink > 0) {
+      const rem = Math.min(manager.pendingShrink, snake.length - 5);
+      for (let i = 0; i < rem; i++) snake.pop();
+      manager.pendingShrink = 0;
+    }
+
+    // GLOW del cuerpo: UN solo stroke aditivo a lo largo de toda la víbora (reemplaza N círculos de halo
+    // por segmento → enorme ahorro de fillrate en mobile). Se saltea en game over (los pedazos vuelan
+    // separados y un stroke los uniría con líneas).
+    if (!manager.gameOver && snake.length > 1) {
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.strokeStyle = 'hsla(168,100%,55%,0.16)';
+      ctx.lineWidth = curR * 2.7; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath();
+      for (let i = 0; i < snake.length; i++) {
+        const e = snake[i];
+        let x = e.x, y = e.y;
+        if (e.id > 0) {                                                          // MISMO wiggle que el cuerpo: si no, el glow va recto y se pierde la forma ondulada
+          const off = Math.sin(waveClock*WIG_SPEED - e.id*WIG_DENSITY) * (curR*WIG_AMP*Math.min(1, e.id/4));
+          x += Math.cos(e.ang + Math.PI/2)*off;
+          y += Math.sin(e.ang + Math.PI/2)*off;
+        }
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    // DIBUJO cola→cabeza (z-orden del original): la cabeza queda encima, la comida/minas sobre el cuerpo.
+    for (let i = snake.length - 1; i >= 0; i--) snake[i].draw();
+    for (const h of hazards) h.draw();
+    for (const f of food) f.draw();
+    manager.draw();
     removeSprites();
 
-    // cursor propio (port del círculo blanco en mouse pos)
-    if (!manager.gameOver) circle([255,255,255], mouseX, mouseY, Math.max(3, sper(0.005)));
+    // punto-guía: en DESKTOP se dibuja en la posición del mouse (sólo visual; la dirección la sigue
+     // fijando aimAt igual que antes). En touch no se dibuja (alcanza con la palanca).
+    if (!IS_TOUCH && !manager.gameOver) {
+      const cr = Math.max(3, sper(0.006));
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = 'rgba(255,255,255,0.25)';
+      ctx.beginPath(); ctx.arc(mouseX, mouseY, cr*2.2, 0, TAU); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath(); ctx.arc(mouseX, mouseY, cr, 0, TAU); ctx.fill();
+    }
 
     requestAnimationFrame(loop);
   }
 
   // ── INIT ──
   resize();
-  manager = addSprite(new Manager());
+  manager = new Manager();
   mouseX = xper(0.5); mouseY = yper(0.5);
+  setupJoystick();
   loop();
 
   const hint = document.getElementById('hint');
   setTimeout(() => hint.style.opacity = '0', 6000);
   </script>
+  <script>
+    document.getElementById('btnExit').addEventListener('click', () => {
+      if (confirm('¿Salir al menú?')) location.href = '../../';
+    });
+  </script>
+  <script>
+    (function() {
+      const btn = document.getElementById('btnFs');
+      btn.addEventListener('click', () => {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+        else document.exitFullscreen?.();
+      });
+      document.addEventListener('fullscreenchange', () => {
+        document.body.classList.toggle('fs-on', !!document.fullscreenElement);
+      });
+    })();
+  </script>
+
 </body>
 </html>

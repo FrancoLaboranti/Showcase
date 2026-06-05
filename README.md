@@ -12,6 +12,20 @@ links straight to each game's web version. It's published with GitHub Pages at:
 
 > The URL is case-sensitive — it's `Showcase` (capital `S`, the rest lowercase).
 
+## Arcade (installable PWA)
+
+[Arcade/](Arcade/index.html) is a separate, fullscreen **Progressive Web App**
+launcher — its own [manifest.json](Arcade/manifest.json), [icon.svg](Arcade/icon.svg)
+and a minimal [service worker](Arcade/sw.js) (registered only so the app is
+*installable*; it's network-only and caches nothing yet). On a phone you can "Add to
+Home Screen" and it opens fullscreen like a native app, with safe-area insets and an
+orientation-lock reset on back-navigation.
+
+It's an early prototype curating a hand-picked subset of the games (currently Pong,
+with more "próximamente") — distinct from the root [index.html](index.html), which is
+the full directory of every web port. Reachable at
+`https://francolaboranti.github.io/Showcase/Arcade/`.
+
 ## Games
 
 | Game | Python | Web |

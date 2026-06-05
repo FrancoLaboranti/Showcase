@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Chess</title>
 <style>
-  :root { --bar-height: 58px; }
+  :root { --bar-height: 48px; }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     width: 100%; height: 100%;
@@ -93,11 +93,11 @@
     gap: 8px;
   }
   #bar button {
-    height: 42px; min-width: 46px; padding: 0 14px;
-    border-radius: 10px;
+    height: 34px; min-width: 38px; padding: 0 11px;
+    border-radius: 8px;
     border: 1px solid rgba(255,255,255,0.10);
     background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
-    color: #f0f0f4; font-family: inherit; font-size: 14px; font-weight: 500;
+    color: #f0f0f4; font-family: inherit; font-size: 12px; font-weight: 500;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: manipulation;
     transition: all 0.14s ease;
@@ -108,9 +108,9 @@
     border-color: rgba(255,255,255,0.20);
   }
   #bar button:active { background: rgba(255,255,255,0.22); transform: scale(0.94); }
-  #bar button.icon { padding: 0 12px; }
-  #bar button svg { display: block; width: 18px; height: 18px; pointer-events: none; }
-  #bar .sep { width: 1px; height: 26px; background: rgba(255,255,255,0.10); margin: 0 4px; }
+  #bar button.icon { padding: 0 9px; }
+  #bar button svg { display: block; width: 15px; height: 15px; pointer-events: none; }
+  #bar .sep { width: 1px; height: 22px; background: rgba(255,255,255,0.10); margin: 0 4px; }
 
   #hint {
     position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
@@ -119,6 +119,93 @@
     pointer-events: none;
     transition: opacity 0.8s; z-index: 2; padding: 0 16px;
   }
+  /* Exit button — vuelta al menú raíz */
+  #btnExit {
+    position: absolute;
+    left: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
+  /* === Bar layout: exit-left, main-center, info/debug-right (refactor) === */
+  #bar {
+    display: grid !important;
+    grid-template-columns: 1fr auto 1fr !important;
+    justify-content: stretch !important;
+  }
+  #bar > #btnExit {
+    position: static !important;
+    left: auto !important; right: auto !important;
+    top: auto !important; bottom: auto !important;
+    justify-self: start;
+  }
+  #bar > #ui { justify-self: center; }
+  #bar > #btnInfo, #bar > #btnDebug, #bar > #btnHome {
+    position: static !important;
+    left: auto !important; right: auto !important;
+    top: auto !important; bottom: auto !important;
+    justify-self: end;
+  }
+  /* Pantalla completa — esquina arriba-der, flotante. */
+  #btnFs {
+    position: absolute;
+    right: 6px;
+    top: calc(env(safe-area-inset-top) + 6px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnFs svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnFs:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  #btnFs .ic-exit { display: none; }
+  body.fs-on #btnFs .ic-enter { display: none; }
+  body.fs-on #btnFs .ic-exit  { display: block; }
+  /* Info (FPS) — esquina abajo-der, flotante. */
+  #btnInfo {
+    position: absolute;
+    right: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnInfo:active, #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+  #fpsOverlay {
+    position: absolute;
+    right: 40px;
+    bottom: calc(env(safe-area-inset-bottom) + 8px);
+    font-family: monospace;
+    font-size: 13px;
+    color: rgba(255,255,255,0.9);
+    background: rgba(0,0,0,0.6);
+    padding: 3px 8px;
+    border-radius: 4px;
+    pointer-events: none;
+    display: none;
+    z-index: 9;
+  }
+
+
+
 </style>
 </head>
 <body>
@@ -135,7 +222,10 @@
   </div>
 
   <div id="bar" style="display:none">
-    <button id="btnFirst" class="icon" title="Posición inicial" aria-label="inicio">
+  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+<button id="btnFirst" class="icon" title="Posición inicial" aria-label="inicio">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 6l-6 6 6 6M19 6l-6 6 6 6"/></svg>
     </button>
     <button id="btnPrev" class="icon" title="Anterior" aria-label="anterior">
@@ -1137,9 +1227,12 @@
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // visualViewport es más confiable en mobile Safari (compensa la toolbar
+    // dinámica y el safe-area). Caemos a innerHeight si no existe.
+    const viewportH = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
     const barH = document.getElementById('bar').offsetHeight || 0;
     W = window.innerWidth;
-    H = window.innerHeight - barH;
+    H = Math.max(160, viewportH - barH);
     canvas.width  = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width  = W + 'px';
@@ -1155,7 +1248,7 @@
     const stripReserve  = 72;    // alto FIJO del strip (2 filas de piezas + reloj)
     const stripGap      = 18;    // aire entre strip y borde del tablero
     const topReserve    = statusReserve + stripReserve + stripGap;
-    const bottomReserve = 38;    // labels a-h + aire
+    const bottomReserve = 72;    // labels a-h + aire EXTRA contra la barra inferior
     const sideReserve   = 24;    // margen lateral mínimo
     const availH = Math.max(160, H - topReserve - bottomReserve);
     const availW = Math.max(160, W - sideReserve * 2);
@@ -1165,6 +1258,9 @@
     boardY = topReserve + (availH - boardSize) / 2;
   }
   window.addEventListener('resize', resize);
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', resize);
+  }
 
   function cellToScreen(c, r) {
     const sc = game.flip ? (7 - c) : c;
@@ -1317,22 +1413,25 @@
   }
 
   function drawPiece(kind, color, cx, cy, size) {
-    // Re-bake si cambió el tamaño de celda (resize) o el dpr (raro)
     if (cellSize > 0 && (Math.abs(cellSize - lastSpriteSize) >= 0.5 || dpr !== lastSpriteDpr)) {
       rebuildPieceSprites(cellSize);
     }
-    // Si la pieza se pide bastante más chica que el sprite del tablero, usar el
-    // cache de tamaño nativo — preserva definición de outline + gradiente.
-    // Si el bake fallara (raro en mobile/Safari) caemos al downscale del grande.
-    if (lastSpriteSize > 0 && size < lastSpriteSize * 0.7) {
-      const sprite = getSmallSprite(kind, color, size);
-      if (sprite) {
-        ctx.drawImage(sprite.canvas, cx - sprite.dim/2, cy - sprite.dim/2, sprite.dim, sprite.dim);
-        return;
-      }
+    let sprite = pieceSprites[color + kind];
+    if (!sprite && cellSize > 0) {
+      rebuildPieceSprites(cellSize);
+      sprite = pieceSprites[color + kind];
     }
-    const sprite = pieceSprites[color + kind];
-    if (!sprite) return;
+    if (!sprite) {
+      // Último fallback: glifo Unicode plano. Garantiza que SE VEA la pieza.
+      ctx.save();
+      ctx.font = `${Math.floor(size * 0.92)}px "Segoe UI Symbol", "Arial Unicode MS", sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = color === 'w' ? '#f0f0f5' : '#101018';
+      ctx.fillText(PIECE_CHARS[kind] || '?', cx, cy);
+      ctx.restore();
+      return;
+    }
     const scale = size / (lastSpriteSize || size);
     const t = sprite.dim * scale;
     ctx.drawImage(sprite.canvas, cx - t/2, cy - t/2, t, t);
@@ -1523,17 +1622,20 @@
     if (stripH < 56) return;                 // proporción mínima — no hay aire para 2 filas
     const stripTop    = stripBottom - stripH;
 
-    // Relojes compactos pegados en el centro
-    const clockW = Math.min(108, Math.max(78, boardSize * 0.16));
+    // Relojes compactos pegados en el centro — más chicos que el strip,
+    // centrados verticalmente, así no dominan visualmente.
+    const clockW = Math.min(60, Math.max(50, boardSize * 0.13));
+    const clockH = Math.min(42, stripH - 12);
     const clockGap = 4;
     const center = boardX + boardSize / 2;
     const leftClockCx  = center - clockW/2 - clockGap/2;
     const rightClockCx = center + clockW/2 + clockGap/2;
+    const clockTop = stripTop + (stripH - clockH) / 2;
 
-    drawClock(leftClockCx,  stripTop, stripH, clockW, 'b');
-    drawClock(rightClockCx, stripTop, stripH, clockW, 'w');
+    drawClock(leftClockCx,  clockTop, clockH, clockW, 'b');
+    drawClock(rightClockCx, clockTop, clockH, clockW, 'w');
 
-    // Piezas más chicas: 2 filas tienen que entrar en stripH
+    // Piezas: 2 filas tienen que entrar en stripH
     const pieceSize = Math.max(18, Math.min(26, stripH * 0.42));
     const innerPad  = 10;
 
@@ -1550,23 +1652,21 @@
 
   function renderCapturesOutward(kinds, color, anchorX, limitX, cy, size, dir) {
     // Las piezas se acomodan EMPEZANDO en anchorX (lado de la reina) y se
-    // expanden hacia limitX en HASTA 2 filas. Cap absoluto a MAX_VISIBLE_CAPTURES
-    // (las más valiosas — ya vinieron sorteadas). dir='left' / 'right' = sentido.
+    // expanden hacia limitX en CAPTURE_ROWS filas. Todas las capturas se dibujan
+    // (las más valiosas ya vienen al frente). Si el span aprieta, achicamos spacing.
     if (!kinds.length) return;
-    const visible = Math.min(kinds.length, MAX_VISIBLE_CAPTURES);
-    const span    = Math.abs(limitX - anchorX);
+    const span = Math.abs(limitX - anchorX);
     if (span < size) return;
-    // SIEMPRE usamos CAPTURES_PER_ROW columnas. Si no hay aire para el spacing
-    // natural, lo apretamos (overlap más fuerte). Floor mínimo para que no se
-    // colapsen unas sobre otras.
-    const cols     = CAPTURES_PER_ROW;
-    const natural  = size * 0.78;
-    const spacing  = Math.max(size * 0.42, Math.min(natural, span / cols));
-    const sign     = dir === 'left' ? -1 : 1;
-    const rowOff   = size * 0.50;                // distancia de cada fila al centro
+    const visible = kinds.length;
+    // Cols = mitad redondeada hacia arriba, así llenamos primero la fila pegada al reloj
+    const cols    = Math.ceil(visible / CAPTURE_ROWS);
+    const natural = size * 0.78;
+    const spacing = Math.max(size * 0.38, Math.min(natural, span / cols));
+    const sign    = dir === 'left' ? -1 : 1;
+    const rowOff  = size * 0.50;
     for (let i = 0; i < visible; i++) {
       const row = Math.floor(i / cols);
-      if (row > 1) break;                        // máximo 2 filas
+      if (row >= CAPTURE_ROWS) break;             // safety net
       const col = i % cols;
       const cx = anchorX + sign * (col + 0.5) * spacing;
       const py = cy + (row === 0 ? -rowOff : rowOff);
@@ -1600,7 +1700,7 @@
       ? '#ff3838'
       : (isActive ? '#181820' : '#7a7a86');
     ctx.fillStyle = textColor;
-    ctx.font = `900 ${Math.floor(height * 0.28)}px Bahnschrift, "Segoe UI Black", Oswald, Impact, "Arial Black", sans-serif`;
+    ctx.font = `900 ${Math.floor(height * 0.42)}px Bahnschrift, "Segoe UI Black", Oswald, Impact, "Arial Black", sans-serif`;
     if ('letterSpacing' in ctx) ctx.letterSpacing = '0.04em';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1626,30 +1726,30 @@
         ? 'Posición inicial · END vuelve al presente'
         : `Viendo movida ${idx} de ${total}  ·  ← → navegar  ·  END = al presente`;
       ctx.fillStyle = '#e8d878';
-      ctx.font = bigFont(Math.max(14, Math.floor(W * 0.018)));
+      ctx.font = bigFont(Math.max(14, Math.min(20, Math.floor(W * 0.018))));
       ctx.fillText(txt, W / 2, 24);
     } else if (view.status === 'checkmate') {
       const winner = view.turn === 'w' ? 'Negras' : 'Blancas';
       ctx.fillStyle = '#ff6464';
-      ctx.font = banner(Math.max(22, Math.floor(W * 0.028)));
+      ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
       ctx.fillText('JAQUE MATE — Ganan ' + winner, W / 2, 28);
     } else if (view.status === 'stalemate') {
       ctx.fillStyle = '#e8d864';
-      ctx.font = banner(Math.max(22, Math.floor(W * 0.028)));
+      ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
       ctx.fillText('AHOGADO — Tablas', W / 2, 28);
     } else if (view.status === 'repetition') {
       ctx.fillStyle = '#e8d864';
-      ctx.font = banner(Math.max(22, Math.floor(W * 0.028)));
+      ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
       ctx.fillText('TABLAS POR REPETICIÓN', W / 2, 28);
     } else if (view.status === 'insufficient') {
       ctx.fillStyle = '#e8d864';
-      ctx.font = banner(Math.max(22, Math.floor(W * 0.028)));
+      ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
       ctx.fillText('TABLAS POR FALTA DE MATERIAL', W / 2, 28);
     } else if (view.status === 'timeout') {
       // El jugador que se quedó sin tiempo es el del turno actual (la vista lo congela)
       const winner = view.turn === 'w' ? 'Negras' : 'Blancas';
       ctx.fillStyle = '#ff6464';
-      ctx.font = banner(Math.max(22, Math.floor(W * 0.028)));
+      ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
       ctx.fillText('TIEMPO AGOTADO — Ganan ' + winner, W / 2, 28);
     } else {
       let txt = view.turn === 'w' ? 'Turno: Blancas' : 'Turno: Negras';
@@ -1664,7 +1764,7 @@
         color = '#ff8a8a';
       }
       ctx.fillStyle = color;
-      ctx.font = bigFont(Math.max(14, Math.floor(W * 0.022)));
+      ctx.font = bigFont(Math.max(14, Math.min(22, Math.floor(W * 0.022))));
       ctx.fillText(txt, W / 2, 24);
     }
     ctx.restore();
@@ -1675,7 +1775,7 @@
       if (game.aiBoth)              mode = 'IA vs IA';
       else if (!game.aiColor)       mode = '2 Jugadores';
       else                          mode = 'vs IA · ' + (game.humanColor === 'w' ? 'Blancas' : 'Negras');
-      ctx.font = `500 ${Math.max(11, Math.floor(W * 0.013))}px "Segoe UI", sans-serif`;
+      ctx.font = `500 ${Math.max(11, Math.min(13, Math.floor(W * 0.013)))}px "Segoe UI", sans-serif`;
       ctx.textBaseline = 'middle';
       ctx.textAlign = 'right';
       const padX = 10, padY = 4;
@@ -1699,7 +1799,7 @@
     // seldepth = profundidad máxima alcanzada con extensiones / quiescence (siempre ≥ depth)
     const fmtDepth = (d, sd) => sd > 0 && sd > d ? (d + '/' + sd) : String(d);
     if (!viewing && !game.gameOver) {
-      ctx.font = `400 ${Math.max(10, Math.floor(W * 0.012))}px "Segoe UI", sans-serif`;
+      ctx.font = `400 ${Math.max(10, Math.min(13, Math.floor(W * 0.012)))}px "Segoe UI", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
       if (game.aiThinking) {
@@ -1828,11 +1928,34 @@
     b.addEventListener('click', () => startGame(b.dataset.mode));
   });
   document.getElementById('btnFirst').addEventListener('click', historyFirst);
-  document.getElementById('btnPrev').addEventListener('click', historyBack);
-  document.getElementById('btnNext').addEventListener('click', historyForward);
   document.getElementById('btnLast').addEventListener('click', historyLast);
   document.getElementById('btnReset').addEventListener('click', resetBoard);
   document.getElementById('btnMenu').addEventListener('click', backToMenu);
+
+  // Auto-repeat para los botones de avance/retroceso de a 1: dispara una vez
+  // al press, después de 400ms empieza a repetir cada 70ms mientras se mantenga
+  // apretado (mouse o touch). Replica el comportamiento de las flechas de teclado.
+  function attachAutoRepeat(btn, action) {
+    let initialT = 0, intervalT = 0;
+    const stop = () => {
+      clearTimeout(initialT); initialT = 0;
+      clearInterval(intervalT); intervalT = 0;
+    };
+    const start = (e) => {
+      e.preventDefault();
+      action();
+      stop();
+      initialT = setTimeout(() => {
+        intervalT = setInterval(action, 70);
+      }, 400);
+    };
+    btn.addEventListener('pointerdown', start);
+    btn.addEventListener('pointerup',    stop);
+    btn.addEventListener('pointercancel', stop);
+    btn.addEventListener('pointerleave', stop);
+  }
+  attachAutoRepeat(document.getElementById('btnPrev'), historyBack);
+  attachAutoRepeat(document.getElementById('btnNext'), historyForward);
 
   // ════════════════════════════════════════════════════════════════════
   //  MAIN LOOP
@@ -1879,5 +2002,54 @@
   setTimeout(() => hint.style.opacity = '0', 5000);
   canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
   </script>
+  <script>
+    document.getElementById('btnExit').addEventListener('click', () => {
+      if (confirm('¿Salir al menú?')) location.href = '../../';
+    });
+  </script>
+  <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+  </button>
+  <script>
+    (function() {
+      const btn = document.getElementById('btnFs');
+      btn.addEventListener('click', () => {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+        else document.exitFullscreen?.();
+      });
+      document.addEventListener('fullscreenchange', () => {
+        document.body.classList.toggle('fs-on', !!document.fullscreenElement);
+      });
+    })();
+  </script>
+  <button id="btnInfo" aria-label="info" title="Info / FPS">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <div id="fpsOverlay">FPS: --</div>
+  <script>
+    (function() {
+      let frameCount = 0, lastT = performance.now();
+      const overlay = document.getElementById('fpsOverlay');
+      function loop() {
+        frameCount++;
+        const now = performance.now();
+        if (now - lastT >= 500) {
+          const fps = Math.round(frameCount * 1000 / (now - lastT));
+          if (overlay.style.display !== 'none') overlay.textContent = 'FPS: ' + fps;
+          frameCount = 0; lastT = now;
+        }
+        requestAnimationFrame(loop);
+      }
+      loop();
+      const btn = document.getElementById('btnInfo');
+      btn.addEventListener('click', () => {
+        const showing = overlay.style.display !== 'none';
+        overlay.style.display = showing ? 'none' : 'block';
+        btn.classList.toggle('on', !showing);
+      });
+    })();
+  </script>
+
+
 </body>
 </html>

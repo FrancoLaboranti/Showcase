@@ -9,7 +9,7 @@
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     width: 100%; height: 100%;
-    background: #000;
+    background: #14161d;
     overflow: hidden;
     touch-action: none;
     user-select: none; -webkit-user-select: none;
@@ -24,12 +24,23 @@
 
   #hint {
     position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
-    text-align: center; color: rgba(0,0,0,0.45);
+    text-align: center; color: rgba(255,255,255,0.5);
     font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
     transition: opacity 0.8s; z-index: 2; padding: 0 16px;
   }
 
-  /* Bottom bar: mine counter (left) + action buttons (centered). Same shell as BallsWeb. */
+  /* Cronómetro de la partida — arriba-izquierda, discreto. Arranca con la 1ª jugada, frena al terminar. */
+  #timer {
+    position: absolute;
+    left: calc(12px + env(safe-area-inset-left)); top: calc(9px + env(safe-area-inset-top));
+    display: flex; align-items: center; gap: 5px;
+    color: rgba(255,255,255,0.5);
+    font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.03em;
+    pointer-events: none; z-index: 2;
+  }
+  #timer svg { width: 14px; height: 14px; opacity: 0.85; }
+
+  /* Bottom bar: action buttons (centered). Same shell as BallsWeb. */
   #bar {
     position: absolute; left: 0; right: 0; bottom: 0;
     height: calc(var(--bar-height) + env(safe-area-inset-bottom));
@@ -54,36 +65,127 @@
   }
   #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
   #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
-  #ui #btnReset svg { width: 21px; height: 21px; }
-  /* toggled-on state for flag mode */
-  #ui button.on { background: rgba(255,80,80,0.30); border-color: rgba(255,80,80,0.6); }
+  #ui #btnDiff { font-weight: 700; font-size: 17px; letter-spacing: 0.02em; }
+  /* toggled-on states */
+  #ui #btnSound.on { background: rgba(120,200,255,0.26); border-color: rgba(120,200,255,0.55); }
 
-  /* Mine counter, left side (lives outside #ui so the buttons stay centered — same trick as #btnDebug). */
+  /* Mine counter — overlay anclado al marco del tablero (posición la fija placeHud() en JS). */
   #status {
-    position: absolute; left: 14px;
-    bottom: calc(env(safe-area-inset-bottom) + 0px);
-    height: var(--bar-height);
-    display: flex; align-items: center; gap: 6px;
-    color: rgba(255,255,255,0.85);
-    font-size: 16px; font-variant-numeric: tabular-nums;
-    pointer-events: none;
+    position: absolute;
+    display: flex; align-items: center; gap: 5px;
+    color: rgba(255,255,255,0.55);
+    font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.03em;
+    pointer-events: none; z-index: 2;
   }
-  #status svg { width: 16px; height: 16px; }
+  #status svg { width: 14px; height: 14px; }
+  /* Exit button — vuelta al menú raíz */
+  #btnExit {
+    position: absolute;
+    left: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
+  /* === Bar layout: exit-left, main-center, info/debug-right (refactor) === */
+  #bar {
+    display: grid !important;
+    grid-template-columns: 1fr auto 1fr !important;
+    justify-content: stretch !important;
+  }
+  #bar > #btnExit {
+    position: static !important;
+    left: auto !important; right: auto !important;
+    top: auto !important; bottom: auto !important;
+    justify-self: start;
+  }
+  #bar > #ui { justify-self: center; }
+  #bar > #btnInfo, #bar > #btnDebug, #bar > #btnHome {
+    position: static !important;
+    left: auto !important; right: auto !important;
+    top: auto !important; bottom: auto !important;
+    justify-self: end;
+  }
+  /* Pantalla completa — esquina arriba-der, flotante. */
+  #btnFs {
+    position: absolute;
+    right: 6px;
+    top: calc(env(safe-area-inset-top) + 6px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnFs svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnFs:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  #btnFs .ic-exit { display: none; }
+  body.fs-on #btnFs .ic-enter { display: none; }
+  body.fs-on #btnFs .ic-exit  { display: block; }
+  /* Info (FPS) — esquina abajo-der, flotante. */
+  #btnInfo {
+    position: absolute;
+    right: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnInfo:active, #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+  #fpsOverlay {
+    position: absolute;
+    right: 40px;
+    bottom: calc(env(safe-area-inset-bottom) + 8px);
+    font-family: monospace;
+    font-size: 13px;
+    color: rgba(255,255,255,0.9);
+    background: rgba(0,0,0,0.6);
+    padding: 3px 8px;
+    border-radius: 4px;
+    pointer-events: none;
+    display: none;
+    z-index: 9;
+  }
+
+
+
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">tocá para descubrir · mantené apretado (o el botón 🚩) para bandera</div>
+  <div id="timer">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="8"/><path d="M12 13V9"/><path d="M9 2h6"/></svg>
+    <span id="timerText">0:00</span>
+  </div>
+  <div id="status">
+    <svg viewBox="0 0 24 24" fill="rgb(232,65,58)"><circle cx="11" cy="14" r="7"/><rect x="10" y="3" width="2" height="5"/><path d="M12 5l4-2" stroke="rgb(232,65,58)" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+    <span id="mineCount">25</span>
+  </div>
+  <div id="hint">tocá para descubrir · mantené apretado para poner bandera</div>
   <div id="bar">
-    <div id="status">
-      <svg viewBox="0 0 24 24" fill="rgb(255,80,80)"><circle cx="12" cy="13" r="7"/><rect x="11" y="2" width="2" height="4"/></svg>
-      <span id="mineCount">40</span>
-    </div>
-    <div id="ui">
-      <button id="btnFlag"  aria-label="bandera"   title="Modo bandera (o mantené apretado)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22V3"/><path d="M6 4h11l-3 3.5L17 11H6z"/></svg>
-      </button>
-      <button id="btnReset" aria-label="reiniciar" title="Reiniciar (R)">
+  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+<div id="ui">
+      <button id="btnDiff"  aria-label="dificultad" title="Dificultad: Fácil / Medio / Difícil">M</button>
+      <button id="btnSound" aria-label="sonido"     title="Sonido on/off"></button>
+      <button id="btnReset" aria-label="reiniciar"  title="Reiniciar (R)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
       </button>
     </div>
@@ -91,29 +193,35 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  MINESWEEPER — port web fiel de MineSweeperGPT.py, con el shell mobile de BallsWeb.
-  //  13×13, 40 minas, zona segura tras el primer click, clusters BFS (20%, 3–5).
-  //  Tap = descubrir · long-press / botón 🚩 / click derecho = bandera · R / botón = reset.
+  //  MINESWEEPER — port web de MineSweeperGPT.py, con el shell mobile de BallsWeb.
+  //  Mejoras sobre el .py: look "campo" moderno (césped/tierra + animación de
+  //  destape en cascada), selector de dificultad, y sonido sintetizado WebAudio.
+  //  Conserva la zona segura tras el 1er click; reparto de minas blue-noise (parejo, sin clusters).
+  //  Tap rápido = descubrir · long-press / click derecho = bandera · R / botón = reset.
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
   const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));               // randint inclusivo
+  const nowMs = () => performance.now();
+  const easeOut = p => 1 - Math.pow(1 - p, 3);
+  const easeOutBack = p => { const c = 1.9; return 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2); };
 
-  // === CONFIG (igual que el .py) ===
-  const GRID_WIDTH  = 13;
-  const GRID_HEIGHT = 13;
-  const MINES_COUNT = 40;
+  // === DIFICULTADES (menos minas que el .py original de 40) ===
+  const DIFFS = [
+    { name: 'Fácil',   key: 'F', cols: 9,  rows: 9,  mines: 10 },
+    { name: 'Medio',   key: 'M', cols: 13, rows: 13, mines: 25 },
+    { name: 'Difícil', key: 'D', cols: 16, rows: 16, mines: 50 },
+  ];
+  let diffIndex = 1;                                                              // arranca en Medio
+  let GRID_WIDTH = DIFFS[diffIndex].cols, GRID_HEIGHT = DIFFS[diffIndex].rows, MINES_COUNT = DIFFS[diffIndex].mines;
 
-  // === COLORES (idénticos al .py) ===
-  const WHITE       = 'rgb(255,255,255)';
-  const GRAY        = 'rgb(225,225,225)';
-  const DARK_GRAY   = 'rgb(80,80,80)';
-  const DARKER_GRAY = 'rgb(30,30,30)';
-  const BLACK       = 'rgb(0,0,0)';
-  const RED         = 'rgb(255,0,0)';
-  const GREEN       = 'rgb(0,180,0)';
-  const NUMBER_COLORS = {
-    1: 'rgb(0,100,255)', 2: 'rgb(0,200,0)',   3: 'rgb(255,0,0)',   4: 'rgb(0,0,128)',
-    5: 'rgb(182,128,0)', 6: 'rgb(0,128,128)', 7: 'rgb(0,0,0)',     8: 'rgb(128,128,128)',
+  // === PALETA (look moderno tipo "campo minado", subida de contraste) ===
+  const GRASS_L = '#8fce4e', GRASS_D = '#7cbf3e';                                 // tapa sin descubrir (damero verde, +contraste entre cuadros)
+  const DIRT_L  = '#e9cda2', DIRT_D  = '#dcbb89';                                 // tierra descubierta (damero tierra, cálida)
+  const FRAME   = '#5f8a2e';                                                      // borde verde oscuro (resalta contra el césped)
+  const BG0 = '#181b24', BG1 = '#10121a';                                         // fondo de la pantalla
+  const NUMBER_COLORS = {                                                         // tonos vívidos para que salten sobre la tierra
+    1: '#1565d8', 2: '#2e9e3a', 3: '#e5302a', 4: '#7d2cc0',
+    5: '#ef7d00', 6: '#0aa6b8', 7: '#3a2f2f', 8: '#5b6b75',
   };
 
   const canvas = document.getElementById('c');
@@ -123,6 +231,28 @@
   let W = 0, H = 0, dpr = 1;
   let tile = 40, boardW = 0, boardH = 0, offX = 0, offY = 0;
   const barEl = document.getElementById('bar');
+  const timerEl = document.getElementById('timer');
+  const statusEl = document.getElementById('status');
+
+  // Ancla el HUD (cronómetro / contador) a las esquinas superiores del MARCO del tablero, no a las
+  // esquinas de la ventana. Si hay lugar arriba del marco los pone ahí; si la pantalla es ancha y el
+  // tablero queda alto (poco margen arriba), los corre a los costados, siempre alineados al tope del marco.
+  function placeHud() {
+    const fpad = Math.round(tile * 0.16);
+    const fL = offX - fpad, fT = offY - fpad, fR = offX + boardW + fpad;
+    const gap = 8;
+    const th = timerEl.offsetHeight || 22;
+    timerEl.style.right = 'auto'; statusEl.style.left = 'auto';
+    if (fT >= th + gap + 4) {                                                    // lugar arriba → esquinas superiores
+      const top = fT - th - gap;
+      timerEl.style.left = fL + 'px';            timerEl.style.top = top + 'px';
+      statusEl.style.right = (W - fR) + 'px';    statusEl.style.top = top + 'px';
+    } else {                                                                     // poco lugar arriba → a los costados, al tope del marco
+      timerEl.style.left = 'auto'; timerEl.style.right = (W - fL + gap) + 'px'; timerEl.style.top = fT + 'px';
+      statusEl.style.left = (fR + gap) + 'px';                                   statusEl.style.top = fT + 'px';
+    }
+  }
+
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     const barH = barEl.offsetHeight;                                             // includes safe-area-inset-bottom on iOS
@@ -133,13 +263,14 @@
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // tablero cuadrado, centrado, lo más grande que entre
-    tile = Math.floor(Math.min(W / GRID_WIDTH, H / GRID_HEIGHT));
+    // tablero cuadrado, centrado, lo más grande que entre (deja un margen para el marco)
+    const pad = 18;
+    tile = Math.floor(Math.min((W - pad * 2) / GRID_WIDTH, (H - pad * 2) / GRID_HEIGHT));
     boardW = tile * GRID_WIDTH;
     boardH = tile * GRID_HEIGHT;
     offX = Math.floor((W - boardW) / 2);
     offY = Math.floor((H - boardH) / 2);
-    render();
+    placeHud();
   }
   window.addEventListener('resize', resize);
 
@@ -149,13 +280,17 @@
   let gameOver = false;
   let victory = false;
   let revealedCount = 0;
-  let flagMode = false;          // botón 🚩: tap marca en vez de descubrir
+  let explodedTile = null;
+  let endAt = 0;                 // timestamp del fin (para animar el banner)
+  let timerStart = 0, timerRunning = false, timerEnd = 0;   // cronómetro: arranca en la 1ª jugada, frena al terminar
 
   function makeTile(x, y) {
-    return { gx: x, gy: y, isMine: false, isRevealed: false, isFlagged: false, adjacent: 0 };
+    return { gx: x, gy: y, isMine: false, isRevealed: false, isFlagged: false, adjacent: 0, revealAt: 0, flagAt: 0 };
   }
   function reset() {
     gridReady = false; gameOver = false; victory = false; revealedCount = 0;
+    explodedTile = null; endAt = 0;
+    timerStart = 0; timerRunning = false; timerEnd = 0;
     grid = [];
     for (let y = 0; y < GRID_HEIGHT; y++) {
       const row = [];
@@ -163,7 +298,6 @@
       grid.push(row);
     }
     updateStatus();
-    render();
   }
 
   // vecinos (incluye la propia celda, igual que get_neighbors del .py con dx=dy=0)
@@ -177,19 +311,11 @@
     return out;
   }
 
-  function generateMineCluster(start, candidateSet, maxSize) {
-    const cluster = new Set([start]);
-    const frontier = [start];
-    while (frontier.length && cluster.size < maxSize) {
-      const current = frontier.pop();
-      for (const nb of neighbors(current)) {
-        if (candidateSet.has(nb) && !cluster.has(nb)) {
-          cluster.add(nb); frontier.push(nb);
-          if (cluster.size >= maxSize) break;
-        }
-      }
-    }
-    return cluster;
+  // amontonamiento local: cuántas minas ya tiene esta celda alrededor
+  function neighborMineCount(t) {
+    let n = 0;
+    for (const nb of neighbors(t)) if (nb !== t && nb.isMine) n++;
+    return n;
   }
 
   function placeMines(firstTile) {
@@ -198,19 +324,26 @@
     const candidates = [];
     for (const row of grid) for (const t of row) if (!safe.has(t)) candidates.push(t);
 
-    const visited = new Set();
+    // Reparto semi-parejo: la mayoría de las minas se ubican "blue-noise" (de varios samples elijo el
+    // MENOS amontonado) para que no se formen tiras largas; pero una fracción SPREAD_BIAS se coloca al
+    // PURO AZAR, así de vez en cuando caen un par pegadas (sin volver a los clusters grandes del .py).
+    const SPREAD_BIAS = 0.4;                                                      // 0 = todo blue-noise (muy parejo) · 1 = todo azar (más clusters)
     let placed = 0, guard = 0;
     while (placed < MINES_COUNT && guard++ < 100000) {
-      const start = candidates[ri(0, candidates.length - 1)];
-      if (visited.has(start)) continue;
-      if (Math.random() < 0.2) {                                                 // 20%: cluster contiguo de 3–5
-        const candMinusVisited = new Set(candidates.filter(t => !visited.has(t)));
-        const cluster = generateMineCluster(start, candMinusVisited, ri(3, 5));
-        for (const t of cluster) { t.isMine = true; visited.add(t); }
-        placed += cluster.size;
-      } else {                                                                   // mina suelta
-        start.isMine = true; visited.add(start); placed++;
+      let pick = null;
+      if (Math.random() < SPREAD_BIAS) {                                          // azar: permite adyacencias ocasionales
+        const c = candidates[ri(0, candidates.length - 1)];
+        if (!c.isMine) pick = c;
+      } else {                                                                    // blue-noise suave: el menos amontonado de 4 samples
+        let bestScore = 99;
+        for (let i = 0; i < 4; i++) {
+          const c = candidates[ri(0, candidates.length - 1)];
+          if (c.isMine) continue;
+          const score = neighborMineCount(c);
+          if (score < bestScore) { pick = c; bestScore = score; if (score === 0) break; }
+        }
       }
+      if (pick && !pick.isMine) { pick.isMine = true; placed++; }
     }
     calculateAdjacency();
     gridReady = true;
@@ -225,27 +358,30 @@
       }
   }
 
-  function reveal(t) {
-    if (t.isFlagged || t.isRevealed) return;
-    t.isRevealed = true; revealedCount++;
-    if (t.adjacent === 0 && !t.isMine)
-      for (const nb of neighbors(t)) if (!nb.isRevealed) reveal(nb);
+  // destape con cascada (BFS): los 0 expanden a sus vecinos y el revealAt escalonado da el efecto de onda
+  let revealSeq = 0;
+  const CASCADE_MS = 14;
+  function digFlood(start, now) {
+    const queue = [start], queued = new Set([start]);
+    while (queue.length) {
+      const t = queue.shift();
+      if (t.isFlagged || t.isRevealed) continue;
+      t.isRevealed = true; t.revealAt = now + Math.min(revealSeq, 60) * CASCADE_MS; revealSeq++;
+      revealedCount++;
+      if (t.adjacent === 0 && !t.isMine)
+        for (const nb of neighbors(t))
+          if (!nb.isRevealed && !nb.isFlagged && !queued.has(nb)) { queued.add(nb); queue.push(nb); }
+    }
   }
-  function revealAll() {
-    for (const row of grid) for (const t of row) t.isRevealed = true;
-  }
-  function mineTotal() {
-    let n = 0; for (const row of grid) for (const t of row) if (t.isMine) n++; return n;
-  }
-  function flagCount() {
-    let n = 0; for (const row of grid) for (const t of row) if (t.isFlagged && !t.isRevealed) n++; return n;
-  }
+  function mineTotal() { let n = 0; for (const row of grid) for (const t of row) if (t.isMine) n++; return n; }
+  function flagCount() { let n = 0; for (const row of grid) for (const t of row) if (t.isFlagged && !t.isRevealed) n++; return n; }
+
   function checkVictory() {
-    // contra la cantidad REAL de minas — los clusters pueden pasar de MINES_COUNT y el chequeo fijo del
-    // .py dejaba tableros imposibles de ganar.
-    if (revealedCount === GRID_WIDTH * GRID_HEIGHT - mineTotal()) {
-      victory = true;
-      revealAll();                                                              // muestra todo al ganar
+    if (revealedCount === GRID_WIDTH * GRID_HEIGHT - mineTotal()) {              // contra la cantidad REAL de minas
+      victory = true; endAt = nowMs();
+      timerRunning = false; timerEnd = endAt;
+      for (const row of grid) for (const t of row) if (t.isMine) t.isFlagged = true;  // planta banderas en todas las minas
+      sndWin();
     }
   }
 
@@ -253,147 +389,345 @@
     if (gameOver || victory) return;
     if (gx < 0 || gx >= GRID_WIDTH || gy < 0 || gy >= GRID_HEIGHT) return;
     const t = grid[gy][gx];
+    const now = nowMs();
     if (!gridReady) placeMines(t);                                              // 1er click (izq O der) coloca minas
     if (rightClick) {
-      if (!t.isRevealed) t.isFlagged = !t.isFlagged;
+      if (!t.isRevealed) { t.isFlagged = !t.isFlagged; t.flagAt = now; t.isFlagged ? sndFlag() : sndUnflag(); }
     } else {
-      if (!t.isRevealed && !t.isFlagged) {
-        reveal(t);
-        if (t.isMine) { gameOver = true; revealAll(); }
+      if (t.isRevealed || t.isFlagged) return;
+      if (!timerStart) { timerStart = now; timerEnd = now; timerRunning = true; }  // arranca con la 1ª celda destapada
+      if (t.isMine) {
+        t.isRevealed = true; t.revealAt = now; explodedTile = t;
+        gameOver = true; endAt = now;
+        timerRunning = false; timerEnd = now;
+        let k = 0;
+        for (const row of grid) for (const mt of row) if (mt.isMine && !mt.isRevealed) { mt.isRevealed = true; mt.revealAt = now + (k++ % 12) * 35; }
+        sndBoom();
+      } else {
+        revealSeq = 0; digFlood(t, now); sndReveal();
+        checkVictory();
       }
     }
-    checkVictory();
     updateStatus();
-    render();
   }
 
-  // === RENDER ===
-  function render() {
-    ctx.fillStyle = WHITE;
-    ctx.fillRect(0, 0, W, H);
+  // ════════════════ RENDER ════════════════
+  const COVER_MS = 150;
+  function pathRound(x, y, w, h, r) {
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
+    else { ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  }
 
-    ctx.lineWidth = Math.max(1, Math.round(tile * 0.05));                       // ~2px a 40px (= el width=2 del .py)
-    ctx.font = '700 ' + Math.round(tile * 0.62) + "px 'Segoe UI', system-ui, sans-serif";
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const r = tile * 0.25;                                                      // = TILE_SIZE//4
+  function drawMine(cx, cy, r, exploded) {
+    if (exploded) { ctx.fillStyle = '#e8413a'; pathRound(cx - r * 1.7, cy - r * 1.7, r * 3.4, r * 3.4, r * 0.5); ctx.fill(); }
+    ctx.fillStyle = '#2c2c2c';
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#2c2c2c'; ctx.lineWidth = Math.max(1.5, r * 0.22); ctx.lineCap = 'round';
+    for (let i = 0; i < 8; i++) {
+      const a = i * TAU / 8, ca = Math.cos(a), sa = Math.sin(a);
+      ctx.beginPath(); ctx.moveTo(cx + ca * r * 0.9, cy + sa * r * 0.9); ctx.lineTo(cx + ca * r * 1.5, cy + sa * r * 1.5); ctx.stroke();
+    }
+    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+    ctx.beginPath(); ctx.arc(cx - r * 0.32, cy - r * 0.32, r * 0.28, 0, TAU); ctx.fill();
+  }
+  function drawFlag(cx, cy, r) {
+    const poleX = cx - r * 0.32;
+    ctx.fillStyle = '#3a3a3a';
+    ctx.fillRect(cx - r * 0.6, cy + r * 0.72, r * 1.2, r * 0.3);                  // base
+    ctx.fillRect(cx - r * 0.28, cy + r * 0.5, r * 0.56, r * 0.26);               // base superior
+    ctx.fillRect(poleX, cy - r, r * 0.16, r * 1.7);                              // mástil
+    ctx.fillStyle = '#e8413a';
+    ctx.beginPath();
+    ctx.moveTo(poleX + r * 0.16, cy - r * 0.95);
+    ctx.lineTo(poleX + r * 0.16 + r * 0.95, cy - r * 0.52);
+    ctx.lineTo(poleX + r * 0.16, cy - r * 0.08);
+    ctx.closePath(); ctx.fill();
+  }
+  function drawWrongX(cx, cy, r) {
+    ctx.strokeStyle = '#c62828'; ctx.lineWidth = Math.max(2, r * 0.22); ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx - r * 0.55, cy - r * 0.55); ctx.lineTo(cx + r * 0.55, cy + r * 0.55);
+    ctx.moveTo(cx + r * 0.55, cy - r * 0.55); ctx.lineTo(cx - r * 0.55, cy + r * 0.55);
+    ctx.stroke();
+  }
+
+  function render(now) {
+    updateTimer();
+    // fondo
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, BG0); g.addColorStop(1, BG1);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    // marco del tablero con sombra
+    const pad = Math.round(tile * 0.16);
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = tile * 0.5; ctx.shadowOffsetY = tile * 0.12;
+    ctx.fillStyle = FRAME;
+    pathRound(offX - pad, offY - pad, boardW + pad * 2, boardH + pad * 2, tile * 0.4);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const r = tile * 0.26;
 
     for (const row of grid) for (const t of row) {
       const px = offX + t.gx * tile, py = offY + t.gy * tile;
       const cx = px + tile / 2, cy = py + tile / 2;
-      ctx.fillStyle = t.isRevealed ? DARK_GRAY : GRAY;
-      ctx.fillRect(px, py, tile, tile);
-      ctx.strokeStyle = BLACK;
-      ctx.strokeRect(px, py, tile, tile);
+      const parity = (t.gx + t.gy) & 1;
 
+      // base de tierra (lo que queda al destapar) + sombra interior arriba/izq = sensación de "cavado"
+      ctx.fillStyle = parity ? DIRT_D : DIRT_L;
+      ctx.fillRect(px, py, tile, tile);
+      ctx.fillStyle = 'rgba(120,72,30,0.12)';
+      ctx.fillRect(px, py, tile, Math.max(1, tile * 0.08));                        // borde superior hundido
+      ctx.fillRect(px, py, Math.max(1, tile * 0.08), tile);                        // borde izquierdo hundido
+      ctx.strokeStyle = 'rgba(90,55,20,0.12)'; ctx.lineWidth = 1;
+      ctx.strokeRect(px + 0.5, py + 0.5, tile - 1, tile - 1);                      // separa celdas de tierra
+
+      // contenido (visible al levantarse la tapa)
       if (t.isRevealed) {
         if (t.isMine) {
-          ctx.fillStyle = gameOver ? BLACK : DARKER_GRAY;
-          ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+          if (t.isFlagged && (gameOver || victory)) drawFlag(cx, cy, tile * 0.3);  // mina bien marcada
+          else drawMine(cx, cy, r, t === explodedTile);
+        } else if (gameOver && t.isFlagged) {
+          drawWrongX(cx, cy, tile * 0.3);                                          // bandera equivocada
         } else if (t.adjacent > 0) {
+          ctx.save();
+          ctx.shadowColor = 'rgba(0,0,0,0.28)'; ctx.shadowBlur = tile * 0.05; ctx.shadowOffsetY = tile * 0.03;
           ctx.fillStyle = NUMBER_COLORS[t.adjacent];
-          ctx.fillText(String(t.adjacent), cx, cy + tile * 0.03);
+          ctx.font = '800 ' + Math.round(tile * 0.64) + "px 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif";
+          ctx.fillText(String(t.adjacent), cx, cy + tile * 0.05);
+          ctx.restore();
         }
-      } else if (t.isFlagged) {
-        ctx.fillStyle = RED;
-        ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
       }
-      // mina sin revelar al terminar el juego → círculo negro (igual que el .py)
-      if (gameOver && t.isMine && !t.isRevealed) {
-        ctx.fillStyle = BLACK;
-        ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+
+      // tapa de césped (animada al destapar)
+      let amt = 1;
+      if (t.isRevealed) {
+        const p = Math.min(1, (now - t.revealAt) / COVER_MS);
+        if (p >= 1) amt = 0; else amt = 1 - easeOut(Math.max(0, p));
+      }
+      if (amt > 0.001) {
+        const s = tile * amt, x = cx - s / 2, y = cy - s / 2;
+        ctx.globalAlpha = Math.min(1, amt * 1.6);
+        ctx.fillStyle = parity ? GRASS_D : GRASS_L;
+        ctx.fillRect(x, y, s, s);
+        ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(x, y, s, s * 0.16);          // brillo superior (bisel)
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';       ctx.fillRect(x, y + s * 0.84, s, s * 0.16); // sombra inferior
+        ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.lineWidth = 1;
+        ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);                                       // separa los cuadros de césped
+        ctx.globalAlpha = 1;
+        // bandera (sólo en celdas tapadas) con pop al plantarla
+        if (t.isFlagged && !t.isRevealed) {
+          let fr = tile * 0.3;
+          if (t.flagAt) { const fp = Math.min(1, (now - t.flagAt) / 160); fr *= 0.55 + 0.45 * easeOutBack(fp); }
+          drawFlag(cx, cy, fr);
+        }
+        if (gameOver && t.isFlagged && !t.isMine && !t.isRevealed) drawWrongX(cx, cy, tile * 0.3);
       }
     }
 
-    if (gameOver) showMessage('Game Over!', RED);
-    else if (victory) showMessage('You Win!', GREEN);
+    if (gameOver) drawBanner('¡Perdiste!', '#e8413a', now);
+    else if (victory) drawBanner('¡Ganaste!', '#43a047', now);
+
+    requestAnimationFrame(render);
   }
 
-  function showMessage(text, color) {
-    ctx.font = '700 ' + Math.round(tile * 0.9) + "px 'Segoe UI', system-ui, sans-serif";
+  function drawBanner(text, color, now) {
+    const p = Math.min(1, (now - endAt) / 350);
+    const scale = 0.7 + 0.3 * easeOutBack(p);
+    ctx.save();
+    ctx.globalAlpha = p;
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(scale, scale);
+    ctx.font = '800 ' + Math.round(tile * 1.0) + "px 'Segoe UI', system-ui, sans-serif";
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const cx = W / 2, cy = H / 2;
-    const w = ctx.measureText(text).width, h = tile * 0.9;
-    ctx.fillStyle = color;
-    ctx.fillRect(cx - w / 2 - 14, cy - h / 2 - 10, w + 28, h + 20);
-    ctx.fillStyle = WHITE;
-    ctx.fillText(text, cx, cy + tile * 0.04);
+    const tw = ctx.measureText(text).width, bw = tw + tile * 1.2, bh = tile * 2.0;
+    ctx.fillStyle = 'rgba(0,0,0,0.78)';
+    pathRound(-bw / 2, -bh / 2, bw, bh, tile * 0.35); ctx.fill();
+    ctx.fillStyle = color; ctx.fillText(text, 0, -tile * 0.28);
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.font = '600 ' + Math.round(tile * 0.34) + "px 'Segoe UI', system-ui, sans-serif";
+    ctx.fillText('tocá ↻ para jugar de nuevo', 0, tile * 0.55);
+    ctx.restore();
   }
 
   // === STATUS ===
   const mineCountEl = document.getElementById('mineCount');
-  function updateStatus() {
-    mineCountEl.textContent = String(MINES_COUNT - flagCount());
+  function updateStatus() { mineCountEl.textContent = String(MINES_COUNT - flagCount()); }
+
+  // === CRONÓMETRO ===
+  const timerTextEl = document.getElementById('timerText');
+  function updateTimer() {
+    const ms = timerStart ? (timerRunning ? nowMs() : timerEnd) - timerStart : 0;
+    const s = Math.floor(ms / 1000);
+    timerTextEl.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
 
-  // === INPUT ===
-  // tap = descubrir · long-press = bandera · botón 🚩 fuerza modo bandera · click derecho = bandera.
+  // ════════════════ SONIDO (WebAudio sintetizado) ════════════════
+  let actx = null, muted = false;
+  function audioOn() {
+    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+    if (actx.state === 'suspended') actx.resume();
+  }
+  function tone(freq, dur, type, gain, slideTo, delay) {
+    if (!actx || muted) return;
+    const t0 = actx.currentTime + (delay || 0);
+    const o = actx.createOscillator(); o.type = type || 'sine';
+    o.frequency.setValueAtTime(freq, t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(gain, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g).connect(actx.destination); o.start(t0); o.stop(t0 + dur + 0.03);
+  }
+  function noiseBurst(dur, gain, fStart, fEnd) {
+    if (!actx || muted) return;
+    const t0 = actx.currentTime;
+    const n = Math.floor(actx.sampleRate * dur);
+    const buf = actx.createBuffer(1, n, actx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = actx.createBufferSource(); src.buffer = buf;
+    const lp = actx.createBiquadFilter(); lp.type = 'lowpass';
+    lp.frequency.setValueAtTime(fStart, t0); lp.frequency.exponentialRampToValueAtTime(fEnd, t0 + dur);
+    const g = actx.createGain(); g.gain.setValueAtTime(gain, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(lp).connect(g).connect(actx.destination); src.start(t0); src.stop(t0 + dur);
+  }
+  const sndReveal = () => { tone(360, 0.08, 'triangle', 0.10); tone(540, 0.06, 'sine', 0.05, null, 0.01); };
+  const sndFlag   = () => { tone(680, 0.05, 'square', 0.08); tone(1020, 0.05, 'square', 0.05, null, 0.02); };
+  const sndUnflag = () => { tone(420, 0.05, 'square', 0.07); };
+  const sndBoom   = () => { noiseBurst(0.5, 0.5, 1400, 60); tone(150, 0.5, 'sine', 0.45, 38); };
+  const sndWin    = () => { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.28, 'triangle', 0.16, null, i * 0.1)); };
+
+  // === INPUT (canvas) ===
   const LONG_MS = 420;
   const MOVE_TOL = () => tile * 0.6;
   let pressId = null, pressTile = null, pressX = 0, pressY = 0, longFired = false, pressTimer = null;
 
   function tileAt(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
-    const gx = Math.floor((clientX - rect.left - offX) / tile);
-    const gy = Math.floor((clientY - rect.top  - offY) / tile);
-    return { gx, gy };
+    return { gx: Math.floor((clientX - rect.left - offX) / tile), gy: Math.floor((clientY - rect.top - offY) / tile) };
+  }
+  function tapAt(clientX, clientY) {
+    // tocar el banner de fin = reiniciar
+    if (gameOver || victory) { reset(); return true; }
+    return false;
   }
 
   canvas.addEventListener('pointerdown', e => {
+    audioOn();
+    if (tapAt(e.clientX, e.clientY)) return;
     if (e.button === 2) {                                                       // click derecho (desktop) → bandera
       e.preventDefault();
       const { gx, gy } = tileAt(e.clientX, e.clientY);
       processClick(gx, gy, true);
       return;
     }
-    if (pressId !== null) return;                                               // un solo dedo a la vez
+    if (pressId !== null) return;
     pressId = e.pointerId; longFired = false;
     pressX = e.clientX; pressY = e.clientY;
     pressTile = tileAt(e.clientX, e.clientY);
     canvas.setPointerCapture(e.pointerId);
-    pressTimer = setTimeout(() => {                                             // long-press → bandera
-      longFired = true;
-      processClick(pressTile.gx, pressTile.gy, true);
-    }, LONG_MS);
+    pressTimer = setTimeout(() => { longFired = true; processClick(pressTile.gx, pressTile.gy, true); }, LONG_MS);
   });
   canvas.addEventListener('pointermove', e => {
     if (e.pointerId !== pressId) return;
     if (Math.abs(e.clientX - pressX) > MOVE_TOL() || Math.abs(e.clientY - pressY) > MOVE_TOL()) {
-      clearTimeout(pressTimer); pressTimer = null; pressId = null;              // se movió demasiado: cancela
+      clearTimeout(pressTimer); pressTimer = null; pressId = null;
     }
   });
   function endPress(e) {
     if (e.pointerId !== pressId) return;
-    clearTimeout(pressTimer); pressTimer = null;
-    const id = pressId; pressId = null;
-    if (longFired) return;                                                      // ya disparó bandera
+    clearTimeout(pressTimer); pressTimer = null; pressId = null;
+    if (longFired) return;
     const { gx, gy } = tileAt(e.clientX, e.clientY);
-    if (gx === pressTile.gx && gy === pressTile.gy)
-      processClick(gx, gy, flagMode);                                           // tap normal (o bandera si flagMode)
+    if (gx === pressTile.gx && gy === pressTile.gy) processClick(gx, gy, false);
   }
   canvas.addEventListener('pointerup', endPress);
   canvas.addEventListener('pointercancel', e => { if (e.pointerId === pressId) { clearTimeout(pressTimer); pressId = null; } });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
 
   // === BOTONES ===
-  const btnFlag = document.getElementById('btnFlag');
-  btnFlag.addEventListener('pointerdown', e => {
-    e.preventDefault();
-    flagMode = !flagMode;
-    btnFlag.classList.toggle('on', flagMode);
-  });
-  document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); reset(); });
-  window.addEventListener('keydown', e => {
-    if (e.key === 'r' || e.key === 'R') reset();
-  });
+  const btnDiff = document.getElementById('btnDiff');
+  function applyDiff() {
+    const d = DIFFS[diffIndex];
+    GRID_WIDTH = d.cols; GRID_HEIGHT = d.rows; MINES_COUNT = d.mines;
+    btnDiff.textContent = d.key; btnDiff.title = 'Dificultad: ' + d.name;
+    reset(); resize();
+  }
+  btnDiff.addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); diffIndex = (diffIndex + 1) % DIFFS.length; applyDiff(); });
+
+  const SOUND_ICON = {
+    on:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a3 3 0 0 1 0 6"/><path d="M18.5 6.5a7 7 0 0 1 0 11"/></svg>',
+    off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M22 9l-6 6M16 9l6 6"/></svg>',
+  };
+  const btnSound = document.getElementById('btnSound');
+  function refreshSound() { btnSound.innerHTML = muted ? SOUND_ICON.off : SOUND_ICON.on; btnSound.classList.toggle('on', !muted); }
+  btnSound.addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); muted = !muted; refreshSound(); });
+
+  document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); reset(); });
+  window.addEventListener('keydown', e => { if (e.key === 'r' || e.key === 'R') reset(); });
 
   // === INIT ===
-  reset();
-  resize();
+  refreshSound();
+  applyDiff();                                                                   // setea grid + label + reset + resize
+  requestAnimationFrame(render);
 
   const hint = document.getElementById('hint');
   setTimeout(() => hint.style.opacity = '0', 6000);
   canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
   </script>
+  <script>
+    document.getElementById('btnExit').addEventListener('click', () => {
+      if (confirm('¿Salir al menú?')) location.href = '../../';
+    });
+  </script>
+  <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+  </button>
+  <script>
+    (function() {
+      const btn = document.getElementById('btnFs');
+      btn.addEventListener('click', () => {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+        else document.exitFullscreen?.();
+      });
+      document.addEventListener('fullscreenchange', () => {
+        document.body.classList.toggle('fs-on', !!document.fullscreenElement);
+      });
+    })();
+  </script>
+  <button id="btnInfo" aria-label="info" title="Info / FPS">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <div id="fpsOverlay">FPS: --</div>
+  <script>
+    (function() {
+      let frameCount = 0, lastT = performance.now();
+      const overlay = document.getElementById('fpsOverlay');
+      function loop() {
+        frameCount++;
+        const now = performance.now();
+        if (now - lastT >= 500) {
+          const fps = Math.round(frameCount * 1000 / (now - lastT));
+          if (overlay.style.display !== 'none') overlay.textContent = 'FPS: ' + fps;
+          frameCount = 0; lastT = now;
+        }
+        requestAnimationFrame(loop);
+      }
+      loop();
+      const btn = document.getElementById('btnInfo');
+      btn.addEventListener('click', () => {
+        const showing = overlay.style.display !== 'none';
+        overlay.style.display = showing ? 'none' : 'block';
+        btn.classList.toggle('on', !showing);
+      });
+    })();
+  </script>
+
+
 </body>
 </html>

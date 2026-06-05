@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<!-- PWA / "agregar a pantalla de inicio": abre sin barra del navegador (display standalone) -->
+<meta name="theme-color" content="#05060a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CrazyTanks">
 <title>CrazyTanks</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,7 +26,7 @@
   /* El canvas tiene resolución LÓGICA fija 1280×720 (igual que el pygame original) y se escala con
      letterbox para entrar en la pantalla — así toda la geometría porcentual y los umbrales de física
      dependientes de SCREEN_X se comportan idénticos al juego de escritorio. */
-  #c { display: block; position: absolute; top: 0; left: 0; }
+  #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
 
   #hint {
     position: absolute; left: 0; right: 0; top: calc(8px + env(safe-area-inset-top));
@@ -32,9 +38,11 @@
   /* ── Controles en pantalla (touch). En desktop el teclado sigue siendo el camino principal; estos
      botones quedan disponibles igual. Cada botón es un elemento independiente con su propio pointer
      capture, así el multi-touch (girar + acelerar al mismo tiempo) funciona. ── */
-  .pad { position: absolute; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 4; display: flex; gap: 8px; }
-  #padL { left: calc(12px + env(safe-area-inset-left)); flex-direction: row; align-items: flex-start; }
-  #padR { right: calc(12px + env(safe-area-inset-right)); align-items: flex-end; }
+  /* Margen horizontal FIJO (sin safe-area): en fullscreen el env(safe-area-inset-left/right) del notch
+     metía un margen extra que corría el joystick hacia adentro. El inferior sí respeta el safe-area (home bar). */
+  .pad { position: absolute; bottom: calc(6px + env(safe-area-inset-bottom)); z-index: 4; display: flex; gap: 8px; }
+  #padL { left: 8px; flex-direction: row; align-items: flex-end; }
+  #padR { right: 8px; align-items: flex-end; }
   .col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
   .row { display: flex; gap: 8px; align-items: center; }
   .btn {
@@ -55,25 +63,33 @@
   .btn.fire:hover { background: rgba(255,90,60,0.32); border-color: rgba(255,90,60,0.8); box-shadow: 0 0 14px rgba(255,90,60,0.65); }
   .btn.fire:active { background: rgba(255,90,60,0.42); }
   #cdRing { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
-  /* Palancas (levers): track + knob arrastrable. Vertical = acelerador, horizontal = dirección. */
-  .lever {
-    position: relative; touch-action: none; flex: none;
-    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18);
-    border-radius: 999px;
+  /* Joysticks (nipplejs). Cada zona aloja un joystick estático centrado; el movimiento se bloquea por eje
+     (jThrottle = vertical = acelerador, jSteer = horizontal = dirección). El look se estiliza abajo. */
+  /* Contenedor NO-flex del joystick: evita el cálculo de posición erróneo de nipplejs cuando el padre es flex. */
+  .joywrap { display: block; width: 84px; height: 84px; }
+  /* La zona se ajusta casi al tamaño del joystick (size 80) para que no quede hueco vacío a los lados. */
+  .joy { width: 84px; height: 84px; position: relative; touch-action: none; }
+  /* Estilizado del joystick de nipplejs: base hundida con glow + nub con relieve celeste */
+  .nipple .back {
+    background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.10), rgba(255,255,255,0.03) 70%) !important;
+    border: 1px solid rgba(120,200,255,0.35);
+    box-shadow: inset 0 2px 14px rgba(0,0,0,0.5), 0 0 16px rgba(120,200,255,0.25);
+    opacity: 1 !important;
   }
-  .vlever { width: 52px; height: 150px; }
-  .hlever { width: 200px; height: 52px; }
-  .lever .knob {
-    position: absolute; left: 50%; top: 50%; width: 44px; height: 44px; border-radius: 50%;
-    background: rgba(120,200,255,0.28); border: 1px solid rgba(120,200,255,0.55);
-    transform: translate(-50%, -50%); transition: transform 0.13s ease-out;
-    box-shadow: 0 0 10px rgba(120,200,255,0.35);
+  .nipple .front {
+    background: radial-gradient(circle at 50% 35%, rgba(160,220,255,0.95), rgba(120,200,255,0.55) 70%) !important;
+    border: 1px solid rgba(180,228,255,0.8);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5), 0 0 16px rgba(120,200,255,0.6);
+    opacity: 1 !important;
   }
-  .lever.dragging .knob { transition: none; background: rgba(120,200,255,0.45); }
   /* Botones de menú (esquina sup-der): Enter / Esc */
   #padMenu { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); z-index: 4; display: flex; gap: 8px; }
   #padMenu .btn { width: 30px; height: 30px; }
   #padMenu .btn svg { width: 14px; height: 14px; }
+  /* Ícono de pantalla completa: muestra "expandir" o "contraer" según el estado (body.fs-on) */
+  #btnFs .ic-exit { display: none; }
+  body.fs-on #btnFs .ic-enter { display: none; }
+  body.fs-on #btnFs .ic-exit  { display: block; }
 
   /* Aviso de orientación: el juego es vertical. Se muestra (vía JS) cuando la pantalla está apaisada. */
   #rotate {
@@ -85,21 +101,70 @@
   #rotate svg { width: 88px; height: 88px; color: #78c8ff; animation: rotatehint 2.2s ease-in-out infinite; }
   #rotate p { font-size: 19px; letter-spacing: 0.06em; line-height: 1.5; }
   @keyframes rotatehint { 0%, 55%, 100% { transform: rotate(0deg); } 25%, 40% { transform: rotate(-90deg); } }
+  /* Exit button — vuelta al menú raíz */
+  #btnExit {
+    position: absolute;
+    left: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
+  /* Info (FPS) — esquina abajo-der, flotante. */
+  #btnInfo {
+    position: absolute;
+    right: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnInfo:active, #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+  #fpsOverlay {
+    position: absolute;
+    right: 40px;
+    bottom: calc(env(safe-area-inset-bottom) + 8px);
+    font-family: monospace;
+    font-size: 13px;
+    color: rgba(255,255,255,0.9);
+    background: rgba(0,0,0,0.6);
+    padding: 3px 8px;
+    border-radius: 4px;
+    pointer-events: none;
+    display: none;
+    z-index: 9;
+  }
+
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">palancas: acelerar (izq) · dirección (der) · 🔴 disparar · teclado: flechas/WASD + espacio</div>
+  <div id="hint">joysticks: acelerar (izq) · dirección (der) · 🔴 disparar · teclado: flechas/WASD + espacio</div>
 
-  <!-- Pad izquierdo: palanca de acelerador (vertical) + disparar -->
+  <!-- Pad izquierdo: joystick de acelerador (eje vertical) + disparar.
+       El joystick va envuelto en un contenedor NO-flex (.joywrap): si su padre directo es flex, nipplejs
+       calcula mal la posición del nub (sobre todo con un hermano al lado, como el botón de disparo). -->
   <div id="padL" class="pad">
-    <div class="lever vlever" id="throttle" aria-label="acelerador"><div class="knob"></div></div>
+    <div class="joywrap"><div class="joy" id="jThrottle" aria-label="acelerador"></div></div>
     <button class="btn fire" data-k="SPACE" aria-label="disparar"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="7"/></svg><span id="cdRing"></span></button>
   </div>
 
-  <!-- Pad derecho: palanca de dirección (horizontal, proporcional) -->
+  <!-- Pad derecho: joystick de dirección (eje horizontal, proporcional) -->
   <div id="padR" class="pad">
-    <div class="lever hlever" id="steer" aria-label="dirección"><div class="knob"></div></div>
+    <div class="joywrap"><div class="joy" id="jSteer" aria-label="dirección"></div></div>
   </div>
 
   <!-- Aviso: girá el teléfono a horizontal -->
@@ -108,11 +173,14 @@
     <p>Girá el teléfono<br>CrazyTanks se juega en horizontal</p>
   </div>
 
-  <!-- Botón atrás / salir (el menú se opera tocando las opciones directamente) -->
+  <!-- Botones de esquina: pantalla completa + atrás/salir (el menú se opera tocando las opciones directamente) -->
   <div id="padMenu">
-    <button class="btn" data-k="ESCAPE" aria-label="atrás"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+    <button class="btn" id="btnFs" aria-label="pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
+    <button class="btn" data-k="ESCAPE" aria-label="atrás"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg></button>
   </div>
 
+<script src="matter.min.js"></script>
+<script src="nipplejs.min.js"></script>
 <script>
 // ════════════════════════════════════════════════════════════════════
 //  CRAZYTANKS — port web del juego de carreras. Se juega en LANDSCAPE (teléfono horizontal).
@@ -129,11 +197,15 @@ const SCREEN_Y = 720;
 // incrementos se escalan por (deltaT * SIM_FPS), así la respuesta es ágil e INDEPENDIENTE del
 // framerate, manteniendo la misma velocidad terminal. Subilo = más ágil; bajalo = más pesado.
 const SIM_FPS = 200;
-// Multiplicador del giro (jugador + IA): qué tan RÁPIDO llega al giro máximo (respuesta/snappiness).
+// Multiplicador del giro de la IA: qué tan RÁPIDO llega al giro máximo (respuesta/snappiness).
 const TURN_MULT = 1.5;
 // Tope de la velocidad de giro EFECTIVA. Evita que acumule rotación de más al mantener apretado el giro.
 // ~4 ≈ el giro tope del juego original. Bajalo si querés que doblen más suave. (No afecta el spin de bombas.)
 const ANG_VEL_MAX = 4;
+// Giro del JUGADOR: directo y proporcional a la palanca/tecla (rad/s a deflexión máxima). A diferencia de
+// la IA, NO acumula inercia de giro → responde al instante y frena al instante al soltar (tracción total).
+// Subilo = dobla más cerrado/responsivo. (El spin-out de bombas sigue usando ang_vel, intacto.)
+const PLAYER_TURN = 5.5;
 
 // ── HELPERS DE RESOLUCIÓN / COLOR / GEOMETRÍA (port directo) ──
 const xper = p => p * SCREEN_X;
@@ -160,6 +232,12 @@ function rectColision(r1, r2) {
           r1[1] + r1[3] > r2[1] && r1[1] < r2[1] + r2[3]);
 }
 
+// ── DISPOSITIVO TÁCTIL ──
+// En mobile (sin mouse) no tiene sentido el modo dos jugadores (comparten un solo teclado), así que se
+// oculta esa opción del menú y se fuerza un jugador. En PC se mantiene. Heurística estándar: puntero
+// grueso + sin hover = teléfono/tablet.
+const IS_TOUCH = (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches) || 'ontouchstart' in window;
+
 // ── CANVAS ──
 // La pista llena toda la pantalla (escala no-uniforme). Como el juego es horizontal, en el celular
 // apaisado el estiramiento es mínimo. Si la pantalla está vertical se muestra el aviso "girá el teléfono".
@@ -172,16 +250,19 @@ let dpr = 1, scaleX = 1, scaleY = 1, cssW = 0, cssH = 0;
 // blitea cada frame en vez de re-dibujar cientos de figuras — clave para los FPS en mobile.
 let bgCanvas = null, bgReady = false, bgTrack = -1, bgW = 0, bgH = 0;
 
+let lastVW = 0, lastVH = 0;                                            // disparadores del poll (innerWidth/Height crudos)
 function resize() {
+  lastVW = window.innerWidth; lastVH = window.innerHeight;
   dpr  = Math.min(window.devicePixelRatio || 1, 2);
-  cssW = window.innerWidth;
-  cssH = window.innerHeight;
+  // El canvas llena su contenedor por CSS (position:fixed; inset:0; 100%/100%). Leemos su tamaño REAL
+  // renderizado (clientWidth/Height) en vez de innerWidth: en fullscreen el navegador a veces reporta
+  // innerWidth sin la zona del notch, y dimensionar el canvas con eso dejaba una franja negra al costado.
+  cssW = canvas.clientWidth  || window.innerWidth;
+  cssH = canvas.clientHeight || window.innerHeight;
   scaleX = cssW / SCREEN_X;
   scaleY = cssH / SCREEN_Y;
-  canvas.width  = Math.floor(cssW * dpr);
+  canvas.width  = Math.floor(cssW * dpr);                             // solo el buffer; el tamaño visual lo fija el CSS
   canvas.height = Math.floor(cssH * dpr);
-  canvas.style.width  = cssW + 'px';
-  canvas.style.height = cssH + 'px';
   document.getElementById('rotate').style.display = (cssH > cssW) ? 'flex' : 'none';
 }
 window.addEventListener('resize', resize);
@@ -493,12 +574,31 @@ let sprites = [], trackpoints = [], walls = [], tanks = [], bombs = [];
 function addSprite(s) { sprites.push(s); return s; }
 function removeFromList(arr, item) { const i = arr.indexOf(item); if (i >= 0) arr.splice(i, 1); }
 
+// ════════════════ FÍSICA (Matter.js) ════════════════
+// Motor 2D rígido sin gravedad (es top-down). Los tanques son cuerpos dinámicos, las paredes estáticas
+// → las colisiones tanque-pared y tanque-tanque las resuelve el motor (deslizan/empujan, no se traban).
+// El manejo es "arcade sobre física": un motor de velocidad objetivo + dirección por velocidad angular.
+const { Engine, Composite, Bodies, Body } = Matter;
+const engine = Engine.create();
+engine.gravity.x = 0; engine.gravity.y = 0;
+const world = engine.world;
+const PHYS_STEP = 1000 / 60;                 // paso fijo (las velocidades quedan en px/frame a 60fps)
+// — Tuning del manejo (px/frame y rad/frame a 60fps; subí/bajá a gusto) —
+const TANK_SPEED   = 9.5;                    // velocidad máx adelante (~570 px/s)
+const TANK_REVERSE = 5.5;                    // velocidad máx atrás
+const TANK_ACCEL   = 0.10;                   // suavizado hacia la velocidad objetivo (0..1): más alto = más ágil
+const TANK_TURN    = 0.070;                  // giro del jugador a dirección máxima (rad/frame, ~4.2 rad/s)
+const AI_TURN_K    = 3.0;                    // qué tan fuerte la IA corrige el rumbo hacia el waypoint
+const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+
+function clearPhysics() { Composite.clear(world, false); }   // saca todos los cuerpos (al rearmar/salir de carrera)
+
 // ════════════════ TANK ════════════════
 class Tank {
   constructor(i, playermode, track, racelength, difficulty) {
     this.id = i;
-    this.radius = xper(0.01);
-    this.vel = 0; this.ang_vel = 0;
+    this.radius = xper(0.0115);
+    this.vel = 0; this.ang_vel = 0; this.psteer = 0;
     this.shoot_cooling = 0;
     this.lap_progress = 0; this.pre_lap_progress = 0;
     this.lap_checkpoint = 0; this.laps = 0;
@@ -518,6 +618,14 @@ class Tank {
 
     if (!this.ai) [this.forward, this.reverse, this.left, this.right, this.shoot] = TANK_CONTROLS[this.id];
 
+    // Cuerpo físico: rectángulo redondeado (mejor ramming que un círculo, sin engancharse en esquinas).
+    const r = this.radius;
+    this.body = Bodies.rectangle(this.x, this.y, r * 2.0, r * 1.6, {
+      angle: this.ang, frictionAir: 0.05, friction: 0.02, restitution: 0.3,
+      chamfer: { radius: r * 0.45 }, label: 'tank',
+    });
+    Composite.add(world, this.body);
+
     tanks.push(this);
   }
 
@@ -526,23 +634,19 @@ class Tank {
 
     this.pre_lap_progress = this.lap_progress;
     this.shoot_cooling = Math.max(this.shoot_cooling - deltaT, 0);
-    const fs = deltaT * SIM_FPS;                                       // factor de compensación de framerate
 
     if (!this.finished) { this.rank = tanks.length; this.racetime += deltaT; }
 
+    let steer = 0, throttle = 0;                                       // ∈ [-1, 1]
+
     if (!this.ai) {
-      // Dirección: teclado da ±1 (full); la palanca (sólo jugador 1) suma su valor PROPORCIONAL.
-      let steer = (keys[this.right] ? 1 : 0) - (keys[this.left] ? 1 : 0);
-      let fwd = keys[this.forward], rev = keys[this.reverse];
-      if (this.id === 0) {                                             // el jugador 1 también maneja con las palancas
-        steer += lever.steer;
-        if (lever.throttle > 0.25) fwd = true;
-        else if (lever.throttle < -0.25) rev = true;
-      }
-      steer = Math.max(-1, Math.min(1, steer));
-      if (fwd) this.vel += 2.5 * fs;
-      if (rev) this.vel -= 1.5 * fs;
-      this.ang_vel += 0.2 * fs * TURN_MULT * steer;                    // giro proporcional a la palanca/tecla
+      // Dirección y acelerador: el teclado da ±1 (full); el joystick (sólo jugador 1) suma su valor
+      // PROPORCIONAL (cercanía al centro → intensidad). Ambos terminan en [-1, 1].
+      steer    = (keys[this.right]   ? 1 : 0) - (keys[this.left]    ? 1 : 0);
+      throttle = (keys[this.forward] ? 1 : 0) - (keys[this.reverse] ? 1 : 0);
+      if (this.id === 0) { steer += lever.steer; throttle += lever.throttle; }   // jugador 1 también con joysticks
+      steer    = clampN(steer, -1, 1);
+      throttle = clampN(throttle, -1, 1);
       if (keys[this.shoot] && this.shoot_cooling === 0) {
         addSprite(new Bomb(this.color, this.radius, this.x, this.y, this.ang, this.vel));
         this.shoot_cooling = 2;
@@ -551,8 +655,7 @@ class Tank {
       this.ai_cooling += deltaT;
       if (this.ai_cooling > this.ai_timer) {
         const d = this.ai_difficulty;
-        this.ai_acel  = d === 0 ? rnd(2,2.15) : d === 1 ? rnd(2.15,2.35) : d === 2 ? rnd(2.35,2.5) : rnd(2.5,2.65);
-        this.ai_turn  = d === 0 ? rnd(0.1,0.125) : d === 1 ? rnd(0.125,0.175) : d === 2 ? rnd(0.175,0.2) : rnd(0.2,0.225);
+        this.ai_acel  = d === 0 ? rnd(0.8,0.85) : d === 1 ? rnd(0.85,0.92) : d === 2 ? rnd(0.92,0.97) : rnd(0.97,1);
         this.ai_shoot = d === 0 ? ri(0,19) : d === 1 ? ri(0,9) : d === 2 ? ri(0,4) : ri(0,1);
         this.ai_cooling = 0;
       }
@@ -574,11 +677,11 @@ class Tank {
           const target_point = trackpoints[(closest_point.id + 8) % trackpoints.length];
           target_point.color = [0, 150, 0];
           const point_ang = getangle2(this.ang, [this.x, this.y], [target_point.x, target_point.y]);
-
-          if (point_ang - this.ang > -Math.PI/12 && point_ang - this.ang < Math.PI/12)
-            this.vel += (this.finished ? this.ai_acel * 0.6 : this.ai_acel) * fs;
-          if (point_ang < this.ang) this.ang_vel -= this.ai_turn * fs * TURN_MULT;
-          if (point_ang > this.ang) this.ang_vel += this.ai_turn * fs * TURN_MULT;
+          let diff = point_ang - this.ang;                             // rumbo relativo al waypoint adelantado
+          while (diff >  Math.PI) diff -= Math.PI * 2;
+          while (diff < -Math.PI) diff += Math.PI * 2;
+          steer    = clampN(diff * AI_TURN_K, -1, 1);                  // gira proporcional al error de rumbo
+          throttle = (Math.abs(diff) < Math.PI / 8 ? 1 : 0.55) * this.ai_acel * (this.finished ? 0.6 : 1);
           if (this.ai_shoot === 0 && this.shoot_cooling === 0 && !this.finished) {
             addSprite(new Bomb(this.color, this.radius, this.x, this.y, this.ang, this.vel));
             this.shoot_cooling = 2;
@@ -587,23 +690,17 @@ class Tank {
       }
     }
 
-    // Integración (umbrales por SCREEN_X — a 1280 cae en la rama >=1000)
-    // El giro efectivo se topea en ANG_VEL_MAX → maniobra ágil sin acumular rotación de más. El valor
-    // crudo de ang_vel NO se topea, así el spin-out de las bombas (±300) sigue siendo violento.
-    const turnRate = Math.max(-ANG_VEL_MAX, Math.min(ANG_VEL_MAX, this.ang_vel));
-    this.ang += SCREEN_X >= 1000 ? turnRate * deltaT : turnRate * xper(0.0017) * deltaT;
-    const mv = SCREEN_X >= 1400 ? deltaT : SCREEN_X >= 1000 ? xper(0.0007) * deltaT : xper(0.0003) * deltaT;
-    this.x += Math.cos(this.ang) * this.vel * mv;
-    this.y += Math.sin(this.ang) * this.vel * mv;
-    // decay multiplicativo, también compensado por framerate (mantiene la misma velocidad terminal)
-    this.ang_vel *= Math.pow(SCREEN_X >= 1000 ? 0.95 : SCREEN_X >= 500 ? 0.92 : 0.9, fs);
-    this.vel *= Math.pow(SCREEN_X >= 1000 ? 0.9975 : 0.999, fs);
-
-    if (this.ang > Math.PI*2 || this.ang < -Math.PI*2) this.ang = 0;
-    if (this.x > SCREEN_X + this.radius) this.x = 0 - this.radius;
-    if (this.x < 0 - this.radius) this.x = SCREEN_X + this.radius;
-    if (this.y > SCREEN_Y + this.radius) this.y = 0 - this.radius;
-    if (this.y < 0 - this.radius) this.y = SCREEN_Y + this.radius;
+    // ── Aplicar al cuerpo Matter ──
+    const b = this.body;
+    // Dirección: velocidad angular directa cuando hay input (feel responsivo, sin inercia); si no, amortiguar
+    // (deja que los choques/bombas impriman spin y se vaya frenando).
+    if (Math.abs(steer) > 0.001) Body.setAngularVelocity(b, steer * TANK_TURN);
+    else                          Body.setAngularVelocity(b, b.angularVelocity * 0.85);
+    // Motor: velocidad objetivo a lo largo del heading; suavizado hacia ella (cede ante colisiones del motor).
+    const target = throttle > 0 ? TANK_SPEED * throttle : throttle < 0 ? -TANK_REVERSE * (-throttle) : 0;
+    const fx = Math.cos(b.angle), fy = Math.sin(b.angle);
+    Body.setVelocity(b, { x: b.velocity.x + (fx * target - b.velocity.x) * TANK_ACCEL,
+                          y: b.velocity.y + (fy * target - b.velocity.y) * TANK_ACCEL });
 
     if (this.lap_progress > 0 && this.lap_progress < 5) this.lap_checkpoint = 1;
     if (this.lap_progress > 95 && this.lap_progress < 100 && this.lap_checkpoint === 1) this.lap_checkpoint = 2;
@@ -612,18 +709,10 @@ class Tank {
       this.lap_checkpoint = 0;
     }
 
+    // Ranking (la colisión tanque-tanque ya la resuelve Matter; acá solo se calcula la posición en carrera).
     for (const tank of tanks) {
       if (tank === this) continue;
       if (!this.finished && !tank.finished) {
-        if (rectColision([tank.x-tank.radius*0.75, tank.y-tank.radius*0.75, tank.radius*1.5, tank.radius*1.5],
-                          [this.x-this.radius*0.75, this.y-this.radius*0.75, this.radius*1.5, this.radius*1.5])) {
-          const hit_ang = getangle([this.x, this.y], [tank.x, tank.y]);
-          this.x -= Math.cos(hit_ang) * 2;
-          this.y -= Math.sin(hit_ang) * 2;
-          this.vel *= 0.9;
-          tank.x += Math.cos(hit_ang) * 2;
-          tank.y += Math.sin(hit_ang) * 2;
-        }
         if (this.laps > tank.laps) this.rank -= 1;
         else if (this.laps === tank.laps && this.lap_progress > tank.lap_progress && this.lap_checkpoint !== 0) this.rank -= 1;
         else if (this.laps === tank.laps && this.lap_progress <= tank.lap_progress && tank.lap_checkpoint === 0) this.rank -= 1;
@@ -691,8 +780,9 @@ class Bomb {
       if (tank.color !== this.color && !tank.finished &&
           rectColision([this.x-this.radius*0.75, this.y-this.radius*0.75, this.radius*1.5, this.radius*1.5],
                         [tank.x-tank.radius*0.75, tank.y-tank.radius*0.75, tank.radius*1.5, tank.radius*1.5])) {
-        if (ri(0,1) === 0) tank.ang_vel -= 300; else tank.ang_vel += 300;
-        tank.vel *= 0.1;
+        // spin-out: trompo violento + casi frena (sobre el cuerpo físico)
+        Body.setAngularVelocity(tank.body, (ri(0,1) === 0 ? -1 : 1) * 0.5);
+        Body.setVelocity(tank.body, { x: tank.body.velocity.x * 0.1, y: tank.body.velocity.y * 0.1 });
         removeFromList(bombs, this); removeFromList(sprites, this);
         return;
       }
@@ -724,25 +814,13 @@ class Wall {
   constructor(i, track, color) {
     this.id = i; this.track = track; this.color = color;
     [this.x, this.y, this.width, this.height] = WALL_MAPS[this.track][this.id];
+    // Cuerpo estático: la colisión contra tanques la resuelve Matter (deslizan, no se traban).
+    this.body = Bodies.rectangle(this.x + this.width / 2, this.y + this.height / 2, this.width, this.height,
+      { isStatic: true, friction: 0.02, label: 'wall' });
+    Composite.add(world, this.body);
     walls.push(this);
   }
-  process() {
-    for (const tank of tanks) {
-      if (!tank.finished && rectColision([this.x, this.y, this.width, this.height],
-          [tank.x-tank.radius*0.75, tank.y-tank.radius*0.75, tank.radius*1.5, tank.radius*1.5])) {
-        const wleft   = Math.abs(tank.x + tank.radius*1.5 - this.x);
-        const wright  = Math.abs(tank.x - tank.radius*1.5 - (this.x + this.width));
-        const wtop    = Math.abs(tank.y + tank.radius*1.5 - this.y);
-        const wbottom = Math.abs(tank.y - tank.radius*1.5 - (this.y + this.height));
-        const wclosest = Math.min(wleft, wright, wtop, wbottom);
-        if (wclosest === wleft)   tank.x = this.x - tank.radius*0.75;
-        if (wclosest === wright)  tank.x = this.x + this.width + tank.radius*0.75;
-        if (wclosest === wtop)    tank.y = this.y - tank.radius*0.75;
-        if (wclosest === wbottom) tank.y = this.y + this.height + tank.radius*0.75;
-        tank.vel *= 0.95;
-      }
-    }
-  }
+  process() {}                                                          // la física la maneja Matter
   draw() {
     if (bgReady) return;                                               // ya está en el fondo horneado
     const col = THEME_WALL[this.color];
@@ -842,8 +920,18 @@ class MainHandler {
       if (this.menulevel === 1 && !this.tournament) this.choose_option = [0,1,2,3];
 
       if (!this.keypressed) {
-        if (keys.UP)   { this.option = (this.option - 1 + this.choose_option.length) % this.choose_option.length; this.keypressed = true; }
-        if (keys.DOWN) { this.option = (this.option + 1) % this.choose_option.length; this.keypressed = true; }
+        if (keys.UP || keys.DOWN) {
+          const d = keys.UP ? -1 : 1;
+          if (this.menulevel === 1) {                                  // navega solo entre las filas visibles (en táctil se saltea "jugadores")
+            const opts = this.menuOpts();
+            const idx = Math.max(0, opts.indexOf(this.option));
+            this.option = opts[(idx + d + opts.length) % opts.length];
+          } else {
+            const len = this.choose_option.length;
+            this.option = (this.option + d + len) % len;
+          }
+          this.keypressed = true;
+        }
         if (keys.LEFT) {
           if (this.menulevel === 1) {
             if (this.option === 0) this.playermode = (this.playermode - 1 + 2) % 2;
@@ -900,11 +988,13 @@ class MainHandler {
   // — acciones reutilizables (teclado y toque comparten estas) —
   pickOption0(opt) {                                                   // menulevel 0: elegir New Race / Tournament / Exit
     this.option = opt;
-    if (opt === 0) { this.menulevel = 1; this.tournament = false; }
-    if (opt === 1) { this.menulevel = 1; this.tournament = true; this.option = 0; }
+    if (opt === 0) { this.menulevel = 1; this.tournament = false; this.option = this.menuOpts()[0]; }
+    if (opt === 1) { this.menulevel = 1; this.tournament = true;  this.option = this.menuOpts()[0]; }
     // opt 2 = Exit (no-op en web)
   }
   startRace() {                                                        // menulevel 1: arrancar la carrera
+    if (IS_TOUCH) this.playermode = 0;                                 // en táctil siempre un jugador
+    clearPhysics();                                                    // mundo limpio antes de crear los cuerpos
     const [nW, nT] = MAP_COUNTS[this.track];
     for (let i = 0; i < nT; i++) addSprite(new TrackPoint(i, this.track));
     for (let i = 0; i < nW; i++) addSprite(new Wall(i, this.track, Math.floor(this.track/2)));
@@ -914,7 +1004,7 @@ class MainHandler {
   }
   confirmExit() {                                                      // confirmar salida de carrera al menú
     for (const s of sprites.slice()) if (s !== this) removeFromList(sprites, s);
-    trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0;
+    clearPhysics(); trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0;
     if (sprites.length === 1) {
       this.menulevel = 0; this.option = 0; this.playermode = 0; this.laps = 1; this.difficulty = 1; this.track = 0;
       this.menu = true; this.confirmQuit = false;
@@ -927,8 +1017,7 @@ class MainHandler {
     if (this.menulevel === 0) {
       if (near(0.5)) this.option = 0; else if (near(0.6)) this.option = 1; else if (near(0.7)) this.option = 2;
     } else {
-      if (near(0.45)) this.option = 0; else if (near(0.55)) this.option = 1;
-      else if (near(0.65)) this.option = 2; else if (near(0.75)) this.option = 3;
+      for (const { opt, y } of this.menuRowDefs()) if (near(y)) { this.option = opt; return; }
     }
   }
   // toque/click sobre el menú (coords lógicas)
@@ -940,12 +1029,25 @@ class MainHandler {
       else if (near(0.6)) this.pickOption0(1);
       else if (near(0.7)) this.pickOption0(2);
     } else {
-      if (near(0.45))      { this.option = 0; this.playermode = (this.playermode + dir + 2) % 2; }
-      else if (near(0.55)) { this.option = 1; this.laps = (this.laps + dir + 3) % 3; }
-      else if (near(0.65)) { this.option = 2; this.difficulty = (this.difficulty + dir + 4) % 4; }
-      else if (near(0.75)) { this.option = 3; if (!this.tournament) this.track = (this.track + dir + 10) % 10; }
-      else if (near(0.88)) this.startRace();                           // botón JUGAR
+      for (const { opt, y } of this.menuRowDefs()) {
+        if (!near(y)) continue;
+        this.option = opt;
+        if (opt === 0)      this.playermode = (this.playermode + dir + 2) % 2;
+        else if (opt === 1) this.laps       = (this.laps + dir + 3) % 3;
+        else if (opt === 2) this.difficulty = (this.difficulty + dir + 4) % 4;
+        else if (opt === 3) { if (!this.tournament) this.track = (this.track + dir + 10) % 10; }
+        return;
+      }
+      if (near(0.88)) this.startRace();                                // botón JUGAR
     }
+  }
+
+  // Opciones del setup (menulevel 1) según dispositivo: en táctil se omite "jugadores" (opt 0).
+  menuOpts() { return IS_TOUCH ? [1, 2, 3] : [0, 1, 2, 3]; }
+  // Filas del setup con su posición Y, centradas verticalmente según cuántas haya (3 en táctil, 4 en PC).
+  menuRowDefs() {
+    const opts = this.menuOpts(), span = 0.1, mid = 0.6, y0 = mid - span*(opts.length - 1)/2;
+    return opts.map((opt, i) => ({ opt, y: y0 + i*span }));
   }
 
   draw() {
@@ -978,11 +1080,16 @@ class MainHandler {
         const tn = TRACK_NAMES[this.track], diffNames = ['Easy','Normal','Hard','Very Hard'];
         const lapsName = this.laps === 0 ? 'Short (10 laps)' : this.laps === 1 ? 'Normal (20 laps)' : 'Long (40 laps)';
         const wrap = (on, s) => on ? `< ${s} >` : s;
+        const labelFor = opt => opt === 0 ? (this.playermode === 0 ? 'Single Player' : 'Two Players')
+                              : opt === 1 ? lapsName
+                              : opt === 2 ? `Difficulty: ${diffNames[this.difficulty]}`
+                              : `Map: ${tn}`;
         createText(B_font, 'CrazyTanks', menucolor, null, xper(0.5), yper(0.2), 28);
-        createText(M_font, wrap(this.option === 0, this.playermode === 0 ? 'Single Player' : 'Two Players'), sel(this.option === 0), null, xper(0.5), yper(0.45), gl(this.option === 0));
-        createText(M_font, wrap(this.option === 1, lapsName), sel(this.option === 1), null, xper(0.5), yper(0.55), gl(this.option === 1));
-        createText(M_font, wrap(this.option === 2, `Difficulty: ${diffNames[this.difficulty]}`), sel(this.option === 2), null, xper(0.5), yper(0.65), gl(this.option === 2));
-        createText(M_font, wrap(this.option === 3, `Map: ${tn}`), this.option === 3 ? menucolor : (this.tournament ? lock : dim), null, xper(0.5), yper(0.75), gl(this.option === 3));
+        for (const { opt, y } of this.menuRowDefs()) {
+          const on = this.option === opt;
+          const col = opt === 3 ? (on ? menucolor : (this.tournament ? lock : dim)) : sel(on);
+          createText(M_font, wrap(on, labelFor(opt)), col, null, xper(0.5), yper(y), gl(on));
+        }
         // botón JUGAR (tocá/click para arrancar) — pulsa, y se ilumina al hover
         const hj = rowHover(0.88), playPulse = 0.6 + 0.4*Math.sin(T*4);
         createText(M_font, '▶ JUGAR', [120 + 120*playPulse, 230, 150], modifyColorPerc(menucolor, hj ? 0.32 : 0.12), xper(0.5), yper(0.88), hj ? 30 : 16);
@@ -1072,7 +1179,7 @@ class AuxiliaryHandler {
   _rebuildRace() {
     const main = sprites[0];
     for (const s of sprites.slice()) if (s !== main && s !== this) removeFromList(sprites, s);
-    trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0;
+    clearPhysics(); trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0;
     if (sprites.length === 2) {
       for (let i = 0; i < this.nTrackpoints; i++) addSprite(new TrackPoint(i, this.track));
       for (let i = 0; i < this.nWalls; i++) addSprite(new Wall(i, this.track, Math.floor(this.track/2)));
@@ -1085,7 +1192,7 @@ class AuxiliaryHandler {
   _backToMenu(tournament) {
     const main = sprites[0];
     for (const s of sprites.slice()) if (s !== main && s !== this) removeFromList(sprites, s);
-    trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0;
+    clearPhysics(); trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0;
     if (sprites.length === 2) {
       main.menulevel = 0; main.option = 0; main.playermode = 0; main.laps = 1; main.difficulty = 1; main.track = 0;
       main.menu = true; main.keypressed = true;
@@ -1250,25 +1357,42 @@ function drawLine(p1, p2, color, lw = 1) {
 function paintTank(x, y, ang, r, color, alpha = 1, finished = false) {
   ctx.save();
   if (alpha !== 1) ctx.globalAlpha = alpha;
+  const a0 = ctx.globalAlpha;
+  const tint = finished ? (c => modifyColorPerc(c, 0.4)) : (c => c);    // tinte apagado al terminar la carrera
+  const cos = Math.cos(ang), sin = Math.sin(ang);
+
+  // Sombra de apoyo: da profundidad y "despega" el tanque del piso.
+  ctx.globalAlpha = a0 * 0.30; ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(x + r*0.13, y + r*0.18, r*1.12, r*0.98, ang, 0, Math.PI*2); ctx.fill();
+  ctx.globalAlpha = a0;
+
+  // Orugas / cuerpo: bandas perpendiculares al avance (look de treads del original).
   const lines = 17;
   for (let layer = 0; layer < 2; layer++) {
     for (let i = 0; i < lines; i++) {
       const px = x + Math.cos(ang + Math.PI/2) * (-r + 2*r*(i/lines) + ((r*2)/lines - 1)/2);
       const py = y + Math.sin(ang + Math.PI/2) * (-r + 2*r*(i/lines) + ((r*2)/lines - 1)/2);
       const length = Math.abs(i - Math.floor(lines/2)) < lines*0.2 ? r*0.7 : r;
-      if (layer === 0) {
-        const col = finished ? modifyColorPerc(modifyColor(color,-50),0.35) : modifyColor(color,-50);
-        drawLine([px + Math.cos(ang)*-length, py + Math.sin(ang)*-length], [px + Math.cos(ang)*length, py + Math.sin(ang)*length], col, Math.max(Math.trunc((r*5)/lines - 1), 1));
-      } else {
-        const col = finished ? modifyColorPerc(color,0.35) : color;
-        drawLine([px + Math.cos(ang)*-length, py + Math.sin(ang)*-length], [px + Math.cos(ang)*length, py + Math.sin(ang)*length], col, Math.max(Math.trunc((r*2)/lines - 1), 1));
-      }
+      const col = layer === 0 ? tint(modifyColor(color,-50)) : tint(color);
+      const lw  = layer === 0 ? Math.max(Math.trunc((r*5)/lines - 1), 1) : Math.max(Math.trunc((r*2)/lines - 1), 1);
+      drawLine([px + cos*-length, py + sin*-length], [px + cos*length, py + sin*length], col, lw);
     }
   }
-  drawCircle(x, y, r*0.7, finished ? modifyColorPerc(modifyColor(color,-25),0.35) : modifyColor(color,-25));
-  drawLine([x, y], [x + Math.cos(ang)*r*1.5, y + Math.sin(ang)*r*1.5], finished ? modifyColorPerc(modifyColor(color,25),0.35) : modifyColor(color,25), Math.trunc(r*0.3));
-  drawCircle(x, y, r*0.5, finished ? modifyColorPerc(modifyColor(color,75),0.35) : modifyColor(color,75));
-  drawCircle(x, y, r*0.5, finished ? modifyColorPerc(modifyColor(color,25),0.35) : modifyColor(color,25), 1);
+
+  // Cañón: base oscura ancha + caño claro fino + boca redondeada.
+  const bx = x + cos*r*1.7, by = y + sin*r*1.7;
+  drawLine([x, y], [bx, by], tint(modifyColor(color,-40)), Math.max(2, Math.trunc(r*0.44)));
+  drawLine([x, y], [bx, by], tint(modifyColor(color,15)),  Math.max(1, Math.trunc(r*0.22)));
+  drawCircle(bx, by, r*0.18, tint(modifyColor(color,-25)));
+
+  // Torreta: base + domo claro + borde, con un brillo (gloss) arriba-izquierda.
+  drawCircle(x, y, r*0.64, tint(modifyColor(color,-25)));
+  drawCircle(x, y, r*0.5,  tint(modifyColor(color,60)));
+  drawCircle(x, y, r*0.5,  tint(modifyColor(color,15)), Math.max(1, r*0.07));
+  ctx.globalAlpha = a0 * 0.5;
+  drawCircle(x - r*0.16, y - r*0.18, r*0.17, [255,255,255]);
+  ctx.globalAlpha = a0;
+
   ctx.restore();
 }
 
@@ -1294,16 +1418,16 @@ function getDeco(track) {
   for (let i = 0; i < 80; i++) {
     const x = rng() * SCREEN_X, y = rng() * SCREEN_Y, s = 0.5 + rng();
     let shape, col, alpha, r, extra = 0;
-    if (theme === 0) {                                                // ASFALTO: grava, grietas, manchas de aceite (nada de pasto)
+    if (theme === 0) {                                                // ASFALTO: grava clara, grietas oscuras, manchas de aceite (nada de pasto)
       const k = rng();
-      if (k < 0.5)       { shape = 'gravel'; col = [80+rng()*45, 82+rng()*45, 88+rng()*45]; alpha = 0.10 + rng()*0.12; r = xper(0.003)*s; }
-      else if (k < 0.82) { shape = 'crack';  col = [28+rng()*16, 29+rng()*16, 33+rng()*16]; alpha = 0.22 + rng()*0.2;  r = xper(0.02)*s;  extra = rng()*TAU; }
-      else               { shape = 'oil';    col = [18+rng()*12, 19+rng()*12, 22+rng()*12]; alpha = 0.16 + rng()*0.14; r = xper(0.013)*s; extra = rng()*TAU; }
+      if (k < 0.5)       { shape = 'gravel'; col = [105+rng()*55, 108+rng()*55, 116+rng()*55]; alpha = 0.18 + rng()*0.16; r = xper(0.0032)*s; }
+      else if (k < 0.82) { shape = 'crack';  col = [16+rng()*14, 17+rng()*14, 21+rng()*14];    alpha = 0.34 + rng()*0.24; r = xper(0.02)*s;  extra = rng()*TAU; }
+      else               { shape = 'oil';    col = [10+rng()*10, 11+rng()*10, 14+rng()*10];    alpha = 0.26 + rng()*0.18; r = xper(0.013)*s; extra = rng()*TAU; }
     }
-    else if (theme === 1) { shape = 'dot';   col = modifyColor([180,165,95], -Math.floor(rng()*45)); alpha = 0.20 + rng()*0.18; r = xper(0.004)*s; }
-    else if (theme === 2) { shape = 'cross'; col = [205+rng()*45, 205+rng()*45, 220]; alpha = 0.10 + rng()*0.12; r = xper(0.004)*s; }
-    else if (theme === 3) { shape = 'ring';  col = [50+rng()*60, 120+rng()*60, 200+rng()*55]; alpha = 0.12 + rng()*0.16; r = xper(0.007)*s; }
-    else                  { shape = 'ember'; col = [205+rng()*50, 80+rng()*60, 20+rng()*40]; alpha = 0.14 + rng()*0.18; r = xper(0.004)*s; }
+    else if (theme === 1) { shape = 'dot';   col = modifyColor([150,132,72], -Math.floor(rng()*40)); alpha = 0.30 + rng()*0.20; r = xper(0.0045)*s; }
+    else if (theme === 2) { shape = 'cross'; col = [150+rng()*40, 168+rng()*40, 200+rng()*35];        alpha = 0.22 + rng()*0.16; r = xper(0.0045)*s; }
+    else if (theme === 3) { shape = 'ring';  col = [60+rng()*70, 150+rng()*70, 230];                  alpha = 0.24 + rng()*0.20; r = xper(0.0075)*s; }
+    else                  { shape = 'ember'; col = [225+rng()*30, 95+rng()*60, 25+rng()*35];          alpha = 0.26 + rng()*0.20; r = xper(0.0045)*s; }
     items.push({ x, y, r, shape, col, alpha, extra });
   }
   decoCache[track] = { theme, items };
@@ -1313,7 +1437,7 @@ function drawDeco(track) {
   const { theme, items } = getDeco(track);
   // grilla tenue para dar sensación de "arena"
   const g = BASE_THEME[theme];
-  ctx.globalAlpha = 0.05;
+  ctx.globalAlpha = 0.08;
   ctx.strokeStyle = rgb(theme === 2 ? [120,120,140] : modifyColorPerc(g, 1.6));
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -1475,28 +1599,60 @@ for (const el of document.querySelectorAll('[data-k]')) {
   el.addEventListener('pointerleave', release);
 }
 
-// ── PALANCAS (analógicas) → alimentan al jugador 1. throttle/steer ∈ [-1, 1]; vuelven a 0 al soltar. ──
+// ── JOYSTICKS (nipplejs) → alimentan al jugador 1. throttle/steer ∈ [-1, 1]; vuelven a 0 al soltar. ──
+// Los dos joysticks se mueven LIBRES en cualquier dirección, pero cada uno usa solo UNA componente:
+//   izq (acelerador) → vector.y (adelante/atrás)   ·   der (dirección) → vector.x (izquierda/derecha)
+// data.vector ya viene normalizado a [-1,1] → la intensidad es proporcional a la cercanía al centro.
+// vector.y es + hacia ARRIBA. La otra componente se ignora, así moverlo en diagonal no molesta.
 const lever = { throttle: 0, steer: 0 };
-function setupLever(id, axis, onValue) {
-  const el = document.getElementById(id), knob = el.querySelector('.knob');
-  let pid = null;
-  const travel = () => Math.max(1, (axis === 'y' ? el.clientHeight - knob.offsetHeight : el.clientWidth - knob.offsetWidth) / 2);
-  const apply = (cx, cy) => {
-    const r = el.getBoundingClientRect(), t = travel();
-    let v = axis === 'y' ? (r.top + r.height/2 - cy) / t : (cx - (r.left + r.width/2)) / t;
-    v = Math.max(-1, Math.min(1, v));
-    onValue(v);
-    const off = v * t * (axis === 'y' ? -1 : 1);                       // y invertido (arriba = +)
-    knob.style.transform = axis === 'y' ? `translate(-50%, calc(-50% + ${off}px))` : `translate(calc(-50% + ${off}px), -50%)`;
-  };
-  el.addEventListener('pointerdown', e => { e.preventDefault(); pid = e.pointerId; el.classList.add('dragging'); try { el.setPointerCapture(pid); } catch {} apply(e.clientX, e.clientY); });
-  el.addEventListener('pointermove', e => { if (e.pointerId === pid) apply(e.clientX, e.clientY); });
-  const end = () => { if (pid === null) return; pid = null; el.classList.remove('dragging'); onValue(0); knob.style.transform = ''; };
-  el.addEventListener('pointerup', end);
-  el.addEventListener('pointercancel', end);
+const clamp1 = v => Math.max(-1, Math.min(1, v));
+// dynamicPage:true → nipplejs recalcula la posición real del joystick en CADA toque (clave: los pads se
+// ocultan en el menú con display:none, lo que invalida la posición cacheada y hacía que el vector saliera
+// siempre hacia abajo-derecha desde la esquina). Con esto el centro es el del joystick, no la esquina.
+const JOY_OPTS = { mode: 'static', position: { left: '50%', top: '50%' }, size: 80, restJoystick: true, fadeTime: 0, dynamicPage: true, color: 'rgba(120,200,255,0.7)' };
+// Referencia RELATIVA: el punto donde agarrás el stick es el neutro. Solo cuenta el movimiento DESDE ese
+// punto, así tomarlo un poco descentrado NO aplica input de una (no doblás/acelerás sin querer al agarrar).
+let jThrottle = null, jSteer = null, throttleRef = null, steerRef = null;
+function setupJoysticks() {
+  // Recrea los joysticks desde cero. Necesario tras entrar/salir de fullscreen o rotar: nipplejs cachea
+  // la geometría al crearlos, así que un cambio de viewport dejaba los controles descolocados.
+  if (jThrottle) { try { jThrottle.destroy(); } catch {} }
+  if (jSteer)    { try { jSteer.destroy(); }    catch {} }
+  lever.throttle = 0; lever.steer = 0; throttleRef = null; steerRef = null;
+  jThrottle = nipplejs.create({ ...JOY_OPTS, zone: document.getElementById('jThrottle') });
+  jSteer    = nipplejs.create({ ...JOY_OPTS, zone: document.getElementById('jSteer') });
+  jThrottle.on('start', () => { throttleRef = null; });
+  jThrottle.on('move',  (e, d) => { if (throttleRef === null) throttleRef = d.vector.y; lever.throttle = clamp1(d.vector.y - throttleRef); });
+  jThrottle.on('end',   () => { lever.throttle = 0; throttleRef = null; });
+  jSteer.on('start', () => { steerRef = null; });
+  jSteer.on('move',  (e, d) => { if (steerRef === null) steerRef = d.vector.x; lever.steer = clamp1(d.vector.x - steerRef); });
+  jSteer.on('end',   () => { lever.steer = 0; steerRef = null; });
 }
-setupLever('throttle', 'y', v => lever.throttle = v);
-setupLever('steer', 'x', v => lever.steer = v);
+setupJoysticks();
+
+// ── PANTALLA COMPLETA. En mobile saca la barra del navegador. iOS Safari NO soporta la Fullscreen API
+//    en elementos arbitrarios → ahí falla en silencio (la alternativa es "agregar a pantalla de inicio",
+//    que con los metas PWA abre sin barra). El botón está en la esquina sup-der, al lado del de atrás. ──
+const fsTarget = document.documentElement;
+const _reqFs  = fsTarget.requestFullscreen || fsTarget.webkitRequestFullscreen;
+const _exitFs = document.exitFullscreen || document.webkitExitFullscreen;
+function isFs()    { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+function enterFs() { if (_reqFs)  { const p = _reqFs.call(fsTarget); if (p && p.catch) p.catch(() => {}); } }
+function exitFs()  { if (_exitFs) _exitFs.call(document); }
+function toggleFs(){ isFs() ? exitFs() : enterFs(); }
+function syncFsIcon() { document.body.classList.toggle('fs-on', isFs()); }
+// Al entrar/salir de fullscreen (o rotar) el viewport cambia → re-ajustar el canvas y RECREAR los
+// joysticks, que si no quedan descolocados con la geometría vieja. Diferido un frame para que el layout
+// ya esté aplicado cuando nipplejs mida.
+function onViewportChange() { syncFsIcon(); requestAnimationFrame(() => { resize(); setupJoysticks(); }); }
+document.addEventListener('fullscreenchange', onViewportChange);
+document.addEventListener('webkitfullscreenchange', onViewportChange);
+window.addEventListener('orientationchange', onViewportChange);
+const btnFs = document.getElementById('btnFs');
+btnFs.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); toggleFs(); });
+
+// (El auto-fullscreen en el primer toque se quitó: se comía el primer tap. La pantalla completa ahora es
+//  solo manual, con el botón de la esquina sup-der.)
 
 // Toque/click directo sobre el canvas → opera el menú, el cartel de confirmación y la pantalla de
 // fin de carrera. (El teclado sigue funcionando en paralelo en desktop.)
@@ -1558,7 +1714,7 @@ let lastT = performance.now();
 let showFPS = false, fKeyPrev = false, dtSmoothed = 1/60;              // overlay de FPS (tecla F)
 let T = 0;                                                             // tiempo acumulado para animaciones (menú, cuenta regresiva)
 const padL = document.getElementById('padL'), padR = document.getElementById('padR');
-let padsHidden = false;
+let padsShown = false;   // arranca oculto (en el menú / desktop)
 function loop(now) {
   if (typeof now !== 'number') now = performance.now();
   deltaT = Math.min((now - lastT) / 1000, 0.05);                       // clamp 50ms, igual que el original
@@ -1570,7 +1726,7 @@ function loop(now) {
 
   // Auto-resize: algunos navegadores móviles no disparan 'resize' al rotar y el aviso "girá el teléfono"
   // quedaba pegado. Re-evaluar acá lo arregla de forma robusta (también ajusta address-bar, etc).
-  if (window.innerWidth !== cssW || window.innerHeight !== cssH) resize();
+  if (window.innerWidth !== lastVW || window.innerHeight !== lastVH) resize();
 
   // Limpiar a negro
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1593,6 +1749,23 @@ function loop(now) {
   // process + draw por sprite. Paredes y trackpoints ya están en el fondo horneado → su draw es no-op.
   for (const sprite of sprites.slice()) { sprite.process(); sprite.draw(); }
 
+  // ── Paso de física (Matter) ── Los process() de arriba ya aplicaron las velocidades a los cuerpos;
+  // acá se integran y se espeja el resultado a this.x/y/ang (lo que lee toda la lógica de juego y el draw).
+  // Paso fijo (60fps de referencia, así las velocidades quedan en px/frame). No corre en menú ni en pausa.
+  const racing = tanks.length > 0;
+  if (racing && main0 && !main0.menu && !tanks[0].pause) {
+    Engine.update(engine, PHYS_STEP);
+    for (const t of tanks) {
+      const b = t.body, r = t.radius;
+      let px = b.position.x, py = b.position.y, wrapped = false;       // wrap de pantalla (como el original)
+      if (px > SCREEN_X + r) { px = -r; wrapped = true; } else if (px < -r) { px = SCREEN_X + r; wrapped = true; }
+      if (py > SCREEN_Y + r) { py = -r; wrapped = true; } else if (py < -r) { py = SCREEN_Y + r; wrapped = true; }
+      if (wrapped) Body.setPosition(b, { x: px, y: py });
+      t.x = b.position.x; t.y = b.position.y; t.ang = b.angle;
+      t.vel = Math.hypot(b.velocity.x, b.velocity.y) * 60;             // px/s (para la velocidad de salida de las bombas)
+    }
+  }
+
   if (showFPS) createText(S_font, 'FPS: ' + Math.round(1 / Math.max(1e-3, dtSmoothed)), [255,255,0], null, xper(0.93), yper(0.03));
 
   // Confirmación de salida al menú (ESC en carrera) — encima de todo. Tocá Sí / No.
@@ -1605,12 +1778,13 @@ function loop(now) {
     createText(M_font, 'NO', [150,210,255], modifyColorPerc([120,200,255], overNo ? 0.45 : 0.22), xper(0.62), yper(0.56), overNo ? 26 : 14);
   }
 
-  // Los pads de manejo se ocultan en el menú (el menú se opera tocando las opciones)
-  const inMenu = !!(sprites[0] && sprites[0].menu);
-  if (inMenu !== padsHidden) {
-    padsHidden = inMenu;
-    padL.style.display = inMenu ? 'none' : 'flex';
-    padR.style.display = inMenu ? 'none' : 'flex';
+  // Los joysticks solo en táctil (en desktop se juega con teclado). En carrera se muestran; en el menú no.
+  const showPads = IS_TOUCH && !(sprites[0] && sprites[0].menu);
+  if (showPads !== padsShown) {
+    padsShown = showPads;
+    padL.style.display = showPads ? 'flex' : 'none';
+    padR.style.display = showPads ? 'flex' : 'none';
+    if (showPads) setupJoysticks();   // recrea con el layout actual al mostrarse (geometría fresca para nipplejs)
   }
 
   updateFireCooldown();
@@ -1629,6 +1803,7 @@ function updateFireCooldown() {
 
 // ── INIT ──
 resize();
+padL.style.display = 'none'; padR.style.display = 'none';   // arrancan ocultos; el loop los muestra solo en táctil + carrera
 addSprite(new MainHandler());
 loop();
 
@@ -1636,5 +1811,41 @@ const hint = document.getElementById('hint');
 setTimeout(() => hint.style.opacity = '0', 6000);
 window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true });
 </script>
+  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+  <script>
+    document.getElementById('btnExit').addEventListener('click', () => {
+      if (confirm('¿Salir al menú?')) location.href = '../../';
+    });
+  </script>
+  <button id="btnInfo" aria-label="info" title="Info / FPS">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <div id="fpsOverlay">FPS: --</div>
+  <script>
+    (function() {
+      let frameCount = 0, lastT = performance.now();
+      const overlay = document.getElementById('fpsOverlay');
+      function loop() {
+        frameCount++;
+        const now = performance.now();
+        if (now - lastT >= 500) {
+          const fps = Math.round(frameCount * 1000 / (now - lastT));
+          if (overlay.style.display !== 'none') overlay.textContent = 'FPS: ' + fps;
+          frameCount = 0; lastT = now;
+        }
+        requestAnimationFrame(loop);
+      }
+      loop();
+      const btn = document.getElementById('btnInfo');
+      btn.addEventListener('click', () => {
+        const showing = overlay.style.display !== 'none';
+        overlay.style.display = showing ? 'none' : 'block';
+        btn.classList.toggle('on', !showing);
+      });
+    })();
+  </script>
+
 </body>
 </html>

@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Tron</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
 <style>
   :root { --bar-height: 66px; }                                                  /* tweak to taste */
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -13,7 +16,7 @@
     overflow: hidden;
     touch-action: none;
     user-select: none; -webkit-user-select: none;
-    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
   }
   /* El canvas ocupa sólo el área SOBRE la barra; ahí vive la pista (la grilla de colisiones se
      dimensiona a este rect). Tamaños seteados explícito desde JS en cada resize. */
@@ -53,38 +56,128 @@
   #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
   #ui button svg { display: block; width: 24px; height: 24px; pointer-events: none; }
 
-  /* Home: chico, esquina abajo-derecha — vuelve al menú (= ESC). Fuera de #ui para que la fila quede centrada. */
-  #btnHome {
-    position: absolute; right: 6px; bottom: calc(env(safe-area-inset-bottom) + 4px);
+  /* Exit button — vuelta al menú raíz */
+  #btnExit {
+    position: absolute;
+    left: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
     width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.16);
-    background: rgba(255,255,255,0.04);
-    color: rgba(255,255,255,0.6);
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: none; padding: 0;
     transition: background 0.1s, transform 0.08s;
+    z-index: 10;
   }
-  #btnHome svg { display: block; width: 15px; height: 15px; pointer-events: none; }
-  #btnHome:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
+  /* Reset — reinicia la partida actual (mismos ajustes). Esquina abajo-derecha. */
+  #btnReset {
+    position: absolute;
+    right: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnReset svg { display: block; width: 15px; height: 15px; pointer-events: none; }
+  #btnReset:active { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.6); color: #fff; transform: scale(0.9); }
+  /* === Bar layout: exit-left, main-center, info/debug-right (refactor) === */
+  #bar {
+    display: grid !important;
+    grid-template-columns: 1fr auto 1fr !important;
+    justify-content: stretch !important;
+  }
+  #bar > #btnExit {
+    position: static !important;
+    left: auto !important; right: auto !important;
+    top: auto !important; bottom: auto !important;
+    justify-self: start;
+  }
+  #bar > #ui { justify-self: center; }
+  #bar > #btnInfo, #bar > #btnDebug, #bar > #btnHome {
+    position: static !important;
+    left: auto !important; right: auto !important;
+    top: auto !important; bottom: auto !important;
+    justify-self: end;
+  }
+  /* Pantalla completa — esquina arriba-der, flotante. */
+  #btnFs {
+    position: absolute;
+    right: 6px;
+    top: calc(env(safe-area-inset-top) + 6px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnFs svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnFs:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  #btnFs .ic-exit { display: none; }
+  body.fs-on #btnFs .ic-enter { display: none; }
+  body.fs-on #btnFs .ic-exit  { display: block; }
+  /* Info (FPS) — esquina abajo-der, flotante. */
+  #btnInfo {
+    position: absolute;
+    right: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnInfo:active, #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+  #fpsOverlay {
+    position: absolute;
+    right: 40px;
+    bottom: calc(env(safe-area-inset-bottom) + 8px);
+    font-family: monospace;
+    font-size: 13px;
+    color: rgba(255,255,255,0.9);
+    background: rgba(0,0,0,0.6);
+    padding: 3px 8px;
+    border-radius: 4px;
+    pointer-events: none;
+    display: none;
+    z-index: 9;
+  }
+
+
+
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">menú: tocá el texto para elegir · en juego: mitades de pantalla o ◄ ► para girar</div>
+  <div id="hint">menú: tocá una opción para cambiarla, ▶ JUGAR para empezar · en juego: tocá la mitad izq/der para doblar</div>
   <div id="bar">
-    <div id="ui">
+  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+<div id="ui">
       <button id="btnLeft"  aria-label="girar izquierda" title="Girar izquierda">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
-      </button>
-      <button id="btnStart" aria-label="empezar" title="Empezar / Reiniciar">
-        <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M8 5v14l11-7z"/></svg>
       </button>
       <button id="btnRight" aria-label="girar derecha" title="Girar derecha">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
       </button>
     </div>
-    <button id="btnHome" aria-label="menú" title="Volver al menú (ESC)">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/></svg>
+    <button id="btnReset" aria-label="reiniciar" title="Reiniciar partida">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
     </button>
   </div>
 
@@ -99,6 +192,26 @@
   //  (lectura O(1); el canvas se pinta en paralelo sólo para mostrar).
   // ════════════════════════════════════════════════════════════════════
   const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));               // randint inclusivo (como random.randint)
+  const TAU = Math.PI * 2;
+
+  // ── TUNING ──
+  const SPEED_MULT  = 1;                                                         // velocidad relativa al original (un poco más rápido)
+  const HEAD_FADE   = 0.6;                                                         // seg que tarda la "cabeza" en bajar del brillo caliente al color base
+  const HEAD_GLOW   = 16;                                                          // shadowBlur del núcleo de la cabeza
+  const HEAD_DOT    = 2.8;                                                         // radio del núcleo blanco de la cabeza
+  const TRAIL_BLOOM = 6;                                                           // px de desenfoque del halo neón de las estelas (0 = sin glow)
+  const GRID_ALPHA  = 0.06;                                                        // opacidad de la grilla de fondo estilo arena (0 = sin grilla)
+  const GRID_CELLS  = 22;                                                          // ~celdas a lo ancho del lado más corto
+  const BG          = '#03060d';                                                   // fondo casi negro con leve tinte azul (arena Tron)
+
+  // ── IA ── navega por anticipación (mide espacio libre adelante/izq/der) con ruido para que no sea
+  // determinista, y mete giros erráticos ocasionales — pero nunca uno que sea muerte inmediata.
+  const AI_DECIDE_CD = 0.04;                                                       // s entre decisiones (no cada frame, así no tiembla)
+  const AI_LOOK      = 150;                                                        // px de anticipación al medir cuánto hay libre en una dirección
+  const AI_JITTER    = 70;                                                         // px de ruido random sumado a cada medición (vuelve la navegación impredecible)
+  const AI_PANIC     = 16;                                                         // si el frente tiene menos px libres que esto → dobla ya al lado más despejado
+  const AI_GREED     = 80;                                                         // un costado debe superar al frente por esto (px) para doblar "por gusto"
+  const AI_ERRATIC   = 0.07;                                                       // prob. por decisión de un giro errático (sólo si es seguro)
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
@@ -106,6 +219,10 @@
   // SCREEN_X/SCREEN_Y del original (1280×720) ahora son responsive = tamaño del canvas.
   let W = 0, H = 0, dpr = 1, scl = 1;                                              // scl = factor de fuente (los px del original eran sobre 1280×720)
   let grid = new Uint8Array(0);                                                    // ocupación: grid[y*W+x] = 1 si hay estela
+  // Estela PERMANENTE (color base) horneada en un canvas offscreen; cada frame se blitea a la pantalla y
+  // encima se dibuja la "cabeza" brillante de cada jugador, que se desvanece hasta el color base. Separar
+  // las dos capas evita que el brillo se acumule (como el cartel viejo) — el overlay es transitorio.
+  let trailCv = null, tctx = null;
 
   const xper = p => p * W;
   const yper = p => p * H;
@@ -117,23 +234,64 @@
     yi = ((yi % H) + H) % H;
     return grid[yi * W + xi];
   }
+
+  // vectores unitarios por dirección (0 arriba, 1 derecha, 2 abajo, 3 izquierda)
+  const DIR_VEC = [[0,-1],[1,0],[0,1],[-1,0]];
+  // anticipación: cuántos px hay libres hacia 'dir' desde (x,y), muestreando en pasos hasta maxPx.
+  function clearDist(x, y, dir, maxPx) {
+    const vx = DIR_VEC[dir][0], vy = DIR_VEC[dir][1];
+    for (let s = 2; s <= maxPx; s += 2) {
+      if (occ(x + vx * s, y + vy * s)) return s;
+    }
+    return maxPx;
+  }
+  // ¿girar a 'dir' NO es muerte inmediata? (frente despejado a 2 y 4 px)
+  function safeAhead(x, y, dir) {
+    const vx = DIR_VEC[dir][0], vy = DIR_VEC[dir][1];
+    return occ(x + vx * 2, y + vy * 2) === 0 && occ(x + vx * 4, y + vy * 4) === 0;
+  }
   // Estampa un punto de estela (≈ el círculo radio-1 del original): 3×3 en la grilla + cuadradito en canvas.
+  // OJO: recorta (no envuelve) las celdas fuera de pantalla, igual que pygame.draw.circle. Si envolviera
+  // con módulo, al cruzar un borde dejaría una estela fantasma en el lado opuesto —justo donde el jugador
+  // reaparece— y moriría al wrappear. La colisión occ() sí envuelve (como el `% SCREEN` del original).
   function stamp(x, y, color) {
     const ix = Math.floor(x), iy = Math.floor(y);
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
-        const xi = ((ix + dx) % W + W) % W, yi = ((iy + dy) % H + H) % H;
+        const xi = ix + dx, yi = iy + dy;
+        if (xi < 0 || xi >= W || yi < 0 || yi >= H) continue;                     // clip, no wrap
         grid[yi * W + xi] = 1;
       }
     }
-    ctx.fillStyle = color;
-    ctx.fillRect(ix - 1, iy - 1, 3, 3);
+    tctx.fillStyle = color;
+    tctx.fillRect(ix - 1, iy - 1, 3, 3);                                          // estela base permanente (offscreen)
   }
 
   function clearField() {
     grid.fill(0);
-    ctx.fillStyle = '#000';
+    tctx.clearRect(0, 0, W, H);                                                   // estela transparente (el halo neón se compone al blitear)
+    ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+  }
+
+  // fondo: casi negro + grilla tenue de arena (se redibuja cada frame, es barato)
+  function drawBackground() {
+    ctx.fillStyle = BG;
     ctx.fillRect(0, 0, W, H);
+    if (GRID_ALPHA > 0) {
+      const step = Math.max(24, Math.round(Math.min(W, H) / GRID_CELLS));
+      ctx.strokeStyle = `rgba(60,170,255,${GRID_ALPHA})`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let x = 0; x <= W; x += step) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
+      for (let y = 0; y <= H; y += step) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
+      ctx.stroke();
+    }
+  }
+
+  // degradé de la cabeza: t=0 (cola) → color base; t=1 (cabeza) → casi blanco caliente.
+  function hot(base, t) {
+    const wt = Math.max(0, t) * Math.max(0, t) * 0.75;                            // ease cuadrático hacia el blanco
+    return [ base[0] + (255 - base[0]) * wt, base[1] + (255 - base[1]) * wt, base[2] + (255 - base[2]) * wt ];
   }
 
   const barEl = document.getElementById('bar');
@@ -147,36 +305,65 @@
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.imageSmoothingEnabled = false;                                            // blit de la pista base 1:1, sin desenfoque
     scl = Math.min(W / 1280, H / 720);                                            // mantiene el texto adentro como en el original
     grid = new Uint8Array(W * H);
+    // canvas offscreen de la estela permanente (mismo tamaño en px de dispositivo que el visible)
+    trailCv = trailCv || document.createElement('canvas');
+    trailCv.width = canvas.width; trailCv.height = canvas.height;
+    tctx = trailCv.getContext('2d');
+    tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     // Cambiar de tamaño invalida la pista; volvemos al menú (la grilla vieja no sirve).
     backToMenu();
   }
   window.addEventListener('resize', resize);
 
-  // ── COLORES (idénticos a Tron.py v1) ──
-  const PLAYER_COLORS = [ [255,100,100], [10,255,155], [225,10,255], [225,155,10] ];
-  const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
-  const randColorInRange = (rmin,rmax,gmin,gmax,bmin,bmax) =>
-    `rgb(${ri(rmin,rmax)},${ri(gmin,gmax)},${ri(bmin,bmax)})`;
+  // ── COLORES neón estilo Tron (más saturados/contrastados que el original para que "brillen" sobre el
+  // fondo): cyan + naranja (el dúo canónico de Tron) + verde + magenta. ──
+  const PLAYER_COLORS = [ [0,240,255], [255,120,0], [120,255,30], [255,40,200] ];
+  const rgb  = c => `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
+  const rgba = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+  const lerpC = (a, b, t) => [ a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t ];
+  const FONT = "'Orbitron', 'Segoe UI', system-ui, sans-serif";                   // fuente tecno para todo el canvas
 
-  // texto centrado (port de create_text; siempre center en el original). size en px del original → ×scl.
-  function createText(size, content, color, fx, fy) {
-    ctx.font = Math.round(size * scl) + "px 'Segoe UI', system-ui, sans-serif";
+  function roundRectPath(x, y, w, h, r) {
+    r = Math.min(r, h / 2, w / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  // texto centrado (port de create_text; siempre center). size en px del original → ×scl.
+  // glow = shadowBlur opcional; boxColor = caja redondeada de fondo (para el botón JUGAR).
+  function createText(size, content, color, fx, fy, glow = 0, boxColor = null) {
+    const fp = Math.round(size * scl);
+    ctx.font = `600 ${fp}px ${FONT}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const px = xper(fx), py = yper(fy);
+    if (boxColor) {
+      const w = ctx.measureText(content).width, pad = fp * 0.45;
+      ctx.fillStyle = boxColor;
+      roundRectPath(px - w / 2 - pad, py - fp * 0.7, w + pad * 2, fp * 1.4, fp * 0.35);
+      ctx.fill();
+    }
+    if (glow > 0) { ctx.shadowColor = color; ctx.shadowBlur = glow; }
     ctx.fillStyle = color;
-    ctx.fillText(content, xper(fx), yper(fy));
+    ctx.fillText(content, px, py);
+    ctx.shadowBlur = 0;
   }
 
   // ════════════════ PLAYER (port de la clase Player) ════════════════
   // directions[dir] = [vx, vy,  dx2,dy2,  scoutDx,scoutDy]
   //   [0,1] = velocidad (px/s, ×deltaT)         [2,3] = look-ahead inmediato (2 px) → muerte / IA
   //   [4,5] = scout que la IA randomiza (5..50 px) cada 2 s
+  // NOTA: el original usaba look-ahead asimétrico (derecha/abajo a 1 px, arriba/izquierda a 2 px),
+  // un ajuste al círculo radio-1 de pygame. Acá la estela es 3×3 (±1 px), así que un look-ahead de
+  // 1 px caería sobre la propia estela y matarías al girar a derecha/abajo. Lo hacemos simétrico a
+  // 2 px (> medio-ancho de la estela) para que nunca se lea a sí misma.
   function dirTemplate() {
     return {
       0: [0,-150, 0,-2, 0,0],   // arriba
-      1: [150,0, 1,0, 0,0],     // derecha
-      2: [0,150, 0,1, 0,0],     // abajo
+      1: [150,0, 2,0, 0,0],     // derecha
+      2: [0,150, 0,2, 0,0],     // abajo
       3: [-150,0, -2,0, 0,0],   // izquierda
     };
   }
@@ -191,21 +378,22 @@
       this.rightpressed = false;
       this.stop = false;
       this.alive = true;
-      this.aiturn_cdtime = 0.001;
-      this.aiturn_incd = 0;
-      this.dire_cdtime = 2;
-      this.dire_incd = 2;
+      this.ai_incd = 0;                                                           // acumulador para la cadencia de decisión de la IA
 
+      // todos arrancan en la MISMA fila (y = 0.95), repartidos en x — así con 4 jugadores no salen
+      // desde alturas distintas, sino en paralelo desde abajo.
       const n = totalplayers;
       const startpos = {
         0: [ (n < 4 ? 0.75 : 0.8), 0.95 ],
-        1: [ (n < 4 ? 0.25 : 0.2), (n === 4 ? 0.65 : 0.95) ],
-        2: [ (n < 4 ? 0.5  : 0.6), (n === 4 ? 0.85 : 0.95) ],
-        3: [ 0.4, 0.75 ],
+        1: [ (n < 4 ? 0.25 : 0.2), 0.95 ],
+        2: [ (n < 4 ? 0.5  : 0.6), 0.95 ],
+        3: [ 0.4, 0.95 ],
       };
-      this.color = rgb(PLAYER_COLORS[id]);
+      this.colorArr = PLAYER_COLORS[id];
+      this.color = rgb(this.colorArr);
       this.x = xper(startpos[id][0]);
       this.y = yper(startpos[id][1]);
+      this.head = [];                                                             // cola reciente {x, y, age} para el degradé de brillo
     }
 
     // giro manual (botones / mitades de pantalla) — sólo el humano
@@ -222,40 +410,32 @@
         if (!keys[this.left])  this.leftpressed = false;
         if (!keys[this.right]) this.rightpressed = false;
       } else {
-        // ── IA ──
-        this.dire_incd += dt;
-        this.aiturn_incd += dt;
+        // ── IA por ANTICIPACIÓN + aleatoriedad ──
+        // Decide a una cadencia fija (no cada frame, así no tiembla). Mide el espacio libre hacia
+        // adelante / izquierda / derecha muestreando varios px (clearDist), y le suma ruido para que la
+        // navegación no sea determinista. Tres comportamientos:
+        //   · pánico: si el frente está casi tapado, dobla ya al lado más despejado;
+        //   · errático: a veces dobla a un lado al azar — pero sólo si NO es muerte inmediata;
+        //   · codicia: si un costado está bastante más abierto que el frente, dobla hacia ahí.
+        // Si nada de eso aplica, sigue derecho (estelas largas y limpias).
+        this.ai_incd += dt;
+        if (this.ai_incd > AI_DECIDE_CD) {
+          this.ai_incd = 0;
+          const dir = this.direction, dL = (dir + 3) % 4, dR = (dir + 1) % 4;
+          const fF = clearDist(this.x, this.y, dir, AI_LOOK);
+          const sL = clearDist(this.x, this.y, dL, AI_LOOK) + ri(0, AI_JITTER);
+          const sR = clearDist(this.x, this.y, dR, AI_LOOK) + ri(0, AI_JITTER);
+          const openSide = sL >= sR ? dL : dR;
+          const blockedSide = sL >= sR ? dR : dL;
 
-        if (this.dire_incd > this.dire_cdtime) {
-          d[0][5] = ri(-50, -5);
-          d[1][4] = ri(5, 50);
-          d[2][5] = ri(5, 50);
-          d[3][4] = ri(-50, -5);
-          this.dire_incd = 0;
-        }
-
-        // si el frente (2 px) o el scout están ocupados → girar a un lado libre, al azar
-        if (this.aiturn_incd > this.aiturn_cdtime) {
-          const dir = this.direction;
-          if (occ(this.x + d[dir][2], this.y + d[dir][3]) || occ(this.x + d[dir][4], this.y + d[dir][5])) {
-            const dL = (dir - 1 + 4) % 4, dR = (dir + 1) % 4;
-            if (ri(0, 1) === 0 && occ(this.x + d[dL][2], this.y + d[dL][3]) === 0) {
-              this.direction = dL; this.aiturn_incd = 0;
-            } else if (occ(this.x + d[dR][2], this.y + d[dR][3]) === 0) {
-              this.direction = dR; this.aiturn_incd = 0;
-            }
-          }
-        }
-
-        // de vez en cuando (1/1500) un giro espontáneo hacia un lado libre
-        if (this.aiturn_incd > this.aiturn_cdtime) {
-          if (ri(0, 1500) === 0) {
-            const dir = this.direction, dL = (dir - 1 + 4) % 4, dR = (dir + 1) % 4;
-            if (ri(0, 1) === 0 && occ(this.x + d[dL][2], this.y + d[dL][3]) === 0) {
-              this.direction = dL; this.aiturn_incd = 0;
-            } else if (occ(this.x + d[dR][2], this.y + d[dR][3]) === 0) {
-              this.direction = dR; this.aiturn_incd = 0;
-            }
+          if (fF < AI_PANIC) {                                                     // peligro adelante → al lado más despejado (seguro)
+            if (safeAhead(this.x, this.y, openSide)) this.direction = openSide;
+            else if (safeAhead(this.x, this.y, blockedSide)) this.direction = blockedSide;
+          } else if (Math.random() < AI_ERRATIC) {                                 // capricho errático, sólo si no es suicidio
+            const side = Math.random() < 0.5 ? dL : dR;
+            if (safeAhead(this.x, this.y, side)) this.direction = side;
+          } else if (Math.max(sL, sR) > fF + AI_GREED) {                           // un costado mucho más abierto → doblar por gusto
+            if (safeAhead(this.x, this.y, openSide)) this.direction = openSide;
           }
         }
       }
@@ -271,18 +451,40 @@
       if (occ(this.x + d[dir][2], this.y + d[dir][3])) { this.alive = false; return; }
 
       if (!this.stop) {
-        this.x += d[dir][0] * dt;
-        this.y += d[dir][1] * dt;
+        this.x += d[dir][0] * dt * SPEED_MULT;
+        this.y += d[dir][1] * dt * SPEED_MULT;
+        this.head.push({ x: this.x, y: this.y, age: 0 });                         // nuevo punto de cabeza (brillante)
       }
     }
 
-    draw() { stamp(this.x, this.y, this.color); }
+    draw() { stamp(this.x, this.y, this.color); }                                 // estampa la estela base permanente (offscreen)
+
+    // dibuja la cola reciente con degradé de brillo: cola al color base, cabeza casi blanca + glow.
+    // Se llama después de blitear la pista base, así el overlay no se acumula.
+    drawHead(dt) {
+      for (const h of this.head) h.age += dt;
+      this.head = this.head.filter(h => h.age <= HEAD_FADE);
+      if (!this.head.length) return;
+      for (const h of this.head) {
+        const t = 1 - h.age / HEAD_FADE;                                          // 1 = cabeza, 0 = cola (= color base)
+        ctx.fillStyle = rgb(hot(this.colorArr, t));
+        ctx.fillRect(Math.floor(h.x) - 1, Math.floor(h.y) - 1, 3, 3);
+      }
+      if (this.alive && !this.stop) {                                             // núcleo blanco brillante en la punta
+        const tip = this.head[this.head.length - 1];
+        ctx.save();
+        ctx.shadowColor = this.color; ctx.shadowBlur = HEAD_GLOW;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(tip.x, tip.y, HEAD_DOT, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+    }
   }
 
   // ════════════════ DRIVER (menú + estado) ════════════════
   const gh = {
     menu: true,
-    option: 0,            // 0 = Start, 1 = N Players, 2 = modo
+    option: 0,            // fila seleccionada: 0 = N Players, 1 = modo (estilo CrazyTanks)
     players: 0,           // +2 → 2..4
     mode: 0,              // 0 = Player vs AI, 1 = Player vs Player
     keypressed: false,
@@ -318,41 +520,137 @@
     for (const p of players) { p.left = CONTROLS[p.id][0]; p.right = CONTROLS[p.id][1]; }
   }
 
+  // ── MENÚ estilo CrazyTanks: cada fila es una opción que se TOCA para ciclar su valor (mitad izq/der
+  // del toque = anterior/siguiente); la seleccionada se muestra entre ‹ › con glow; el hover del mouse
+  // mueve la selección; y un botón ▶ JUGAR abajo arranca la partida. ──
+  const MENU_ROWS = { players: 0.46, mode: 0.58, play: 0.8 };                     // posición Y (fracción) de cada fila
+  function nearY(ly, frac) { return Math.abs(ly - yper(frac)) < yper(0.06); }
+  let hoverY = -1;                                                                // y del mouse sobre el canvas (CSS px); -1 = sin hover
+  function hoverRow(frac) { return hoverY >= 0 && nearY(hoverY, frac); }
+  function hoverFocus(ly) {                                                        // mover selección a la fila bajo el cursor
+    if (nearY(ly, MENU_ROWS.players)) gh.option = 0;
+    else if (nearY(ly, MENU_ROWS.mode)) gh.option = 1;
+  }
+  function menuChangeValue(delta) {
+    if (gh.option === 0) gh.players = (gh.players + delta + 3) % 3;
+    else if (gh.option === 1) gh.mode = (gh.mode + delta + 2) % 2;
+  }
+  function tapMenu(lx, ly) {                                                       // toque/click sobre el menú (coords del canvas)
+    const dir = lx < W * 0.5 ? -1 : 1;                                            // mitad izq/der = anterior/siguiente
+    if (nearY(ly, MENU_ROWS.players))   { gh.option = 0; gh.players = (gh.players + dir + 3) % 3; }
+    else if (nearY(ly, MENU_ROWS.mode)) { gh.option = 1; gh.mode = (gh.mode + dir + 2) % 2; }
+    else if (nearY(ly, MENU_ROWS.play)) startGame();
+  }
+
   function processMenu() {
     if (!gh.keypressed) {
-      if (keys.ArrowUp)   { gh.option = (gh.option - 1 + 3) % 3; gh.keypressed = true; }
-      if (keys.ArrowDown) { gh.option = (gh.option + 1) % 3;     gh.keypressed = true; }
-      if (keys.ArrowLeft) {
-        if (gh.option === 1) gh.players = (gh.players - 1 + 3) % 3;
-        if (gh.option === 2) gh.mode    = (gh.mode - 1 + 2) % 2;
-        gh.keypressed = true;
-      }
-      if (keys.ArrowRight) {
-        if (gh.option === 1) gh.players = (gh.players + 1) % 3;
-        if (gh.option === 2) gh.mode    = (gh.mode + 1) % 2;
-        gh.keypressed = true;
-      }
-      if (keys.Enter && gh.option === 0) startGame();                              // como el original: Enter arranca sólo con la opción Start elegida
+      if (keys.ArrowUp)    { gh.option = (gh.option - 1 + 2) % 2; gh.keypressed = true; }
+      if (keys.ArrowDown)  { gh.option = (gh.option + 1) % 2;     gh.keypressed = true; }
+      if (keys.ArrowLeft)  { menuChangeValue(-1); gh.keypressed = true; }
+      if (keys.ArrowRight) { menuChangeValue(+1); gh.keypressed = true; }
+      if (keys.Enter) startGame();                                                 // Enter siempre arranca (como el nivel de config de CrazyTanks)
     }
     if (!keys.ArrowLeft && !keys.ArrowRight && !keys.ArrowUp && !keys.ArrowDown) gh.keypressed = false;
   }
 
+  // Color de acento del menú: cicla SUAVE por la paleta neón con crossfade continuo (mejora del título de
+  // V2, que saltaba de color al tocar el negro). Todo el menú late con este mismo color.
+  function accentNow() {
+    const n = PLAYER_COLORS.length;
+    const pos = (T / 3.4) % n;                                                     // ~3.4 s por color
+    const i = Math.floor(pos), f = pos - i;
+    const ff = f * f * (3 - 2 * f);                                                // smoothstep
+    return lerpC(PLAYER_COLORS[i], PLAYER_COLORS[(i + 1) % n], ff);
+  }
+
+  // Título "TRON": halo radial + bloom multicapa + núcleo blanco caliente + tracking ancho. Respira.
+  function drawTitle(text, fx, fy, col) {
+    const fp = Math.round(220 * scl);
+    const px = xper(fx), py = yper(fy);
+    const breathe = 0.5 + 0.5 * Math.sin(T * 1.6);                                 // 0..1
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `900 ${fp}px ${FONT}`;
+    ctx.letterSpacing = (fp * 0.10).toFixed(1) + 'px';
+
+    // halo radial detrás (fuente de luz)
+    const haloR = fp * 1.7;
+    const g = ctx.createRadialGradient(px, py, 0, px, py, haloR);
+    g.addColorStop(0, rgba(col, 0.16 + 0.12 * breathe));
+    g.addColorStop(1, rgba(col, 0));
+    ctx.fillStyle = g;
+    ctx.fillRect(px - haloR, py - haloR, haloR * 2, haloR * 2);
+
+    // bloom: pasadas con shadowBlur decreciente, todas del color de acento
+    ctx.shadowColor = rgb(col);
+    ctx.fillStyle = rgb(col);
+    for (const blur of [40, 22, 0]) {
+      ctx.shadowBlur = blur * (0.7 + 0.3 * breathe);
+      ctx.fillText(text, px, py);
+    }
+    // núcleo blanco caliente
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.3 * breathe})`;
+    ctx.fillText(text, px, py);
+
+    ctx.restore();
+    ctx.letterSpacing = '0px';                                                     // que no contagie al resto del texto
+  }
+
+  // Fila de opción: seleccionada → color de acento, más grande, con ‹ › y glow; si no → gris apagado.
+  function drawOption(label, fy, selected, col) {
+    if (selected) createText(50, '‹  ' + label + '  ›', rgb(col), 0.5, fy, 18);
+    else          createText(46, label, 'rgb(120,128,142)', 0.5, fy, 0);
+  }
+
+  // Botón ▶ JUGAR: píldora neón con borde + glow, late y se intensifica al hover.
+  function drawPlay(fy, col) {
+    const hj = hoverRow(fy), pulse = 0.6 + 0.4 * Math.sin(T * 4);
+    const fp = Math.round(46 * scl), px = xper(0.5), py = yper(fy), text = '▶ JUGAR';
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `700 ${fp}px ${FONT}`;
+    const w = ctx.measureText(text).width, padX = fp * 0.7, padY = fp * 0.42;
+    const bw = w + padX * 2, bh = fp + padY * 2, bx = px - bw / 2, by = py - bh / 2;
+    ctx.shadowColor = rgb(col); ctx.shadowBlur = hj ? 28 : 15;
+    ctx.lineWidth = 2; ctx.strokeStyle = rgba(col, hj ? 0.95 : 0.7);
+    roundRectPath(bx, by, bw, bh, bh * 0.5);
+    ctx.fillStyle = rgba(col, hj ? 0.20 : 0.10);
+    ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = hj ? 18 : 10;
+    ctx.fillStyle = `rgba(255,255,255,${0.82 + 0.18 * pulse})`;
+    ctx.fillText(text, px, py);
+    ctx.restore();
+  }
+
   function drawMenu() {
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-    // título con color al azar cada frame (parpadeo, igual que randcolor_in_range(100,255,...))
-    createText(150, 'TRON', randColorInRange(100,255,100,255,100,255), 0.5, 0.15);
-    createText(60, 'Enter / ▶ to Start', gh.option === 0 ? 'rgb(255,255,255)' : 'rgb(128,128,128)', 0.5, 0.38);
-    createText(60, (gh.players + 2) + ' Players', gh.option === 1 ? 'rgb(255,255,255)' : 'rgb(128,128,128)', 0.5, 0.5);
-    createText(60, gh.mode === 0 ? 'Player vs AI' : 'Player vs Player', gh.option === 2 ? 'rgb(255,255,255)' : 'rgb(128,128,128)', 0.5, 0.62);
-    createText(60, 'tocá el texto para elegir', 'rgb(75,75,75)', 0.5, 0.85);
+    drawBackground();                                                             // grilla de arena (mismo look que el juego)
+    const col = accentNow();
+
+    drawTitle('TRON', 0.5, 0.2, col);
+
+    // divisor neón bajo el título
+    const dy = yper(0.35), dw = Math.min(xper(0.62), 520);
+    ctx.save();
+    ctx.strokeStyle = rgba(col, 0.55); ctx.shadowColor = rgb(col); ctx.shadowBlur = 12; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(W / 2 - dw / 2, dy); ctx.lineTo(W / 2 + dw / 2, dy); ctx.stroke();
+    ctx.restore();
+
+    drawOption((gh.players + 2) + ' Players', MENU_ROWS.players, gh.option === 0, col);
+    drawOption(gh.mode === 0 ? 'Player vs AI' : 'Player vs Player', MENU_ROWS.mode, gh.option === 1, col);
+    drawPlay(MENU_ROWS.play, col);
+
+    createText(20, 'tocá una opción para cambiarla', 'rgba(150,160,175,0.7)', 0.5, 0.9);
   }
 
   function drawWinner() {
     const w = players.find(p => p.alive);
     if (!w) return;
     const name = 'Player ' + (w.id + 1);
-    createText(60, name + ' Wins!', w.color, 0.5, 0.5);
-    createText(60, 'Enter / ▶ to Restart', 'rgb(180,180,180)', 0.5, 0.58);
+    // Ahora el fondo se repinta cada frame (no se acumula), así que el glow es seguro. Caja translúcida
+    // para que se lea sobre las estelas brillantes de atrás.
+    createText(90, name + ' Wins!', w.color, 0.5, 0.45, 22, 'rgba(0,0,0,0.55)');
+    createText(40, 'tocá o Enter para reiniciar', 'rgb(220,220,220)', 0.5, 0.58, 0, 'rgba(0,0,0,0.55)');
   }
 
   // ════════════════ INPUT ════════════════
@@ -369,43 +667,47 @@
   });
   window.addEventListener('keyup', e => { keys[e.code] = false; });
 
-  // Toque en el canvas: en menú elige según la zona vertical; en juego gira al humano (mitades) o reinicia.
+  // Toque en el canvas: en menú toca la opción (mitad izq/der cicla su valor); en juego, tocar la mitad
+  // izquierda dobla a la izquierda y la derecha dobla a la derecha; en game over reinicia.
   canvas.addEventListener('pointerdown', e => {
     const r = canvas.getBoundingClientRect();
-    const fx = (e.clientX - r.left) / W, fy = (e.clientY - r.top) / H;
+    const lx = e.clientX - r.left, ly = e.clientY - r.top;
     if (gh.menu) {
-      if (fy < 0.44)      { gh.option = 0; startGame(); }
-      else if (fy < 0.56) { gh.option = 1; gh.players = (gh.players + 1) % 3; }
-      else if (fy < 0.74) { gh.option = 2; gh.mode = (gh.mode + 1) % 2; }
+      tapMenu(lx, ly);
     } else if (gameOver()) {
       restart();
     } else {
       const p0 = players.find(p => p.id === 0 && p.alive);
-      if (p0) (fx < 0.5 ? p0.turnLeft() : p0.turnRight());
+      if (p0) (lx < W * 0.5 ? p0.turnLeft() : p0.turnRight());
     }
   });
+  // hover del mouse (desktop): mueve la selección a la fila debajo del cursor
+  canvas.addEventListener('mousemove', e => {
+    const r = canvas.getBoundingClientRect();
+    hoverY = e.clientY - r.top;
+    if (gh.menu) hoverFocus(hoverY);
+  });
+  canvas.addEventListener('mouseleave', () => { hoverY = -1; });
 
   // botones de la barra. pointerdown (no click) para que respondan aun con otro toque activo (estilo BallsWeb).
   function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
-  function menuChangeValue(delta) {
-    if (gh.option === 1) gh.players = (gh.players + delta + 3) % 3;
-    else if (gh.option === 2) gh.mode = (gh.mode + delta + 2) % 2;
-  }
   function humanTurn(side) {
     const p0 = players.find(p => p.id === 0 && p.alive);
     if (p0) (side < 0 ? p0.turnLeft() : p0.turnRight());
   }
+  // ◄ ►: en menú cambian el valor de la opción seleccionada; en juego doblan al humano.
   tappable(document.getElementById('btnLeft'),  () => { gh.menu ? menuChangeValue(-1) : humanTurn(-1); });
   tappable(document.getElementById('btnRight'), () => { gh.menu ? menuChangeValue(+1) : humanTurn(+1); });
-  tappable(document.getElementById('btnStart'), () => { gh.menu ? startGame() : (gameOver() && restart()); });
-  tappable(document.getElementById('btnHome'),  () => { if (!gh.menu) backToMenu(); });
+  tappable(document.getElementById('btnReset'), () => { if (!gh.menu) restart(); });   // reinicia la partida actual
 
   // ════════════════ LOOP ════════════════
   let lastT = performance.now();
+  let T = 0;                                                                      // tiempo acumulado (seg) para los pulsos del menú
   function loop(now) {
     if (typeof now !== 'number') now = performance.now();
     const dt = Math.min((now - lastT) / 1000, 0.01);                              // deltaT = min(real, 0.01), igual que el original
     lastT = now;
+    T += dt;                                                                      // tiempo para los pulsos del menú
 
     if (gh.menu) {
       processMenu();
@@ -414,8 +716,19 @@
       for (const p of players) {
         if (!p.alive) continue;
         p.process(dt);
-        if (p.alive) p.draw();                                                    // estampa estela sólo si sigue vivo tras el chequeo
+        if (p.alive) p.draw();                                                    // estampa estela base sólo si sigue vivo tras el chequeo
       }
+      // componer el frame: fondo + halo neón (copia desenfocada) + estela nítida + cabezas brillantes.
+      // El bloom se recalcula cada frame desde la estela offscreen, así no se acumula.
+      drawBackground();
+      if (TRAIL_BLOOM > 0) {
+        ctx.save();
+        ctx.filter = `blur(${TRAIL_BLOOM}px)`;
+        ctx.drawImage(trailCv, 0, 0, W, H);                                        // halo neón
+        ctx.restore();
+      }
+      ctx.drawImage(trailCv, 0, 0, W, H);                                          // estela nítida encima del halo
+      for (const p of players) p.drawHead(dt);
       if (aliveCount() <= 1) {                                                     // game over: frenar a todos y mostrar ganador
         for (const p of players) p.stop = true;
         drawWinner();
@@ -432,5 +745,54 @@
   setTimeout(() => hint.style.opacity = '0', 6000);
   canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
   </script>
+  <script>
+    document.getElementById('btnExit').addEventListener('click', () => {
+      if (confirm('¿Salir al menú?')) location.href = '../../';
+    });
+  </script>
+  <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+  </button>
+  <script>
+    (function() {
+      const btn = document.getElementById('btnFs');
+      btn.addEventListener('click', () => {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+        else document.exitFullscreen?.();
+      });
+      document.addEventListener('fullscreenchange', () => {
+        document.body.classList.toggle('fs-on', !!document.fullscreenElement);
+      });
+    })();
+  </script>
+  <button id="btnInfo" aria-label="info" title="Info / FPS">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <div id="fpsOverlay">FPS: --</div>
+  <script>
+    (function() {
+      let frameCount = 0, lastT = performance.now();
+      const overlay = document.getElementById('fpsOverlay');
+      function loop() {
+        frameCount++;
+        const now = performance.now();
+        if (now - lastT >= 500) {
+          const fps = Math.round(frameCount * 1000 / (now - lastT));
+          if (overlay.style.display !== 'none') overlay.textContent = 'FPS: ' + fps;
+          frameCount = 0; lastT = now;
+        }
+        requestAnimationFrame(loop);
+      }
+      loop();
+      const btn = document.getElementById('btnInfo');
+      btn.addEventListener('click', () => {
+        const showing = overlay.style.display !== 'none';
+        overlay.style.display = showing ? 'none' : 'block';
+        btn.classList.toggle('on', !showing);
+      });
+    })();
+  </script>
+
+
 </body>
 </html>

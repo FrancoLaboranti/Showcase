@@ -58,13 +58,103 @@
   #ui #btnMinus svg, #ui #btnPlus svg { width: 24px; height: 24px; }
   /* visual indicator for toggled-on state */
   #ui button.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); }
+  /* Exit button — vuelta al menú raíz */
+  #btnExit {
+    position: absolute;
+    left: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
+  /* === Bar layout: exit-left, main-center, info/debug-right (refactor) === */
+  #bar {
+    display: grid !important;
+    grid-template-columns: 1fr auto 1fr !important;
+    justify-content: stretch !important;
+  }
+  #bar > #btnExit {
+    position: static !important;
+    left: auto !important; right: auto !important;
+    top: auto !important; bottom: auto !important;
+    justify-self: start;
+  }
+  #bar > #ui { justify-self: center; }
+  #bar > #btnInfo, #bar > #btnDebug, #bar > #btnHome {
+    position: static !important;
+    left: auto !important; right: auto !important;
+    top: auto !important; bottom: auto !important;
+    justify-self: end;
+  }
+  /* Pantalla completa — esquina arriba-der, flotante. */
+  #btnFs {
+    position: absolute;
+    right: 6px;
+    top: calc(env(safe-area-inset-top) + 6px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnFs svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnFs:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  #btnFs .ic-exit { display: none; }
+  body.fs-on #btnFs .ic-enter { display: none; }
+  body.fs-on #btnFs .ic-exit  { display: block; }
+  /* Info (FPS) — esquina abajo-der, flotante. */
+  #btnInfo {
+    position: absolute;
+    right: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.45);
+    background: rgba(0,0,0,0.55);
+    color: rgba(255,255,255,0.85);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnInfo:active, #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+  #fpsOverlay {
+    position: absolute;
+    right: 40px;
+    bottom: calc(env(safe-area-inset-bottom) + 8px);
+    font-family: monospace;
+    font-size: 13px;
+    color: rgba(255,255,255,0.9);
+    background: rgba(0,0,0,0.6);
+    padding: 3px 8px;
+    border-radius: 4px;
+    pointer-events: none;
+    display: none;
+    z-index: 9;
+  }
+
+
+
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
   <div id="hint">levantá una bola y soltala · +/− bolas · 👻 atraviesa · ⏸ congela</div>
   <div id="bar">
-    <div id="ui">
+  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+<div id="ui">
       <button id="btnGhost" aria-label="fantasma" title="Modo fantasma (se atraviesan)">
         <svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 3a7 7 0 0 0-7 7v9l2-1.6 2 1.6 2-1.6 1 1.6 1-1.6 2 1.6 2-1.6V10a7 7 0 0 0-7-7zm-2.2 6.2a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2zm4.4 0a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"/></svg>
       </button>
@@ -462,5 +552,54 @@
   requestAnimationFrame(frame);
   setTimeout(() => hint.style.opacity = '0', 5000);
   </script>
+  <script>
+    document.getElementById('btnExit').addEventListener('click', () => {
+      if (confirm('¿Salir al menú?')) location.href = '../../';
+    });
+  </script>
+  <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+  </button>
+  <script>
+    (function() {
+      const btn = document.getElementById('btnFs');
+      btn.addEventListener('click', () => {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+        else document.exitFullscreen?.();
+      });
+      document.addEventListener('fullscreenchange', () => {
+        document.body.classList.toggle('fs-on', !!document.fullscreenElement);
+      });
+    })();
+  </script>
+  <button id="btnInfo" aria-label="info" title="Info / FPS">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <div id="fpsOverlay">FPS: --</div>
+  <script>
+    (function() {
+      let frameCount = 0, lastT = performance.now();
+      const overlay = document.getElementById('fpsOverlay');
+      function loop() {
+        frameCount++;
+        const now = performance.now();
+        if (now - lastT >= 500) {
+          const fps = Math.round(frameCount * 1000 / (now - lastT));
+          if (overlay.style.display !== 'none') overlay.textContent = 'FPS: ' + fps;
+          frameCount = 0; lastT = now;
+        }
+        requestAnimationFrame(loop);
+      }
+      loop();
+      const btn = document.getElementById('btnInfo');
+      btn.addEventListener('click', () => {
+        const showing = overlay.style.display !== 'none';
+        overlay.style.display = showing ? 'none' : 'block';
+        btn.classList.toggle('on', !showing);
+      });
+    })();
+  </script>
+
+
 </body>
 </html>
