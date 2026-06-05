@@ -170,13 +170,20 @@
     // Si ya está instalada (o se instala), ocultar el botón.
     window.addEventListener('appinstalled', () => installBtn.classList.remove('show'));
 
-    // Al volver del juego (Android back), si la página fue cacheada por bfcache,
-    // resetear cualquier orientation lock que el juego haya dejado puesto.
-    window.addEventListener('pageshow', () => {
-      if (screen.orientation && screen.orientation.unlock) {
-        try { screen.orientation.unlock(); } catch (e) {}
-      }
-    });
+    // El menú se muestra siempre en VERTICAL. En la PWA instalada Android Chrome permite
+    // fijar la orientación sin gesto; en pestaña de navegador falla en silencio (queda como
+    // esté). Lo aplicamos al cargar y al volver de un juego (pageshow cubre el bfcache),
+    // así al salir del Pong (horizontal) el menú vuelve a portrait.
+    function forcePortrait() {
+      try {
+        if (screen.orientation && screen.orientation.lock) {
+          const p = screen.orientation.lock('portrait');
+          if (p && p.catch) p.catch(() => {});
+        }
+      } catch (e) {}
+    }
+    forcePortrait();
+    window.addEventListener('pageshow', forcePortrait);
   </script>
 </body>
 </html>

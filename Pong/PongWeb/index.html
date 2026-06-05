@@ -658,9 +658,12 @@
   syncFsIcon();   // estado inicial correcto del ícono
   tappable(document.getElementById('btnFull'), () => { isFs() ? exitFs() : enterFs(); });
 
-  // PWA: forzar la orientación apenas carga, sin esperar un gesto (Android Chrome lo
-  // permite en apps instaladas) → entra directo en la orientación pedida, sin cartel.
-  if (isPWA()) lockOrient();
+  // PWA instalada: intentar landscape + Fullscreen API real apenas carga, sin esperar
+  // un toque. La orientación se fija siempre (Android Chrome lo permite sin gesto en
+  // apps instaladas); el fullscreen real depende de que Chrome acepte el request sin
+  // gesto en la PWA. Si lo rechaza, queda el fallback del primer toque (más abajo) y
+  // no se rompe nada. Así el botón ya arranca en estado "salir" si lo logra.
+  if (isPWA()) enterFs();
 
   // Primer toque (touch) en cualquier lugar = gesto válido para pedir Fullscreen API
   // real y ganar el área del notch. Reintenta en cada toque hasta lograrlo; una vez
@@ -1127,7 +1130,11 @@
   </script>
   <script>
     document.getElementById('btnExit').addEventListener('click', () => {
-      if (confirm('¿Salir al menú?')) location.href = '../../';
+      if (confirm('¿Salir al menú?')) {
+        // desbloquear la orientación antes de volver: el menú del Arcade es vertical
+        try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch {}
+        location.href = '../../Arcade/';   // menú de la app (no el índice raíz "sin app")
+      }
     });
   </script>
 </body>
