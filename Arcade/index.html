@@ -236,35 +236,39 @@
         }
       } catch (e) {}
     }
-    // El menú es VERTICAL. En la PWA instalada Android Chrome permite fijar la orientación
-    // sin gesto; en pestaña de navegador falla en silencio (queda como esté).
-    lockOrient('portrait');
-    window.addEventListener('pageshow', () => { if (!player.classList.contains('show')) lockOrient('portrait'); });
+    let entered = false;   // true tras tocar "ENTRAR" (gesto inicial de la app)
 
-    // Fullscreen real: requiere un gesto, así que no se puede en la carga. Lo pedimos en el
-    // PRIMER toque dentro del menú → el menú ya queda inmersivo y, al abrir un juego, no se
-    // vuelve a pedir. Resultado: el aviso nativo de Chrome aparece una sola vez, al empezar
-    // a usar la app, en vez de al abrir el primer juego.
+    // Fullscreen real: requiere un gesto, así que no se puede en la carga. Se pide en el
+    // toque de la pantalla de entrada → el menú ya queda inmersivo y abrir un juego no lo
+    // vuelve a pedir. Así el aviso nativo de Chrome sale una sola vez, al abrir la app.
     let fsAsked = false;
     function requestFs() {
       if (fsAsked || document.fullscreenElement || !root.requestFullscreen) return;
       fsAsked = true;
+      // OJO: requestFullscreen debe llamarse SÍNCRONO dentro del handler del gesto (un .then
+      // previo perdería la "user activation" y Chrome lo rechazaría).
       try { const p = root.requestFullscreen(); if (p && p.catch) p.catch(() => { fsAsked = false; }); }
       catch (e) { fsAsked = false; }
     }
     // si en algún momento salimos de fullscreen, permitir volver a pedirlo
     document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) fsAsked = false; });
-    // el primer gesto en el menú lo dispara (capture: corre antes que el click del tile)
-    document.addEventListener('pointerdown', requestFs, true);
+    // volver de un juego (bfcache incl.) re-fija portrait, pero recién después de entrar
+    window.addEventListener('pageshow', () => { if (entered && !player.classList.contains('show')) lockOrient('portrait'); });
 
-    // Pantalla de entrada: el toque acá es el gesto inicial → activa fullscreen al abrir la
-    // app (y deja el aviso de Chrome en este punto, no al abrir el primer juego).
+    // Pantalla de entrada: usamos 'click' (gesto COMPLETO, más confiable que pointerdown para
+    // activar fullscreen) y ocultamos el splash recién cuando el fullscreen se aplicó —
+    // ocultarlo en el mismo gesto puede cancelar el pedido en algunos Android Chrome.
     const enterEl = document.getElementById('enter');
-    enterEl.addEventListener('pointerdown', () => {
-      requestFs();
-      lockOrient('portrait');
-      enterEl.classList.add('hide');
-    });
+    function enterApp() {
+      if (entered) return;
+      entered = true;
+      requestFs();              // pide fullscreen con la activación de este click
+      lockOrient('portrait');   // el menú es vertical
+      const hide = () => enterEl.classList.add('hide');
+      document.addEventListener('fullscreenchange', hide, { once: true });
+      setTimeout(hide, 500);    // fallback (desktop / si no hay fullscreen, igual entra al menú)
+    }
+    enterEl.addEventListener('click', enterApp);
 
     // Lanzar un juego: el TAP del tile es un gesto válido → pedimos Fullscreen API real
     // (gana el notch + oculta la barra de estado) y bloqueamos la orientación del juego.
