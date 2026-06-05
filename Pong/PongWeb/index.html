@@ -106,6 +106,8 @@
   #btnFull .ic-exit { display: none; }
   body.fs-on #btnFull .ic-enter { display: none; }
   body.fs-on #btnFull .ic-exit  { display: block; }
+  /* Embebido en la shell del Arcade: la shell maneja el fullscreen → el botón sobra. */
+  body.embedded #btnFull { display: none; }
 
   /* Aviso de orientación: Pong se juega en HORIZONTAL. Se muestra (vía JS) cuando la pantalla está vertical. */
   #rotate {
@@ -117,7 +119,32 @@
   #rotate svg { width: 88px; height: 88px; color: #78c8ff; animation: rotatehint 2.2s ease-in-out infinite; }
   #rotate p { font-size: 18px; letter-spacing: 0.05em; line-height: 1.6; }
   @keyframes rotatehint { 0%, 55%, 100% { transform: rotate(0deg); } 25%, 40% { transform: rotate(-90deg); } }
-  /* Exit button — vuelta al menú raíz */
+
+  /* Confirmación in-game de salida al menú (reemplaza el confirm() del navegador) */
+  #exitConfirm {
+    position: absolute; inset: 0; z-index: 60; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 28px;
+    background: rgba(3,5,12,0.82); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+    text-align: center; padding: 24px;
+  }
+  #exitConfirm.show { display: flex; }
+  #exitConfirm p {
+    margin: 0; font-size: 22px; letter-spacing: 0.06em; color: #eaf2ff;
+    text-shadow: 0 0 14px rgba(120,200,255,0.45);
+  }
+  #exitConfirm .row { display: flex; gap: 16px; }
+  #exitConfirm button {
+    font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: 0.12em;
+    padding: 12px 28px; border-radius: 999px; cursor: pointer; color: #eaf2ff;
+    background: rgba(0,0,0,0.4); transition: transform 0.08s, background 0.15s, border-color 0.15s;
+  }
+  #exitConfirm button:active { transform: scale(0.94); }
+  #exitConfirm .yes { border: 1px solid rgba(240,90,95,0.6);  color: #ff9094; }
+  #exitConfirm .yes:active { background: rgba(240,90,95,0.25); border-color: rgba(240,90,95,0.9); }
+  #exitConfirm .no  { border: 1px solid rgba(120,200,255,0.5); color: #9fd4ff; }
+  #exitConfirm .no:active  { background: rgba(120,200,255,0.22); border-color: rgba(120,200,255,0.85); }
+
+  /* Exit button — vuelta al menú del Arcade */
   #btnExit {
     position: absolute;
     left: calc(6px + env(safe-area-inset-left));
@@ -193,6 +220,15 @@
   <div class="pad" id="padR" aria-label="control jugador 1">
     <button class="ctl" data-side="R" data-dir="up" aria-label="subir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg></button>
     <button class="ctl" data-side="R" data-dir="dn" aria-label="bajar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg></button>
+  </div>
+
+  <!-- Confirmación in-game de salida al menú -->
+  <div id="exitConfirm">
+    <p>¿Salir al menú?</p>
+    <div class="row">
+      <button class="no"  id="exitNo">Seguir</button>
+      <button class="yes" id="exitYes">Salir</button>
+    </div>
   </div>
 
   <!-- Aviso: girá el teléfono a horizontal -->
@@ -658,12 +694,16 @@
   syncFsIcon();   // estado inicial correcto del ícono
   tappable(document.getElementById('btnFull'), () => { isFs() ? exitFs() : enterFs(); });
 
-  // PWA instalada: intentar landscape + Fullscreen API real apenas carga, sin esperar
-  // un toque. La orientación se fija siempre (Android Chrome lo permite sin gesto en
-  // apps instaladas); el fullscreen real depende de que Chrome acepte el request sin
-  // gesto en la PWA. Si lo rechaza, queda el fallback del primer toque (más abajo) y
-  // no se rompe nada. Así el botón ya arranca en estado "salir" si lo logra.
-  if (isPWA()) enterFs();
+  // ¿Corremos embebidos en la shell del Arcade (iframe)? La shell ya pidió Fullscreen API
+  // real + bloqueó la orientación al tocar el tile, así que el juego NO los toca (evita
+  // fullscreen anidado y peleas de orientación). Sólo aplica cuando se abre suelto.
+  const EMBEDDED = (window.self !== window.top);
+  if (EMBEDDED) document.body.classList.add('embedded');
+
+  // Abierto suelto + PWA instalada: intentar landscape + Fullscreen API real apenas carga.
+  // La orientación se fija siempre; el fullscreen real depende de que Chrome lo acepte sin
+  // gesto. Si lo rechaza, queda el fallback del primer toque (más abajo) y no se rompe nada.
+  if (!EMBEDDED && isPWA()) enterFs();
 
   // Primer toque (touch) en cualquier lugar = gesto válido para pedir Fullscreen API
   // real y ganar el área del notch. Reintenta en cada toque hasta lograrlo; una vez
@@ -675,7 +715,7 @@
     if (isFs()) { fsOnce = true; return; }
     enterFs();
   }
-  document.addEventListener('pointerdown', tryAutoFs, true);
+  if (!EMBEDDED) document.addEventListener('pointerdown', tryAutoFs, true);
   document.addEventListener('fullscreenchange', () => { if (isFs()) fsOnce = true; });
 
   function togglePause() {
@@ -1129,12 +1169,22 @@
   setTimeout(() => hint.style.opacity = '0', 5000);
   </script>
   <script>
-    document.getElementById('btnExit').addEventListener('click', () => {
-      if (confirm('¿Salir al menú?')) {
-        // desbloquear la orientación antes de volver: el menú del Arcade es vertical
-        try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch {}
-        location.href = '../../Arcade/';   // menú de la app (no el índice raíz "sin app")
+    // Salida al menú con un overlay in-game (no el confirm() del navegador).
+    const exitConfirm = document.getElementById('exitConfirm');
+    const closeExit = () => exitConfirm.classList.remove('show');
+    document.getElementById('btnExit').addEventListener('click', () => exitConfirm.classList.add('show'));
+    document.getElementById('exitNo').addEventListener('click', closeExit);
+    // tocar el fondo (fuera de los botones) también cancela
+    exitConfirm.addEventListener('click', (e) => { if (e.target === exitConfirm) closeExit(); });
+    document.getElementById('exitYes').addEventListener('click', () => {
+      // Dentro de la shell del Arcade (iframe): le avisamos para que cierre el reproductor
+      // SIN navegar (mantiene el fullscreen de la sesión). Suelto: navegamos al menú.
+      if (window.self !== window.top) {
+        try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {}
+        return;
       }
+      try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch {}
+      location.href = '../../Arcade/';   // menú de la app (no el índice raíz "sin app")
     });
   </script>
 </body>

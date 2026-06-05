@@ -116,6 +116,13 @@
     }
     #installBtn:active { transform: scale(0.96); border-color: #ffd95a; }
     #installBtn.show { display: inline-block; }
+
+    /* Reproductor (shell): el juego corre en un iframe a pantalla completa SIN navegar,
+       así la Fullscreen API pedida en el tap del tile se mantiene toda la sesión (gana el
+       notch y oculta la barra de estado). Cubre todo, sin safe-area, para full-bleed. */
+    #player { position: fixed; inset: 0; z-index: 1000; display: none; background: #000; }
+    #player.show { display: block; }
+    #frame { width: 100%; height: 100%; border: 0; display: block; }
   </style>
 </head>
 <body>
@@ -126,8 +133,9 @@
   </header>
 
   <main>
-    <div class="grid">
-      <a class="tile" href="../Pong/PongWeb/">
+    <div class="grid" id="grid">
+      <!-- data-src: ruta del juego (se carga en el iframe) · data-orient: orientación forzada -->
+      <a class="tile" href="../Pong/PongWeb/" data-src="../Pong/PongWeb/" data-orient="landscape">
         <svg class="tile-art" viewBox="0 0 100 70" aria-hidden="true">
           <rect x="50" y="0" width="1.5" height="70" fill="#262a36"/>
           <rect x="6"  y="20" width="6" height="30" rx="1.5" fill="#e6e9ef"/>
@@ -142,6 +150,9 @@
   </main>
 
   <footer>v0.1 · prototipo</footer>
+
+  <!-- Reproductor: el juego vive acá adentro, sin navegar (mantiene el fullscreen) -->
+  <div id="player"><iframe id="frame" allow="fullscreen; accelerometer; gyroscope; autoplay" allowfullscreen></iframe></div>
 
   <script>
     // Registrar service worker (necesario para que la PWA sea "instalable")
@@ -170,20 +181,58 @@
     // Si ya está instalada (o se instala), ocultar el botón.
     window.addEventListener('appinstalled', () => installBtn.classList.remove('show'));
 
-    // El menú se muestra siempre en VERTICAL. En la PWA instalada Android Chrome permite
-    // fijar la orientación sin gesto; en pestaña de navegador falla en silencio (queda como
-    // esté). Lo aplicamos al cargar y al volver de un juego (pageshow cubre el bfcache),
-    // así al salir del Pong (horizontal) el menú vuelve a portrait.
-    function forcePortrait() {
+    // ── ORIENTACIÓN + REPRODUCTOR (shell) ─────────────────────────────────────
+    const player = document.getElementById('player');
+    const frame  = document.getElementById('frame');
+    const root   = document.documentElement;
+
+    function lockOrient(o) {
       try {
         if (screen.orientation && screen.orientation.lock) {
-          const p = screen.orientation.lock('portrait');
+          const p = screen.orientation.lock(o);
           if (p && p.catch) p.catch(() => {});
         }
       } catch (e) {}
     }
-    forcePortrait();
-    window.addEventListener('pageshow', forcePortrait);
+    // El menú es VERTICAL. En la PWA instalada Android Chrome permite fijar la orientación
+    // sin gesto; en pestaña de navegador falla en silencio (queda como esté).
+    lockOrient('portrait');
+    window.addEventListener('pageshow', () => { if (!player.classList.contains('show')) lockOrient('portrait'); });
+
+    // Lanzar un juego: el TAP del tile es un gesto válido → pedimos Fullscreen API real
+    // (gana el notch + oculta la barra de estado) y bloqueamos la orientación del juego,
+    // y lo cargamos en el iframe SIN navegar, así el fullscreen se mantiene toda la sesión.
+    function launch(src, orient) {
+      try { const p = root.requestFullscreen && root.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+      lockOrient(orient || 'landscape');
+      frame.src = src;
+      player.classList.add('show');
+      history.pushState({ arcadeGame: true }, '');   // el "atrás" de Android cierra el juego
+    }
+    function closeGame() {
+      player.classList.remove('show');
+      frame.src = 'about:blank';        // descarga el juego (se recrea al volver a entrar)
+      lockOrient('portrait');           // menú vertical — NO salimos de fullscreen
+    }
+
+    // Cada tile con data-src lanza su juego (preventDefault del <a>, que queda de fallback
+    // si se abre la página suelta sin la shell).
+    document.getElementById('grid').addEventListener('click', (e) => {
+      const tile = e.target.closest('.tile[data-src]');
+      if (!tile) return;
+      e.preventDefault();
+      launch(tile.dataset.src, tile.dataset.orient);
+    });
+
+    // El juego pide salir (botón ✕ in-game) vía postMessage. Pasa por history.back para
+    // compartir el camino con el botón "atrás" de Android.
+    window.addEventListener('message', (e) => {
+      if (e.data && e.data.type === 'arcade:exit') {
+        if (history.state && history.state.arcadeGame) history.back();
+        else closeGame();
+      }
+    });
+    window.addEventListener('popstate', () => { if (player.classList.contains('show')) closeGame(); });
   </script>
 </body>
 </html>
