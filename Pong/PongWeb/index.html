@@ -586,7 +586,7 @@
   // Toque directo en el canvas: reinicia (fin de partida) o reanuda (pausa). El juego se maneja
   // con los botones de control, así que acá sólo viven esos atajos + descartar el hint.
   canvas.addEventListener('pointerdown', e => {
-    tryAutoFs(e);                          // primer toque en mobile → pantalla completa
+    // (el auto-fullscreen lo dispara el listener global de pointerdown en captura)
     hint.style.opacity = '0';
     if (state === 'over') newMatch();
     else if (state === 'paused') togglePause();
@@ -614,47 +614,66 @@
   tappable(document.getElementById('btnReset'), () => newMatch());
   tappable(btnInfo, () => { showDebug = !showDebug; btnInfo.classList.toggle('on', showDebug); });
 
-  // ── PANTALLA COMPLETA (como CrazyTanks) ──
-  // En mobile saca la barra del navegador. iOS Safari no soporta la Fullscreen API en elementos
-  // arbitrarios → ahí falla en silencio (queda la alternativa de "agregar a pantalla de inicio").
+  // ── PANTALLA COMPLETA + ORIENTACIÓN ───────────────────────────────────────
+  // Bloque auto-contenido y REUTILIZABLE. Para portarlo a otro juego: copialo tal
+  // cual y cambiá ORIENT ('landscape' | 'portrait'); el resto funciona igual. El
+  // launcher (Arcade) ya desbloquea la orientación al volver, en su 'pageshow'.
+  //
+  // Comportamiento en Android Chrome:
+  //   • PWA instalada → bloquea la orientación al CARGAR, sin gesto: entra directo
+  //     en la orientación pedida y NO muestra el cartel "girá el teléfono". El área
+  //     del notch/cámara se gana pidiendo Fullscreen API real en el primer toque
+  //     (misma resolución que da el botón).
+  //   • Pestaña del navegador → Fullscreen API + lock recién en el primer gesto
+  //     (el navegador no permite ninguno de los dos sin interacción del usuario).
+  //   • iOS Safari / sin soporte → falla en silencio y queda el cartel #rotate.
+  const ORIENT  = 'landscape';   // ← orientación forzada de ESTE juego
   const fsTarget = document.documentElement;
   const _reqFs  = fsTarget.requestFullscreen || fsTarget.webkitRequestFullscreen;
   const _exitFs = document.exitFullscreen || document.webkitExitFullscreen;
   const isFs    = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
-  // Lock de orientación: en Android Chrome SOLO funciona estando en pantalla completa.
-  // iOS Safari no lo soporta (falla en silencio). Lo intentamos tras entrar a fullscreen.
-  const lockLandscape = () => {
+  const isPWA   = () => (window.matchMedia && (matchMedia('(display-mode: fullscreen)').matches
+                          || matchMedia('(display-mode: standalone)').matches))
+                          || window.navigator.standalone === true;
+
+  const lockOrient = () => {
     try {
       const so = screen.orientation;
-      if (so && so.lock) { const p = so.lock('landscape'); if (p && p.catch) p.catch(() => {}); }
+      if (so && so.lock) { const p = so.lock(ORIENT); if (p && p.catch) p.catch(() => {}); }
     } catch {}
   };
   const unlockOrient = () => { try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch {} };
   const enterFs = () => {
-    if (!_reqFs) { lockLandscape(); return; }
-    const p = _reqFs.call(fsTarget);
-    // Intentar el lock pase lo que pase: si ya estamos fullscreen (PWA instalada) el
-    // requestFullscreen puede rechazar, pero el lock de orientación igual debe correr.
-    if (p && p.then) p.then(lockLandscape, lockLandscape);
-    else lockLandscape();
+    let p; try { p = _reqFs && _reqFs.call(fsTarget); } catch { p = null; }
+    // El lock va entre o no a fullscreen (en PWA el request puede rechazar por estar
+    // ya inmersa, pero la orientación igual debe quedar fijada).
+    if (p && p.then) p.then(lockOrient, lockOrient);
+    else lockOrient();
   };
-  const exitFs  = () => { unlockOrient(); if (_exitFs) _exitFs.call(document); };
+  const exitFs  = () => { unlockOrient(); try { if (_exitFs) _exitFs.call(document); } catch {} };
+
   function syncFsIcon() { document.body.classList.toggle('fs-on', isFs()); }
   document.addEventListener('fullscreenchange', syncFsIcon);
   document.addEventListener('webkitfullscreenchange', syncFsIcon);
+  syncFsIcon();   // estado inicial correcto del ícono
   tappable(document.getElementById('btnFull'), () => { isFs() ? exitFs() : enterFs(); });
 
-  // Auto pantalla completa + landscape en el primer toque (sólo touch; en desktop no se fuerza).
-  let autoFsDone = false;
+  // PWA: forzar la orientación apenas carga, sin esperar un gesto (Android Chrome lo
+  // permite en apps instaladas) → entra directo en la orientación pedida, sin cartel.
+  if (isPWA()) lockOrient();
+
+  // Primer toque (touch) en cualquier lugar = gesto válido para pedir Fullscreen API
+  // real y ganar el área del notch. Reintenta en cada toque hasta lograrlo; una vez
+  // conseguido NO vuelve a forzar (así no pelea si salís a propósito con el botón).
+  let fsOnce = false;
   function tryAutoFs(e) {
-    if (autoFsDone) return;
-    autoFsDone = true;
-    if (e && e.pointerType === 'mouse') return;
-    if (!isFs()) enterFs(); else lockLandscape();
+    if (fsOnce) return;
+    if (e && e.pointerType === 'mouse') return;   // en desktop no forzamos
+    if (isFs()) { fsOnce = true; return; }
+    enterFs();
   }
-  // El primer toque en CUALQUIER lugar (canvas o botones) cuenta como gesto válido para
-  // pedir fullscreen — así también dispara si entrás tocando un control en vez del canvas.
-  document.addEventListener('pointerdown', tryAutoFs, { capture: true, once: true });
+  document.addEventListener('pointerdown', tryAutoFs, true);
+  document.addEventListener('fullscreenchange', () => { if (isFs()) fsOnce = true; });
 
   function togglePause() {
     if (state === 'play') state = 'paused';
