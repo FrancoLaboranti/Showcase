@@ -217,14 +217,11 @@
     // Si ya está instalada (o se instala), ocultar el botón.
     window.addEventListener('appinstalled', () => installBtn.classList.remove('show'));
 
-    // Salir de la app. window.close() sólo cierra una PWA si NO hay historial; como abrir un
-    // juego hace pushState, después queda bloqueado. Fallback: en el menú siempre estamos en
-    // la primera entrada del historial, así que history.back() sale de la app igual que el
-    // botón "atrás" de Android en la raíz. (El botón sólo es tocable en el menú: durante un
-    // juego queda tapado por #player.)
+    // Salir de la app. window.close() cierra la PWA SIEMPRE QUE no haya historial de
+    // navegación — por eso los juegos NO usan pushState (ver launch/closeGame), así el
+    // historial queda en 1 y este botón siempre puede cerrar la app.
     document.getElementById('exitApp').addEventListener('click', () => {
       try { window.close(); } catch (e) {}
-      history.back();
     });
 
     // ── ORIENTACIÓN + REPRODUCTOR (shell) ─────────────────────────────────────
@@ -270,8 +267,10 @@
 
     // Lanzar un juego: el TAP del tile es un gesto válido → pedimos Fullscreen API real
     // (gana el notch + oculta la barra de estado) y bloqueamos la orientación del juego.
-    // Creamos un IFRAME NUEVO por juego: su carga inicial NO agrega entrada al historial
-    // (cambiar .src de un iframe existente sí lo hace, y eso rompía el back en el 2º ciclo).
+    // Creamos un IFRAME NUEVO por juego (su carga inicial no agrega entrada al historial) y
+    // NO usamos pushState: así el historial queda en 1 y el botón "salir de la app" siempre
+    // puede cerrar la PWA. Contrapartida elegida: el botón atrás del cel dentro de un juego
+    // cierra la app (para volver al menú se usa la ✕ del juego).
     function launch(src, orient) {
       // normalmente ya entramos a fullscreen en el splash → acá sólo fija la orientación;
       // si no (fallback), pide fullscreen y lockea después.
@@ -283,13 +282,12 @@
       frame.src = src;
       player.appendChild(frame);
       player.classList.add('show');
-      history.pushState({ arcadeGame: true }, '');   // el "atrás" de Android cierra el juego
     }
     function closeGame() {
       if (!player.classList.contains('show')) return;   // evita doble cierre
       player.classList.remove('show');
-      if (frame) { frame.remove(); frame = null; }       // destruye el juego (y su historial)
-      lockOrient('portrait');                            // menú vertical — NO salimos de fullscreen
+      if (frame) { frame.remove(); frame = null; }       // destruye el juego
+      lockOrient('portrait');                            // menú vertical
     }
 
     // Cada tile con data-src lanza su juego (preventDefault del <a>, que queda de fallback
@@ -301,15 +299,23 @@
       launch(tile.dataset.src, tile.dataset.orient);
     });
 
-    // El juego pide salir (botón ✕ in-game) vía postMessage. Pasa por history.back para
-    // compartir el camino con el botón "atrás" de Android (popstate → closeGame).
+    // Mensajes del juego embebido:
+    //  • arcade:exit       → cerrar el reproductor (volver al menú)
+    //  • arcade:fullscreen → toggle del fullscreen real (lo maneja la shell, no el iframe)
     window.addEventListener('message', (e) => {
-      if (e.data && e.data.type === 'arcade:exit') {
-        if (history.state && history.state.arcadeGame) history.back();
-        else closeGame();
+      if (!e.data) return;
+      if (e.data.type === 'arcade:exit') { closeGame(); return; }
+      if (e.data.type === 'arcade:fullscreen') {
+        if (document.fullscreenElement) { try { document.exitFullscreen(); } catch (x) {} }
+        else if (root.requestFullscreen) { try { const p = root.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (x) {} }
       }
     });
-    window.addEventListener('popstate', () => { if (player.classList.contains('show')) closeGame(); });
+    // Avisar al juego el estado de fullscreen para que sincronice su ícono.
+    document.addEventListener('fullscreenchange', () => {
+      if (frame && frame.contentWindow) {
+        try { frame.contentWindow.postMessage({ type: 'arcade:fs-state', on: !!document.fullscreenElement }, '*'); } catch (x) {}
+      }
+    });
   </script>
 </body>
 </html>
