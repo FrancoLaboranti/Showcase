@@ -273,7 +273,14 @@
     const enterMsg = enterEl.querySelector('.es');
     function enterApp() {
       requestFs().then(
-        () => { entered = true; enterEl.classList.add('hide'); },
+        () => {
+          // Lock portrait RECIÉN acá: en Android Chrome el lock sólo agarra confiable estando
+          // en fullscreen. (Va en el .then, después de que el request resolvió → no revive el
+          // bug de 2 toques.) Una vez puesto, girar el teléfono ya no rota la vista.
+          lockOrient('portrait');
+          entered = true;
+          enterEl.classList.add('hide');
+        },
         (e) => { enterMsg.textContent = 'FS: ' + ((e && (e.name + (e.message ? ' · ' + e.message : ''))) || e); }
       );
     }
@@ -325,8 +332,10 @@
         else if (root.requestFullscreen) { try { const p = root.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (x) {} }
       }
     });
-    // Avisar al juego el estado de fullscreen para que sincronice su ícono.
+    // Al (re)entrar a fullscreen, re-fijar portrait (el lock sólo agarra confiable en fullscreen,
+    // y un toggle pudo soltarlo). Además avisamos al juego el estado para que sincronice el ícono.
     document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement) lockOrient('portrait');
       if (frame && frame.contentWindow) {
         try { frame.contentWindow.postMessage({ type: 'arcade:fs-state', on: !!document.fullscreenElement }, '*'); } catch (x) {}
       }
