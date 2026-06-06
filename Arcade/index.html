@@ -217,10 +217,14 @@
     // Si ya está instalada (o se instala), ocultar el botón.
     window.addEventListener('appinstalled', () => installBtn.classList.remove('show'));
 
-    // Salir de la app: en una PWA instalada (ventana de app) window.close() la cierra.
-    // En una pestaña común el navegador no deja cerrarla por script y no pasa nada.
+    // Salir de la app. window.close() sólo cierra una PWA si NO hay historial; como abrir un
+    // juego hace pushState, después queda bloqueado. Fallback: en el menú siempre estamos en
+    // la primera entrada del historial, así que history.back() sale de la app igual que el
+    // botón "atrás" de Android en la raíz. (El botón sólo es tocable en el menú: durante un
+    // juego queda tapado por #player.)
     document.getElementById('exitApp').addEventListener('click', () => {
       try { window.close(); } catch (e) {}
+      history.back();
     });
 
     // ── ORIENTACIÓN + REPRODUCTOR (shell) ─────────────────────────────────────
