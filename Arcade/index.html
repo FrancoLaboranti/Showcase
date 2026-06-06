@@ -123,6 +123,18 @@
     #player { position: fixed; inset: 0; z-index: 1000; display: none; background: #000; }
     #player.show { display: block; }
     #frame { width: 100%; height: 100%; border: 0; display: block; }
+    /* Juego landscape SIN rotar el dispositivo: el aparato queda en portrait (no rota → cero
+       flashes) y rotamos el iframe 90° por CSS, dándole tamaño landscape. Sostenés el celu de
+       costado. El juego adentro ve un viewport landscape; los toques se mapean solos por el
+       transform. (translateX(100vw)+rotate(90deg) con origen 0,0 hace calzar exacto la pantalla.) */
+    @media (orientation: portrait) {
+      #frame.landscape {
+        position: absolute; top: 0; left: 0;
+        width: 100vh; height: 100vw;
+        transform-origin: 0 0;
+        transform: translateX(100vw) rotate(90deg);
+      }
+    }
 
     /* Botón "salir de la app" (cierra la PWA). Sólo visible en el menú. */
     #exitApp {
@@ -244,18 +256,15 @@
     // en la carga (no junto al requestFullscreen del toque), así no reintroduce el bug de 2 toques.
     lockOrient('portrait');
 
-    // Pide Fullscreen API (si hace falta) y bloquea la orientación DESPUÉS de entrar.
-    // CLAVE del bug de los "2 toques": llamar al lock de orientación de forma SÍNCRONA junto
-    // al requestFullscreen hace que Chrome rechace el primer pedido. El lock va en el .then,
-    // recién cuando ya estamos en fullscreen. (requestFullscreen sí debe ser síncrono dentro
-    // del handler del gesto: un .then previo perdería la "user activation".)
-    function enterFullscreenThen(orient) {
-      if (document.fullscreenElement || !root.requestFullscreen) { lockOrient(orient); return Promise.resolve(); }
-      let p; try { p = root.requestFullscreen(); } catch (e) { lockOrient(orient); return Promise.reject(e); }
-      if (p && p.then) return p.then(() => lockOrient(orient), (e) => { lockOrient(orient); throw e; });
-      lockOrient(orient); return Promise.resolve();
+    // Sólo Fullscreen API (notch + barra de estado). La orientación del DISPOSITIVO NO cambia:
+    // queda en portrait fijo (lock arriba). Los juegos landscape se rotan por CSS (clase
+    // .landscape al iframe en launch), no rotando el aparato → cero flashes de orientación.
+    function requestFs() {
+      if (document.fullscreenElement || !root.requestFullscreen) return Promise.resolve();
+      let p; try { p = root.requestFullscreen(); } catch (e) { return Promise.reject(e); }
+      return (p && p.then) ? p : Promise.resolve();
     }
-    // volver de un juego (bfcache incl.) re-fija portrait, pero recién después de entrar
+    // volver de un juego (bfcache incl.) re-asegura portrait (no-op si ya está → sin flash)
     window.addEventListener('pageshow', () => { if (entered && !player.classList.contains('show')) lockOrient('portrait'); });
 
     // Pantalla de entrada (gesto inicial, vía 'click' = gesto completo). Si el fullscreen es
@@ -263,7 +272,7 @@
     const enterEl  = document.getElementById('enter');
     const enterMsg = enterEl.querySelector('.es');
     function enterApp() {
-      enterFullscreenThen('portrait').then(
+      requestFs().then(
         () => { entered = true; enterEl.classList.add('hide'); },
         (e) => { enterMsg.textContent = 'FS: ' + ((e && (e.name + (e.message ? ' · ' + e.message : ''))) || e); }
       );
@@ -277,15 +286,14 @@
     // puede cerrar la PWA. Contrapartida elegida: el botón atrás del cel dentro de un juego
     // cierra la app (para volver al menú se usa la ✕ del juego).
     function launch(src, orient) {
-      // normalmente ya entramos a fullscreen en el splash → acá sólo fija la orientación;
-      // si no (fallback), pide fullscreen y lockea después.
-      enterFullscreenThen(orient || 'landscape').catch(() => {});
+      requestFs().catch(() => {});   // fullscreen para el notch; el aparato NO rota (portrait fijo)
       frame = document.createElement('iframe');
       frame.id = 'frame';
       frame.allow = 'fullscreen; accelerometer; gyroscope; autoplay';
       frame.setAttribute('allowfullscreen', '');
-      // cache-buster: el juego carga siempre su última versión (evita que Chrome sirva una
-      // copia vieja cacheada tras un deploy).
+      // Juego landscape → rotación por CSS (no se rota el dispositivo). Portrait → normal.
+      if (orient === 'landscape') frame.classList.add('landscape');
+      // cache-buster: el juego carga siempre su última versión (evita caché vieja tras deploy).
       frame.src = src + (src.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
       player.appendChild(frame);
       player.classList.add('show');
