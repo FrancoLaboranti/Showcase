@@ -137,16 +137,22 @@
       }
     }
 
-    /* Botón "salir de la app" (cierra la PWA). Sólo visible en el menú. */
+    /* Botón "salir de la app" (cierra la PWA). Sólo visible cuando estamos en PWA instalada
+       (display-mode: standalone/fullscreen). En pestaña del browser window.close() está
+       bloqueado por Chrome, así que el botón no tendría función — se oculta para evitar
+       confusión. El usuario cierra la pestaña con la ✕ del browser como cualquier otra web. */
     #exitApp {
       position: fixed; z-index: 50;
       top: calc(env(safe-area-inset-top) + 10px);
       right: calc(env(safe-area-inset-right) + 12px);
       width: 36px; height: 36px; border-radius: 50%; padding: 0;
       border: 1px solid #3a4154; background: rgba(20,22,30,0.82); color: #9aa3b6;
-      display: flex; align-items: center; justify-content: center; cursor: pointer;
+      display: none; align-items: center; justify-content: center; cursor: pointer;
       -webkit-tap-highlight-color: transparent;
       transition: transform 0.08s, border-color 0.15s, color 0.15s;
+    }
+    @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+      #exitApp { display: flex; }
     }
     #exitApp:active { transform: scale(0.92); border-color: #ff8a8e; color: #ff8a8e; }
     #exitApp svg { width: 18px; height: 18px; display: block; }
@@ -207,7 +213,7 @@
       ['🕐', 'Reloj',         'Clock/ClockWeb/',                 'portrait'],
       ['🚜', 'Crazy Tanks',   'CrazyTanks/CrazyTanksWeb/',       'landscape'],
       ['🎆', 'Fuegos',        'Fireworks/FireworksWeb/',         'portrait'],
-      ['🎇', 'Fuegos V2',     'FireworksV2/FireworksV2Web/',     'portrait'],
+      ['🎇', 'Fuegos V2',     'FireworksV2/FireworksV2Web/',     'landscape'],
       ['🔤', 'Ahorcado',      'Hangman/HangmanWeb/',             'portrait'],
       ['💣', 'Buscaminas',    'MineSweeperGPT/MineSweeperWeb/',  'portrait'],
       ['⚪', 'Mini Canicas',  'MiniBalls/MiniBallsWeb/',         'portrait'],
@@ -218,7 +224,7 @@
       ['🐍', 'Snake',         'Snake/SnakeWeb/',                 'portrait'],
       ['💥', 'Tank Wars',     'TankWARS/TankWARSWeb/',           'landscape'],
       ['❌', 'Ta-Te-Ti',      'Tateti/TatetiWeb/',               'portrait'],
-      ['🏍️', 'Tron',          'Tron/TronWeb/',                   'landscape'],
+      ['🏍️', 'Tron',          'Tron/TronWeb/',                   'portrait'],
       ['🏍️', 'Tron V2',       'TronV2/TronV2Web/',               'landscape'],
     ];
     {
@@ -263,7 +269,9 @@
 
     // Salir de la app. window.close() cierra la PWA SIEMPRE QUE no haya historial de
     // navegación — por eso los juegos NO usan pushState (ver launch/closeGame), así el
-    // historial queda en 1 y este botón siempre puede cerrar la app.
+    // historial queda en 1 y este botón siempre puede cerrar la app. El botón sólo se
+    // muestra en PWA instalada (ver CSS @media display-mode arriba), así que en pestaña
+    // del browser no se llega a clickear.
     document.getElementById('exitApp').addEventListener('click', () => {
       try { window.close(); } catch (e) {}
     });
@@ -321,17 +329,16 @@
     const enterEl  = document.getElementById('enter');
     const enterMsg = enterEl.querySelector('.es');
     function enterApp() {
-      requestFs().then(
-        () => {
-          // Lock portrait RECIÉN acá: en Android Chrome el lock sólo agarra confiable estando
-          // en fullscreen. (Va en el .then, después de que el request resolvió → no revive el
-          // bug de 2 toques.) Con reintentos por si entramos a fullscreen desde landscape.
-          lockPortrait();
-          entered = true;
-          enterEl.classList.add('hide');
-        },
-        (e) => { enterMsg.textContent = 'FS: ' + ((e && (e.name + (e.message ? ' · ' + e.message : ''))) || e); }
-      );
+      // El splash SIEMPRE se cierra al primer click — entrar al menú no debe depender de que
+      // el browser acepte fullscreen (en desktop suele fallar silenciosamente sin causa visible
+      // para el usuario, y mantenerlo trabado en el splash es UX rota). Lock + FS son best-effort.
+      entered = true;
+      enterEl.classList.add('hide');
+      requestFs().then(lockPortrait, (e) => {
+        // Diagnóstico opcional en el footer (no bloquea al usuario)
+        const fv = document.getElementById('footerVer');
+        if (fv && e) fv.textContent = VERSION + ' · FS✗ ' + ((e.name || e) + '');
+      });
     }
     enterEl.addEventListener('click', enterApp);
 

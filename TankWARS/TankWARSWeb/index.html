@@ -30,11 +30,17 @@
     transition: opacity 0.8s; z-index: 5; padding: 0 16px;
   }
 
-  /* ── Controles táctiles (joysticks nipplejs + botones), copiados de CrazyTanks. En desktop se ocultan
-     (teclado+mouse). Cada control es un elemento independiente con su pointer capture → multi-touch. ── */
-  .pad { position: absolute; bottom: calc(6px + env(safe-area-inset-bottom)); z-index: 4; display: flex; gap: 10px; align-items: flex-end; }
-  #padL { left: 10px; flex-direction: row; }
-  #padR { right: 10px; flex-direction: row; }
+  /* ── Controles táctiles (joysticks hand-rolled + botones), al estilo CrazyTanks. En desktop se ocultan
+     (teclado+mouse). Cada joystick es una ZONA grande invisible: tocás en cualquier punto de su mitad de
+     pantalla y la palanca aparece centrada en el dedo (base + nub dibujados con DOM por createJoystick). ── */
+  #jMove { position: fixed; left: 0;  bottom: 0; width: 50%; height: 82%; z-index: 3; touch-action: none; }
+  #jAim  { position: fixed; right: 0; bottom: 0; width: 50%; height: 82%; z-index: 3; touch-action: none; }
+  /* Botones de acción (abajo-derecha), por encima de las zonas. En COLUMNA: boost (acelerar) ARRIBA del misil. */
+  #actBtns { position: fixed; right: calc(10px + env(safe-area-inset-right)); bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+  /* Safety zone: rectángulo (abajo-derecha) que cubre boost+misil con margen. Está por ENCIMA de la zona de
+     puntería (#jAim) y por DEBAJO de los botones → absorbe el toque para que la palanca der NO se active ahí,
+     pero los botones siguen funcionando. */
+  #aimSafe { position: fixed; right: 0; bottom: 0; width: calc(92px + env(safe-area-inset-right)); height: calc(150px + env(safe-area-inset-bottom)); z-index: 4; touch-action: none; }
   .btn {
     width: 44px; height: 44px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.22);
@@ -52,9 +58,7 @@
   .btn.missile { background: rgba(255,90,60,0.16); border-color: rgba(255,90,60,0.5); }
   .btn.missile:active, .btn.missile.on { background: rgba(255,90,60,0.42); }
 
-  /* Joysticks nipplejs. Contenedor NO-flex (.joywrap) para que nipplejs no calcule mal el centro. */
-  .joywrap { display: block; width: 84px; height: 84px; }
-  .joy { width: 84px; height: 84px; position: relative; touch-action: none; }
+  /* Estilizado del joystick de nipplejs: base hundida con glow + nub con relieve celeste. */
   .nipple .back {
     background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.10), rgba(255,255,255,0.03) 70%) !important;
     border: 1px solid rgba(120,200,255,0.35);
@@ -67,6 +71,33 @@
     box-shadow: 0 3px 10px rgba(0,0,0,0.5), 0 0 16px rgba(120,200,255,0.6);
     opacity: 1 !important;
   }
+  /* Palanca de puntería/disparo (derecha): tinte rojo para diferenciarla de la de movimiento (azul). */
+  #jAim .nipple .back { border-color: rgba(255,90,60,0.4); box-shadow: inset 0 2px 14px rgba(0,0,0,0.5), 0 0 16px rgba(255,90,60,0.25); }
+  #jAim .nipple .front {
+    background: radial-gradient(circle at 50% 35%, rgba(255,170,150,0.95), rgba(255,90,60,0.6) 70%) !important;
+    border: 1px solid rgba(255,180,160,0.85);
+    box-shadow: 0 3px 10px rgba(0,0,0,0.5), 0 0 16px rgba(255,90,60,0.6);
+  }
+
+  /* Placeholder TENUE de cada palanca: se ve la posición de descanso (prolija) al arrancar, antes del primer
+     toque. Apenas tocás, el joystick real (modo semi) toma el control y queda él tenue en la última posición. */
+  .joyRest {
+    position: fixed; width: 90px; height: 90px; border-radius: 50%;
+    transform: translate(-50%, 50%); z-index: 2; pointer-events: none; opacity: 0.4;
+    background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.10), rgba(255,255,255,0.03) 70%);
+    border: 1px solid rgba(120,200,255,0.35);
+    box-shadow: inset 0 2px 14px rgba(0,0,0,0.5), 0 0 16px rgba(120,200,255,0.25);
+  }
+  .joyRest::after {
+    content: ''; position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle at 50% 35%, rgba(160,220,255,0.95), rgba(120,200,255,0.55) 70%);
+    border: 1px solid rgba(180,228,255,0.8);
+  }
+  /* Posición de descanso: cerca de los botones (esquinas inferiores). Izq cerca del exit, der cerca de boost/misil. */
+  #jMoveRest { left: 13%; bottom: 13%; }
+  #jAimRest  { left: 78%; bottom: 13%; border-color: rgba(255,90,60,0.35); box-shadow: inset 0 2px 14px rgba(0,0,0,0.5), 0 0 16px rgba(255,90,60,0.25); }
+  #jAimRest::after { background: radial-gradient(circle at 50% 35%, rgba(255,170,150,0.95), rgba(255,90,60,0.6) 70%); border-color: rgba(255,180,160,0.85); }
 
   /* Botones de esquina sup-der: pantalla completa / reiniciar / debug */
   #padMenu { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); z-index: 4; display: flex; gap: 8px; }
@@ -103,6 +134,18 @@
   }
   #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
   #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
+
+  /* Overlay de controles (lo abre #btnInfo, el circle-i de arriba-derecha). Fondo oscurecido + tarjeta. */
+  #infoPanel { position: absolute; inset: 0; z-index: 15; display: none; align-items: center; justify-content: center; background: rgba(5,6,10,0.82); padding: 24px; }
+  #infoPanel.show { display: flex; }
+  #infoPanel .card { max-width: 440px; width: 100%; background: rgba(16,20,30,0.96); border: 1px solid rgba(120,200,255,0.35); border-radius: 14px; padding: 20px 24px; color: rgba(255,255,255,0.9); box-shadow: 0 0 30px rgba(120,200,255,0.25); }
+  #infoPanel h2 { margin: 0 0 10px; font-size: 17px; letter-spacing: 0.06em; color: #78c8ff; }
+  #infoPanel .desc { margin: 0 0 12px; font-size: 14px; line-height: 1.5; color: rgba(255,255,255,0.7); }
+  #infoPanel .row { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; font-size: 14px; border-bottom: 1px solid rgba(255,255,255,0.07); }
+  #infoPanel .row:last-of-type { border-bottom: none; }
+  #infoPanel .row .k { color: rgba(255,255,255,0.55); }
+  #infoPanel .row .v { color: #fff; font-weight: 600; text-align: right; }
+  #infoPanel .foot { margin-top: 14px; text-align: center; color: rgba(255,255,255,0.45); font-size: 12px; letter-spacing: 0.04em; }
 </style>
 <script>/* arcade-embed-shim: corre embebido en la shell del Arcade (iframe) */
 (function () {
@@ -123,18 +166,24 @@
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">palanca (izq) = mover en cualquier dirección · tocá la pantalla para apuntar y disparar · 🚀 misil · ⚡ boost</div>
+  <div id="hint">palanca izq = mover · palanca der = apuntar y disparar · 🚀 misil · ⚡ boost</div>
 
-  <!-- Pad izquierdo: palanca de movimiento omnidireccional + botón boost -->
-  <div id="padL" class="pad">
-    <div class="joywrap"><div class="joy" id="jMove" aria-label="mover"></div></div>
+  <!-- Zona de MOVIMIENTO: joystick semi (mitad izquierda). Tocás donde quieras y aparece ahí; queda tenue. -->
+  <div id="jMove" aria-label="mover"></div>
+  <!-- Zona de PUNTERÍA/DISPARO: joystick semi (mitad derecha). Mueve la mira sobre el mapa y dispara. -->
+  <div id="jAim" aria-label="apuntar y disparar"></div>
+  <!-- Placeholders tenues: posición de descanso prolija al arrancar (antes del primer toque). -->
+  <div id="jMoveRest" class="joyRest"></div>
+  <div id="jAimRest" class="joyRest"></div>
+
+  <!-- Safety zone: absorbe toques sobre el rectángulo de boost/misil para no activar la palanca de puntería. -->
+  <div id="aimSafe"></div>
+
+  <!-- Botones de acción (abajo-derecha): boost (acelerar) ARRIBA del misil. Van por encima de la zona de puntería. -->
+  <div id="actBtns">
     <button class="btn boost" id="btnBoost" aria-label="boost" title="Boost">
       <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
     </button>
-  </div>
-
-  <!-- Pad derecho: botón misil (el apuntado/disparo del cañón es tocando la pantalla) -->
-  <div id="padR" class="pad">
     <button class="btn missile" id="btnMissile" aria-label="misil" title="Misil">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2.5 2.5 3.5 6 3.5 10 0 2.5-1.5 5-3.5 7-2-2-3.5-4.5-3.5-7C8.5 8 9.5 4.5 12 2z"/><path d="M8.5 14 6 17l2 1M15.5 14 18 17l-2 1"/></svg>
     </button>
@@ -148,13 +197,12 @@
   <div id="padMenu">
     <button class="btn" id="btnFs" aria-label="pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
     <button class="btn" id="btnReset" aria-label="reiniciar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></button>
-    <button class="btn" id="btnDebug" aria-label="debug"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg></button>
+    <button class="btn" id="btnInfo" aria-label="controles" title="Controles"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg></button>
   </div>
 
   <!-- Física rígida (matter-js 0.19.0, vendorizado) para los cuerpos: tanques (dinámicos) y muros
        (estáticos). El manejo/apuntado/disparo/IA/daño siguen siendo hand-rolled. -->
   <script src="matter.min.js"></script>
-  <script src="nipplejs.min.js"></script>
   <script>
   // ════════════════════════════════════════════════════════════════════
   //  TankWARS — port web del shooter de tanques (Pygame → Canvas 2D).
@@ -172,6 +220,11 @@
 
   // ── TUNING KNOBS ──
   const MOVE_SPEED      = 0.12;     // velocidad tope del PLAYER (fracción sper, px/s) — palanca omnidireccional, directa
+  const DESKTOP_TURN    = 5;       // giro del cuerpo del PLAYER hacia la dirección WASD en desktop (rad/s) — suaviza el salto entre las 8 direcciones
+  const AIM_SPEED       = 0.3;     // velocidad del cursor de mira con la palanca der (mobile), fracción sper/s — la mira se mueve sobre el mapa
+  const AIM_DEAD        = 0.5;     // zona muerta de la palanca de mira: cerca del centro NO mueve; recién mueve pasada esta fracción (0..1)
+  const AIM_MAGNET      = 0.08;    // imán de la mira hacia el enemigo más cercano (fracción/frame@60) — suave, no clavado
+  const AIM_MAGNET_RANGE= 0.1;     // radio de captura del imán (fracción sper): sólo engancha si la mira ya está así de cerca
   const THRUST          = 0.0096;   // empuje de los ENEMIGOS por frame@60
   const BOOST_MULT      = 1.9;
   const TURN_RATE       = 0.000125; // giro del cuerpo de los ENEMIGOS (con inercia)
@@ -187,6 +240,7 @@
   const SHIELD_CAP      = 5;
   const PLAYER_R        = 0.0128;   // radio en fracción sper
   const SHOT_SPEED      = 0.8;
+  const PLAYER_SPREAD   = Math.PI/22; // cono chico de dispersión del cañón del PLAYER (ángulo total, ~8°) — cubre más área
   const MISSILE_SPEED   = 0.48;
   const MAX_ENEMIES     = 14;
 
@@ -284,6 +338,8 @@
     if (n >= 5) physAcc = 0;                                 // anti espiral si hubo lag
   }
   const TANK_BODY_OPTS = { restitution: 0, friction: 0, frictionAir: 0, frictionStatic: 0, inertia: Infinity };
+  const TANK_MASS = 20;   // masa IGUAL para todos los tanques. Como reseteamos la velocidad cada frame, la masa
+                          // pareja hace que al chocar se separen 50/50 (no se manda a volar al enemigo chico) → se empujan poco.
   function clearWalls() {
     for (const w of walls) if (w.body) World.remove(world, w.body);
     walls.length = 0;
@@ -326,6 +382,7 @@
       // Creación perezosa del cuerpo: el radio ya es definitivo tras el constructor de la subclase.
       if (!this.body) {
         this.body = Bodies.circle(this.x, this.y, this.radius, TANK_BODY_OPTS);
+        Body.setMass(this.body, TANK_MASS);   // masa pareja → empuje tanque-tanque simétrico y chico
         this.body.gameRef = this;
         World.add(world, this.body);
       }
@@ -483,10 +540,25 @@
       this.boosting = inp.boost;
       const mag = Math.min(1, Math.hypot(inp.moveX, inp.moveY));
       const spd = sper(MOVE_SPEED) * (this.boosting ? BOOST_MULT : 1) * mag;
-      if (mag > 0.05) this.ang = Math.atan2(inp.moveY, inp.moveX);   // el cuerpo mira hacia donde se mueve
+      // El MOVIMIENTO va SIEMPRE en la dirección de la palanca (instantáneo, máxima tracción, sin arco).
+      // El ángulo del cuerpo es sólo VISUAL (apuntás con la torreta/mouse aparte), así que lo desacoplamos.
+      let moveX = 0, moveY = 0;
+      if (mag > 0.05) {
+        const target = Math.atan2(inp.moveY, inp.moveX);            // dirección pedida = dirección de movimiento
+        moveX = (inp.moveX / Math.hypot(inp.moveX, inp.moveY)) * spd;
+        moveY = (inp.moveY / Math.hypot(inp.moveX, inp.moveY)) * spd;
+        if (IS_TOUCH) {
+          this.ang = target;                                       // joystick analógico: dirección continua → snap directo
+        } else {
+          // Desktop (WASD da solo 8 direcciones discretas): el cuerpo rota SUAVE hacia la dirección para
+          // que el sprite no salte de golpe, pero el movimiento ya es instantáneo (arriba). Tope DESKTOP_TURN rad/s.
+          const adiff = getAngle2(this.ang, [0,0], [Math.cos(target),Math.sin(target)]) - this.ang;
+          this.ang = mod(this.ang + clampN(adiff, -DESKTOP_TURN*dt, DESKTOP_TURN*dt), TAU);
+        }
+      }
       if (this.body) Body.setVelocity(this.body, {
-        x: (Math.cos(this.ang)*spd + this.borderPushX) * MATTER_VEL,
-        y: (Math.sin(this.ang)*spd + this.borderPushY) * MATTER_VEL,
+        x: (moveX + this.borderPushX) * MATTER_VEL,
+        y: (moveY + this.borderPushY) * MATTER_VEL,
       });
       if (inp.primary) this.primaryShotAction();
       if (inp.missile) this.secondaryShotAction();
@@ -604,15 +676,21 @@
       const goal = this.playerLocked ? [this.targetX,this.targetY] : [this.scoutX,this.scoutY];
       this.moveAngle = getAngle2(this.ang, [this.x,this.y], goal);
 
-      // esquiva de muros simple: si el frente está bloqueado, doblá hacia el lado libre
-      let dir = 0;
-      for (let i = 1; i < 8 && dir === 0; i++) {
-        const fx = this.x+Math.cos(this.moveAngle)*this.radius*i, fy = this.y+Math.sin(this.moveAngle)*this.radius*i;
-        if (walls.some(w => rectPointCollision([w.x,w.y,w.width,w.height],[fx,fy]))) {
-          const rx = this.x+Math.cos(this.moveAngle+Math.PI/2)*this.radius*i, ry = this.y+Math.sin(this.moveAngle+Math.PI/2)*this.radius*i;
-          const blockedR = walls.some(w => rectPointCollision([w.x,w.y,w.width,w.height],[rx,ry]));
-          dir = blockedR ? -Math.PI/2 : Math.PI/2;
+      // esquiva de muros: si el frente está bloqueado, doblá hacia el lado MÁS LIBRE (izq o der), no siempre
+      // a la derecha. Medimos cuántos pasos hay libres en cada dirección (cuanto más alto, más despejado).
+      const STEPS = 7;
+      const clearance = a => {
+        for (let i = 1; i <= STEPS; i++) {
+          const px = this.x+Math.cos(a)*this.radius*i, py = this.y+Math.sin(a)*this.radius*i;
+          if (walls.some(w => rectPointCollision([w.x,w.y,w.width,w.height],[px,py]))) return i;
         }
+        return STEPS + 1;
+      };
+      let dir = 0;
+      if (clearance(this.moveAngle) <= STEPS) {            // frente bloqueado
+        const clrL = clearance(this.moveAngle - Math.PI/2);
+        const clrR = clearance(this.moveAngle + Math.PI/2);
+        dir = clrR >= clrL ? Math.PI/2 : -Math.PI/2;       // doblá hacia donde hay más espacio
       }
       this.moveAngle += dir;
       this.angVel += (this.moveAngle > this.ang ? sper(TURN_RATE) : -sper(TURN_RATE)) * fr;
@@ -719,6 +797,7 @@
       this.color = modifyColor(tank.color,150);
       this.radius = tank.radius*0.3;
       this.ang = tank.turretAng;
+      if (tank.isPlayer) this.ang += rnd(-PLAYER_SPREAD/2, PLAYER_SPREAD/2);  // cono chico solo para el jugador
       this.x = tank.x + Math.cos(this.ang)*this.radius*7;
       this.y = tank.y + Math.sin(this.ang)*this.radius*7;
       this.preX = this.x; this.preY = this.y;
@@ -895,7 +974,8 @@
   let mouseLeft = false, mouseRight = false;
   const canvasPointers = new Map();               // pointers táctiles sobre el canvas → disparan apuntando
   const btnState = { missile: false, boost: false };
-  const moveVec = { x: 0, y: 0 };                 // palanca de movimiento (nipplejs), y en coords pantalla (+ abajo)
+  const moveVec = { x: 0, y: 0 };                 // palanca de movimiento (hand-rolled), y en coords pantalla (+ abajo)
+  const aimVec  = { x: 0, y: 0, active: false };  // palanca de puntería (hand-rolled, mobile): dirección de la mira + dispara
 
   function readInput() {
     // vector de movimiento: teclado (4 direcciones) + palanca, clampeado a magnitud 1
@@ -903,10 +983,37 @@
     let my = (keys.has('s')||keys.has('arrowdown')?1:0)  - (keys.has('w')||keys.has('arrowup')?1:0)   + moveVec.y;
     const m = Math.hypot(mx, my);
     if (m > 1) { mx /= m; my /= m; }
+    // Palanca de puntería (mobile): mueve la MIRA SOBRE EL MAPA (no fija al tanque). Con ZONA MUERTA: cerca
+    // del centro no mueve; recién al pasar AIM_DEAD empieza, ramping de 0 a AIM_SPEED en los extremos. El
+    // crosshair y el seguimiento de torreta ya usan aimX/aimY.
+    if (aimVec.active) {
+      const am = Math.hypot(aimVec.x, aimVec.y);
+      if (am > AIM_DEAD) {
+        const k = (am - AIM_DEAD) / (1 - AIM_DEAD);          // 0..1 más allá de la zona muerta
+        const sp = sper(AIM_SPEED) * k * dt;
+        aimX = clampN(aimX + (aimVec.x / am) * sp, 0, W);
+        aimY = clampN(aimY + (aimVec.y / am) * sp, 0, H);
+      }
+    }
+    // IMÁN de puntería (mobile): vos acercás la mira al tanque que querés; cuando YA está cerca (dentro del
+    // radio de captura) el imán la engancha suave hacia él (no clavada). Si no hay tanque cerca, apuntás libre.
+    if (IS_TOUCH && enemies.length) {
+      let bx = 0, by = 0, bd = Infinity;
+      for (const e of enemies) {
+        const d = getDistSq([aimX, aimY], [e.x, e.y]);
+        if (d < bd) { bd = d; bx = e.x; by = e.y; }
+      }
+      const r = sper(AIM_MAGNET_RANGE);
+      if (bd < r * r) {                                       // sólo si la mira YA está cerca de un tanque
+        const k = 1 - Math.pow(1 - AIM_MAGNET, fr);           // lerp frame-rate independiente
+        aimX += (bx - aimX) * k;
+        aimY += (by - aimY) * k;
+      }
+    }
     return {
       moveX: mx, moveY: my,
       aimX, aimY,
-      primary: mouseLeft || canvasPointers.size > 0,
+      primary: mouseLeft || canvasPointers.size > 0 || aimVec.active,
       missile: mouseRight || btnState.missile,
       boost: keys.has('shift') || btnState.boost,
     };
@@ -957,22 +1064,77 @@
   holdBtn('btnMissile', 'missile');
   holdBtn('btnBoost', 'boost');
   document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); startGame(); });
-  let showDebug = false;
-  const btnDebug = document.getElementById('btnDebug');
-  btnDebug.addEventListener('pointerdown', e => { e.preventDefault(); showDebug = !showDebug; btnDebug.classList.toggle('on', showDebug); });
+  // El cableado del overlay de info (#infoPanel) se hace en el <script> del final, porque ese div se declara
+  // después de este bloque y acá document.getElementById('infoPanel') daría null.
 
-  // ── JOYSTICK de movimiento (nipplejs). UNA sola palanca omnidireccional: data.vector es la dirección
-  //    desde el centro (magnitud 0..1). y de nipplejs es + hacia arriba → invierto a coords pantalla (+ abajo). ──
-  const JOY_OPTS = { mode: 'static', position: { left: '50%', top: '50%' }, size: 80, restJoystick: true, fadeTime: 0, dynamicPage: true, color: 'rgba(120,200,255,0.7)' };
-  let jMove = null;
-  function setupJoysticks() {
-    if (!IS_TOUCH || typeof nipplejs === 'undefined') return;
-    if (jMove) { try { jMove.destroy(); } catch {} }
-    moveVec.x = 0; moveVec.y = 0;
-    jMove = nipplejs.create({ ...JOY_OPTS, zone: document.getElementById('jMove') });
-    jMove.on('move', (e, d) => { moveVec.x = d.vector.x; moveVec.y = -d.vector.y; });
-    jMove.on('end',  () => { moveVec.x = 0; moveVec.y = 0; });
+  // Debug HUD: tecla ` (backtick) — herramienta de dev, ya no ocupa un botón.
+  let showDebug = false;
+  addEventListener('keydown', e => { if (e.key === '`' || e.key === '~') showDebug = !showDebug; });
+
+  // ── PALANCA ANALÓGICA hand-rolled (reemplaza nipplejs) ──
+  // Aparece donde tocás dentro de su zona y se dibuja con DOM (base + nub). Robusta ante multitouch vía
+  // setPointerCapture: TODOS los eventos del dedo (move/up/cancel) vuelven siempre a la zona → nunca queda
+  // colgada, ni con otro dedo en un botón. Escribe en vivo en `out` (target): { active, x, y, ang, mag } en
+  // coords pantalla (+ abajo); x/y ∈ [-1,1], mag ∈ [0,1]. nipplejs en 'dynamic'/'semi' perdía el pointerup
+  // con multitouch y dejaba el nub pegado al centro.
+  function createJoystick(zoneEl, opts) {
+    opts = opts || {};
+    const BASE_R = opts.baseR || 56, KNOB_R = opts.knobR || 32, DEAD = opts.dead || 7, aDead = opts.activeDead || 0;
+    const rgb = opts.rgb || '120,200,255', kRgb = opts.knobRgb || '160,220,255', kbRgb = opts.knobBorderRgb || '180,228,255';
+    const out = opts.target || { active: false, x: 0, y: 0, ang: 0, mag: 0 };
+    const base = document.createElement('div'), knob = document.createElement('div');
+    base.style.cssText = 'position:fixed;border-radius:50%;pointer-events:none;z-index:6;display:none;width:'+(BASE_R*2)+'px;height:'+(BASE_R*2)+'px;margin:'+(-BASE_R)+'px 0 0 '+(-BASE_R)+'px;background:radial-gradient(circle at 50% 38%,rgba('+rgb+',0.10),rgba('+rgb+',0.03) 70%);border:1px solid rgba('+rgb+',0.35);box-shadow:inset 0 2px 14px rgba(0,0,0,0.5),0 0 16px rgba('+rgb+',0.25);';
+    knob.style.cssText = 'position:fixed;border-radius:50%;pointer-events:none;z-index:7;display:none;width:'+(KNOB_R*2)+'px;height:'+(KNOB_R*2)+'px;margin:'+(-KNOB_R)+'px 0 0 '+(-KNOB_R)+'px;background:radial-gradient(circle at 50% 35%,rgba('+kRgb+',0.95),rgba('+rgb+',0.55) 70%);border:1px solid rgba('+kbRgb+',0.8);box-shadow:0 3px 10px rgba(0,0,0,0.5),0 0 16px rgba('+rgb+',0.6);';
+    document.body.appendChild(base); document.body.appendChild(knob);
+    let id = null, ox = 0, oy = 0;
+    zoneEl.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' || id !== null) return;
+      e.preventDefault();
+      id = e.pointerId; ox = e.clientX; oy = e.clientY;
+      try { zoneEl.setPointerCapture(id); } catch {}
+      base.style.left = ox+'px'; base.style.top = oy+'px'; base.style.display = 'block';
+      knob.style.left = ox+'px'; knob.style.top = oy+'px'; knob.style.display = 'block';
+      out.active = aDead <= 0; out.x = 0; out.y = 0; out.mag = 0;
+      if (opts.onStart) opts.onStart();
+    });
+    zoneEl.addEventListener('pointermove', e => {
+      if (e.pointerId !== id) return;
+      let dx = e.clientX - ox, dy = e.clientY - oy;
+      const d = Math.hypot(dx, dy);
+      if (d > BASE_R) { dx = dx/d*BASE_R; dy = dy/d*BASE_R; }            // el nub se clampa al borde de la base
+      knob.style.left = (ox+dx)+'px'; knob.style.top = (oy+dy)+'px';
+      out.mag = Math.min(1, d / BASE_R); out.x = dx / BASE_R; out.y = dy / BASE_R;
+      if (d > DEAD) out.ang = Math.atan2(dy, dx);
+      out.active = out.mag > aDead;
+    });
+    const end = e => {
+      if (e.pointerId !== id) return;
+      id = null; out.active = false; out.x = 0; out.y = 0; out.mag = 0;
+      base.style.display = 'none'; knob.style.display = 'none';
+      if (opts.onEnd) opts.onEnd();
+    };
+    zoneEl.addEventListener('pointerup', end);
+    zoneEl.addEventListener('pointercancel', end);
+    zoneEl.addEventListener('lostpointercapture', end);
+    return out;
   }
+  // Dos palancas: IZQ mueve (alimenta moveVec, celeste), DER apunta+dispara (alimenta aimVec, roja; activa
+  // apenas la tocás → activeDead 0). Los placeholders de descanso (.joyRest) se ocultan al tocar y vuelven al
+  // soltar. Sólo en touch (en desktop las zonas están display:none y se juega con teclado+mouse).
+  if (IS_TOUCH) {
+    const restMove = document.getElementById('jMoveRest'), restAim = document.getElementById('jAimRest');
+    createJoystick(document.getElementById('jMove'), {
+      target: moveVec, rgb: '120,200,255', knobRgb: '160,220,255', knobBorderRgb: '180,228,255',
+      onStart: () => { if (restMove) restMove.style.display = 'none'; },
+      onEnd:   () => { if (restMove) restMove.style.display = '';     },
+    });
+    createJoystick(document.getElementById('jAim'), {
+      target: aimVec, activeDead: 0, rgb: '255,90,60', knobRgb: '255,170,150', knobBorderRgb: '255,180,160',
+      onStart: () => { if (restAim) restAim.style.display = 'none'; },
+      onEnd:   () => { if (restAim) restAim.style.display = '';     },
+    });
+  }
+  function setupJoysticks() {}   // compat: las palancas hand-rolled se crean una vez y se posicionan solas (nada que recrear al rotar)
 
   // ── PANTALLA COMPLETA (saca la barra del navegador en mobile). iOS Safari falla en silencio. ──
   const fsTarget = document.documentElement;
@@ -990,9 +1152,23 @@
   document.getElementById('btnFs').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); toggleFs(); });
   let autoFsDone = false;
   function tryAutoFs(e) { if (autoFsDone) return; autoFsDone = true; if (e && e.pointerType === 'mouse') return; if (!isFs()) enterFs(); }
+  // Las zonas de joystick cubren el canvas, así que el primer toque no llega a su pointerdown → escuchamos
+  // a nivel ventana para el auto-fullscreen (ignora mouse).
+  addEventListener('pointerdown', tryAutoFs);
 
-  // En desktop ocultamos los pads táctiles (se juega con teclado + mouse).
-  if (!IS_TOUCH) { document.getElementById('padL').style.display = 'none'; document.getElementById('padR').style.display = 'none'; }
+  // En desktop ocultamos los pads táctiles (se juega con teclado + mouse) y el cursor del SO sobre el
+  // canvas (apuntás con la torreta, no hace falta ver la flecha). Los botones siguen con su cursor propio.
+  if (!IS_TOUCH) {
+    document.getElementById('jMove').style.display = 'none';
+    document.getElementById('jAim').style.display = 'none';
+    document.getElementById('actBtns').style.display = 'none';
+    document.getElementById('aimSafe').style.display = 'none';
+    document.getElementById('jMoveRest').style.display = 'none';
+    document.getElementById('jAimRest').style.display = 'none';
+    canvas.style.cursor = 'none';
+  }
+  // (En mobile ocultamos la tabla de controles del overlay; se hace en el <script> del final, porque
+  //  #infoControls vive dentro de #infoPanel, declarado después de este bloque.)
 
   // ════════════════ HUD ════════════════
   function drawHUD() {
@@ -1020,10 +1196,10 @@
       text('Score: ' + player.score, [255,255,255], xper(0.08), yper(0.082), sper(0.0192));
       if (player.moneyToAdd > 0) text('+ ' + player.moneyToAdd, [128,128,0], xper(0.008), yper(0.108), sper(0.0192));
 
-      // pips de misiles, columna abajo-izquierda
+      // pips de misiles, columna abajo-izquierda (subidos ~50px para no pisar el botón de salir)
       for (let i = 0; i < player.missileMax; i++) {
         const c = i < player.missileStack ? [52,204,255] : [50,50,50];
-        circle(xper(0.015), yper(0.95) - sper(0.02)*i, sper(0.007), c);
+        circle(xper(0.015), yper(0.95) - 50 - sper(0.02)*i, sper(0.007), c);
       }
 
       // crosshair en el punto de mira (mouse en desktop, último toque en mobile)
@@ -1142,10 +1318,38 @@
   <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
+  <div id="infoPanel">
+    <div class="card">
+      <h2>TANKWARS</h2>
+      <p class="desc">Sobreviví las oleadas, juntá monedas y mejorá tu tanque. Los misiles se auto-apuntan al enemigo más importante que tengas adelante.</p>
+      <div id="infoControls">
+        <div class="row"><span class="k">Mover</span><span class="v">WASD / Flechas</span></div>
+        <div class="row"><span class="k">Apuntar</span><span class="v">Mouse</span></div>
+        <div class="row"><span class="k">Disparar cañón</span><span class="v">Click izq</span></div>
+        <div class="row"><span class="k">Misil</span><span class="v">Click der</span></div>
+        <div class="row"><span class="k">Boost</span><span class="v">Shift</span></div>
+      </div>
+      <div class="foot">tocá para cerrar</div>
+    </div>
+  </div>
   <script>
     document.getElementById('btnExit').addEventListener('click', () => {
       if (confirm('¿Salir al menú?')) location.href = '../../';
     });
+    // Info / controles: el botón circle-i (arriba-derecha) abre el overlay. Se cablea acá porque #infoPanel
+    // recién existe en el DOM en este punto (está declarado arriba de este script).
+    (function () {
+      const btnInfo = document.getElementById('btnInfo');
+      const infoPanel = document.getElementById('infoPanel');
+      if (!btnInfo || !infoPanel) return;
+      const toggleInfo = show => { infoPanel.classList.toggle('show', show); btnInfo.classList.toggle('on', show); };
+      btnInfo.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); toggleInfo(!infoPanel.classList.contains('show')); });
+      infoPanel.addEventListener('pointerdown', e => { e.preventDefault(); toggleInfo(false); });
+      // En mobile no mostramos la tabla de controles de teclado/mouse.
+      const isTouch = (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches) || 'ontouchstart' in window;
+      const ic = document.getElementById('infoControls');
+      if (isTouch && ic) ic.style.display = 'none';
+    })();
   </script>
 </body>
 </html>

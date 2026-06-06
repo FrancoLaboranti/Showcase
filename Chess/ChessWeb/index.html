@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Chess</title>
+<link rel="stylesheet" href="../../Arcade/arcade-shell.css">
 <style>
   :root { --bar-height: 48px; }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -90,7 +91,7 @@
     border-top: 1px solid rgba(255,255,255,0.06);
     box-shadow: 0 -1px 0 rgba(255,255,255,0.03) inset, 0 -8px 24px rgba(0,0,0,0.2);
     z-index: 3;
-    gap: 8px;
+    gap: 12px;
   }
   #bar button {
     height: 34px; min-width: 38px; padding: 0 11px;
@@ -119,110 +120,11 @@
     pointer-events: none;
     transition: opacity 0.8s; z-index: 2; padding: 0 16px;
   }
-  /* Exit button — vuelta al menú raíz */
-  #btnExit {
-    position: absolute;
-    left: 6px;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
-    color: rgba(255,255,255,0.85);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-    z-index: 10;
-  }
-  #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
-  /* === Bar layout: exit-left, main-center, info/debug-right (refactor) === */
-  #bar {
-    display: grid !important;
-    grid-template-columns: 1fr auto 1fr !important;
-    justify-content: stretch !important;
-  }
-  #bar > #btnExit {
-    position: static !important;
-    left: auto !important; right: auto !important;
-    top: auto !important; bottom: auto !important;
-    justify-self: start;
-  }
-  #bar > #ui { justify-self: center; }
-  #bar > #btnInfo, #bar > #btnDebug, #bar > #btnHome {
-    position: static !important;
-    left: auto !important; right: auto !important;
-    top: auto !important; bottom: auto !important;
-    justify-self: end;
-  }
-  /* Pantalla completa — esquina arriba-der, flotante. */
-  #btnFs {
-    position: absolute;
-    right: 6px;
-    top: calc(env(safe-area-inset-top) + 6px);
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
-    color: rgba(255,255,255,0.85);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-    z-index: 10;
-  }
-  #btnFs svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnFs:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
-  #btnFs .ic-exit { display: none; }
-  body.fs-on #btnFs .ic-enter { display: none; }
-  body.fs-on #btnFs .ic-exit  { display: block; }
-  /* Info (FPS) — esquina abajo-der, flotante. */
-  #btnInfo {
-    position: absolute;
-    right: 6px;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
-    color: rgba(255,255,255,0.85);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-    z-index: 10;
-  }
-  #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnInfo:active, #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
-  #fpsOverlay {
-    position: absolute;
-    right: 40px;
-    bottom: calc(env(safe-area-inset-bottom) + 8px);
-    font-family: monospace;
-    font-size: 13px;
-    color: rgba(255,255,255,0.9);
-    background: rgba(0,0,0,0.6);
-    padding: 3px 8px;
-    border-radius: 4px;
-    pointer-events: none;
-    display: none;
-    z-index: 9;
-  }
+  /* Botones ✕/⛶ + overlay de salida vienen de arcade-shell.css. */
 
 
 
 </style>
-<script>/* arcade-embed-shim: corre embebido en la shell del Arcade (iframe) */
-(function () {
-  if (window.self === window.top) return;            // sólo embebido
-  var noop = function () { return Promise.resolve(); };
-  try { Element.prototype.requestFullscreen = noop; } catch (e) {}
-  try { Element.prototype.webkitRequestFullscreen = noop; } catch (e) {}
-  // El "salir al menú" del juego: en vez de navegar (recargaría el menú dentro del iframe),
-  // avisamos a la shell por postMessage. Capturamos el click antes que el handler del juego.
-  window.addEventListener('click', function (e) {
-    var ex = e.target && e.target.closest && e.target.closest('#btnExit, #btnHome');
-    if (!ex) return;
-    e.preventDefault(); e.stopImmediatePropagation();
-    try { parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (x) {}
-  }, true);
-})();
-</script>
 </head>
 <body>
   <canvas id="c"></canvas>
@@ -256,6 +158,9 @@
     <div class="sep"></div>
     <button id="btnReset" title="Reiniciar partida">Reiniciar</button>
     <button id="btnMenu"  title="Volver al menú">Menú</button>
+    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+    </button>
   </div>
 
   <div id="hint">Arrastrá o clic-clic para mover · Las flechas navegan el historial</div>
@@ -1239,7 +1144,7 @@
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
   let W = 0, H = 0, dpr = 1;
-  let boardSize = 0, boardX = 0, boardY = 0, cellSize = 0;
+  let boardSize = 0, boardX = 0, boardY = 0, cellSize = 0, topInset = 0;
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -1260,7 +1165,10 @@
     // Layout: status arriba, strip horizontal (relojes + capturas) sobre el tablero,
     // labels abajo. Sin paneles laterales — todo se agrupa arriba.
     // Proporciones mínimas garantizan que entren 2 filas de capturas + reloj.
-    const statusReserve = 52;    // status text (y≈22) + depth info (y≈48)
+    // En viewports angostos empujamos todo hacia abajo para dejar aire del
+    // notch / safe-area-inset-top, y para que el texto no quede pegado al borde.
+    topInset            = W < 600 ? 18 : 0;
+    const statusReserve = 52 + topInset;   // status text (y≈22) + depth info (y≈48) + margen mobile
     const stripReserve  = 72;    // alto FIJO del strip (2 filas de piezas + reloj)
     const stripGap      = 18;    // aire entre strip y borde del tablero
     const topReserve    = statusReserve + stripReserve + stripGap;
@@ -1629,7 +1537,7 @@
     const black = (viewCaptured || []).filter(p => p.color === 'b').map(p => p.kind).sort((a, b) => order[b] - order[a]);
     const white = (viewCaptured || []).filter(p => p.color === 'w').map(p => p.kind).sort((a, b) => order[b] - order[a]);
 
-    const minStripTop = 56;                  // tope: justo debajo de status + depth info
+    const minStripTop = 56 + topInset;       // tope: justo debajo de status + depth info (incluye margen mobile)
     const maxStripH   = 72;                  // techo para 2 filas de capturas + reloj
     const gapToBoard  = 18;                  // separación entre strip y tablero
     const stripBottom = boardY - gapToBoard;
@@ -1743,30 +1651,30 @@
         : `Viendo movida ${idx} de ${total}  ·  ← → navegar  ·  END = al presente`;
       ctx.fillStyle = '#e8d878';
       ctx.font = bigFont(Math.max(14, Math.min(20, Math.floor(W * 0.018))));
-      ctx.fillText(txt, W / 2, 24);
+      ctx.fillText(txt, W / 2, 24 + topInset);
     } else if (view.status === 'checkmate') {
       const winner = view.turn === 'w' ? 'Negras' : 'Blancas';
       ctx.fillStyle = '#ff6464';
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
-      ctx.fillText('JAQUE MATE — Ganan ' + winner, W / 2, 28);
+      ctx.fillText('JAQUE MATE — Ganan ' + winner, W / 2, 28 + topInset);
     } else if (view.status === 'stalemate') {
       ctx.fillStyle = '#e8d864';
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
-      ctx.fillText('AHOGADO — Tablas', W / 2, 28);
+      ctx.fillText('AHOGADO — Tablas', W / 2, 28 + topInset);
     } else if (view.status === 'repetition') {
       ctx.fillStyle = '#e8d864';
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
-      ctx.fillText('TABLAS POR REPETICIÓN', W / 2, 28);
+      ctx.fillText('TABLAS POR REPETICIÓN', W / 2, 28 + topInset);
     } else if (view.status === 'insufficient') {
       ctx.fillStyle = '#e8d864';
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
-      ctx.fillText('TABLAS POR FALTA DE MATERIAL', W / 2, 28);
+      ctx.fillText('TABLAS POR FALTA DE MATERIAL', W / 2, 28 + topInset);
     } else if (view.status === 'timeout') {
       // El jugador que se quedó sin tiempo es el del turno actual (la vista lo congela)
       const winner = view.turn === 'w' ? 'Negras' : 'Blancas';
       ctx.fillStyle = '#ff6464';
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
-      ctx.fillText('TIEMPO AGOTADO — Ganan ' + winner, W / 2, 28);
+      ctx.fillText('TIEMPO AGOTADO — Ganan ' + winner, W / 2, 28 + topInset);
     } else {
       let txt = view.turn === 'w' ? 'Turno: Blancas' : 'Turno: Negras';
       let color = '#ececf0';
@@ -1781,7 +1689,7 @@
       }
       ctx.fillStyle = color;
       ctx.font = bigFont(Math.max(14, Math.min(22, Math.floor(W * 0.022))));
-      ctx.fillText(txt, W / 2, 24);
+      ctx.fillText(txt, W / 2, 24 + topInset);
     }
     ctx.restore();
 
@@ -1797,7 +1705,7 @@
       const padX = 10, padY = 4;
       const txtW = ctx.measureText(mode).width;
       const chipW = txtW + padX*2, chipH = 22;
-      const chipX = W - 12 - chipW, chipY = 16 - chipH/2;
+      const chipX = W - 12 - chipW, chipY = (16 + topInset) - chipH/2;
       ctx.fillStyle = 'rgba(255,255,255,0.06)';
       ctx.beginPath();
       if (ctx.roundRect) ctx.roundRect(chipX, chipY, chipW, chipH, 11);
@@ -1807,7 +1715,7 @@
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.fillStyle = 'rgba(220,220,235,0.85)';
-      ctx.fillText(mode, W - 12 - padX, 16);
+      ctx.fillText(mode, W - 12 - padX, 16 + topInset);
     }
 
     // Depth secundario + nombre del motor
@@ -1832,12 +1740,12 @@
         }
         if (game.aiTactical) line += ' · táctica';
         ctx.fillStyle = 'rgba(180,200,240,0.7)';
-        ctx.fillText(line, W / 2, 48);
+        ctx.fillText(line, W / 2, 48 + topInset);
       } else if (game.aiLastDepth > 0) {
         // Última jugada de la IA — depth final de la búsqueda
         const motor = game.aiEngineName || 'IA';
         ctx.fillStyle = 'rgba(160,180,210,0.65)';
-        ctx.fillText('Última jugada · ' + motor + ' · depth ' + fmtDepth(game.aiLastDepth, game.aiLastSeldepth), W / 2, 48);
+        ctx.fillText('Última jugada · ' + motor + ' · depth ' + fmtDepth(game.aiLastDepth, game.aiLastSeldepth), W / 2, 48 + topInset);
       }
     }
   }
@@ -2018,53 +1926,10 @@
   setTimeout(() => hint.style.opacity = '0', 5000);
   canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
   </script>
-  <script>
-    document.getElementById('btnExit').addEventListener('click', () => {
-      if (confirm('¿Salir al menú?')) location.href = '../../';
-    });
-  </script>
-  <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
-  </button>
-  <script>
-    (function() {
-      const btn = document.getElementById('btnFs');
-      btn.addEventListener('click', () => {
-        if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
-        else document.exitFullscreen?.();
-      });
-      document.addEventListener('fullscreenchange', () => {
-        document.body.classList.toggle('fs-on', !!document.fullscreenElement);
-      });
-    })();
-  </script>
-  <button id="btnInfo" aria-label="info" title="Info / FPS">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
-  </button>
-  <div id="fpsOverlay">FPS: --</div>
-  <script>
-    (function() {
-      let frameCount = 0, lastT = performance.now();
-      const overlay = document.getElementById('fpsOverlay');
-      function loop() {
-        frameCount++;
-        const now = performance.now();
-        if (now - lastT >= 500) {
-          const fps = Math.round(frameCount * 1000 / (now - lastT));
-          if (overlay.style.display !== 'none') overlay.textContent = 'FPS: ' + fps;
-          frameCount = 0; lastT = now;
-        }
-        requestAnimationFrame(loop);
-      }
-      loop();
-      const btn = document.getElementById('btnInfo');
-      btn.addEventListener('click', () => {
-        const showing = overlay.style.display !== 'none';
-        overlay.style.display = showing ? 'none' : 'block';
-        btn.classList.toggle('on', !showing);
-      });
-    })();
-  </script>
+
+  <!-- Shell del Arcade (exit + fullscreen + lock de orientación). data-orient: landscape/portrait/any. -->
+  <script src="../../Arcade/arcade-shell.js" data-orient="portrait"></script>
+
 
 
 </body>

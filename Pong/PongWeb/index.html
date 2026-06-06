@@ -115,30 +115,6 @@
   #rotate p { font-size: 18px; letter-spacing: 0.05em; line-height: 1.6; }
   @keyframes rotatehint { 0%, 55%, 100% { transform: rotate(0deg); } 25%, 40% { transform: rotate(-90deg); } }
 
-  /* Confirmación in-game de salida al menú (reemplaza el confirm() del navegador) */
-  #exitConfirm {
-    position: absolute; inset: 0; z-index: 60; display: none;
-    flex-direction: column; align-items: center; justify-content: center; gap: 28px;
-    background: rgba(3,5,12,0.82); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
-    text-align: center; padding: 24px;
-  }
-  #exitConfirm.show { display: flex; }
-  #exitConfirm p {
-    margin: 0; font-size: 22px; letter-spacing: 0.06em; color: #eaf2ff;
-    text-shadow: 0 0 14px rgba(120,200,255,0.45);
-  }
-  #exitConfirm .row { display: flex; gap: 16px; }
-  #exitConfirm button {
-    font-family: inherit; font-size: 14px; font-weight: 700; letter-spacing: 0.12em;
-    padding: 12px 28px; border-radius: 999px; cursor: pointer; color: #eaf2ff;
-    background: rgba(0,0,0,0.4); transition: transform 0.08s, background 0.15s, border-color 0.15s;
-  }
-  #exitConfirm button:active { transform: scale(0.94); }
-  #exitConfirm .yes { border: 1px solid rgba(240,90,95,0.6);  color: #ff9094; }
-  #exitConfirm .yes:active { background: rgba(240,90,95,0.25); border-color: rgba(240,90,95,0.9); }
-  #exitConfirm .no  { border: 1px solid rgba(120,200,255,0.5); color: #9fd4ff; }
-  #exitConfirm .no:active  { background: rgba(120,200,255,0.22); border-color: rgba(120,200,255,0.85); }
-
   /* Exit (✕) — botón secundario. Mismo brillo tenue que ⛶/ⓘ (camuflado con el fondo) y
      pegado al borde INFERIOR de la barra (un nivel más abajo que los del juego). */
   #btnExit {
@@ -196,15 +172,6 @@
   <div class="pad" id="padR" aria-label="control jugador 1">
     <button class="ctl" data-side="R" data-dir="up" aria-label="subir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg></button>
     <button class="ctl" data-side="R" data-dir="dn" aria-label="bajar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg></button>
-  </div>
-
-  <!-- Confirmación in-game de salida al menú -->
-  <div id="exitConfirm">
-    <p>¿Salir al menú?</p>
-    <div class="row">
-      <button class="no"  id="exitNo">Seguir</button>
-      <button class="yes" id="exitYes">Salir</button>
-    </div>
   </div>
 
   <!-- Aviso: girá el teléfono a horizontal -->
@@ -274,10 +241,10 @@
   const AI_IDLE_FREQ    = 2.2;     // velocidad del vaivén suave (rad/s)
   // Siesta: cada tanto la IA se queda LITERALMENTE dormida sin moverse. Sobreescribe el movimiento,
   // pero el resto de la lógica (ciclos, predicción) sigue procesándose por debajo.
-  const AI_AWAKE_MIN    = 4.5;     // seg despierta entre siestas
-  const AI_AWAKE_MAX    = 10;
-  const AI_SLEEP_MIN    = 0.6;     // duración de la siesta (no hace NADA)
-  const AI_SLEEP_MAX    = 1.6;
+  const AI_AWAKE_MIN    = 4.0;     // seg despierta entre siestas
+  const AI_AWAKE_MAX    = 9;
+  const AI_SLEEP_MIN    = 0.8;     // duración de la siesta (no hace NADA)
+  const AI_SLEEP_MAX    = 2.0;
   const SCORE_LABELS    = ['5', '10', '20', '40', '∞'];
   const WIN_POINTS      = [5, 10, 20, 40, null];   // null = práctica (sin fin)
 
@@ -887,11 +854,11 @@
       if (!p.onFire) continue;
       const ph = paddleH(), pw = paddleW();
       const cx = (isR ? rightX() : leftX()) + pw / 2;   // centro de la paleta
-      for (let i = 0; i < 2; i++)                 // brasas: suben desde el centro, repartidas a lo alto
+      if (Math.random() < 0.7)                    // brasas: suben desde el centro, repartidas a lo alto
         spawnEmber(cx + rnd(-1, 1) * pw * 0.4, p.cy + rnd(-ph / 2, ph / 2),
           rnd(-1, 1) * s * 0.05, -rnd(s * 0.1, s * 0.3),
           rnd(0.3, 0.6), rnd(pw * 0.5, pw * 1.2), 0);
-      if (Math.random() < 0.5)                    // alguna chispa saltando hacia el campo
+      if (Math.random() < 0.35)                   // alguna chispa saltando hacia el campo
         spawnEmber(cx, p.cy + rnd(-ph / 2, ph / 2),
           (isR ? -1 : 1) * rnd(s * 0.1, s * 0.4), rnd(-1, 1) * s * 0.2,
           rnd(0.12, 0.28), rnd(pw * 0.2, pw * 0.45), 1);
@@ -977,9 +944,9 @@
     ctx.save();
     ctx.shadowBlur = fs * 0.45;
     ctx.shadowColor = rgba(c2, 0.85); ctx.fillStyle = rgba(c2, 0.95);
-    ctx.fillText(String(j2score), W / 2 - W * 0.12, H * 0.045);
+    ctx.fillText(String(j2score), W * 0.25, H * 0.045);
     ctx.shadowColor = rgba(c1, 0.85); ctx.fillStyle = rgba(c1, 0.95);
-    ctx.fillText(String(j1score), W / 2 + W * 0.12, H * 0.045);
+    ctx.fillText(String(j1score), W * 0.75, H * 0.045);
     ctx.restore();
   }
 
@@ -1111,6 +1078,7 @@
         updateBall(FIXED_DT);
         acc -= FIXED_DT;
         steps++;
+        if (state !== 'play') break;   // gol que termina el partido: cortar el catch-up (si no, suma de más)
       }
       if (acc > FIXED_DT) acc %= FIXED_DT;              // si se capó el catch-up, descartar el exceso
       const alpha = acc / FIXED_DT;                     // fracción no simulada → render interpolado
@@ -1153,14 +1121,8 @@
   setTimeout(() => hint.style.opacity = '0', 5000);
   </script>
   <script>
-    // Salida al menú con un overlay in-game (no el confirm() del navegador).
-    const exitConfirm = document.getElementById('exitConfirm');
-    const closeExit = () => exitConfirm.classList.remove('show');
-    document.getElementById('btnExit').addEventListener('click', () => exitConfirm.classList.add('show'));
-    document.getElementById('exitNo').addEventListener('click', closeExit);
-    // tocar el fondo (fuera de los botones) también cancela
-    exitConfirm.addEventListener('click', (e) => { if (e.target === exitConfirm) closeExit(); });
-    document.getElementById('exitYes').addEventListener('click', () => {
+    // Salida al menú directa, sin confirmación.
+    document.getElementById('btnExit').addEventListener('click', () => {
       // Dentro de la shell del Arcade (iframe): le avisamos para que cierre el reproductor
       // SIN navegar (mantiene el fullscreen de la sesión). Suelto: navegamos al menú.
       if (window.self !== window.top) {

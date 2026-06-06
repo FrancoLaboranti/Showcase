@@ -41,8 +41,6 @@
   /* Margen horizontal FIJO (sin safe-area): en fullscreen el env(safe-area-inset-left/right) del notch
      metía un margen extra que corría el joystick hacia adentro. El inferior sí respeta el safe-area (home bar). */
   .pad { position: absolute; bottom: calc(6px + env(safe-area-inset-bottom)); z-index: 4; display: flex; gap: 8px; }
-  #padL { left: 8px; flex-direction: row; align-items: flex-end; }
-  #padR { right: 8px; align-items: flex-end; }
   .col { display: flex; flex-direction: column; gap: 8px; align-items: center; }
   .row { display: flex; gap: 8px; align-items: center; }
   .btn {
@@ -58,18 +56,10 @@
   .btn:hover { background: rgba(120,200,255,0.16); border-color: rgba(120,200,255,0.6); box-shadow: 0 0 14px rgba(120,200,255,0.6); }
   .btn:active, .btn.on { background: rgba(120,200,255,0.30); border-color: rgba(120,200,255,0.55); transform: scale(0.93); }
   .btn svg { display: block; width: 16px; height: 16px; pointer-events: none; }
-  .btn.fire { width: 30px; height: 30px; background: rgba(255,90,60,0.18); border-color: rgba(255,90,60,0.5); position: relative; overflow: hidden; }
-  .btn.fire svg { width: 13px; height: 13px; }
-  .btn.fire:hover { background: rgba(255,90,60,0.32); border-color: rgba(255,90,60,0.8); box-shadow: 0 0 14px rgba(255,90,60,0.65); }
-  .btn.fire:active { background: rgba(255,90,60,0.42); }
-  #cdRing { position: absolute; inset: 0; border-radius: 50%; pointer-events: none; }
-  /* Joysticks (nipplejs). Cada zona aloja un joystick estático centrado; el movimiento se bloquea por eje
-     (jThrottle = vertical = acelerador, jSteer = horizontal = dirección). El look se estiliza abajo. */
-  /* Contenedor NO-flex del joystick: evita el cálculo de posición erróneo de nipplejs cuando el padre es flex. */
-  .joywrap { display: block; width: 84px; height: 84px; }
-  /* La zona se ajusta casi al tamaño del joystick (size 80) para que no quede hueco vacío a los lados. */
-  .joy { width: 84px; height: 84px; position: relative; touch-action: none; }
-  /* Estilizado del joystick de nipplejs: base hundida con glow + nub con relieve celeste */
+  /* Joystick ÚNICO de movimiento (hand-rolled): se agarra en cualquier punto del lado izquierdo de la
+     pantalla y aparece centrado en el dedo. El vector marca el rumbo; el disparo es automático. */
+  #jMove { position: fixed; left: 0; bottom: 0; width: 48%; height: 86%; z-index: 4; touch-action: none; }
+  /* (Estilo del nub: ahora inline en createJoystick; estas reglas .nipple quedan sin uso pero inofensivas.) */
   .nipple .back {
     background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.10), rgba(255,255,255,0.03) 70%) !important;
     border: 1px solid rgba(120,200,255,0.35);
@@ -168,20 +158,12 @@
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">joysticks: acelerar (izq) · dirección (der) · 🔴 disparar · teclado: flechas/WASD + espacio</div>
+  <div id="hint">palanca (lado izq): apuntá hacia dónde ir · 🔴 disparar · teclado: flechas/WASD + espacio</div>
 
-  <!-- Pad izquierdo: joystick de acelerador (eje vertical) + disparar.
-       El joystick va envuelto en un contenedor NO-flex (.joywrap): si su padre directo es flex, nipplejs
-       calcula mal la posición del nub (sobre todo con un hermano al lado, como el botón de disparo). -->
-  <div id="padL" class="pad">
-    <div class="joywrap"><div class="joy" id="jThrottle" aria-label="acelerador"></div></div>
-    <button class="btn fire" data-k="SPACE" aria-label="disparar"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="7"/></svg><span id="cdRing"></span></button>
-  </div>
+  <!-- Zona de movimiento: joystick ÚNICO y DINÁMICO. Tocá en cualquier punto del lado izquierdo y la
+       palanca aparece ahí. El vector marca el rumbo del tanque. -->
+  <div id="jMove" aria-label="mover"></div>
 
-  <!-- Pad derecho: joystick de dirección (eje horizontal, proporcional) -->
-  <div id="padR" class="pad">
-    <div class="joywrap"><div class="joy" id="jSteer" aria-label="dirección"></div></div>
-  </div>
 
   <!-- Aviso: girá el teléfono a horizontal -->
   <div id="rotate">
@@ -196,7 +178,6 @@
   </div>
 
 <script src="matter.min.js"></script>
-<script src="nipplejs.min.js"></script>
 <script>
 // ════════════════════════════════════════════════════════════════════
 //  CRAZYTANKS — port web del juego de carreras. Se juega en LANDSCAPE (teléfono horizontal).
@@ -600,12 +581,26 @@ engine.gravity.x = 0; engine.gravity.y = 0;
 const world = engine.world;
 const PHYS_STEP = 1000 / 60;                 // paso fijo (las velocidades quedan en px/frame a 60fps)
 // — Tuning del manejo (px/frame y rad/frame a 60fps; subí/bajá a gusto) —
-const TANK_SPEED   = 9.5;                    // velocidad máx adelante (~570 px/s)
-const TANK_REVERSE = 5.5;                    // velocidad máx atrás
-const TANK_ACCEL   = 0.10;                   // suavizado hacia la velocidad objetivo (0..1): más alto = más ágil
-const TANK_TURN    = 0.070;                  // giro del jugador a dirección máxima (rad/frame, ~4.2 rad/s)
+const TANK_SPEED   = 8;                     // velocidad máx adelante (~720 px/s). Ojo: muy alto = atraviesa paredes finas.
+const TANK_REVERSE = 4;                      // velocidad máx atrás
+const TANK_ACCEL   = 0.07;                   // suavizado hacia la velocidad objetivo (0..1): bajo = acelera/frena gradual (acumula)
+const TANK_AIRDRAG = 0.02;                   // fricción del aire del cuerpo: baja = mantiene/acumula velocidad
+const TANK_TURN    = 0.045;                  // giro del jugador a dirección máxima (rad/frame, ~2.7 rad/s) — menos ágil
 const AI_TURN_K    = 3.0;                    // qué tan fuerte la IA corrige el rumbo hacia el waypoint
+const MOVE_STEER_K = 2.8;                    // palanca única: qué tan fuerte gira hacia el rumbo apuntado
+const AUTOFIRE_RANGE = xper(0.55);           // alcance del auto-disparo del jugador (px)
+const AIM_CONE = 0.18;                        // semicono frontal (rad, ~10°): solo dispara si el enemigo está adelante
 const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+
+// ¿Hay una pared entre dos puntos? (muestreo del segmento) → el auto-disparo no tira contra paredes.
+function lineBlocked(x1, y1, x2, y2) {
+  const steps = Math.max(2, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / xper(0.012)));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps, px = x1 + (x2 - x1) * t, py = y1 + (y2 - y1) * t;
+    for (const w of walls) if (px > w.x && px < w.x + w.width && py > w.y && py < w.y + w.height) return true;
+  }
+  return false;
+}
 
 function clearPhysics() { Composite.clear(world, false); }   // saca todos los cuerpos (al rearmar/salir de carrera)
 
@@ -637,7 +632,7 @@ class Tank {
     // Cuerpo físico: rectángulo redondeado (mejor ramming que un círculo, sin engancharse en esquinas).
     const r = this.radius;
     this.body = Bodies.rectangle(this.x, this.y, r * 2.0, r * 1.6, {
-      angle: this.ang, frictionAir: 0.05, friction: 0.02, restitution: 0.3,
+      angle: this.ang, frictionAir: TANK_AIRDRAG, friction: 0.02, restitution: 0.3,
       chamfer: { radius: r * 0.45 }, label: 'tank',
     });
     Composite.add(world, this.body);
@@ -660,10 +655,18 @@ class Tank {
       // PROPORCIONAL (cercanía al centro → intensidad). Ambos terminan en [-1, 1].
       steer    = (keys[this.right]   ? 1 : 0) - (keys[this.left]    ? 1 : 0);
       throttle = (keys[this.forward] ? 1 : 0) - (keys[this.reverse] ? 1 : 0);
-      if (this.id === 0) { steer += lever.steer; throttle += lever.throttle; }   // jugador 1 también con joysticks
+      if (this.id === 0 && moveStick.active) {                        // palanca única (mobile): rumbo + acelerador
+        let diff = moveStick.ang - this.ang;                          // error de rumbo hacia donde apuntás
+        while (diff >  Math.PI) diff -= Math.PI * 2;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        steer    = diff * MOVE_STEER_K;                               // girá hacia el rumbo apuntado
+        throttle = moveStick.mag;                                     // acelerá según cuánto empujás
+      }
       steer    = clampN(steer, -1, 1);
       throttle = clampN(throttle, -1, 1);
-      if (keys[this.shoot] && this.shoot_cooling === 0) {
+      // Auto-disparo: dispara SOLO hacia adelante (donde apunta el cañón = this.ang) y únicamente cuando
+      // hay un enemigo alineado al frente, en rango y con la línea despejada. El jugador no dispara a mano.
+      if (this.shoot_cooling === 0 && this.findTarget()) {
         addSprite(new Bomb(this.color, this.radius, this.x, this.y, this.ang, this.vel));
         this.shoot_cooling = 2;
       }
@@ -741,6 +744,24 @@ class Tank {
     }
 
     if (this.laps === this.racelength) { this.finished = true; this.ai = true; }
+  }
+
+  // ¿Hay un enemigo para el tiro frontal? Debe estar ADELANTE (dentro del cono del cañón), en rango y con
+  // la línea de tiro despejada. Devuelve el más cercano que cumpla (el disparo siempre sale hacia this.ang).
+  findTarget() {
+    let best = null, bestDist = AUTOFIRE_RANGE;
+    for (const t of tanks) {
+      if (t === this || t.color === this.color || t.finished) continue;
+      const d = getdist([this.x, this.y], [t.x, t.y]);
+      if (d > bestDist) continue;
+      let diff = getangle([this.x, this.y], [t.x, t.y]) - this.ang;     // ángulo al enemigo vs hacia dónde apunta el cañón
+      while (diff >  Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      if (Math.abs(diff) > AIM_CONE) continue;                         // fuera del cono frontal → no dispara
+      if (lineBlocked(this.x, this.y, t.x, t.y)) continue;
+      bestDist = d; best = t;
+    }
+    return best;
   }
 
   draw() {
@@ -1615,36 +1636,60 @@ for (const el of document.querySelectorAll('[data-k]')) {
   el.addEventListener('pointerleave', release);
 }
 
-// ── JOYSTICKS (nipplejs) → alimentan al jugador 1. throttle/steer ∈ [-1, 1]; vuelven a 0 al soltar. ──
-// Los dos joysticks se mueven LIBRES en cualquier dirección, pero cada uno usa solo UNA componente:
-//   izq (acelerador) → vector.y (adelante/atrás)   ·   der (dirección) → vector.x (izquierda/derecha)
-// data.vector ya viene normalizado a [-1,1] → la intensidad es proporcional a la cercanía al centro.
-// vector.y es + hacia ARRIBA. La otra componente se ignora, así moverlo en diagonal no molesta.
-const lever = { throttle: 0, steer: 0 };
-const clamp1 = v => Math.max(-1, Math.min(1, v));
-// dynamicPage:true → nipplejs recalcula la posición real del joystick en CADA toque (clave: los pads se
-// ocultan en el menú con display:none, lo que invalida la posición cacheada y hacía que el vector saliera
-// siempre hacia abajo-derecha desde la esquina). Con esto el centro es el del joystick, no la esquina.
-const JOY_OPTS = { mode: 'static', position: { left: '50%', top: '50%' }, size: 80, restJoystick: true, fadeTime: 0, dynamicPage: true, color: 'rgba(120,200,255,0.7)' };
-// Referencia RELATIVA: el punto donde agarrás el stick es el neutro. Solo cuenta el movimiento DESDE ese
-// punto, así tomarlo un poco descentrado NO aplica input de una (no doblás/acelerás sin querer al agarrar).
-let jThrottle = null, jSteer = null, throttleRef = null, steerRef = null;
-function setupJoysticks() {
-  // Recrea los joysticks desde cero. Necesario tras entrar/salir de fullscreen o rotar: nipplejs cachea
-  // la geometría al crearlos, así que un cambio de viewport dejaba los controles descolocados.
-  if (jThrottle) { try { jThrottle.destroy(); } catch {} }
-  if (jSteer)    { try { jSteer.destroy(); }    catch {} }
-  lever.throttle = 0; lever.steer = 0; throttleRef = null; steerRef = null;
-  jThrottle = nipplejs.create({ ...JOY_OPTS, zone: document.getElementById('jThrottle') });
-  jSteer    = nipplejs.create({ ...JOY_OPTS, zone: document.getElementById('jSteer') });
-  jThrottle.on('start', () => { throttleRef = null; });
-  jThrottle.on('move',  (e, d) => { if (throttleRef === null) throttleRef = d.vector.y; lever.throttle = clamp1(d.vector.y - throttleRef); });
-  jThrottle.on('end',   () => { lever.throttle = 0; throttleRef = null; });
-  jSteer.on('start', () => { steerRef = null; });
-  jSteer.on('move',  (e, d) => { if (steerRef === null) steerRef = d.vector.x; lever.steer = clamp1(d.vector.x - steerRef); });
-  jSteer.on('end',   () => { lever.steer = 0; steerRef = null; });
+// ── PALANCA ANALÓGICA hand-rolled (reemplaza nipplejs) ──
+// Aparece donde tocás dentro de su zona y se dibuja con DOM (base + nub). Robusta ante multitouch vía
+// setPointerCapture: TODOS los eventos del dedo (move/up/cancel) vuelven siempre a la zona, vaya donde vaya
+// el dedo → nunca queda colgada, ni con otro dedo en un botón. Escribe en vivo en `out`: { active, x, y,
+// ang, mag } en coords pantalla (+ abajo); x/y ∈ [-1,1], mag ∈ [0,1]. nipplejs en 'dynamic' perdía el
+// pointerup con multitouch y dejaba el nub pegado al centro.
+function createJoystick(zoneEl, opts) {
+  opts = opts || {};
+  const BASE_R = opts.baseR || 52, KNOB_R = opts.knobR || 30, DEAD = opts.dead || 7, aDead = opts.activeDead || 0;
+  const rgb = opts.rgb || '120,200,255', kRgb = opts.knobRgb || '160,220,255', kbRgb = opts.knobBorderRgb || '180,228,255';
+  const out = opts.target || { active: false, x: 0, y: 0, ang: 0, mag: 0 };
+  const base = document.createElement('div'), knob = document.createElement('div');
+  base.style.cssText = 'position:fixed;border-radius:50%;pointer-events:none;z-index:6;display:none;width:'+(BASE_R*2)+'px;height:'+(BASE_R*2)+'px;margin:'+(-BASE_R)+'px 0 0 '+(-BASE_R)+'px;background:radial-gradient(circle at 50% 38%,rgba('+rgb+',0.10),rgba('+rgb+',0.03) 70%);border:1px solid rgba('+rgb+',0.35);box-shadow:inset 0 2px 14px rgba(0,0,0,0.5),0 0 16px rgba('+rgb+',0.25);';
+  knob.style.cssText = 'position:fixed;border-radius:50%;pointer-events:none;z-index:7;display:none;width:'+(KNOB_R*2)+'px;height:'+(KNOB_R*2)+'px;margin:'+(-KNOB_R)+'px 0 0 '+(-KNOB_R)+'px;background:radial-gradient(circle at 50% 35%,rgba('+kRgb+',0.95),rgba('+rgb+',0.55) 70%);border:1px solid rgba('+kbRgb+',0.8);box-shadow:0 3px 10px rgba(0,0,0,0.5),0 0 16px rgba('+rgb+',0.6);';
+  document.body.appendChild(base); document.body.appendChild(knob);
+  let id = null, ox = 0, oy = 0;
+  zoneEl.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' || id !== null) return;
+    e.preventDefault();
+    id = e.pointerId; ox = e.clientX; oy = e.clientY;
+    try { zoneEl.setPointerCapture(id); } catch {}
+    base.style.left = ox+'px'; base.style.top = oy+'px'; base.style.display = 'block';
+    knob.style.left = ox+'px'; knob.style.top = oy+'px'; knob.style.display = 'block';
+    out.active = aDead <= 0; out.x = 0; out.y = 0; out.mag = 0;
+    if (opts.onStart) opts.onStart();
+  });
+  zoneEl.addEventListener('pointermove', e => {
+    if (e.pointerId !== id) return;
+    let dx = e.clientX - ox, dy = e.clientY - oy;
+    const d = Math.hypot(dx, dy);
+    if (d > BASE_R) { dx = dx/d*BASE_R; dy = dy/d*BASE_R; }            // el nub se clampa al borde de la base
+    knob.style.left = (ox+dx)+'px'; knob.style.top = (oy+dy)+'px';
+    out.mag = Math.min(1, d / BASE_R); out.x = dx / BASE_R; out.y = dy / BASE_R;
+    if (d > DEAD) out.ang = Math.atan2(dy, dx);
+    out.active = out.mag > aDead;
+  });
+  const end = e => {
+    if (e.pointerId !== id) return;
+    id = null; out.active = false; out.x = 0; out.y = 0; out.mag = 0;
+    base.style.display = 'none'; knob.style.display = 'none';
+    if (opts.onEnd) opts.onEnd();
+  };
+  zoneEl.addEventListener('pointerup', end);
+  zoneEl.addEventListener('pointercancel', end);
+  zoneEl.addEventListener('lostpointercapture', end);
+  return out;
 }
-setupJoysticks();
+
+// ── JOYSTICK ÚNICO de movimiento (hand-rolled) → alimenta al jugador 1. ──
+// Una sola palanca omnidireccional: su vector marca el RUMBO deseado (ang) y la intensidad (mag = acelerador).
+const moveStick = { active: false, ang: 0, mag: 0, x: 0, y: 0 };
+if (IS_TOUCH) createJoystick(document.getElementById('jMove'),
+  { target: moveStick, activeDead: 0.15, rgb: '120,200,255', knobRgb: '160,220,255', knobBorderRgb: '180,228,255' });
+function setupJoysticks() {}   // compat: la palanca hand-rolled se crea una vez y se posiciona sola (nada que recrear al rotar)
 
 // ── PANTALLA COMPLETA. En mobile saca la barra del navegador. iOS Safari NO soporta la Fullscreen API
 //    en elementos arbitrarios → ahí falla en silencio (la alternativa es "agregar a pantalla de inicio",
@@ -1729,7 +1774,7 @@ function bakeBackground(track) {
 let lastT = performance.now();
 let showFPS = false, fKeyPrev = false, dtSmoothed = 1/60;              // overlay de FPS (tecla F)
 let T = 0;                                                             // tiempo acumulado para animaciones (menú, cuenta regresiva)
-const padL = document.getElementById('padL'), padR = document.getElementById('padR');
+const jMoveZone = document.getElementById('jMove');
 let padsShown = false;   // arranca oculto (en el menú / desktop)
 function loop(now) {
   if (typeof now !== 'number') now = performance.now();
@@ -1795,31 +1840,21 @@ function loop(now) {
   }
 
   // Los joysticks solo en táctil (en desktop se juega con teclado). En carrera se muestran; en el menú no.
-  const showPads = IS_TOUCH && !(sprites[0] && sprites[0].menu);
+  // Controles solo en táctil + en carrera. Se ocultan también durante el cartel de confirmación para que
+  // la zona de movimiento (lado izquierdo) no tape el botón SÍ.
+  const showPads = IS_TOUCH && !!sprites[0] && !sprites[0].menu && !sprites[0].confirmQuit;
   if (showPads !== padsShown) {
     padsShown = showPads;
-    padL.style.display = showPads ? 'flex' : 'none';
-    padR.style.display = showPads ? 'flex' : 'none';
-    if (showPads) setupJoysticks();   // recrea con el layout actual al mostrarse (geometría fresca para nipplejs)
+    jMoveZone.style.display = showPads ? 'block' : 'none';
+    if (showPads) setupJoysticks();   // no-op (la palanca hand-rolled ya existe); se mantiene por compatibilidad
   }
 
-  updateFireCooldown();
   requestAnimationFrame(loop);
-}
-
-// Cooldown circular en el botón de disparar (jugador 1): sector oscuro que se achica al recargar.
-const cdRing = document.getElementById('cdRing');
-function updateFireCooldown() {
-  const p = tanks[0];
-  const cd = (p && !p.ai) ? p.shoot_cooling / 2 : 0;                   // 0..1 restante (cooldown = 2s)
-  cdRing.style.background = cd > 0.001
-    ? `conic-gradient(rgba(0,0,0,0.55) ${cd*360}deg, rgba(0,0,0,0) 0deg)`
-    : 'transparent';
 }
 
 // ── INIT ──
 resize();
-padL.style.display = 'none'; padR.style.display = 'none';   // arrancan ocultos; el loop los muestra solo en táctil + carrera
+jMoveZone.style.display = 'none';   // arranca oculto; el loop lo muestra solo en táctil + carrera
 addSprite(new MainHandler());
 loop();
 

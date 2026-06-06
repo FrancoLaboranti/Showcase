@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Fireworks</title>
+<link rel="stylesheet" href="../../Arcade/arcade-shell.css">
 <style>
   :root { --bar-height: 66px; }                                                  /* tweak to taste */
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -58,82 +59,8 @@
   #ui button.txt { font-weight: 700; font-size: 17px; letter-spacing: 0.02em; }
   /* visual indicator for toggled-on state */
   #ui button.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); }
-  /* Pantalla completa: muestra "expandir" o "contraer" según body.fs-on (igual que CrazyTanks) */
-  #btnFs .ic-exit { display: none; }
-  body.fs-on #btnFs .ic-enter { display: none; }
-  body.fs-on #btnFs .ic-exit  { display: block; }
-
-  /* Info y pantalla completa: chicos, esquina abajo-derecha (fuera de #ui para no descentrar la fila).
-     btnFs queda a la izquierda de btnDebug. */
-  #btnDebug, #btnFs {
-    position: absolute;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.16);
-    background: rgba(255,255,255,0.04);
-    color: rgba(255,255,255,0.6);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-  }
-  #btnDebug { right: 6px; }
-  #btnFs    { right: 40px; }                                                     /* 28px del de info + 6px de borde + 6px de gap */
-  #btnDebug svg, #btnFs svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnDebug:active, #btnFs:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
-  #btnDebug.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
-  /* Exit button — vuelta al menú raíz */
-  #btnExit {
-    position: absolute;
-    left: 6px;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
-    color: rgba(255,255,255,0.85);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-    z-index: 10;
-  }
-  #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
-  /* === Bar layout: exit-left, main-center, info/debug-right (refactor) === */
-  #bar {
-    display: grid !important;
-    grid-template-columns: 1fr auto 1fr !important;
-    justify-content: stretch !important;
-  }
-  #bar > #btnExit {
-    position: static !important;
-    left: auto !important; right: auto !important;
-    top: auto !important; bottom: auto !important;
-    justify-self: start;
-  }
-  #bar > #ui { justify-self: center; }
-  #bar > #btnInfo, #bar > #btnDebug, #bar > #btnHome {
-    position: static !important;
-    left: auto !important; right: auto !important;
-    top: auto !important; bottom: auto !important;
-    justify-self: end;
-  }
-
+  /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
 </style>
-<script>/* arcade-embed-shim: corre embebido en la shell del Arcade (iframe) */
-(function () {
-  if (window.self === window.top) return;            // sólo embebido
-  var noop = function () { return Promise.resolve(); };
-  try { Element.prototype.requestFullscreen = noop; } catch (e) {}
-  try { Element.prototype.webkitRequestFullscreen = noop; } catch (e) {}
-  // El "salir al menú" del juego: en vez de navegar (recargaría el menú dentro del iframe),
-  // avisamos a la shell por postMessage. Capturamos el click antes que el handler del juego.
-  window.addEventListener('click', function (e) {
-    var ex = e.target && e.target.closest && e.target.closest('#btnExit, #btnHome');
-    if (!ex) return;
-    e.preventDefault(); e.stopImmediatePropagation();
-    try { parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (x) {}
-  }, true);
-})();
-</script>
 </head>
 <body>
   <canvas id="c"></canvas>
@@ -157,7 +84,7 @@
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
-    <button id="btnDebug" aria-label="debug" title="Info / debug">
+    <button id="btnInfo" aria-label="info" title="Info / debug">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
   </div>
@@ -181,6 +108,7 @@
   // El cohete tiene un OBJETIVO (dónde explota) y un TIEMPO al azar para llegar. Tres estilos de
   // trayectoria (ver makeFirework): 'arc' (balístico: sube fuerte y cae al objetivo), 'decel'
   // (sube rápido y frena al llegar) y 'direct' (sube casi recto y explota). Deja estela + chispas.
+  const FW_MAX           = 100;      // tope de cohetes vivos: si está lleno, no se spawnea
   const FW_RADIUS_FRAC   = 0.0045;   // radio de la cabeza del cohete (chico = delicado)
   const EXPLODE_TOP_FRAC = 0.08;     // banda donde explotan (fracción de H): desde acá (arriba)...
   const EXPLODE_MID_FRAC = 0.5;      // ...hasta la mitad de la pantalla
@@ -213,6 +141,7 @@
   const LAUNCH_INTERVAL  = 0.6;     // s entre cohetes mientras se mantiene apretado (más cooldown entre lanzamientos)
   const MULTI_COUNT      = 5;        // cohetes por disparo con el toggle ×5
   const AUTO_INTERVAL    = [0.4, 0.85];  // s entre cohetes del show automático (al azar)
+  const SALVO_EVERY      = 25;       // cada cuántos lanzamientos sale el salvo garantizado (amarillo-blanco-...)
   const BLOWONE_CD       = 0.12;     // s entre explosiones al mantener "reventar de a uno"
   const CURSOR_R_FRAC    = 0.01;     // marcador bajo cada dedo/cursor activo (V1: sper(0.01))
 
@@ -260,6 +189,8 @@
     [255, 100, 210],  // magenta
   ];
   const GOLD = [255, 200, 95];                                                     // dorado de sauces/palmeras
+  const C_YELLOW = [255, 224, 64];                                                 // amarillo del salvo
+  const C_WHITE  = [255, 250, 240];                                                // blanco del salvo
   const pickColor = () => PALETTE[ri(0, PALETTE.length - 1)];
   const mixWhite  = (c, amt) => [c[0]+(255-c[0])*amt, c[1]+(255-c[1])*amt, c[2]+(255-c[2])*amt];   // hacia el blanco caliente
 
@@ -313,7 +244,9 @@
   let blowOneHeld = false;                                                         // se mantiene apretado el botón de reventar uno
 
   // ════════════════ COHETE ════════════════
-  function makeFirework(x, y) {
+  function makeFirework(x, y, forced, pat) {
+    if (fireworks.length >= FW_MAX) return;                                       // cap: si está lleno, no se spawnea
+
     // OBJETIVO en la mitad superior de la pantalla (banda absoluta): lanzando desde abajo (cerca de
     // los botones) el recorrido es largo. Siempre al menos MIN_RISE arriba del toque, con inclinación.
     let ty = yper(rnd(EXPLODE_TOP_FRAC, EXPLODE_MID_FRAC));
@@ -328,9 +261,10 @@
       sx: x, sy: y, tx, ty, x, y,
       duration: T, age: 0, style,
       radius: sper(FW_RADIUS_FRAC),
-      color: pickColor(),
+      color: forced || pickColor(),
+      pattern: pat,                                                               // patrón de explosión forzado (salvos); undefined = al azar
       trail: [], emberCD: 0,
-      dud: Math.random() < DUD_CHANCE,                                            // mínima chance de no explotar
+      dud: !forced && Math.random() < DUD_CHANCE,                                 // los del salvo nunca fallan
     };
     if (style === 'arc') {                                                        // balístico: resolver la v inicial para caer al objetivo en T
       fw.g  = sper(rnd(ARC_GRAV_FRAC[0], ARC_GRAV_FRAC[1]));
@@ -339,6 +273,36 @@
     }
     fireworks.push(fw);
     return fw;
+  }
+
+  // Salvo garantizado cada SALVO_EVERY lanzamientos: una tanda "de golpe" con esquema de color y forma
+  // sorteados al azar, así varía cada vez. Las formas 'abanico'/'columna' usan dónde tocaste.
+  let launchCount = 0;
+  const SALVO_SCHEMES = [
+    [C_YELLOW, C_WHITE],                  // amarillo · blanco (el clásico que pediste)
+    [GOLD, [255, 70, 70]],                // dorado · rojo
+    [[70, 200, 255], C_WHITE],            // celeste · blanco
+    [[120, 130, 255], [200, 120, 255]],   // azul · violeta
+    [[255, 100, 210], C_WHITE],           // magenta · blanco
+    'rainbow',                            // arcoíris (recorre la paleta)
+  ];
+  const _salvoColor = (scheme, i) => scheme === 'rainbow' ? PALETTE[i % PALETTE.length] : scheme[i % scheme.length];
+  function salvo(x, y) {
+    const scheme = SALVO_SCHEMES[ri(0, SALVO_SCHEMES.length - 1)];
+    const shape  = ri(0, 2);                                                      // 0 = fila ancha · 1 = abanico · 2 = columna
+    const pat    = pickPattern();                                                 // un patrón de explosión compartido por todo el salvo
+    const n = ri(5, 7);
+    for (let i = 0; i < n; i++) {
+      let fx;
+      if (shape === 0)      fx = xper(0.5 + (i - (n - 1) / 2) * 0.15);             // fila a lo ancho de la pantalla
+      else if (shape === 1) fx = Math.max(xper(0.18), Math.min(xper(0.82), x)) + (i - (n - 1) / 2) * xper(0.06);  // abanico alrededor del toque
+      else                  fx = Math.max(xper(0.12), Math.min(xper(0.88), x)) + rnd(-xper(0.015), xper(0.015));  // columna en el punto
+      makeFirework(fx, H, _salvoColor(scheme, i), pat);
+    }
+  }
+  function launch(x, y) {                                                         // lanzamiento normal; cada SALVO_EVERY tira el salvo en vez del cohete suelto
+    if ((++launchCount % SALVO_EVERY) === 0) salvo(x, y);
+    else makeFirework(x, y);
   }
 
   function spawnEmber(fw, bright) {                                               // chispita que se desprende de la cola del cohete
@@ -397,7 +361,7 @@
         fw.g  = sper(DUD_GRAV_FRAC);
       } else {
         fw.dead = true;
-        spawnBurst(fw.x, fw.y, fw.radius, false, fw.color);
+        spawnBurst(fw.x, fw.y, fw.radius, false, fw.color, fw.pattern);
       }
     }
   }
@@ -480,9 +444,9 @@
     });
   }
 
-  function spawnBurst(x, y, radius, isChild, color) {
+  function spawnBurst(x, y, radius, isChild, color, forcePattern) {
     color = color || pickColor();
-    const pattern = isChild ? null : pickPattern();
+    const pattern = isChild ? null : (forcePattern || pickPattern());            // el salvo fuerza un patrón compartido
     const big = !isChild && Math.random() < BURST_BIG_CHANCE;
     const sizeMul = (big ? rnd(BURST_BIG_MULT[0], BURST_BIG_MULT[1]) : rnd(BURST_SIZE_VAR[0], BURST_SIZE_VAR[1])) * (isChild ? 0.5 : 1);
     const V = sper(SPARK_SPEED_FRAC) * sizeMul;                                   // velocidad base
@@ -666,21 +630,9 @@
 
   tappable(document.getElementById('btnBlowAll'), blowAll);
 
-  const btnDebug = document.getElementById('btnDebug');
-  tappable(btnDebug, () => { showDebug = !showDebug; btnDebug.classList.toggle('on', showDebug); });
-
-  // Pantalla completa (igual que CrazyTanks): en mobile saca la barra del navegador. iOS Safari no
-  // soporta la Fullscreen API en elementos → falla en silencio. El resize() se reengancha solo al cambiar.
-  const fsTarget = document.documentElement;
-  const _reqFs  = fsTarget.requestFullscreen || fsTarget.webkitRequestFullscreen;
-  const _exitFs = document.exitFullscreen || document.webkitExitFullscreen;
-  const isFs = () => !!(document.fullscreenElement || document.webkitFullscreenElement);
-  function enterFs() { if (_reqFs) { const p = _reqFs.call(fsTarget); if (p && p.catch) p.catch(() => {}); } }
-  function exitFs()  { if (_exitFs) _exitFs.call(document); }
-  function syncFsIcon() { document.body.classList.toggle('fs-on', isFs()); }
-  document.addEventListener('fullscreenchange', syncFsIcon);
-  document.addEventListener('webkitfullscreenchange', syncFsIcon);
-  tappable(document.getElementById('btnFs'), () => { isFs() ? exitFs() : enterFs(); });
+  const btnInfo = document.getElementById('btnInfo');
+  tappable(btnInfo, () => { showDebug = !showDebug; btnInfo.classList.toggle('on', showDebug); });
+  // Fullscreen + lock de orientación + exit los maneja arcade-shell.js (al final del body).
 
   // ── LOOP ──
   let lastT = performance.now();
@@ -699,7 +651,7 @@
       ps.cd -= dt;
       if (ps.cd <= 0) {
         const n = multiLaunch ? MULTI_COUNT : 1;
-        for (let i = 0; i < n; i++) makeFirework(ps.x, ps.y);
+        for (let i = 0; i < n; i++) launch(ps.x, ps.y);
         ps.cd = LAUNCH_INTERVAL;
       }
     }
@@ -708,7 +660,7 @@
       autoCD -= dt;
       if (autoCD <= 0) {
         const ax = xper(rnd(0.12, 0.88)), n = multiLaunch ? MULTI_COUNT : 1;
-        for (let i = 0; i < n; i++) makeFirework(ax + rnd(-xper(0.02), xper(0.02)), H);
+        for (let i = 0; i < n; i++) launch(ax + rnd(-xper(0.02), xper(0.02)), H);
         autoCD = rnd(AUTO_INTERVAL[0], AUTO_INTERVAL[1]);
       }
     }
@@ -781,10 +733,8 @@
   setTimeout(() => hint.style.opacity = '0', 5000);
   canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
   </script>
-  <script>
-    document.getElementById('btnExit').addEventListener('click', () => {
-      if (confirm('¿Salir al menú?')) location.href = '../../';
-    });
-  </script>
+
+  <!-- Shell del Arcade (exit + fullscreen + lock de orientación). data-orient: landscape/portrait/any. -->
+  <script src="../../Arcade/arcade-shell.js" data-orient="portrait"></script>
 </body>
 </html>

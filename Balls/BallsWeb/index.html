@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Balls</title>
+<link rel="stylesheet" href="../../Arcade/arcade-shell.css">
 <style>
   :root { --bar-height: 66px; }                                                  /* tweak to taste */
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -63,95 +64,8 @@
   /* visual indicator for toggled-on state */
   #ui button.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); }
 
-  /* Info: chico, en la esquina abajo-derecha. Lives outside #ui so the main row stays centered. */
-  #btnDebug {
-    position: absolute;
-    right: 6px;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.16);
-    background: rgba(255,255,255,0.04);
-    color: rgba(255,255,255,0.6);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-  }
-  #btnDebug svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnDebug:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
-  #btnDebug.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
-  /* Exit button — vuelta al menú raíz */
-  #btnExit {
-    position: absolute;
-    left: 6px;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
-    color: rgba(255,255,255,0.85);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-    z-index: 10;
-  }
-  #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
-  /* === Bar layout: exit-left, main-center, info/debug-right (refactor) === */
-  #bar {
-    display: grid !important;
-    grid-template-columns: 1fr auto 1fr !important;
-    justify-content: stretch !important;
-  }
-  #bar > #btnExit {
-    position: static !important;
-    left: auto !important; right: auto !important;
-    top: auto !important; bottom: auto !important;
-    justify-self: start;
-  }
-  #bar > #ui { justify-self: center; }
-  #bar > #btnInfo, #bar > #btnDebug, #bar > #btnHome {
-    position: static !important;
-    left: auto !important; right: auto !important;
-    top: auto !important; bottom: auto !important;
-    justify-self: end;
-  }
-  /* Pantalla completa — esquina arriba-der, flotante. */
-  #btnFs {
-    position: absolute;
-    right: 6px;
-    top: calc(env(safe-area-inset-top) + 6px);
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
-    color: rgba(255,255,255,0.85);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-    z-index: 10;
-  }
-  #btnFs svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnFs:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
-  #btnFs .ic-exit { display: none; }
-  body.fs-on #btnFs .ic-enter { display: none; }
-  body.fs-on #btnFs .ic-exit  { display: block; }
-
-
+  /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
 </style>
-<script>/* arcade-embed-shim: corre embebido en la shell del Arcade (iframe) */
-(function () {
-  if (window.self === window.top) return;            // sólo embebido
-  var noop = function () { return Promise.resolve(); };
-  try { Element.prototype.requestFullscreen = noop; } catch (e) {}
-  try { Element.prototype.webkitRequestFullscreen = noop; } catch (e) {}
-  // El "salir al menú" del juego: en vez de navegar (recargaría el menú dentro del iframe),
-  // avisamos a la shell por postMessage. Capturamos el click antes que el handler del juego.
-  window.addEventListener('click', function (e) {
-    var ex = e.target && e.target.closest && e.target.closest('#btnExit, #btnHome');
-    if (!ex) return;
-    e.preventDefault(); e.stopImmediatePropagation();
-    try { parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (x) {}
-  }, true);
-})();
-</script>
 </head>
 <body>
   <canvas id="c"></canvas>
@@ -178,7 +92,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
       </button>
     </div>
-    <button id="btnDebug" aria-label="debug" title="Info / debug">
+    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+    </button>
+    <button id="btnInfo" aria-label="info" title="Info / debug">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
   </div>
@@ -793,10 +710,10 @@
   });
 
   // Debug HUD toggle.
-  const btnDebug = document.getElementById('btnDebug');
-  tappable(btnDebug, () => {
+  const btnInfo = document.getElementById('btnInfo');
+  tappable(btnInfo, () => {
     showDebug = !showDebug;
-    btnDebug.classList.toggle('on', showDebug);
+    btnInfo.classList.toggle('on', showDebug);
   });
 
   // ── ACELERÓMETRO (requiere HTTPS / WebView de la app) ──
@@ -1123,26 +1040,8 @@
   setTimeout(() => hint.style.opacity = '0', 5000);
   canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
   </script>
-  <script>
-    document.getElementById('btnExit').addEventListener('click', () => {
-      if (confirm('¿Salir al menú?')) location.href = '../../';
-    });
-  </script>
-  <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
-  </button>
-  <script>
-    (function() {
-      const btn = document.getElementById('btnFs');
-      btn.addEventListener('click', () => {
-        if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
-        else document.exitFullscreen?.();
-      });
-      document.addEventListener('fullscreenchange', () => {
-        document.body.classList.toggle('fs-on', !!document.fullscreenElement);
-      });
-    })();
-  </script>
 
+  <!-- Shell del Arcade (exit + fullscreen + lock de orientación). data-orient: landscape/portrait/any. -->
+  <script src="../../Arcade/arcade-shell.js" data-orient="portrait"></script>
 </body>
 </html>

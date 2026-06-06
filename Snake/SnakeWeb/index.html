@@ -71,15 +71,10 @@
   #btnExit svg { display: block; width: 16px; height: 16px; pointer-events: none; }
   #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
 
-  /* Palanca de dirección (nipplejs) — abajo-izquierda, sobre el canvas. Sólo touch. */
-  /* La zona es 128 pero el joystick visible va donde estaba antes (centro ≈ 60px del borde, como con la
-     zona de 88 y left/bottom:16): corro #padL para compensar el agrandado y la zona extra se extiende
-     hacia arriba/derecha (área natural del pulgar). */
-  #padL { position: absolute; left: -4px; bottom: calc(env(safe-area-inset-bottom) - 4px); z-index: 4; }
-  /* La zona táctil (.joy) es MÁS GRANDE que el joystick visible (size 84): así el agarre es más sólido y
-     toma el toque aunque caigas un poco afuera. El joystick visual queda centrado en esta zona. */
-  .joywrap { display: block; width: 128px; height: 128px; }
-  .joy { width: 128px; height: 128px; position: relative; touch-action: none; }
+  /* Palanca de dirección (hand-rolled). Zona invisible = mitad izquierda × 1/3 inferior (área natural del
+     pulgar): tocás ahí y la palanca se dibuja en el canvas centrada en el dedo. Al soltar vuelve el
+     placeholder de descanso. Sólo touch — en desktop se oculta. touch-action:none evita scroll/gestos. */
+  #jMove { position: fixed; left: 0; bottom: 0; width: 50%; height: 33%; z-index: 3; touch-action: none; }
   .nipple .back {
     background: radial-gradient(circle at 50% 38%, rgba(0,255,140,0.12), rgba(0,255,140,0.03) 70%) !important;
     border: 1px solid rgba(0,255,140,0.35);
@@ -93,13 +88,30 @@
     opacity: 1 !important;
   }
 
+  /* Placeholder TENUE de la palanca: muestra una posición de descanso prolija al arrancar, antes del primer
+     toque (en semi el joystick real recién se crea al tocar; después él mismo queda tenue donde lo soltaste). */
+  .joyRest {
+    position: fixed; left: 64px; bottom: calc(env(safe-area-inset-bottom) + 64px);
+    width: 96px; height: 96px; border-radius: 50%;
+    transform: translate(-50%, 50%); z-index: 2; pointer-events: none; opacity: 0.4;
+    background: radial-gradient(circle at 50% 38%, rgba(0,255,140,0.12), rgba(0,255,140,0.03) 70%);
+    border: 1px solid rgba(0,255,140,0.35);
+    box-shadow: inset 0 2px 14px rgba(0,0,0,0.5), 0 0 16px rgba(0,255,140,0.22);
+  }
+  .joyRest::after {
+    content: ''; position: absolute; left: 50%; top: 50%; width: 48px; height: 48px; border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle at 50% 35%, rgba(160,255,200,0.95), rgba(0,230,140,0.55) 70%);
+    border: 1px solid rgba(190,255,220,0.8);
+  }
+
   /* Boost: botón de acción grande y flotante, abajo-derecha, ARRIBA del botón de info. Orbe verde que
      brilla fuerte al mantenerlo (.on). Simétrico al joystick de la izquierda. */
   #btnSprint {
     position: absolute;
     right: 16px;
     bottom: calc(env(safe-area-inset-bottom) + 16px);
-    width: 88px; height: 88px; border-radius: 50%;                               /* mismo tamaño que la palanca (.joywrap = 88px) */
+    width: 88px; height: 88px; border-radius: 50%;                               /* orbe de boost, simétrico al joystick (size 96) */
     z-index: 4; padding: 0; cursor: pointer; touch-action: none;
     display: flex; align-items: center; justify-content: center;
     color: #eafff2;
@@ -160,15 +172,16 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
 
-  <!-- Palanca de dirección (touch): su dirección fija el rumbo de la cabeza. Misma de TankWARS. -->
-  <div id="padL"><div class="joywrap"><div class="joy" id="jMove" aria-label="dirección"></div></div></div>
+  <!-- Palanca de dirección (touch): zona invisible full-screen; la palanca aparece donde tocás (semi).
+       Su dirección fija el rumbo de la cabeza. Mismo esquema dinámico que TankWARS. -->
+  <div id="jMove" aria-label="dirección"></div>
+  <div id="jMoveRest" class="joyRest"></div>
 
   <!-- Boost: botón de acción grande y flotante (abajo-derecha, arriba del de info), simétrico al joystick -->
   <button id="btnSprint" aria-label="acelerar" title="Acelerar (mantener)">
     <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
   </button>
 
-  <script src="nipplejs.min.js"></script>
   <script>
   // ════════════════════════════════════════════════════════════════════
   //  SNAKE — port web fiel de Snake.py, con el mismo shell mobile que BallsWeb.
@@ -686,17 +699,24 @@
   window.addEventListener('resize', resize);
 
   // ════════════════ INPUT ════════════════
-  // En TOUCH la dirección la da la PALANCA (ver setupJoystick); tocar el campo NO dirige — sólo sirve para
+  // En TOUCH la dirección la da la PALANCA hand-rolled (más abajo); tocar el campo NO dirige — sólo sirve para
   // acelerar con 2+ dedos y para reiniciar en game over. En DESKTOP el mouse dirige (la cabeza va hacia el
   // puntero) y mantener el botón acelera (port de "LMB held = sprint").
   function evtPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-  const canvasPointers = new Map();                                              // dedos sobre el canvas (sólo para el sprint multi-touch)
+  // Conteo de dedos a NIVEL WINDOW (no por elemento): el pointerup/cancel siempre llega a window aunque el
+  // dedo se deslice fuera del elemento donde empezó, así NUNCA quedan punteros zombi (esa era la causa de que
+  // el boost/dirección se trabaran tras varios toques). 2+ dedos = acelerar.
+  const activeTouches = new Set();
   let mousePressed = false;                                                      // desktop: botón del mouse = acelerar
   function updateSprint() {
-    sprint = sprintBtnHeld || mousePressed || canvasPointers.size > 1;           // 2+ dedos (o botón, o mouse en desktop) = acelerar
+    sprint = sprintBtnHeld || mousePressed || activeTouches.size >= 2;           // 2+ dedos (o botón, o mouse en desktop) = acelerar
     const b = document.getElementById('btnSprint');                              // el orbe se enciende cuando estás acelerando (incl. clic del mouse en desktop)
     if (b) b.classList.toggle('on', sprint);
   }
+  addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') { activeTouches.add(e.pointerId); updateSprint(); } });
+  function dropTouch(e) { if (activeTouches.delete(e.pointerId)) updateSprint(); }
+  addEventListener('pointerup', dropTouch);
+  addEventListener('pointercancel', dropTouch);
   function aimAt(px, py) {                                                       // fija el RUMBO de la cabeza hacia (px,py) — sólo mouse (desktop)
     const head = snake[0];
     if (!head || manager.gameOver) return;
@@ -711,19 +731,14 @@
     if (e.pointerType === 'mouse') {
       mouseX = p.x; mouseY = p.y; aimAt(p.x, p.y);                               // desktop: el mouse dirige
       mousePressed = true;
-    } else {
-      canvasPointers.set(e.pointerId, p);                                        // touch: sólo cuenta para el sprint (la palanca dirige)
+      updateSprint();
     }
-    updateSprint();
   });
   canvas.addEventListener('pointermove', e => {
-    if (e.pointerType === 'mouse') { const p = evtPos(e); mouseX = p.x; mouseY = p.y; aimAt(p.x, p.y); return; }
-    if (canvasPointers.has(e.pointerId)) canvasPointers.set(e.pointerId, evtPos(e));
+    if (e.pointerType === 'mouse') { const p = evtPos(e); mouseX = p.x; mouseY = p.y; aimAt(p.x, p.y); }
   });
   function endPointer(e) {
-    if (e.pointerType === 'mouse') { mousePressed = false; updateSprint(); return; }
-    canvasPointers.delete(e.pointerId);
-    updateSprint();
+    if (e.pointerType === 'mouse') { mousePressed = false; updateSprint(); }
   }
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
@@ -732,29 +747,16 @@
   // ── BOTONES ──
   // tap en pointerdown (responde aunque otro dedo esté dirigiendo en el canvas), igual que BallsWeb.
   function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
-  // press-and-hold: mantener apretado el botón ⚡ acelera; soltar/arrastrar afuera lo corta.
+  // press-and-hold: mantener apretado el botón ⚡ acelera; soltar/salir lo corta. SÓLO listeners en el propio
+  // elemento (igual que el holdBtn de TankWARS): nada a nivel document, así no se pisa con la palanca.
   let sprintBtnHeld = false;
   function pressable(el, onDown, onUp) {
-    let pid = null;
-    const stop = () => {
-      if (pid === null) return; pid = null; onUp();
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', stop);
-      document.removeEventListener('pointercancel', stop);
-    };
-    const onMove = e => {
-      if (e.pointerId !== pid) return;
-      const r = el.getBoundingClientRect();
-      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) stop();
-    };
-    el.addEventListener('pointerdown', e => {
-      e.preventDefault(); pid = e.pointerId;
-      try { el.releasePointerCapture(e.pointerId); } catch {}
-      onDown();
-      document.addEventListener('pointermove', onMove);
-      document.addEventListener('pointerup', stop);
-      document.addEventListener('pointercancel', stop);
-    });
+    const down = e => { e.preventDefault(); onDown(); };
+    const up   = () => onUp();
+    el.addEventListener('pointerdown', down);
+    el.addEventListener('pointerup', up);
+    el.addEventListener('pointercancel', up);
+    el.addEventListener('pointerleave', up);
   }
 
   const btnSprint = document.getElementById('btnSprint');
@@ -774,27 +776,60 @@
   const btnDebug = document.getElementById('btnDebug');
   tappable(btnDebug, () => { showDebug = !showDebug; btnDebug.classList.toggle('on', showDebug); });
 
-  // ── PALANCA DE DIRECCIÓN (nipplejs) — misma de TankWARS ──
-  // Una sola palanca omnidireccional: su dirección fija el RUMBO de la cabeza (head.targetAng), igual que
-  // marcar un punto con el dedo. Mantiene el rumbo entre inputs (no hace falta sostenerla). Sólo en touch;
-  // en desktop se oculta y se sigue dirigiendo con el mouse. Coexiste con el toque-en-pantalla.
+  // ── PALANCA DE DIRECCIÓN (hand-rolled) — sólo touch ──
+  // Palanca propia, SIN nipplejs: aparece donde tocás dentro de la zona (mitad izq × 1/3 inferior) y su
+  // dirección fija el RUMBO de la cabeza (head.targetAng), persistente entre inputs. La clave de robustez es
+  // setPointerCapture: TODOS los eventos de ese dedo (move/up/cancel) llegan siempre a la zona, vaya donde
+  // vaya el dedo, así NUNCA queda colgada — ni aunque otro dedo esté en el orbe de boost. nipplejs en modo
+  // dynamic perdía el pointerup con multitouch y dejaba la palanca pegada al centro.
   const IS_TOUCH = (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches) || 'ontouchstart' in window;
-  const JOY_OPTS = { mode: 'static', position: { left: '50%', top: '50%' }, size: 84, restJoystick: true, fadeTime: 0, dynamicPage: true, color: 'rgba(0,255,140,0.7)' };
-  let jMove = null;
-  function setupJoystick() {
-    if (!IS_TOUCH || typeof nipplejs === 'undefined') return;
-    if (jMove) { try { jMove.destroy(); } catch {} }
-    jMove = nipplejs.create({ ...JOY_OPTS, zone: document.getElementById('jMove') });
-    jMove.on('move', (e, d) => {
-      const head = snake[0];
-      if (!head || manager.gameOver) return;
-      const ang = Math.atan2(-d.vector.y, d.vector.x);   // nipplejs y es + arriba → invierto a coords pantalla
-      head.targetAng = ang;                               // sólo fija el rumbo; el punto-guía se calcula por frame en el draw (suave)
+  const JOY_BASE_R = 52, JOY_KNOB_R = 30, JOY_DEAD = 7;    // px CSS (el ctx ya está escalado por dpr)
+  let joy = null;                                          // { id, ox, oy, kx, ky } mientras dirigís, o null en reposo
+  const jZone = document.getElementById('jMove');
+  const jRest = document.getElementById('jMoveRest');
+  if (IS_TOUCH) {
+    jZone.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse') return;
+      e.preventDefault();
+      if (manager.gameOver) { manager.reset(); btnPause.classList.remove('on'); return; }   // tocá para reiniciar
+      if (joy) return;                                     // ya hay un dedo dirigiendo; el 2º sólo cuenta para boost (window)
+      try { jZone.setPointerCapture(e.pointerId); } catch {}
+      const p = evtPos(e);
+      joy = { id: e.pointerId, ox: p.x, oy: p.y, kx: p.x, ky: p.y };
       hint.style.opacity = '0';
+      jRest.style.display = 'none';
     });
+    jZone.addEventListener('pointermove', e => {
+      if (!joy || e.pointerId !== joy.id) return;
+      const p = evtPos(e);
+      let dx = p.x - joy.ox, dy = p.y - joy.oy;
+      const d = Math.hypot(dx, dy);
+      if (d > JOY_BASE_R) { dx = dx/d*JOY_BASE_R; dy = dy/d*JOY_BASE_R; }   // el nub se clampa al borde de la base
+      joy.kx = joy.ox + dx; joy.ky = joy.oy + dy;
+      if (d > JOY_DEAD) { const head = snake[0]; if (head && !manager.gameOver) head.targetAng = Math.atan2(dy, dx); }
+    });
+    const endJoy = e => { if (joy && e.pointerId === joy.id) { joy = null; jRest.style.display = ''; } };
+    jZone.addEventListener('pointerup', endJoy);
+    jZone.addEventListener('pointercancel', endJoy);
+    jZone.addEventListener('lostpointercapture', endJoy);
+  } else {
+    jZone.style.display = 'none';
+    jRest.style.display = 'none';
   }
-  if (!IS_TOUCH) document.getElementById('padL').style.display = 'none';
-  window.addEventListener('orientationchange', () => requestAnimationFrame(setupJoystick));
+  // Dibuja la palanca ACTIVA sobre el canvas (la de reposo es el placeholder DOM .joyRest). Se llama en el loop.
+  function drawJoystick() {
+    if (!joy) return;
+    ctx.beginPath(); ctx.arc(joy.ox, joy.oy, JOY_BASE_R, 0, TAU);          // base hundida
+    ctx.fillStyle = 'rgba(0,255,140,0.06)'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,255,140,0.35)'; ctx.stroke();
+    ctx.globalCompositeOperation = 'lighter';                              // nub con glow verde
+    ctx.beginPath(); ctx.arc(joy.kx, joy.ky, JOY_KNOB_R, 0, TAU);
+    const g = ctx.createRadialGradient(joy.kx, joy.ky - JOY_KNOB_R*0.3, JOY_KNOB_R*0.2, joy.kx, joy.ky, JOY_KNOB_R);
+    g.addColorStop(0, 'rgba(170,255,210,0.9)'); g.addColorStop(1, 'rgba(0,220,130,0.5)');
+    ctx.fillStyle = g; ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(190,255,220,0.8)'; ctx.stroke();
+  }
 
   // ════════════════ LOOP ════════════════
   function loop(now) {
@@ -883,6 +918,7 @@
       ctx.fillStyle = 'rgba(255,255,255,0.9)';
       ctx.beginPath(); ctx.arc(mouseX, mouseY, cr, 0, TAU); ctx.fill();
     }
+    if (IS_TOUCH) drawJoystick();                                                 // palanca activa (touch) por encima de todo
 
     requestAnimationFrame(loop);
   }
@@ -891,7 +927,6 @@
   resize();
   manager = new Manager();
   mouseX = xper(0.5); mouseY = yper(0.5);
-  setupJoystick();
   loop();
 
   const hint = document.getElementById('hint');

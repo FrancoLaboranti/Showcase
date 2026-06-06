@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Newton's Cradle</title>
+<link rel="stylesheet" href="../../Arcade/arcade-shell.css">
 <style>
   :root { --bar-height: 66px; }                                                  /* tweak to taste */
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -58,76 +59,7 @@
   #ui #btnMinus svg, #ui #btnPlus svg { width: 24px; height: 24px; }
   /* visual indicator for toggled-on state */
   #ui button.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); }
-  /* Exit button — vuelta al menú raíz */
-  #btnExit {
-    position: absolute;
-    left: 6px;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
-    color: rgba(255,255,255,0.85);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-    z-index: 10;
-  }
-  #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
-  /* === Bar layout: exit-left, main-center, info/debug-right (refactor) === */
-  #bar {
-    display: grid !important;
-    grid-template-columns: 1fr auto 1fr !important;
-    justify-content: stretch !important;
-  }
-  #bar > #btnExit {
-    position: static !important;
-    left: auto !important; right: auto !important;
-    top: auto !important; bottom: auto !important;
-    justify-self: start;
-  }
-  #bar > #ui { justify-self: center; }
-  #bar > #btnInfo, #bar > #btnDebug, #bar > #btnHome {
-    position: static !important;
-    left: auto !important; right: auto !important;
-    top: auto !important; bottom: auto !important;
-    justify-self: end;
-  }
-  /* Pantalla completa — esquina arriba-der, flotante. */
-  #btnFs {
-    position: absolute;
-    right: 6px;
-    top: calc(env(safe-area-inset-top) + 6px);
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
-    color: rgba(255,255,255,0.85);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-    z-index: 10;
-  }
-  #btnFs svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnFs:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
-  #btnFs .ic-exit { display: none; }
-  body.fs-on #btnFs .ic-enter { display: none; }
-  body.fs-on #btnFs .ic-exit  { display: block; }
-  /* Info (FPS) — esquina abajo-der, flotante. */
-  #btnInfo {
-    position: absolute;
-    right: 6px;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
-    color: rgba(255,255,255,0.85);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-    z-index: 10;
-  }
-  #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnInfo:active, #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+  /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
   #fpsOverlay {
     position: absolute;
     right: 40px;
@@ -146,22 +78,6 @@
 
 
 </style>
-<script>/* arcade-embed-shim: corre embebido en la shell del Arcade (iframe) */
-(function () {
-  if (window.self === window.top) return;            // sólo embebido
-  var noop = function () { return Promise.resolve(); };
-  try { Element.prototype.requestFullscreen = noop; } catch (e) {}
-  try { Element.prototype.webkitRequestFullscreen = noop; } catch (e) {}
-  // El "salir al menú" del juego: en vez de navegar (recargaría el menú dentro del iframe),
-  // avisamos a la shell por postMessage. Capturamos el click antes que el handler del juego.
-  window.addEventListener('click', function (e) {
-    var ex = e.target && e.target.closest && e.target.closest('#btnExit, #btnHome');
-    if (!ex) return;
-    e.preventDefault(); e.stopImmediatePropagation();
-    try { parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (x) {}
-  }, true);
-})();
-</script>
 </head>
 <body>
   <canvas id="c"></canvas>
@@ -187,6 +103,12 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
       </button>
     </div>
+    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+    </button>
+    <button id="btnInfo" aria-label="info" title="Info / FPS">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+    </button>
   </div>
 
   <script>
@@ -212,20 +134,23 @@
   // ── PERILLAS DE AJUSTE ──
   const FIXED_DT       = 5;       // ms por paso de física (acumulador → estable e independiente del fps)
   const OMEGA          = 6.1;     // rad/s — frecuencia natural del péndulo (período chico ≈ 2π/OMEGA ≈ 1.0 s)
-  const DAMP           = 0.05;    // 1/s — amortiguación de aire (chico = oscila mucho rato)
+  const DAMP           = 0.15;    // 1/s — amortiguación de aire (chico = oscila mucho rato)
   const COLLISION_LOSS = 1.0;     // 1 = choque perfectamente elástico; <1 pierde energía en cada impacto
+  const RESIDUAL       = 0.005;    // fracción que NO se transfiere en el choque ⇒ queda algo de sway en la cadena (0 = swap perfecto, fila muerta)
   const REST_SNAP_ANG  = 0.004;   // rad — por debajo de esto (y vel baja) se clava en reposo
   const REST_SNAP_VEL  = 0.012;   // rad/s
   const ANG_EPS        = 0.0015;  // rad — penetración angular por debajo de la cual no se corrige (anti-jitter en reposo)
   const VEL_EPS        = 1e-3;    // rad/s — umbral de "acercándose" para disparar el swap
+  const FLING_TC       = 0.05;    // s — constante del filtro paso-bajo de la velocidad de arrastre (como MOUSE_SMOOTH_TC de Balls)
+  const FLING_MAX      = 10;      // rad/s — tope del impulso que podés imprimirle a una bola al soltarla
 
-  // colores de las bolas (acero oscuro / gunmetal)
+  // colores de las bolas (acero cromado, como la foto: highlight brillante y borde oscuro fresnel)
   const STEEL = {
-    hi:   'rgb(134,144,150)',
-    lite: 'rgb(80,102,110)',
-    mid:  'rgb(64,72,82)',
-    lo:   'rgb(32,38,46)',
-    edge: 'rgb(10,13,18)',
+    hi:   'rgb(226,233,241)',
+    lite: 'rgb(150,162,176)',
+    mid:  'rgb(96,107,121)',
+    lo:   'rgb(46,54,64)',
+    edge: 'rgb(14,18,24)',
   };
 
   const canvas = document.getElementById('c');
@@ -242,6 +167,7 @@
   let ghosted = false;          // toggle: las bolas se atraviesan (sin colisión) + se ven translúcidas
   let holding = false;          // toggle: congela la gravedad (modo pose)
   let grabbedBall = null;       // una sola bola agarrada por vez (pegajosa hasta soltar el dedo)
+  let flingVel = 0;             // velocidad angular filtrada del arrastre, para imprimirla al soltar
 
   // ── geometría ──
   const getangle = (ax, ay, bx, by) => Math.atan2(by - ay, bx - ax);
@@ -253,24 +179,27 @@
   }
   function setPos(b) { b.x = origX(b.nro) + Math.cos(b.angulo) * L; b.y = origY + Math.sin(b.angulo) * L; }
 
+  const INSET_K    = 1.9;         // voladizo del marco más allá de la bola del extremo, en radios
+  const BASE_THK_K = 1.3;         // grosor de la base negra, en radios
+  const STRING_K   = 9.0;         // largo del hilo, en radios (hilos largos ⇒ bolas más chicas, como la foto)
   function layout() {
-    const minDim = Math.min(W, H);
-    // radio ≈ 34 px a 1280×720, acotado para que el marco entero (bolas + voladizo + parantes) entre en pantalla
-    let r = minDim * 0.052;
-    const maxByWidth = (0.92 * W) / (2 * nroBalls + 4.5);
-    radio = Math.max(6, Math.min(r, maxByWidth));
     centerX = W / 2;
-    frameTop = H * 0.18;
-    L = radio * 15;
-    const beam = radio * 0.95;
-    const maxL = H - frameTop - radio * 3.4 - beam * 2;                            // dejar lugar para la base + las patas
-    if (L > maxL) L = Math.max(radio * 4, maxL);
+    // tamaño NORMAL: el aparato ocupa ~50% del ancho (o lo que entre a lo alto) y va CENTRADO con márgenes,
+    // no estirado a toda la pantalla.
+    const rW = (0.50 * W) / (2 * (nroBalls - 1) + 2 * INSET_K);
+    const rH = (0.86 * H) / (STRING_K + 0.15 + 1.1 + BASE_THK_K);
+    radio = Math.max(6, Math.min(rW, rH));
+    k = radio / 30;
+    L = radio * STRING_K;
+    const baseThk = radio * BASE_THK_K, topRod = radio * 0.3;
+    const totalH = topRod * 0.5 + L + radio * 1.1 + baseThk;                       // alto del aparato (travesaño → fondo de la base)
+    frameTop = (H - totalH) / 2 + topRod * 0.5;                                    // centrado vertical
+    baseY = frameTop + L + radio * 1.1;                                            // cara superior de la base (bola en reposo ~0.1·radio arriba)
+    origY = frameTop;                                                              // pivote de los hilos = travesaño superior
     const ballSpan = (nroBalls - 1) * radio * 2;
-    const inset = radio * 2.8;                                                     // cuánto sobresale el marco más allá de las bolas de los extremos
+    const inset = radio * INSET_K;
     frameLeft  = centerX - ballSpan / 2 - inset;
     frameRight = centerX + ballSpan / 2 + inset;
-    baseY = frameTop + L + radio * 1.7;
-    k = radio / 30;
     for (const b of balls) setPos(b);
   }
 
@@ -346,11 +275,13 @@
           a.angulo = mid; setPos(a);
           b.angulo = mid; setPos(b);
           changed = true;
-          // choque elástico de masas iguales: intercambio de velocidad, sólo si se acercan
+          // choque de masas iguales: intercambio de velocidad, sólo si se acercan. Pero IMPERFECTO: cada
+          // una se queda con una fracción RESIDUAL de su propia velocidad, así la cadena conserva un poco
+          // de movimiento (sway suave) en vez de quedar perfectamente muerta.
           if (allowSwap && (b.velocidad - a.velocidad) > VEL_EPS) {
             const va = a.velocidad, vb = b.velocidad;
-            a.velocidad = vb * COLLISION_LOSS;
-            b.velocidad = va * COLLISION_LOSS;
+            a.velocidad = (vb * (1 - RESIDUAL) + va * RESIDUAL) * COLLISION_LOSS;
+            b.velocidad = (va * (1 - RESIDUAL) + vb * RESIDUAL) * COLLISION_LOSS;
           }
         }
       }
@@ -358,27 +289,50 @@
     }
   }
 
+  // ángulo del puntero respecto del ancla de la bola, mapeado al hemisferio inferior [0, π]
+  function pointerAngle(b) {
+    let ang = getangle(origX(b.nro), origY, mx, my);
+    if (ang < 0 && ang >= -Math.PI / 2) ang = 0;
+    else if (ang > -Math.PI && ang < -Math.PI / 2) ang = Math.PI;
+    return ang;
+  }
+
   function step(dtms) {
     const dt = dtms / 1000;
+
+    // ── soltar: imprimir el impulso del arrastre (como el throw de Balls con mouseVx/Vy) ──
+    // Se usa el flag `pushed` del frame ANTERIOR (todavía en las bolas) para que un grupo levantado
+    // junto salga junto, todas con la misma velocidad angular. Por eso va ANTES del reset de `pushed`.
+    if (!mDown && grabbedBall) {
+      const fv = Math.max(-FLING_MAX, Math.min(FLING_MAX, flingVel));
+      grabbedBall.velocidad = fv;
+      for (const b of balls) if (b.pushed) b.velocidad = fv;
+      grabbedBall = null;
+    }
+
     for (const b of balls) b.pushed = false;                                       // se recalcula cada frame en resolveCollisions
 
     // ── agarre: una sola bola por vez y pegajosa (se mantiene hasta soltar el dedo) ──
-    if (!mDown) grabbedBall = null;
-    else if (!grabbedBall) {
+    if (mDown && !grabbedBall) {
       for (const b of balls) {
-        if (colisionRyp(b.x - radio, b.y - radio, radio * 2, radio * 2, mx, my)) { grabbedBall = b; break; }
+        if (colisionRyp(b.x - radio, b.y - radio, radio * 2, radio * 2, mx, my)) {
+          grabbedBall = b;
+          flingVel = 0;
+          b.angulo = pointerAngle(b); setPos(b);                                    // pegar al puntero sin spike de velocidad
+          break;
+        }
       }
     }
 
     for (const ball of balls) {
       ball.grabbed = (ball === grabbedBall);
       if (ball.grabbed) {
-        // pegar la bola al puntero, mapeando al hemisferio inferior [0, π] (como el clamp del .py)
-        let ang = getangle(origX(ball.nro), origY, mx, my);
-        if (ang < 0 && ang >= -Math.PI / 2) ang = 0;
-        else if (ang > -Math.PI && ang < -Math.PI / 2) ang = Math.PI;
+        const ang = pointerAngle(ball);
+        const raw = (ang - ball.angulo) / dt;                                       // velocidad angular instantánea del arrastre
+        const kf = 1 - Math.exp(-dt / FLING_TC);
+        flingVel += (raw - flingVel) * kf;                                          // filtro paso-bajo (suaviza el jitter del puntero)
         ball.angulo = ang;
-        ball.velocidad = 0;
+        ball.velocidad = 0;                                                         // mientras la sostenés no transmite; el impulso se aplica al soltar
       } else if (!holding) {
         integrate(ball, dt);
       }
@@ -401,60 +355,114 @@
     ctx.closePath();
   }
 
-  // Una barra de madera oscura, SIN borde (el stroke era lo que ensuciaba los empalmes). El degradé
-  // transversal hace de volumen; un bevel claro finito sobre la cara superior le da terminación.
-  function woodBar(x, y, w, h, vertical) {
-    const rad = Math.min(w, h) * 0.34;
-    const g = vertical ? ctx.createLinearGradient(x, 0, x + w, 0)
-                       : ctx.createLinearGradient(0, y, 0, y + h);
-    g.addColorStop(0,    'rgb(74,50,28)');
-    g.addColorStop(0.5,  'rgb(44,29,15)');
-    g.addColorStop(1,    'rgb(22,14,7)');
+  // depth offset del arco trasero respecto del delantero (para simular los dos arcos paralelos del original)
+  function depthXY() { return { dx: radio * 0.55, dy: radio * 0.5 }; }
+
+  // varilla cromada (capsule): degradé perpendicular oscuro→brillo→oscuro = cilindro metálico
+  function chromeBar(x, y, w, h) {
+    const horizontal = w >= h;
+    const rad = Math.min(w, h) / 2;
+    const g = horizontal ? ctx.createLinearGradient(0, y, 0, y + h)
+                         : ctx.createLinearGradient(x, 0, x + w, 0);
+    g.addColorStop(0,    'rgb(34,40,48)');
+    g.addColorStop(0.16, 'rgb(150,160,172)');
+    g.addColorStop(0.40, 'rgb(214,224,234)');
+    g.addColorStop(0.5,  'rgb(248,252,255)');
+    g.addColorStop(0.62, 'rgb(196,206,218)');
+    g.addColorStop(0.86, 'rgb(80,90,102)');
+    g.addColorStop(1,    'rgb(26,32,40)');
     rrPath(x, y, w, h, rad); ctx.fillStyle = g; ctx.fill();
-    // bevel: una franja clara translúcida pegada al borde superior/izquierdo
-    ctx.save();
-    rrPath(x, y, w, h, rad); ctx.clip();
-    const bg = vertical ? ctx.createLinearGradient(x, 0, x + w * 0.5, 0)
-                        : ctx.createLinearGradient(0, y, 0, y + h * 0.5);
-    bg.addColorStop(0, 'rgba(150,112,72,0.45)');
-    bg.addColorStop(1, 'rgba(150,112,72,0)');
-    ctx.fillStyle = bg; ctx.fillRect(x, y, w, h);
+  }
+
+  // un arco "∏": dos parantes + travesaño superior, en varilla cromada
+  function drawArch(ox, oy, thk) {
+    chromeBar(frameLeft - thk / 2 + ox,  frameTop + oy, thk, (baseY - frameTop) + thk);  // parante izq (entra en la base)
+    chromeBar(frameRight - thk / 2 + ox, frameTop + oy, thk, (baseY - frameTop) + thk);  // parante der
+    chromeBar(frameLeft - thk / 2 + ox,  frameTop - thk / 2 + oy, (frameRight - frameLeft) + thk, thk); // travesaño
+  }
+
+  // collar cromado donde el parante entra en la base
+  function drawCollar(cx) {
+    const w = radio * 0.78, h = radio * 0.42;
+    const g = ctx.createLinearGradient(cx - w / 2, 0, cx + w / 2, 0);
+    g.addColorStop(0, 'rgb(40,46,54)');
+    g.addColorStop(0.5, 'rgb(220,228,238)');
+    g.addColorStop(1, 'rgb(40,46,54)');
+    rrPath(cx - w / 2, baseY - h * 0.55, w, h, h * 0.35); ctx.fillStyle = g; ctx.fill();
+  }
+
+  // base de acrílico negro brillante
+  function drawBase() {
+    const xL = frameLeft - radio * 2.4, xR = frameRight + radio * 2.4;
+    const top = baseY, thk = radio * BASE_THK_K, w = xR - xL, rad = radio * 0.3;
+    // sombra en el piso
+    const sh = ctx.createLinearGradient(0, top + thk, 0, top + thk + radio * 1.2);
+    sh.addColorStop(0, 'rgba(0,0,0,0.4)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = sh; ctx.fillRect(xL - radio, top + thk - 2, w + radio * 2, radio * 1.3);
+    // cuerpo negro
+    const g = ctx.createLinearGradient(0, top, 0, top + thk);
+    g.addColorStop(0,   'rgb(28,30,36)');
+    g.addColorStop(0.18,'rgb(14,15,18)');
+    g.addColorStop(1,   'rgb(3,4,6)');
+    rrPath(xL, top, w, thk, rad); ctx.fillStyle = g; ctx.fill();
+    // cara superior (bisel) con brillo especular
+    ctx.save(); rrPath(xL, top, w, thk, rad); ctx.clip();
+    const gloss = ctx.createLinearGradient(0, top, 0, top + thk * 0.42);
+    gloss.addColorStop(0, 'rgba(150,160,175,0.45)');
+    gloss.addColorStop(1, 'rgba(150,160,175,0)');
+    ctx.fillStyle = gloss; ctx.fillRect(xL, top, w, thk * 0.42);
+    // línea especular fina en el canto superior
+    ctx.strokeStyle = 'rgba(210,220,235,0.6)'; ctx.lineWidth = Math.max(1, 1.1 * k);
+    ctx.beginPath(); ctx.moveTo(xL + rad, top + 1); ctx.lineTo(xR - rad, top + 1); ctx.stroke();
     ctx.restore();
   }
 
   function drawFrame() {
-    const beam = radio * 1.0;      // grosor de los travesaños (superior + base)
-    const post = radio * 0.8;      // grosor de los parantes
-    const xl = frameLeft, xr = frameRight;
-    const spanX = xl - post * 0.6, spanW = (xr - xl) + post * 1.2;
-    const footW = post * 2.7, footH = beam * 0.8;
-
-    // Orden de dibujo pensado para que los empalmes queden tapados (nada de esquinas redondeadas
-    // cruzándose a la vista): patas → parantes (full alto, detrás) → base → travesaño superior.
-    woodBar(xl - footW / 2, baseY + beam * 0.35, footW, footH, false);            // pata izq
-    woodBar(xr - footW / 2, baseY + beam * 0.35, footW, footH, false);            // pata der
-    woodBar(xl - post / 2, frameTop, post, baseY - frameTop, true);               // parante izq
-    woodBar(xr - post / 2, frameTop, post, baseY - frameTop, true);               // parante der
-    woodBar(spanX, baseY - beam * 0.5, spanW, beam, false);                       // base (tapa el pie de los parantes)
-    woodBar(spanX, frameTop - beam * 0.5, spanW, beam, false);                    // travesaño superior (los hilos cuelgan de acá)
+    const { dx, dy } = depthXY();
+    const thk = radio * 0.3;        // grosor de la varilla
+    // arco trasero (offset arriba-izq, apenas más tenue) → delantero
+    drawArch(-dx, -dy, thk);
+    ctx.save(); ctx.globalAlpha = 0.85; drawArch(-dx, -dy, thk); ctx.restore();
+    drawArch(0, 0, thk);
+    // base por delante (tapa el pie de los parantes) + collares
+    drawBase();
+    drawCollar(frameLeft); drawCollar(frameRight);
+    drawCollar(frameLeft - dx); drawCollar(frameRight - dx);
   }
 
   function drawStrings(ball) {
-    // V doble a cada bola (como el péndulo real: evita que rote), abriéndose en el travesaño
-    const splay = radio * 0.72;
-    const ax = origX(ball.nro), ay = frameTop;
-    ctx.strokeStyle = 'rgba(214,216,222,0.5)';
-    ctx.lineWidth = Math.max(1, 1.1 * k);
+    // hilos cruzados (X), como el original: uno sube al travesaño DELANTERO por un lado y el otro al
+    // travesaño TRASERO por el lado opuesto. Entre bolas vecinas se arma la red en X.
+    const { dx, dy } = depthXY();
+    const splay = radio * 0.95;
+    const ax = origX(ball.nro);
+    ctx.lineWidth = Math.max(1, 0.9 * k);
+    // hilo al arco delantero (anclaje a la derecha)
+    ctx.strokeStyle = 'rgba(220,224,232,0.6)';
+    ctx.beginPath(); ctx.moveTo(ax + splay, frameTop); ctx.lineTo(ball.x, ball.y); ctx.stroke();
+    // hilo al arco trasero (anclaje a la izquierda, más arriba) — un toque más tenue por la profundidad
+    ctx.strokeStyle = 'rgba(180,186,196,0.5)';
+    ctx.beginPath(); ctx.moveTo(ax - splay - dx, frameTop - dy); ctx.lineTo(ball.x, ball.y); ctx.stroke();
+  }
+
+  // sombra de contacto de la bola sobre la base (más marcada cuanto más cerca del reposo está)
+  function drawBallShadow(ball) {
+    const baseTop = baseY;
+    const t = Math.max(0, Math.min(1, (ball.y - origY) / L));                      // 0 = arriba, 1 = en reposo
+    const a = 0.4 * t * t;
+    if (a < 0.02) return;
+    ctx.save();
+    ctx.fillStyle = `rgba(0,0,0,${a})`;
     ctx.beginPath();
-    ctx.moveTo(ax - splay, ay); ctx.lineTo(ball.x, ball.y);
-    ctx.moveTo(ax + splay, ay); ctx.lineTo(ball.x, ball.y);
-    ctx.stroke();
+    ctx.ellipse(ball.x, baseTop, radio * (0.7 + 0.4 * t), radio * 0.26, 0, 0, TAU);
+    ctx.fill();
+    ctx.restore();
   }
 
   function drawMetalBall(x, y, r) {
-    // cuerpo cromado: highlight arriba-izquierda → medio → borde oscuro (fresnel)
-    const hx = x - r * 0.4, hy = y - r * 0.4;
-    const g = ctx.createRadialGradient(hx, hy, r * 0.08, hx, hy, r * 1.7);
+    // cuerpo metálico oscuro: highlight arriba-izquierda → medio → borde oscuro (fresnel)
+    const hx = x - r * 0.4, hy = y - r * 0.42;
+    const g = ctx.createRadialGradient(hx, hy, r * 0.06, hx, hy, r * 1.75);
     g.addColorStop(0,    STEEL.hi);
     g.addColorStop(0.22, STEEL.lite);
     g.addColorStop(0.5,  STEEL.mid);
@@ -464,30 +472,41 @@
     ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.clip();
     ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
 
-    // reflejo de rebote (luz del piso) en la parte de abajo
-    const bx = x + r * 0.2, by = y + r * 0.62;
-    const g2 = ctx.createRadialGradient(bx, by, 0, bx, by, r * 0.85);
-    g2.addColorStop(0, 'rgba(120,132,146,0.45)');
+    // rim-light: arco claro fino sobre el borde inferior-derecho (luz reflejada del ambiente)
+    const rg = ctx.createRadialGradient(x, y, r * 0.78, x, y, r);
+    rg.addColorStop(0, 'rgba(150,160,172,0)');
+    rg.addColorStop(0.82, 'rgba(150,160,172,0)');
+    rg.addColorStop(1, 'rgba(170,182,196,0.5)');
+    ctx.fillStyle = rg; ctx.fillRect(x - r, y - r, r * 2, r * 2);
+
+    // reflejo de rebote (luz del piso) abajo
+    const bx = x + r * 0.18, by = y + r * 0.6;
+    const g2 = ctx.createRadialGradient(bx, by, 0, bx, by, r * 0.8);
+    g2.addColorStop(0, 'rgba(120,132,146,0.4)');
     g2.addColorStop(1, 'rgba(120,132,146,0)');
     ctx.fillStyle = g2; ctx.fillRect(x - r, y - r, r * 2, r * 2);
     ctx.restore();
 
-    // hotspot especular nítido
-    const sx = x - r * 0.36, sy = y - r * 0.42, sr = Math.max(1.5, r * 0.16);
-    const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, sr);
-    sg.addColorStop(0, 'rgba(255,255,255,0.95)');
-    sg.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sx, sy, sr, 0, TAU); ctx.fill();
+    // hotspot especular nítido (núcleo blanco + halo)
+    const sx = x - r * 0.36, sy = y - r * 0.44;
+    const halo = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 0.34);
+    halo.addColorStop(0, 'rgba(255,255,255,0.5)');
+    halo.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(sx, sy, r * 0.34, 0, TAU); ctx.fill();
+    const core = Math.max(1.2, r * 0.1);
+    ctx.fillStyle = 'rgba(255,255,255,0.95)';
+    ctx.beginPath(); ctx.arc(sx, sy, core, 0, TAU); ctx.fill();
 
     // contorno fino para despegar del fondo
     ctx.lineWidth = Math.max(1, 0.8 * k);
-    ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)';
     ctx.beginPath(); ctx.arc(x, y, r - 0.4, 0, TAU); ctx.stroke();
   }
 
   function draw() {
     ctx.clearRect(0, 0, W, H);
     drawFrame();
+    if (!ghosted) for (const ball of balls) drawBallShadow(ball);
     for (const ball of balls) drawStrings(ball);
     ctx.globalAlpha = ghosted ? 0.4 : 1;
     for (const ball of balls) drawMetalBall(ball.x, ball.y, radio);
@@ -568,50 +587,33 @@
   requestAnimationFrame(frame);
   setTimeout(() => hint.style.opacity = '0', 5000);
   </script>
-  <script>
-    document.getElementById('btnExit').addEventListener('click', () => {
-      if (confirm('¿Salir al menú?')) location.href = '../../';
-    });
-  </script>
-  <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
-  </button>
-  <script>
-    (function() {
-      const btn = document.getElementById('btnFs');
-      btn.addEventListener('click', () => {
-        if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
-        else document.exitFullscreen?.();
-      });
-      document.addEventListener('fullscreenchange', () => {
-        document.body.classList.toggle('fs-on', !!document.fullscreenElement);
-      });
-    })();
-  </script>
-  <button id="btnInfo" aria-label="info" title="Info / FPS">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
-  </button>
+
+  <!-- Shell del Arcade (exit + fullscreen + lock de orientación). data-orient: landscape/portrait/any. -->
+  <script src="../../Arcade/arcade-shell.js" data-orient="landscape"></script>
+
   <div id="fpsOverlay">FPS: --</div>
   <script>
     (function() {
       let frameCount = 0, lastT = performance.now();
+      let fpsOn = false;                                                            // estado real (no depender del display inline, que arranca vacío)
       const overlay = document.getElementById('fpsOverlay');
       function loop() {
         frameCount++;
         const now = performance.now();
         if (now - lastT >= 500) {
           const fps = Math.round(frameCount * 1000 / (now - lastT));
-          if (overlay.style.display !== 'none') overlay.textContent = 'FPS: ' + fps;
+          if (fpsOn) overlay.textContent = 'FPS: ' + fps;
           frameCount = 0; lastT = now;
         }
         requestAnimationFrame(loop);
       }
       loop();
       const btn = document.getElementById('btnInfo');
-      btn.addEventListener('click', () => {
-        const showing = overlay.style.display !== 'none';
-        overlay.style.display = showing ? 'none' : 'block';
-        btn.classList.toggle('on', !showing);
+      btn.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        fpsOn = !fpsOn;
+        overlay.style.display = fpsOn ? 'block' : 'none';
+        btn.classList.toggle('on', fpsOn);
       });
     })();
   </script>
