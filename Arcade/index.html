@@ -160,6 +160,7 @@
     #enter.hide { display: none; }
     #enter .et { font-size: 30px; font-weight: 700; letter-spacing: 0.24em; color: #fff; }
     #enter .es { font-size: 13px; letter-spacing: 0.24em; color: #7d8493; animation: blink 1.4s steps(2, start) infinite; }
+    #enter .ev { margin-top: 20px; font-size: 11px; letter-spacing: 0.22em; color: #4a525f; }
     @keyframes blink { 50% { opacity: 0.25; } }
   </style>
 </head>
@@ -168,6 +169,7 @@
   <div id="enter">
     <div class="et">ARCADE</div>
     <div class="es">▶ TOCÁ PARA ENTRAR</div>
+    <div class="ev" id="splashVer"></div>
   </div>
 
   <button id="exitApp" aria-label="salir de la app" title="Salir de la app">
@@ -197,12 +199,18 @@
     <div class="empty-note">más juegos próximamente</div>
   </main>
 
-  <footer>v0.1 · prototipo</footer>
+  <footer id="footerVer"></footer>
 
   <!-- Reproductor: el juego vive acá adentro (iframe creado por JS), sin navegar -->
   <div id="player"></div>
 
   <script>
+    // Versión visible (splash + footer). SUBIR este número en cada update → permite confirmar
+    // de un vistazo si la PWA tomó el último deploy (Android cachea fuerte).
+    const VERSION = 'v0.3';
+    { const sv = document.getElementById('splashVer'); if (sv) sv.textContent = VERSION;
+      const fv = document.getElementById('footerVer'); if (fv) fv.textContent = VERSION + ' · prototipo'; }
+
     // Registrar service worker (necesario para que la PWA sea "instalable")
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
@@ -249,6 +257,23 @@
         }
       } catch (e) {}
     }
+    // Lock portrait CON REINTENTOS: al pasar a fullscreen DESDE landscape, en varios Android el
+    // lock se rechaza al primer intento. Reintentamos unas veces; si igual falla, lo mostramos
+    // en el footer (para diagnosticar). En éxito no toca el footer.
+    function lockPortrait(tries) {
+      tries = tries || 0;
+      let p;
+      try { p = (screen.orientation && screen.orientation.lock) ? screen.orientation.lock('portrait') : null; }
+      catch (e) { showLockErr(e && e.name || e); return; }
+      if (p && p.then) p.then(null, (e) => {
+        if (tries < 5) setTimeout(() => lockPortrait(tries + 1), 180);
+        else showLockErr((e && e.name) || e);
+      });
+    }
+    function showLockErr(msg) {
+      const fv = document.getElementById('footerVer');
+      if (fv) fv.textContent = VERSION + ' · lock✗ ' + msg;
+    }
     let entered = false;   // true tras tocar "ENTRAR" (gesto inicial de la app)
 
     // La pantalla de entrada (y el menú) van en VERTICAL. En la PWA instalada Android Chrome
@@ -276,8 +301,8 @@
         () => {
           // Lock portrait RECIÉN acá: en Android Chrome el lock sólo agarra confiable estando
           // en fullscreen. (Va en el .then, después de que el request resolvió → no revive el
-          // bug de 2 toques.) Una vez puesto, girar el teléfono ya no rota la vista.
-          lockOrient('portrait');
+          // bug de 2 toques.) Con reintentos por si entramos a fullscreen desde landscape.
+          lockPortrait();
           entered = true;
           enterEl.classList.add('hide');
         },
@@ -335,7 +360,7 @@
     // Al (re)entrar a fullscreen, re-fijar portrait (el lock sólo agarra confiable en fullscreen,
     // y un toggle pudo soltarlo). Además avisamos al juego el estado para que sincronice el ícono.
     document.addEventListener('fullscreenchange', () => {
-      if (document.fullscreenElement) lockOrient('portrait');
+      if (document.fullscreenElement) lockPortrait();
       if (frame && frame.contentWindow) {
         try { frame.contentWindow.postMessage({ type: 'arcade:fs-state', on: !!document.fullscreenElement }, '*'); } catch (x) {}
       }
