@@ -82,23 +82,16 @@
   .ctl svg { display: block; width: 28px; height: 28px; pointer-events: none; }
   .ctl.held { background: rgba(120,200,255,0.30); border-color: rgba(120,200,255,0.6); transform: scale(0.94); }
 
-  /* Info, esquina abajo-derecha — mismo patrón que el resto. */
-  /* Info y pantalla completa: chicos, esquina abajo-derecha (btnFull a la izquierda de btnInfo),
-     mismo patrón que FireworksWeb. */
+  /* Info y pantalla completa: botones secundarios, dentro de la barra junto a los del juego. */
   #btnInfo, #btnFull {
-    position: absolute;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
-    width: 28px; height: 28px; border-radius: 50%;
+    width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto;
     border: 1px solid rgba(255,255,255,0.16);
     background: rgba(255,255,255,0.04);
     color: rgba(255,255,255,0.6);
     display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0; z-index: 4;
+    cursor: pointer; touch-action: none; padding: 0;
     transition: background 0.1s, transform 0.08s;
   }
-  /* a la izquierda del pad de mover (104px + 6 borde + 10 gap = 120) */
-  #btnInfo { right: calc(120px + env(safe-area-inset-right)); }
-  #btnFull { right: calc(154px + env(safe-area-inset-right)); }   /* + 28 del de info + 6 gap */
   #btnInfo svg, #btnFull svg { display: block; width: 14px; height: 14px; pointer-events: none; }
   #btnInfo:active, #btnFull:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
   #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
@@ -106,8 +99,6 @@
   #btnFull .ic-exit { display: none; }
   body.fs-on #btnFull .ic-enter { display: none; }
   body.fs-on #btnFull .ic-exit  { display: block; }
-  /* Embebido en la shell del Arcade: la shell maneja el fullscreen → el botón sobra. */
-  body.embedded #btnFull { display: none; }
 
   /* Aviso de orientación: Pong se juega en HORIZONTAL. Se muestra (vía JS) cuando la pantalla está vertical. */
   #rotate {
@@ -144,42 +135,22 @@
   #exitConfirm .no  { border: 1px solid rgba(120,200,255,0.5); color: #9fd4ff; }
   #exitConfirm .no:active  { background: rgba(120,200,255,0.22); border-color: rgba(120,200,255,0.85); }
 
-  /* Exit button — vuelta al menú del Arcade */
+  /* Exit (✕) — botón secundario, dentro de la barra a la izquierda de los del juego */
   #btnExit {
-    position: absolute;
-    left: calc(6px + env(safe-area-inset-left));
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
-    width: 28px; height: 28px; border-radius: 50%;
+    width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto;
     border: 1px solid rgba(255,255,255,0.45);
     background: rgba(0,0,0,0.55);
     color: rgba(255,255,255,0.85);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: none; padding: 0;
     transition: background 0.1s, transform 0.08s;
-    z-index: 10;
   }
   #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
   #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
-  body.two #btnExit { left: calc(120px + env(safe-area-inset-left)); }   /* en 2P, a la derecha del pad de P2 */
-  /* === Bar layout: exit-left, main-center, info/debug-right (refactor) === */
-  #bar {
-    display: grid !important;
-    grid-template-columns: 1fr auto 1fr !important;
-    justify-content: stretch !important;
-  }
-  #bar > #btnExit {
-    position: static !important;
-    left: auto !important; right: auto !important;
-    top: auto !important; bottom: auto !important;
-    justify-self: start;
-  }
-  #bar > #ui { justify-self: center; }
-  #bar > #btnInfo, #bar > #btnDebug, #bar > #btnHome {
-    position: static !important;
-    left: auto !important; right: auto !important;
-    top: auto !important; bottom: auto !important;
-    justify-self: end;
-  }
+
+  /* Barra centralizada: TODO en una fila centrada — ✕ · botones de juego · ⛶ · ⓘ.
+     (#bar ya es flex con justify-content:center arriba; sólo agregamos separación.) */
+  #bar { gap: 8px; }
 
 </style>
 </head>
@@ -664,6 +635,10 @@
   //     (el navegador no permite ninguno de los dos sin interacción del usuario).
   //   • iOS Safari / sin soporte → falla en silencio y queda el cartel #rotate.
   const ORIENT  = 'landscape';   // ← orientación forzada de ESTE juego
+  // ¿Embebidos en la shell del Arcade (iframe)? La shell maneja fullscreen + orientación
+  // (las pidió al tocar el tile). El juego no las toca; sólo refleja/togglea vía postMessage.
+  const EMBEDDED = (window.self !== window.top);
+  if (EMBEDDED) document.body.classList.add('embedded');
   const fsTarget = document.documentElement;
   const _reqFs  = fsTarget.requestFullscreen || fsTarget.webkitRequestFullscreen;
   const _exitFs = document.exitFullscreen || document.webkitExitFullscreen;
@@ -688,17 +663,21 @@
   };
   const exitFs  = () => { unlockOrient(); try { if (_exitFs) _exitFs.call(document); } catch {} };
 
-  function syncFsIcon() { document.body.classList.toggle('fs-on', isFs()); }
+  // El ícono refleja el estado EFECTIVO: dentro de la shell del Arcade ya estamos en
+  // fullscreen (lo controla el documento padre, aunque este iframe no sea el fullscreenElement).
+  function syncFsIcon() { document.body.classList.toggle('fs-on', isFs() || EMBEDDED); }
   document.addEventListener('fullscreenchange', syncFsIcon);
   document.addEventListener('webkitfullscreenchange', syncFsIcon);
   syncFsIcon();   // estado inicial correcto del ícono
-  tappable(document.getElementById('btnFull'), () => { isFs() ? exitFs() : enterFs(); });
-
-  // ¿Corremos embebidos en la shell del Arcade (iframe)? La shell ya pidió Fullscreen API
-  // real + bloqueó la orientación al tocar el tile, así que el juego NO los toca (evita
-  // fullscreen anidado y peleas de orientación). Sólo aplica cuando se abre suelto.
-  const EMBEDDED = (window.self !== window.top);
-  if (EMBEDDED) document.body.classList.add('embedded');
+  tappable(document.getElementById('btnFull'), () => {
+    // Embebido: el fullscreen lo maneja la shell → le pedimos que togglee (no tocamos el iframe).
+    if (EMBEDDED) { try { window.parent.postMessage({ type: 'arcade:fullscreen' }, '*'); } catch (e) {} return; }
+    isFs() ? exitFs() : enterFs();
+  });
+  // Embebido: la shell nos avisa su estado de fullscreen para mantener el ícono sincronizado.
+  window.addEventListener('message', (e) => {
+    if (e.data && e.data.type === 'arcade:fs-state') document.body.classList.toggle('fs-on', !!e.data.on);
+  });
 
   // Abierto suelto + PWA instalada: intentar landscape + Fullscreen API real apenas carga.
   // La orientación se fija siempre; el fullscreen real depende de que Chrome lo acepte sin
