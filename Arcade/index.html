@@ -77,9 +77,10 @@
       width: 64%; height: auto; margin-bottom: 10px;
       display: block;
     }
+    .tile .emoji { font-size: 44px; line-height: 1; margin-bottom: 8px; }
     .tile-name {
-      font-size: 15px; font-weight: 700; letter-spacing: 0.14em;
-      color: #ffffff;
+      font-size: 14px; font-weight: 700; letter-spacing: 0.1em;
+      color: #ffffff; text-align: center;
     }
     .tile-tag {
       font-size: 10px; color: #6a7185; margin-top: 4px; letter-spacing: 0.12em;
@@ -183,20 +184,7 @@
   </header>
 
   <main>
-    <div class="grid" id="grid">
-      <!-- data-src: ruta del juego (se carga en el iframe) · data-orient: orientación forzada -->
-      <a class="tile" href="../Pong/PongWeb/" data-src="../Pong/PongWeb/" data-orient="landscape">
-        <svg class="tile-art" viewBox="0 0 100 70" aria-hidden="true">
-          <rect x="50" y="0" width="1.5" height="70" fill="#262a36"/>
-          <rect x="6"  y="20" width="6" height="30" rx="1.5" fill="#e6e9ef"/>
-          <rect x="88" y="28" width="6" height="22" rx="1.5" fill="#e6e9ef"/>
-          <circle cx="46" cy="38" r="4.5" fill="#ffd95a"/>
-        </svg>
-        <div class="tile-name">PONG</div>
-        <div class="tile-tag">2P · IA</div>
-      </a>
-    </div>
-    <div class="empty-note">más juegos próximamente</div>
+    <div class="grid" id="grid"><!-- tiles generadas por JS (ver GAMES) --></div>
   </main>
 
   <footer id="footerVer"></footer>
@@ -207,9 +195,45 @@
   <script>
     // Versión visible (splash + footer). SUBIR este número en cada update → permite confirmar
     // de un vistazo si la PWA tomó el último deploy (Android cachea fuerte).
-    const VERSION = 'v0.5';
+    const VERSION = 'v0.6';
     { const sv = document.getElementById('splashVer'); if (sv) sv.textContent = VERSION;
       const fv = document.getElementById('footerVer'); if (fv) fv.textContent = VERSION + ' · prototipo'; }
+
+    // Catálogo de juegos: [emoji, nombre, ruta (relativa a /Arcade/), orientación].
+    // 'landscape' rota el iframe por CSS (sostenés el celu de costado); 'portrait' = normal.
+    const GAMES = [
+      ['🔮', 'Canicas',      'Balls/BallsWeb/',                 'portrait'],
+      ['♟️', 'Ajedrez',       'Chess/ChessWeb/',                 'portrait'],
+      ['🕐', 'Reloj',         'Clock/ClockWeb/',                 'portrait'],
+      ['🚜', 'Crazy Tanks',   'CrazyTanks/CrazyTanksWeb/',       'landscape'],
+      ['🎆', 'Fuegos',        'Fireworks/FireworksWeb/',         'portrait'],
+      ['🎇', 'Fuegos V2',     'FireworksV2/FireworksV2Web/',     'portrait'],
+      ['🔤', 'Ahorcado',      'Hangman/HangmanWeb/',             'portrait'],
+      ['💣', 'Buscaminas',    'MineSweeperGPT/MineSweeperWeb/',  'portrait'],
+      ['⚪', 'Mini Canicas',  'MiniBalls/MiniBallsWeb/',         'portrait'],
+      ['🌀', 'Péndulo',       "Newton's Cradle/NewtonsCradleWeb/", 'landscape'],
+      ['🃏', 'Póker',         'Poker/PokerWeb/',                 'landscape'],
+      ['🏓', 'Pong',          'Pong/PongWeb/',                   'landscape'],
+      ['🎵', 'Simón Dice',    'SimonSays/SimonSaysWeb/',         'portrait'],
+      ['🐍', 'Snake',         'Snake/SnakeWeb/',                 'portrait'],
+      ['💥', 'Tank Wars',     'TankWARS/TankWARSWeb/',           'landscape'],
+      ['❌', 'Ta-Te-Ti',      'Tateti/TatetiWeb/',               'portrait'],
+      ['🏍️', 'Tron',          'Tron/TronWeb/',                   'landscape'],
+      ['🏍️', 'Tron V2',       'TronV2/TronV2Web/',               'landscape'],
+    ];
+    {
+      const grid = document.getElementById('grid');
+      for (const [ico, name, path, orient] of GAMES) {
+        const src = encodeURI('../' + path);   // codifica el espacio de "Newton's Cradle"
+        const a = document.createElement('a');
+        a.className = 'tile';
+        a.href = src;                            // fallback si se abre suelto (sin la shell)
+        a.dataset.src = src;
+        a.dataset.orient = orient;
+        a.innerHTML = '<span class="emoji">' + ico + '</span><span class="tile-name">' + name + '</span>';
+        grid.appendChild(a);
+      }
+    }
 
     // Registrar service worker (necesario para que la PWA sea "instalable")
     if ('serviceWorker' in navigator) {

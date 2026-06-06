@@ -132,6 +132,22 @@
 
 
 </style>
+<script>/* arcade-embed-shim: corre embebido en la shell del Arcade (iframe) */
+(function () {
+  if (window.self === window.top) return;            // sólo embebido
+  var noop = function () { return Promise.resolve(); };
+  try { Element.prototype.requestFullscreen = noop; } catch (e) {}
+  try { Element.prototype.webkitRequestFullscreen = noop; } catch (e) {}
+  // El "salir al menú" del juego: en vez de navegar (recargaría el menú dentro del iframe),
+  // avisamos a la shell por postMessage. Capturamos el click antes que el handler del juego.
+  window.addEventListener('click', function (e) {
+    var ex = e.target && e.target.closest && e.target.closest('#btnExit, #btnHome');
+    if (!ex) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    try { parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (x) {}
+  }, true);
+})();
+</script>
 </head>
 <body>
   <canvas id="c"></canvas>
