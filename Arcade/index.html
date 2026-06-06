@@ -238,35 +238,29 @@
     }
     let entered = false;   // true tras tocar "ENTRAR" (gesto inicial de la app)
 
-    // Fullscreen real: requiere un gesto, así que no se puede en la carga. Se pide en el
-    // toque de la pantalla de entrada → el menú ya queda inmersivo y abrir un juego no lo
-    // vuelve a pedir. Así el aviso nativo de Chrome sale una sola vez, al abrir la app.
-    let fsAsked = false;
-    function requestFs() {
-      if (fsAsked || document.fullscreenElement || !root.requestFullscreen) return;
-      fsAsked = true;
-      // OJO: requestFullscreen debe llamarse SÍNCRONO dentro del handler del gesto (un .then
-      // previo perdería la "user activation" y Chrome lo rechazaría).
-      try { const p = root.requestFullscreen(); if (p && p.catch) p.catch(() => { fsAsked = false; }); }
-      catch (e) { fsAsked = false; }
+    // Pide Fullscreen API (si hace falta) y bloquea la orientación DESPUÉS de entrar.
+    // CLAVE del bug de los "2 toques": llamar al lock de orientación de forma SÍNCRONA junto
+    // al requestFullscreen hace que Chrome rechace el primer pedido. El lock va en el .then,
+    // recién cuando ya estamos en fullscreen. (requestFullscreen sí debe ser síncrono dentro
+    // del handler del gesto: un .then previo perdería la "user activation".)
+    function enterFullscreenThen(orient) {
+      if (document.fullscreenElement || !root.requestFullscreen) { lockOrient(orient); return Promise.resolve(); }
+      let p; try { p = root.requestFullscreen(); } catch (e) { lockOrient(orient); return Promise.reject(e); }
+      if (p && p.then) return p.then(() => lockOrient(orient), (e) => { lockOrient(orient); throw e; });
+      lockOrient(orient); return Promise.resolve();
     }
-    // si en algún momento salimos de fullscreen, permitir volver a pedirlo
-    document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) fsAsked = false; });
     // volver de un juego (bfcache incl.) re-fija portrait, pero recién después de entrar
     window.addEventListener('pageshow', () => { if (entered && !player.classList.contains('show')) lockOrient('portrait'); });
 
-    // Pantalla de entrada: usamos 'click' (gesto COMPLETO, más confiable que pointerdown para
-    // activar fullscreen) y ocultamos el splash recién cuando el fullscreen se aplicó —
-    // ocultarlo en el mismo gesto puede cancelar el pedido en algunos Android Chrome.
-    const enterEl = document.getElementById('enter');
+    // Pantalla de entrada (gesto inicial, vía 'click' = gesto completo). Si el fullscreen es
+    // rechazado, mostramos el motivo en el splash y podés volver a tocar para reintentar.
+    const enterEl  = document.getElementById('enter');
+    const enterMsg = enterEl.querySelector('.es');
     function enterApp() {
-      if (entered) return;
-      entered = true;
-      requestFs();              // pide fullscreen con la activación de este click
-      lockOrient('portrait');   // el menú es vertical
-      const hide = () => enterEl.classList.add('hide');
-      document.addEventListener('fullscreenchange', hide, { once: true });
-      setTimeout(hide, 500);    // fallback (desktop / si no hay fullscreen, igual entra al menú)
+      enterFullscreenThen('portrait').then(
+        () => { entered = true; enterEl.classList.add('hide'); },
+        (e) => { enterMsg.textContent = 'FS: ' + ((e && (e.name + (e.message ? ' · ' + e.message : ''))) || e); }
+      );
     }
     enterEl.addEventListener('click', enterApp);
 
@@ -275,8 +269,9 @@
     // Creamos un IFRAME NUEVO por juego: su carga inicial NO agrega entrada al historial
     // (cambiar .src de un iframe existente sí lo hace, y eso rompía el back en el 2º ciclo).
     function launch(src, orient) {
-      requestFs();   // normalmente ya se pidió en el primer toque del menú → acá es no-op
-      lockOrient(orient || 'landscape');
+      // normalmente ya entramos a fullscreen en el splash → acá sólo fija la orientación;
+      // si no (fallback), pide fullscreen y lockea después.
+      enterFullscreenThen(orient || 'landscape').catch(() => {});
       frame = document.createElement('iframe');
       frame.id = 'frame';
       frame.allow = 'fullscreen; accelerometer; gyroscope; autoplay';
