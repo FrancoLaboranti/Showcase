@@ -31,10 +31,14 @@
   }
 
   #hint {
-    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
-    text-align: center; color: rgba(var(--accent-dark),0.55);
-    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
-    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    max-width: min(88vw, 480px);
+    background: rgba(10,12,18,0.78); border: 1px solid rgba(255,255,255,0.10);
+    padding: 12px 20px; border-radius: 14px;
+    text-align: center; color: rgba(255,255,255,0.92);
+    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
+    pointer-events: none; transition: opacity 0.8s; z-index: 2;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
   /* Bottom bar: holds the second-hand toggle. Opaque-ish background so it reads as a bezel rather than
@@ -67,16 +71,17 @@
   /* visual indicator for the smooth (suave) mode */
   #ui button.on { background: rgba(var(--accent),0.26); border-color: rgba(var(--accent),0.6); color: rgb(var(--accent)); }
   /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
+  /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
   #fpsOverlay {
     position: absolute;
-    right: 40px;
-    bottom: calc(env(safe-area-inset-bottom) + 8px);
-    font-family: monospace;
+    left: calc(8px + env(safe-area-inset-left));
+    top: calc(8px + env(safe-area-inset-top));
+    font-family: ui-monospace, Menlo, Consolas, monospace;
     font-size: 13px;
+    line-height: 18px;
     color: rgba(255,255,255,0.9);
-    background: rgba(0,0,0,0.6);
-    padding: 3px 8px;
-    border-radius: 4px;
+    background: rgba(0,0,0,0.55);
+    padding: 4px 6px;
     pointer-events: none;
     display: none;
     z-index: 9;
@@ -88,7 +93,7 @@
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">tocá el reloj o el botón · segundero tic-tac ⇄ suave</div>
+  <div id="hint">tocá el reloj para alternar el segundero · tic-tac ⇄ movimiento suave</div>
   <div id="bar">
   <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -426,8 +431,12 @@
       }
       loop();
       const btn = document.getElementById('btnInfo');
-      btn.addEventListener('click', () => {
-        const showing = overlay.style.display !== 'none';
+      btn.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        // El overlay arranca con display:none POR CSS — el style inline está vacío "", así que
+        // comparamos con === 'block' (estado visible explícito) en vez de !== 'none' (que daba true
+        // al inicio y se comía el primer tap).
+        const showing = overlay.style.display === 'block';
         overlay.style.display = showing ? 'none' : 'block';
         btn.classList.toggle('on', !showing);
       });

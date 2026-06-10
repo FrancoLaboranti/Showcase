@@ -24,10 +24,14 @@
   }
 
   #hint {
-    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
-    text-align: center; color: rgba(255,255,255,0.5);
-    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
-    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    max-width: min(88vw, 480px);
+    background: rgba(10,12,18,0.78); border: 1px solid rgba(255,255,255,0.10);
+    padding: 12px 20px; border-radius: 14px;
+    text-align: center; color: rgba(255,255,255,0.92);
+    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
+    pointer-events: none; transition: opacity 0.8s; z-index: 2;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
   /* Bottom bar: count buttons + the two toggles. Opaque-ish background so it reads as a bezel rather
@@ -60,16 +64,17 @@
   /* visual indicator for toggled-on state */
   #ui button.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); }
   /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
+  /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
   #fpsOverlay {
     position: absolute;
-    right: 40px;
-    bottom: calc(env(safe-area-inset-bottom) + 8px);
-    font-family: monospace;
+    left: calc(8px + env(safe-area-inset-left));
+    top: calc(8px + env(safe-area-inset-top));
+    font-family: ui-monospace, Menlo, Consolas, monospace;
     font-size: 13px;
+    line-height: 18px;
     color: rgba(255,255,255,0.9);
-    background: rgba(0,0,0,0.6);
-    padding: 3px 8px;
-    border-radius: 4px;
+    background: rgba(0,0,0,0.55);
+    padding: 4px 6px;
     pointer-events: none;
     display: none;
     z-index: 9;
@@ -81,7 +86,7 @@
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">levantá una bola y soltala · +/− bolas · 👻 atraviesa · ⏸ congela</div>
+  <div id="hint">levantá una bola y soltala para impulsar las otras · +/− cambia la cantidad · 👻 fantasma · ⏸ pausa</div>
   <div id="bar">
   <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -160,6 +165,11 @@
   // layout (recalculado en resize y al cambiar la cantidad de bolas)
   let radio = 30, L = 450, origY = 150, centerX = 0;
   let frameLeft = 0, frameRight = 0, frameTop = 0, baseY = 0, k = 1;
+  let tableTop = 0;             // y de la superficie del mueble donde se apoya la base del péndulo
+  let sceneDay = null, sceneNight = null;   // habitación pre-renderizada en sus dos estados (se rearman sólo en resize)
+  let nightFactor = 0;          // 0 = día, 1 = noche (transiciona en bucle, independiente del péndulo)
+  let sceneClock = 0;           // ms acumulados para el ciclo día/noche
+  const NIGHT_PERIOD = 54;      // s — duración del ciclo día↔noche completo
 
   // estado de simulación
   let nroBalls = 5;
@@ -184,18 +194,20 @@
   const STRING_K   = 9.0;         // largo del hilo, en radios (hilos largos ⇒ bolas más chicas, como la foto)
   function layout() {
     centerX = W / 2;
-    // tamaño NORMAL: el aparato ocupa ~50% del ancho (o lo que entre a lo alto) y va CENTRADO con márgenes,
-    // no estirado a toda la pantalla.
+    // Plano de cerca: la base del péndulo se apoya sobre el borde de la mesa, bien abajo (a ~82% del
+    // alto), así abajo sólo se ve el CANTO de la mesa y arriba entra una ventana grande. Crece hacia arriba.
+    tableTop = H * 0.82;
+    const topMargin = H * 0.06;                                                    // aire arriba para el hint
+    const divH = STRING_K + 0.15 + 1.1 + BASE_THK_K;                               // alto del aparato / radio
     const rW = (0.50 * W) / (2 * (nroBalls - 1) + 2 * INSET_K);
-    const rH = (0.86 * H) / (STRING_K + 0.15 + 1.1 + BASE_THK_K);
+    const rH = (tableTop - topMargin) / divH;
     radio = Math.max(6, Math.min(rW, rH));
     k = radio / 30;
     L = radio * STRING_K;
-    const baseThk = radio * BASE_THK_K, topRod = radio * 0.3;
-    const totalH = topRod * 0.5 + L + radio * 1.1 + baseThk;                       // alto del aparato (travesaño → fondo de la base)
-    frameTop = (H - totalH) / 2 + topRod * 0.5;                                    // centrado vertical
-    baseY = frameTop + L + radio * 1.1;                                            // cara superior de la base (bola en reposo ~0.1·radio arriba)
-    origY = frameTop;                                                              // pivote de los hilos = travesaño superior
+    const baseThk = radio * BASE_THK_K;
+    baseY = tableTop - baseThk;                                                    // cara superior de la base (su fondo descansa en la mesa)
+    frameTop = baseY - L - radio * 1.1;                                            // travesaño superior
+    origY = frameTop;                                                              // pivote de los hilos
     const ballSpan = (nroBalls - 1) * radio * 2;
     const inset = radio * INSET_K;
     frameLeft  = centerX - ballSpan / 2 - inset;
@@ -215,6 +227,7 @@
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     layout();
+    buildScenes();
   }
   window.addEventListener('resize', resize);
 
@@ -224,6 +237,7 @@
     for (let i = 0; i < nroBalls; i++)
       balls.push({ nro: i, angulo: Math.PI / 2, velocidad: 0, grabbed: false, pushed: false, x: 0, y: 0 });
     layout();
+    buildScenes();                                                                 // el radio/ancho cambió ⇒ rearmar la escena (día + noche)
   }
 
   // ════════════════ FÍSICA ════════════════
@@ -344,105 +358,252 @@
   }
 
   // ════════════════ DIBUJO ════════════════
-  function rrPath(x, y, w, h, rad) {
+  // path de rectángulo redondeado en un contexto cualquiera (sirve para el canvas principal y el de la escena)
+  function rrp(c, x, y, w, h, rad) {
     rad = Math.min(rad, w / 2, h / 2);
-    ctx.beginPath();
-    ctx.moveTo(x + rad, y);
-    ctx.arcTo(x + w, y, x + w, y + h, rad);
-    ctx.arcTo(x + w, y + h, x, y + h, rad);
-    ctx.arcTo(x, y + h, x, y, rad);
-    ctx.arcTo(x, y, x + w, y, rad);
-    ctx.closePath();
+    c.beginPath();
+    c.moveTo(x + rad, y);
+    c.arcTo(x + w, y, x + w, y + h, rad);
+    c.arcTo(x + w, y + h, x, y + h, rad);
+    c.arcTo(x, y + h, x, y, rad);
+    c.arcTo(x, y, x + w, y, rad);
+    c.closePath();
+  }
+  function rrPath(x, y, w, h, rad) { rrp(ctx, x, y, w, h, rad); }
+
+  // ════════════════ ESCENA (habitación: pared + ventana grande + mesa) ════════════════
+  // Se renderiza dos veces (día y noche) a canvas offscreen; el draw() crossfadea entre ambas.
+  function buildScenes() {
+    if (W <= 0 || H <= 0) return;
+    sceneDay = renderScene(false);
+    sceneNight = renderScene(true);
   }
 
-  // depth offset del arco trasero respecto del delantero (para simular los dos arcos paralelos del original)
-  function depthXY() { return { dx: radio * 0.55, dy: radio * 0.5 }; }
+  function renderScene(night) {
+    const cv = document.createElement('canvas');
+    cv.width  = Math.max(1, Math.floor(W * dpr));
+    cv.height = Math.max(1, Math.floor(H * dpr));
+    const s = cv.getContext('2d');
+    s.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  // varilla cromada (capsule): degradé perpendicular oscuro→brillo→oscuro = cilindro metálico
-  function chromeBar(x, y, w, h) {
+    // ── PARED (de 0 hasta la mesa) ──
+    let g = s.createLinearGradient(0, 0, 0, tableTop);
+    if (night) { g.addColorStop(0, 'rgb(20,21,33)'); g.addColorStop(1, 'rgb(36,33,46)'); }
+    else       { g.addColorStop(0, 'rgb(46,40,47)'); g.addColorStop(1, 'rgb(76,62,61)'); }
+    s.fillStyle = g; s.fillRect(0, 0, W, tableTop);
+
+    // ── VENTANA GRANDE (~3/4 de la pantalla, centrada detrás del péndulo) ──
+    const winW = Math.min(W * 0.94, Math.max(W * 0.75, (frameRight - frameLeft) + radio * 8));
+    const winTop = H * 0.05, winBottom = tableTop - radio * 0.4;
+    drawWindow(s, centerX - winW / 2, winTop, winW, winBottom - winTop, night);
+
+    // pool de luz que entra por la ventana — cálida de día, fría (luna) de noche
+    const lg = s.createRadialGradient(centerX, H * 0.18, 0, centerX, H * 0.18, Math.max(W, H) * 0.7);
+    if (night) { lg.addColorStop(0, 'rgba(150,172,230,0.10)'); lg.addColorStop(1, 'rgba(150,172,230,0)'); }
+    else       { lg.addColorStop(0, 'rgba(255,226,170,0.16)'); lg.addColorStop(1, 'rgba(255,226,170,0)'); }
+    s.fillStyle = lg; s.fillRect(0, 0, W, tableTop);
+
+    // ── MESA: sólo el CANTO (franja de madera de tableTop al fondo) ──
+    drawTableEdge(s, night);
+
+    // sombra de contacto del péndulo sobre la tapa de la mesa
+    const sw = (frameRight - frameLeft) + radio * 5;
+    const csh = s.createRadialGradient(centerX, tableTop, 0, centerX, tableTop, sw * 0.5);
+    csh.addColorStop(0, `rgba(0,0,0,${night ? 0.5 : 0.4})`); csh.addColorStop(1, 'rgba(0,0,0,0)');
+    s.fillStyle = csh; s.save(); s.translate(0, tableTop); s.scale(1, 0.16);
+    s.beginPath(); s.arc(centerX, 0, sw * 0.5, 0, TAU); s.fill(); s.restore();
+    return cv;
+  }
+
+  // ventana grande con marco de madera, grilla de parteluces y vista (atardecer de día / cielo estrellado de noche)
+  function drawWindow(s, x, y, w, h, night) {
+    const fr = Math.max(6, radio * 0.5);                                            // grosor del marco
+    // marco de madera (de noche, más oscuro)
+    const frG = s.createLinearGradient(x, y, x, y + h);
+    if (night) { frG.addColorStop(0, 'rgb(60,42,24)'); frG.addColorStop(1, 'rgb(34,24,14)'); }
+    else       { frG.addColorStop(0, 'rgb(96,64,36)'); frG.addColorStop(1, 'rgb(56,36,18)'); }
+    s.fillStyle = frG; rrp(s, x - fr * 0.4, y - fr * 0.4, w + fr * 0.8, h + fr * 0.8, fr * 0.6); s.fill();
+    const gx = x + fr, gy = y + fr, gw = w - 2 * fr, gh = h - 2 * fr;
+    // vidrio
+    const gg = s.createLinearGradient(0, gy, 0, gy + gh);
+    if (night) {
+      gg.addColorStop(0, 'rgb(10,14,34)'); gg.addColorStop(0.6, 'rgb(22,26,54)'); gg.addColorStop(1, 'rgb(40,40,66)');
+    } else {
+      gg.addColorStop(0, 'rgb(96,128,168)'); gg.addColorStop(0.45, 'rgb(176,168,170)');
+      gg.addColorStop(0.7, 'rgb(224,176,132)'); gg.addColorStop(1, 'rgb(196,128,96)');
+    }
+    s.fillStyle = gg; s.fillRect(gx, gy, gw, gh);
+
+    if (night) {
+      // estrellas (posiciones deterministas, sin Math.random para que no titilen al rearmar)
+      s.fillStyle = 'rgba(255,255,255,0.85)';
+      for (let i = 0; i < 36; i++) {
+        const sx = gx + ((i * 73) % 100) / 100 * gw;
+        const sy = gy + ((i * 149) % 100) / 100 * gh * 0.7;
+        const r = 0.6 + ((i * 37) % 10) / 10 * 1.1;
+        s.globalAlpha = 0.3 + ((i * 53) % 10) / 10 * 0.6;
+        s.beginPath(); s.arc(sx, sy, r, 0, TAU); s.fill();
+      }
+      s.globalAlpha = 1;
+      // luna + halo
+      const mx = gx + gw * 0.7, my = gy + gh * 0.26, mr = gh * 0.13;
+      const halo = s.createRadialGradient(mx, my, 0, mx, my, mr * 3);
+      halo.addColorStop(0, 'rgba(220,230,255,0.4)'); halo.addColorStop(1, 'rgba(220,230,255,0)');
+      s.fillStyle = halo; s.beginPath(); s.arc(mx, my, mr * 3, 0, TAU); s.fill();
+      const mg = s.createRadialGradient(mx - mr * 0.3, my - mr * 0.3, 0, mx, my, mr);
+      mg.addColorStop(0, 'rgb(245,248,255)'); mg.addColorStop(1, 'rgb(196,206,228)');
+      s.fillStyle = mg; s.beginPath(); s.arc(mx, my, mr, 0, TAU); s.fill();
+    } else {
+      // sol bajo + resplandor
+      const sun = s.createRadialGradient(gx + gw * 0.34, gy + gh * 0.62, 0, gx + gw * 0.34, gy + gh * 0.62, gh * 0.5);
+      sun.addColorStop(0, 'rgba(255,238,200,0.95)'); sun.addColorStop(0.5, 'rgba(255,210,150,0.4)'); sun.addColorStop(1, 'rgba(255,210,150,0)');
+      s.fillStyle = sun; s.fillRect(gx, gy, gw, gh);
+    }
+
+    // colinas lejanas
+    s.fillStyle = night ? 'rgba(14,16,30,0.85)' : 'rgba(64,74,68,0.55)';
+    s.beginPath(); s.moveTo(gx, gy + gh * 0.74);
+    s.quadraticCurveTo(gx + gw * 0.3, gy + gh * 0.6, gx + gw * 0.55, gy + gh * 0.72);
+    s.quadraticCurveTo(gx + gw * 0.8, gy + gh * 0.82, gx + gw, gy + gh * 0.68);
+    s.lineTo(gx + gw, gy + gh); s.lineTo(gx, gy + gh); s.closePath(); s.fill();
+
+    // parteluces (grilla, panes ~ cuadrados)
+    const cols = Math.max(2, Math.round(gw / (gh * 0.55)));
+    const rows = Math.max(2, Math.round(gh * cols / gw));
+    s.strokeStyle = night ? 'rgb(46,32,18)' : 'rgb(74,50,28)'; s.lineWidth = Math.max(2, fr * 0.45);
+    s.beginPath();
+    for (let c = 1; c < cols; c++) { const px = gx + gw * c / cols; s.moveTo(px, gy); s.lineTo(px, gy + gh); }
+    for (let r = 1; r < rows; r++) { const py = gy + gh * r / rows; s.moveTo(gx, py); s.lineTo(gx + gw, py); }
+    s.stroke();
+    // reflejo diagonal sutil en el vidrio
+    s.strokeStyle = night ? 'rgba(180,200,255,0.06)' : 'rgba(255,255,255,0.10)'; s.lineWidth = Math.max(3, fr * 0.8);
+    s.beginPath(); s.moveTo(gx + gw * 0.05, gy + gh * 0.55); s.lineTo(gx + gw * 0.5, gy + gh * 0.05); s.stroke();
+    // alféizar
+    s.fillStyle = night ? 'rgb(52,36,20)' : 'rgb(78,52,28)'; s.fillRect(x - fr, y + h - fr * 0.2, w + 2 * fr, fr * 1.1);
+  }
+
+  // mesa de madera proporcional (tapa + faldón con dos cajones + cuatro patas + estante)
+  // Plano de cerca: sólo se ve el CANTO de la mesa (una franja de madera desde tableTop hasta el fondo).
+  function drawTableEdge(s, night) {
+    const DK = night ? 0.62 : 1;
+    const g = s.createLinearGradient(0, tableTop, 0, H);
+    g.addColorStop(0,    `rgb(${126*DK|0},${82*DK|0},${48*DK|0})`);                // canto superior, más iluminado
+    g.addColorStop(0.10, `rgb(${100*DK|0},${64*DK|0},${36*DK|0})`);
+    g.addColorStop(0.5,  `rgb(${76*DK|0},${48*DK|0},${26*DK|0})`);
+    g.addColorStop(1,    `rgb(${44*DK|0},${27*DK|0},${14*DK|0})`);
+    s.fillStyle = g; s.fillRect(0, tableTop, W, H - tableTop);
+    // realce del canto superior (la arista donde apoya el péndulo)
+    s.strokeStyle = night ? 'rgba(150,170,210,0.45)' : 'rgba(224,180,128,0.7)';
+    s.lineWidth = Math.max(1.5, 1.4 * k);
+    s.beginPath(); s.moveTo(0, tableTop + 1); s.lineTo(W, tableTop + 1); s.stroke();
+    // vetas horizontales sutiles a lo largo del canto
+    s.strokeStyle = 'rgba(18,8,4,0.28)'; s.lineWidth = Math.max(1, 0.6 * k);
+    s.beginPath();
+    for (const f of [0.32, 0.55, 0.78]) { const ly = tableTop + (H - tableTop) * f; s.moveTo(0, ly); s.lineTo(W, ly); }
+    s.stroke();
+  }
+
+  // varilla de madera torneada (capsule): degradé perpendicular oscuro→lomo iluminado→oscuro = cilindro,
+  // con vetas finas a lo largo y un brillo cálido suave sobre el lomo.
+  function woodDowel(x, y, w, h) {
     const horizontal = w >= h;
     const rad = Math.min(w, h) / 2;
     const g = horizontal ? ctx.createLinearGradient(0, y, 0, y + h)
                          : ctx.createLinearGradient(x, 0, x + w, 0);
-    g.addColorStop(0,    'rgb(34,40,48)');
-    g.addColorStop(0.16, 'rgb(150,160,172)');
-    g.addColorStop(0.40, 'rgb(214,224,234)');
-    g.addColorStop(0.5,  'rgb(248,252,255)');
-    g.addColorStop(0.62, 'rgb(196,206,218)');
-    g.addColorStop(0.86, 'rgb(80,90,102)');
-    g.addColorStop(1,    'rgb(26,32,40)');
+    g.addColorStop(0,    'rgb(28,11,7)');
+    g.addColorStop(0.12, 'rgb(66,26,16)');
+    g.addColorStop(0.40, 'rgb(112,50,32)');
+    g.addColorStop(0.5,  'rgb(138,66,44)');                                        // lomo iluminado (caoba)
+    g.addColorStop(0.62, 'rgb(100,44,28)');
+    g.addColorStop(0.86, 'rgb(56,22,13)');
+    g.addColorStop(1,    'rgb(24,9,5)');
     rrPath(x, y, w, h, rad); ctx.fillStyle = g; ctx.fill();
+    ctx.save(); rrPath(x, y, w, h, rad); ctx.clip();
+    // vetas
+    ctx.strokeStyle = 'rgba(20,6,3,0.4)'; ctx.lineWidth = Math.max(1, 0.5 * k);
+    ctx.beginPath();
+    for (const f of [0.3, 0.5, 0.68, 0.82]) {
+      if (horizontal) { const ly = y + h * f; ctx.moveTo(x + rad, ly); ctx.lineTo(x + w - rad, ly); }
+      else            { const lx = x + w * f; ctx.moveTo(lx, y + rad); ctx.lineTo(lx, y + h - rad); }
+    }
+    ctx.stroke();
+    // brillo cálido sobre el lomo
+    ctx.strokeStyle = 'rgba(206,132,98,0.42)'; ctx.lineWidth = Math.max(1, Math.min(w, h) * 0.07);
+    ctx.beginPath();
+    if (horizontal) { const ly = y + h * 0.42; ctx.moveTo(x + rad, ly); ctx.lineTo(x + w - rad, ly); }
+    else            { const lx = x + w * 0.42; ctx.moveTo(lx, y + rad); ctx.lineTo(lx, y + h - rad); }
+    ctx.stroke();
+    ctx.restore();
   }
 
-  // un arco "∏": dos parantes + travesaño superior, en varilla cromada
-  function drawArch(ox, oy, thk) {
-    chromeBar(frameLeft - thk / 2 + ox,  frameTop + oy, thk, (baseY - frameTop) + thk);  // parante izq (entra en la base)
-    chromeBar(frameRight - thk / 2 + ox, frameTop + oy, thk, (baseY - frameTop) + thk);  // parante der
-    chromeBar(frameLeft - thk / 2 + ox,  frameTop - thk / 2 + oy, (frameRight - frameLeft) + thk, thk); // travesaño
+  // arco "∏" único y limpio: dos parantes + travesaño, todo en madera torneada. Parantes primero y el
+  // travesaño encima, así la curva en las esquinas queda prolija.
+  function drawArch() {
+    const thk = radio * 0.32;
+    woodDowel(frameLeft - thk / 2,  frameTop, thk, (baseY - frameTop) + thk);             // parante izq (entra en la base)
+    woodDowel(frameRight - thk / 2, frameTop, thk, (baseY - frameTop) + thk);             // parante der
+    woodDowel(frameLeft - thk / 2,  frameTop - thk / 2, (frameRight - frameLeft) + thk, thk); // travesaño
   }
 
-  // collar cromado donde el parante entra en la base
+  // collar de bronce donde el parante entra en la base
   function drawCollar(cx) {
-    const w = radio * 0.78, h = radio * 0.42;
+    const w = radio * 0.74, h = radio * 0.42;
     const g = ctx.createLinearGradient(cx - w / 2, 0, cx + w / 2, 0);
-    g.addColorStop(0, 'rgb(40,46,54)');
-    g.addColorStop(0.5, 'rgb(220,228,238)');
-    g.addColorStop(1, 'rgb(40,46,54)');
+    g.addColorStop(0,   'rgb(74,52,20)');
+    g.addColorStop(0.5, 'rgb(214,176,98)');
+    g.addColorStop(1,   'rgb(74,52,20)');
     rrPath(cx - w / 2, baseY - h * 0.55, w, h, h * 0.35); ctx.fillStyle = g; ctx.fill();
   }
 
-  // base de acrílico negro brillante
+  // base de madera maciza
   function drawBase() {
     const xL = frameLeft - radio * 2.4, xR = frameRight + radio * 2.4;
-    const top = baseY, thk = radio * BASE_THK_K, w = xR - xL, rad = radio * 0.3;
+    const top = baseY, thk = radio * BASE_THK_K, w = xR - xL, rad = radio * 0.26;
     // sombra en el piso
     const sh = ctx.createLinearGradient(0, top + thk, 0, top + thk + radio * 1.2);
     sh.addColorStop(0, 'rgba(0,0,0,0.4)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
     ctx.fillStyle = sh; ctx.fillRect(xL - radio, top + thk - 2, w + radio * 2, radio * 1.3);
-    // cuerpo negro
+    // cuerpo madera (cara iluminada arriba → canto oscuro abajo)
     const g = ctx.createLinearGradient(0, top, 0, top + thk);
-    g.addColorStop(0,   'rgb(28,30,36)');
-    g.addColorStop(0.18,'rgb(14,15,18)');
-    g.addColorStop(1,   'rgb(3,4,6)');
+    g.addColorStop(0,    'rgb(108,48,30)');
+    g.addColorStop(0.16, 'rgb(78,32,20)');
+    g.addColorStop(1,    'rgb(32,12,7)');
     rrPath(xL, top, w, thk, rad); ctx.fillStyle = g; ctx.fill();
-    // cara superior (bisel) con brillo especular
     ctx.save(); rrPath(xL, top, w, thk, rad); ctx.clip();
-    const gloss = ctx.createLinearGradient(0, top, 0, top + thk * 0.42);
-    gloss.addColorStop(0, 'rgba(150,160,175,0.45)');
-    gloss.addColorStop(1, 'rgba(150,160,175,0)');
-    ctx.fillStyle = gloss; ctx.fillRect(xL, top, w, thk * 0.42);
-    // línea especular fina en el canto superior
-    ctx.strokeStyle = 'rgba(210,220,235,0.6)'; ctx.lineWidth = Math.max(1, 1.1 * k);
+    // sheen cálido en la cara superior (bisel)
+    const gloss = ctx.createLinearGradient(0, top, 0, top + thk * 0.4);
+    gloss.addColorStop(0, 'rgba(190,116,82,0.5)');
+    gloss.addColorStop(1, 'rgba(190,116,82,0)');
+    ctx.fillStyle = gloss; ctx.fillRect(xL, top, w, thk * 0.4);
+    // vetas horizontales
+    ctx.strokeStyle = 'rgba(20,6,3,0.32)'; ctx.lineWidth = Math.max(1, 0.6 * k);
+    ctx.beginPath();
+    for (const f of [0.42, 0.62, 0.8]) { const ly = top + thk * f; ctx.moveTo(xL + rad, ly); ctx.lineTo(xR - rad, ly); }
+    ctx.stroke();
+    // canto superior iluminado
+    ctx.strokeStyle = 'rgba(212,140,104,0.6)'; ctx.lineWidth = Math.max(1, 1.0 * k);
     ctx.beginPath(); ctx.moveTo(xL + rad, top + 1); ctx.lineTo(xR - rad, top + 1); ctx.stroke();
     ctx.restore();
   }
 
   function drawFrame() {
-    const { dx, dy } = depthXY();
-    const thk = radio * 0.3;        // grosor de la varilla
-    // arco trasero (offset arriba-izq, apenas más tenue) → delantero
-    drawArch(-dx, -dy, thk);
-    ctx.save(); ctx.globalAlpha = 0.85; drawArch(-dx, -dy, thk); ctx.restore();
-    drawArch(0, 0, thk);
-    // base por delante (tapa el pie de los parantes) + collares
-    drawBase();
-    drawCollar(frameLeft); drawCollar(frameRight);
-    drawCollar(frameLeft - dx); drawCollar(frameRight - dx);
+    drawArch();                                                                    // arco cromado único
+    drawBase();                                                                    // base por delante (tapa el pie de los parantes)
+    drawCollar(frameLeft); drawCollar(frameRight);                                 // collares donde entran a la base
   }
 
+  // hilos: cada bola cuelga de dos hilos abiertos en V hacia el travesaño; con un splay > radio los de
+  // bolas vecinas se cruzan y arman la clásica red en X. Finos y con un dejo de brillo metálico.
   function drawStrings(ball) {
-    // hilos cruzados (X), como el original: uno sube al travesaño DELANTERO por un lado y el otro al
-    // travesaño TRASERO por el lado opuesto. Entre bolas vecinas se arma la red en X.
-    const { dx, dy } = depthXY();
-    const splay = radio * 0.95;
-    const ax = origX(ball.nro);
-    ctx.lineWidth = Math.max(1, 0.9 * k);
-    // hilo al arco delantero (anclaje a la derecha)
-    ctx.strokeStyle = 'rgba(220,224,232,0.6)';
-    ctx.beginPath(); ctx.moveTo(ax + splay, frameTop); ctx.lineTo(ball.x, ball.y); ctx.stroke();
-    // hilo al arco trasero (anclaje a la izquierda, más arriba) — un toque más tenue por la profundidad
-    ctx.strokeStyle = 'rgba(180,186,196,0.5)';
-    ctx.beginPath(); ctx.moveTo(ax - splay - dx, frameTop - dy); ctx.lineTo(ball.x, ball.y); ctx.stroke();
+    const splay = radio * 1.15;
+    const ax = origX(ball.nro), ay = frameTop;
+    ctx.lineWidth = Math.max(1, 0.7 * k);
+    ctx.strokeStyle = 'rgba(225,229,236,0.55)';
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(ax - splay, ay); ctx.lineTo(ball.x, ball.y);
+    ctx.moveTo(ax + splay, ay); ctx.lineTo(ball.x, ball.y);
+    ctx.stroke();
   }
 
   // sombra de contacto de la bola sobre la base (más marcada cuanto más cerca del reposo está)
@@ -504,13 +665,23 @@
   }
 
   function draw() {
-    ctx.clearRect(0, 0, W, H);
+    // fondo: crossfade día → noche
+    if (sceneDay) ctx.drawImage(sceneDay, 0, 0, W, H);
+    else ctx.clearRect(0, 0, W, H);
+    if (sceneNight && nightFactor > 0.001) {
+      ctx.globalAlpha = nightFactor; ctx.drawImage(sceneNight, 0, 0, W, H); ctx.globalAlpha = 1;
+    }
     drawFrame();
     if (!ghosted) for (const ball of balls) drawBallShadow(ball);
     for (const ball of balls) drawStrings(ball);
     ctx.globalAlpha = ghosted ? 0.4 : 1;
     for (const ball of balls) drawMetalBall(ball.x, ball.y, radio);
     ctx.globalAlpha = 1;
+    // veil frío de noche sobre TODO (incluye el péndulo) para que la luz cuaje con la escena
+    if (nightFactor > 0.001) {
+      ctx.fillStyle = `rgba(18,26,54,${nightFactor * 0.2})`;
+      ctx.fillRect(0, 0, W, H);
+    }
   }
 
   // ════════════════ INPUT ════════════════
@@ -576,6 +747,11 @@
     if (elapsed > 100) elapsed = 100;                                            // anti spiral-of-death tras un blur de ventana
     acc += elapsed;
     while (acc >= FIXED_DT) { step(FIXED_DT); acc -= FIXED_DT; }
+    // ciclo día↔noche (independiente del péndulo): mesetas largas + transiciones suaves con smoothstep
+    sceneClock += elapsed;
+    const ph = (sceneClock / 1000 % NIGHT_PERIOD) / NIGHT_PERIOD;
+    const ss = (a, b, x) => { x = Math.max(0, Math.min(1, (x - a) / (b - a))); return x * x * (3 - 2 * x); };
+    nightFactor = ph < 0.42 ? 0 : ph < 0.50 ? ss(0.42, 0.50, ph) : ph < 0.92 ? 1 : 1 - ss(0.92, 1.0, ph);
     draw();
     requestAnimationFrame(frame);
   }

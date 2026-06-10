@@ -20,10 +20,14 @@
   #c { display: block; position: absolute; top: 0; left: 0; }
 
   #hint {
-    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
-    text-align: center; color: rgba(255,255,255,0.5);
-    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
-    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    max-width: min(88vw, 480px);
+    background: rgba(10,12,18,0.78); border: 1px solid rgba(255,255,255,0.10);
+    padding: 12px 20px; border-radius: 14px;
+    text-align: center; color: rgba(255,255,255,0.92);
+    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
+    pointer-events: none; transition: opacity 0.8s; z-index: 2;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
   /* Barra inferior (mismo estilo que BallsWeb/TatetiWeb) */
@@ -56,7 +60,7 @@
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">repetí la secuencia · tocá el centro para empezar</div>
+  <div id="hint">tocá el centro para empezar · repetí la secuencia sin equivocarte</div>
   <div id="bar">
   <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -176,18 +180,42 @@
     } catch (_) {}
     heldOsc = null; heldGain = null;
   }
-  function playWrong() {                // buzzer grave del Simón
+  function playCorrect() {              // acierto: arpegio ascendente alegre, misma escala que los pads
     if (!soundOn) return;
     audioResume();
     if (!actx) return;
-    const t = actx.currentTime;
-    const osc = actx.createOscillator(), g = actx.createGain();
-    osc.type = 'sawtooth'; osc.frequency.setValueAtTime(130, t);
-    osc.frequency.exponentialRampToValueAtTime(60, t + 0.5);
-    g.gain.setValueAtTime(0.3, t);
-    g.gain.exponentialRampToValueAtTime(0.0008, t + 0.55);
-    osc.connect(g).connect(actx.destination);
-    osc.start(t); osc.stop(t + 0.6);
+    const notes = [311.13, 415.30, 622.25];   // D#4 → G#4 → D#5
+    const step = 0.085, dur = 0.20;
+    for (let i = 0; i < notes.length; i++) {
+      const t = actx.currentTime + i * step;
+      const osc = actx.createOscillator(), g = actx.createGain();
+      osc.type = 'sine'; osc.frequency.value = notes[i];
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.16, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + dur);
+      osc.connect(g).connect(actx.destination);
+      osc.start(t); osc.stop(t + dur + 0.03);
+    }
+  }
+  function playWrong() {                // derrota suave: arpegio descendente del acorde del Simón
+    if (!soundOn) return;               // (G#4→D#4→B3→G#3) + glissando final hacia abajo
+    audioResume();
+    if (!actx) return;
+    const notes = [415.30, 311.13, 252.00, 207.65];
+    const step = 0.13, dur = 0.22;
+    for (let i = 0; i < notes.length; i++) {
+      const last = i === notes.length - 1;
+      const t = actx.currentTime + i * step;
+      const osc = actx.createOscillator(), g = actx.createGain();
+      osc.type = 'sine'; osc.frequency.setValueAtTime(notes[i], t);
+      const d = last ? 0.55 : dur;
+      if (last) osc.frequency.exponentialRampToValueAtTime(notes[i] * 0.6, t + d);  // droop "fail"
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(0.14, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0006, t + d);
+      osc.connect(g).connect(actx.destination);
+      osc.start(t); osc.stop(t + d + 0.03);
+    }
   }
 
   // ── LÓGICA ──
@@ -232,6 +260,7 @@
     inputPos++;
     if (inputPos >= sequence.length) {             // secuencia completa
       score++;
+      playCorrect();
       phase = 'nice'; timer = NICE_T;
     }
   }

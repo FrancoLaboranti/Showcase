@@ -27,10 +27,14 @@
   }
 
   #hint {
-    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
-    text-align: center; color: rgba(255,255,255,0.5);
-    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
-    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    max-width: min(88vw, 480px);
+    background: rgba(10,12,18,0.78); border: 1px solid rgba(255,255,255,0.10);
+    padding: 12px 20px; border-radius: 14px;
+    text-align: center; color: rgba(255,255,255,0.92);
+    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
+    pointer-events: none; transition: opacity 0.8s; z-index: 2;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
   /* Barra inferior: gira al jugador humano (◄ ►) y ▶ arranca / reinicia. Mismo shell que BallsWeb. */
@@ -57,29 +61,19 @@
   #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
   #ui button svg { display: block; width: 24px; height: 24px; pointer-events: none; }
 
-  /* Reset — reinicia la partida actual (mismos ajustes). Hueco a la derecha del bar. */
-  #btnReset {
-    width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; align-self: flex-end; margin-bottom: 6px;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
-    color: rgba(255,255,255,0.85);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-  }
-  #btnReset svg { display: block; width: 15px; height: 15px; pointer-events: none; }
-  #btnReset:active { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.6); color: #fff; transform: scale(0.9); }
+  /* Reset (⟳): dentro de #ui, hereda el mismo estilo que las flechas. */
   /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
+  /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
   #fpsOverlay {
     position: absolute;
-    right: 40px;
-    bottom: calc(env(safe-area-inset-bottom) + 8px);
-    font-family: monospace;
+    left: calc(8px + env(safe-area-inset-left));
+    top: calc(8px + env(safe-area-inset-top));
+    font-family: ui-monospace, Menlo, Consolas, monospace;
     font-size: 13px;
+    line-height: 18px;
     color: rgba(255,255,255,0.9);
-    background: rgba(0,0,0,0.6);
-    padding: 3px 8px;
-    border-radius: 4px;
+    background: rgba(0,0,0,0.55);
+    padding: 4px 6px;
     pointer-events: none;
     display: none;
     z-index: 9;
@@ -116,7 +110,7 @@
   })();
   </script>
   <canvas id="c"></canvas>
-  <div id="hint">menú: tocá una opción para cambiarla, ▶ JUGAR para empezar · en juego: tocá la mitad izq/der para doblar</div>
+  <div id="hint">tocá las opciones del menú y ▶ JUGAR · en juego: tocá los lados para doblar</div>
   <div id="bar">
   <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -128,10 +122,10 @@
       <button id="btnRight" aria-label="girar derecha" title="Girar derecha">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
       </button>
+      <button id="btnReset" aria-label="reiniciar" title="Reiniciar partida">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+      </button>
     </div>
-    <button id="btnReset" aria-label="reiniciar" title="Reiniciar partida">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
-    </button>
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
@@ -182,6 +176,7 @@
   // encima se dibuja la "cabeza" brillante de cada jugador, que se desvanece hasta el color base. Separar
   // las dos capas evita que el brillo se acumule (como el cartel viejo) — el overlay es transitorio.
   let trailCv = null, tctx = null;
+  let glowCv = null, gctx = null;                                                 // buffer de glow a media resolución (bloom barato)
 
   const xper = p => p * W;
   const yper = p => p * H;
@@ -213,17 +208,32 @@
   // OJO: recorta (no envuelve) las celdas fuera de pantalla, igual que pygame.draw.circle. Si envolviera
   // con módulo, al cruzar un borde dejaría una estela fantasma en el lado opuesto —justo donde el jugador
   // reaparece— y moriría al wrappear. La colisión occ() sí envuelve (como el `% SCREEN` del original).
-  function stamp(x, y, color) {
-    const ix = Math.floor(x), iy = Math.floor(y);
+  // marca una celda 3×3 en la grilla (recorta fuera de pantalla, no envuelve — igual que pygame.draw.circle)
+  function markCell(ix, iy) {
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         const xi = ix + dx, yi = iy + dy;
-        if (xi < 0 || xi >= W || yi < 0 || yi >= H) continue;                     // clip, no wrap
+        if (xi < 0 || xi >= W || yi < 0 || yi >= H) continue;
         grid[yi * W + xi] = 1;
       }
     }
-    tctx.fillStyle = color;
-    tctx.fillRect(ix - 1, iy - 1, 3, 3);                                          // estela base permanente (offscreen)
+  }
+  // Pinta un TRAMO de estela. Con `connect` rasteriza una línea continua de (x0,y0) a (x1,y1) — así la
+  // estela no queda entrecortada aunque se caigan frames (el jugador se mueve varios px por frame). Sin
+  // connect (primer punto o wrap), estampa un solo punto en (x1,y1).
+  function paintTrail(x0, y0, x1, y1, color, connect) {
+    if (connect) {
+      const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)));
+      for (let s = 0; s <= steps; s++) {
+        const u = s / steps;
+        markCell(Math.floor(x0 + (x1 - x0) * u), Math.floor(y0 + (y1 - y0) * u));
+      }
+      tctx.strokeStyle = color; tctx.lineWidth = 3; tctx.lineCap = 'round'; tctx.lineJoin = 'round';
+      tctx.beginPath(); tctx.moveTo(x0, y0); tctx.lineTo(x1, y1); tctx.stroke();
+    } else {
+      markCell(Math.floor(x1), Math.floor(y1));
+      tctx.fillStyle = color; tctx.fillRect(Math.floor(x1) - 1, Math.floor(y1) - 1, 3, 3);
+    }
   }
 
   function clearField() {
@@ -272,6 +282,12 @@
     trailCv.width = canvas.width; trailCv.height = canvas.height;
     tctx = trailCv.getContext('2d');
     tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // buffer de glow a MEDIA resolución: blurear acá (1/4 del área) es ~4× más barato que blurear la
+    // pantalla completa cada frame — clave para no perder frames en mobile.
+    glowCv = glowCv || document.createElement('canvas');
+    glowCv.width = Math.max(1, Math.floor(canvas.width / 2));
+    glowCv.height = Math.max(1, Math.floor(canvas.height / 2));
+    gctx = glowCv.getContext('2d');
     // Cambiar de tamaño invalida la pista; volvemos al menú (la grilla vieja no sirve).
     backToMenu();
   }
@@ -353,6 +369,7 @@
       this.x = xper(startpos[id][0]);
       this.y = yper(startpos[id][1]);
       this.head = [];                                                             // cola reciente {x, y, age} para el degradé de brillo
+      this.lastX = null; this.lastY = null;                                       // última posición estampada (para conectar la estela con línea)
     }
 
     // giro manual (botones / mitades de pantalla) — sólo el humano
@@ -405,29 +422,46 @@
       if (this.y > H) this.y = 0;
       if (this.y < 0) this.y = H;
 
-      // muerte: si el frente (look-ahead 2 px) está ocupado
+      // muerte: COLISIÓN BARRIDA (no un solo punto). Muestreo todo el tramo que recorrerá la cycle este
+      // frame —de 2px adelante hasta donde llega la cabeza + margen— así no salta por encima de una estela
+      // fina cuando avanza varios px por frame.
       const dir = this.direction;
-      if (occ(this.x + d[dir][2], this.y + d[dir][3])) { this.alive = false; return; }
-
       if (!this.stop) {
+        const ux = Math.sign(d[dir][0]), uy = Math.sign(d[dir][1]);
+        const moveDist = Math.hypot(d[dir][0], d[dir][1]) * dt * SPEED_MULT;
+        const reach = moveDist + 2;
+        for (let s = 2; s <= reach; s += 1) {
+          if (occ(this.x + ux * s, this.y + uy * s)) { this.alive = false; return; }
+        }
         this.x += d[dir][0] * dt * SPEED_MULT;
         this.y += d[dir][1] * dt * SPEED_MULT;
         this.head.push({ x: this.x, y: this.y, age: 0 });                         // nuevo punto de cabeza (brillante)
       }
     }
 
-    draw() { stamp(this.x, this.y, this.color); }                                 // estampa la estela base permanente (offscreen)
+    // estampa la estela base permanente (offscreen) conectando con la posición previa (línea continua);
+    // si saltó por un wrap (distancia grande) o es el primer punto, estampa un punto suelto.
+    draw() {
+      const far = Math.min(W, H) * 0.5;
+      const connect = this.lastX !== null && Math.hypot(this.x - this.lastX, this.y - this.lastY) <= far;
+      paintTrail(this.lastX, this.lastY, this.x, this.y, this.color, connect);
+      this.lastX = this.x; this.lastY = this.y;
+    }
 
-    // dibuja la cola reciente con degradé de brillo: cola al color base, cabeza casi blanca + glow.
-    // Se llama después de blitear la pista base, así el overlay no se acumula.
+    // dibuja la cola reciente con degradé de brillo, CONECTANDO los puntos con segmentos (así no queda
+    // entrecortada con frames bajos). Cola → color base; cabeza → casi blanca + núcleo con glow.
     drawHead(dt) {
       for (const h of this.head) h.age += dt;
       this.head = this.head.filter(h => h.age <= HEAD_FADE);
       if (!this.head.length) return;
-      for (const h of this.head) {
-        const t = 1 - h.age / HEAD_FADE;                                          // 1 = cabeza, 0 = cola (= color base)
-        ctx.fillStyle = rgb(hot(this.colorArr, t));
-        ctx.fillRect(Math.floor(h.x) - 1, Math.floor(h.y) - 1, 3, 3);
+      const far = Math.min(W, H) * 0.5;
+      ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      for (let k = 1; k < this.head.length; k++) {
+        const a = this.head[k - 1], b = this.head[k];
+        if (Math.hypot(b.x - a.x, b.y - a.y) > far) continue;                     // no cruzar un wrap
+        const t = 1 - b.age / HEAD_FADE;                                          // 1 = cabeza, 0 = cola (= color base)
+        ctx.strokeStyle = rgb(hot(this.colorArr, t));
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       }
       if (this.alive && !this.stop) {                                             // núcleo blanco brillante en la punta
         const tip = this.head[this.head.length - 1];
@@ -482,34 +516,25 @@
   // ── MENÚ estilo CrazyTanks: cada fila es una opción que se TOCA para ciclar su valor (mitad izq/der
   // del toque = anterior/siguiente); la seleccionada se muestra entre ‹ › con glow; el hover del mouse
   // mueve la selección; y un botón ▶ JUGAR abajo arranca la partida. ──
-  const MENU_ROWS = { players: 0.46, mode: 0.58, play: 0.8 };                     // posición Y (fracción) de cada fila
+  // Sólo se juega contra la IA → una sola opción (cantidad de jugadores) + JUGAR.
+  const MENU_ROWS = { players: 0.5, play: 0.78 };                                 // posición Y (fracción) de cada fila
   function nearY(ly, frac) { return Math.abs(ly - yper(frac)) < yper(0.06); }
   let hoverY = -1;                                                                // y del mouse sobre el canvas (CSS px); -1 = sin hover
   function hoverRow(frac) { return hoverY >= 0 && nearY(hoverY, frac); }
-  function hoverFocus(ly) {                                                        // mover selección a la fila bajo el cursor
-    if (nearY(ly, MENU_ROWS.players)) gh.option = 0;
-    else if (nearY(ly, MENU_ROWS.mode)) gh.option = 1;
-  }
-  function menuChangeValue(delta) {
-    if (gh.option === 0) gh.players = (gh.players + delta + 3) % 3;
-    else if (gh.option === 1) gh.mode = (gh.mode + delta + 2) % 2;
-  }
+  function menuChangeValue(delta) { gh.players = (gh.players + delta + 3) % 3; }
   function tapMenu(lx, ly) {                                                       // toque/click sobre el menú (coords del canvas)
     const dir = lx < W * 0.5 ? -1 : 1;                                            // mitad izq/der = anterior/siguiente
-    if (nearY(ly, MENU_ROWS.players))   { gh.option = 0; gh.players = (gh.players + dir + 3) % 3; }
-    else if (nearY(ly, MENU_ROWS.mode)) { gh.option = 1; gh.mode = (gh.mode + dir + 2) % 2; }
+    if (nearY(ly, MENU_ROWS.players))   gh.players = (gh.players + dir + 3) % 3;
     else if (nearY(ly, MENU_ROWS.play)) startGame();
   }
 
   function processMenu() {
     if (!gh.keypressed) {
-      if (keys.ArrowUp)    { gh.option = (gh.option - 1 + 2) % 2; gh.keypressed = true; }
-      if (keys.ArrowDown)  { gh.option = (gh.option + 1) % 2;     gh.keypressed = true; }
       if (keys.ArrowLeft)  { menuChangeValue(-1); gh.keypressed = true; }
       if (keys.ArrowRight) { menuChangeValue(+1); gh.keypressed = true; }
-      if (keys.Enter) startGame();                                                 // Enter siempre arranca (como el nivel de config de CrazyTanks)
+      if (keys.Enter) startGame();
     }
-    if (!keys.ArrowLeft && !keys.ArrowRight && !keys.ArrowUp && !keys.ArrowDown) gh.keypressed = false;
+    if (!keys.ArrowLeft && !keys.ArrowRight) gh.keypressed = false;
   }
 
   // Color de acento del menú: cicla SUAVE por la paleta neón con crossfade continuo (mejora del título de
@@ -596,11 +621,10 @@
     ctx.beginPath(); ctx.moveTo(W / 2 - dw / 2, dy); ctx.lineTo(W / 2 + dw / 2, dy); ctx.stroke();
     ctx.restore();
 
-    drawOption((gh.players + 2) + ' Players', MENU_ROWS.players, gh.option === 0, col);
-    drawOption(gh.mode === 0 ? 'Player vs AI' : 'Player vs Player', MENU_ROWS.mode, gh.option === 1, col);
+    drawOption((gh.players + 2) + ' Players', MENU_ROWS.players, true, col);
     drawPlay(MENU_ROWS.play, col);
 
-    createText(20, 'tocá una opción para cambiarla', 'rgba(150,160,175,0.7)', 0.5, 0.9);
+    createText(20, 'tocá la cantidad para cambiarla · vs IA', 'rgba(150,160,175,0.7)', 0.5, 0.9);
   }
 
   function drawWinner() {
@@ -641,11 +665,10 @@
       if (p0) (lx < W * 0.5 ? p0.turnLeft() : p0.turnRight());
     }
   });
-  // hover del mouse (desktop): mueve la selección a la fila debajo del cursor
+  // hover del mouse (desktop): sólo para iluminar el botón JUGAR al pasar el cursor
   canvas.addEventListener('mousemove', e => {
     const r = canvas.getBoundingClientRect();
     hoverY = e.clientY - r.top;
-    if (gh.menu) hoverFocus(hoverY);
   });
   canvas.addEventListener('mouseleave', () => { hoverY = -1; });
 
@@ -684,14 +707,19 @@
         p.process(dt);
         if (p.alive) p.draw();                                                    // estampa estela base sólo si sigue vivo tras el chequeo
       }
-      // componer el frame: fondo + halo neón (copia desenfocada) + estela nítida + cabezas brillantes.
-      // El bloom se recalcula cada frame desde la estela offscreen, así no se acumula.
+      // componer el frame: fondo + halo neón + estela nítida + cabezas brillantes.
+      // Bloom BARATO: la estela se reduce a media resolución y se blurea ahí (1/4 del área); después se
+      // re-estira con suavizado. Mucho más liviano que blurear la pantalla completa cada frame (mobile).
       drawBackground();
       if (TRAIL_BLOOM > 0) {
-        ctx.save();
-        ctx.filter = `blur(${TRAIL_BLOOM}px)`;
-        ctx.drawImage(trailCv, 0, 0, W, H);                                        // halo neón
-        ctx.restore();
+        gctx.setTransform(1, 0, 0, 1, 0, 0);
+        gctx.clearRect(0, 0, glowCv.width, glowCv.height);
+        gctx.filter = `blur(${TRAIL_BLOOM * 0.6}px)`;
+        gctx.drawImage(trailCv, 0, 0, glowCv.width, glowCv.height);                // downscale + blur (área chica)
+        gctx.filter = 'none';
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(glowCv, 0, 0, W, H);                                         // upscale suave → halo neón
+        ctx.imageSmoothingEnabled = false;
       }
       ctx.drawImage(trailCv, 0, 0, W, H);                                          // estela nítida encima del halo
       for (const p of players) p.drawHead(dt);
@@ -732,8 +760,12 @@
       }
       loop();
       const btn = document.getElementById('btnInfo');
-      btn.addEventListener('click', () => {
-        const showing = overlay.style.display !== 'none';
+      btn.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        // El overlay arranca con display:none POR CSS — el style inline está vacío "", así que
+        // comparamos con === 'block' (estado visible explícito) en vez de !== 'none' (que daba true
+        // al inicio y se comía el primer tap).
+        const showing = overlay.style.display === 'block';
         overlay.style.display = showing ? 'none' : 'block';
         btn.classList.toggle('on', !showing);
       });

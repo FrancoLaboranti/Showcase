@@ -54,7 +54,25 @@
 
   function tappable(el, fn) { el && el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
   tappable(document.getElementById('btnFs'), () => {
-    if (EMBEDDED) { try { window.parent.postMessage({ type: 'arcade:fullscreen' }, '*'); } catch (e) {} return; }
+    if (EMBEDDED) {
+      // Same-origin con la shell del Arcade → llamamos requestFullscreen() DIRECTO sobre el
+      // documento padre para preservar el user-activation del tap (postMessage lo perdía y
+      // Chrome rechazaba el request en silencio). Fallback a postMessage si fuera cross-origin.
+      try {
+        const topDoc = window.top.document;
+        if (topDoc.fullscreenElement || topDoc.webkitFullscreenElement) {
+          (topDoc.exitFullscreen || topDoc.webkitExitFullscreen).call(topDoc);
+        } else {
+          const el = topDoc.documentElement;
+          const req = el.requestFullscreen || el.webkitRequestFullscreen;
+          const p = req.call(el);
+          if (p && p.catch) p.catch(() => {});
+        }
+      } catch (e) {
+        try { window.parent.postMessage({ type: 'arcade:fullscreen' }, '*'); } catch (e2) {}
+      }
+      return;
+    }
     isFs() ? exitFs() : enterFs();
   });
   window.addEventListener('message', (e) => {

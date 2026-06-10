@@ -4,9 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Tron V2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../../Arcade/arcade-shell.css">
 <style>
-  :root { --bar-height: 66px; }                                                  /* tweak to taste */
+  :root { --bar-height: 66px; }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     width: 100%; height: 100%;
@@ -14,14 +17,11 @@
     overflow: hidden;
     touch-action: none;
     user-select: none; -webkit-user-select: none;
-    font-family: 'Century Gothic', 'Futura', 'Segoe UI', system-ui, sans-serif;
+    font-family: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
   }
-  /* El canvas ocupa sólo el área SOBRE la barra; ahí vive la pista de Tron (la grilla de colisiones se
-     dimensiona a este rect). Tamaños seteados explícito desde JS en cada resize. */
-  #c {
-    display: block; position: absolute;
-    top: 0; left: 0;
-  }
+  /* Canvas a PANTALLA COMPLETA (sin barra que ocupe alto) — UI = botones de esquina + control por toque,
+     estilo CrazyTanks/Pong. */
+  #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
 
   #hint {
     position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
@@ -30,182 +30,366 @@
     transition: opacity 0.8s; z-index: 2; padding: 0 16px;
   }
 
-  /* Barra inferior: gira al jugador humano (◄ ►) y Start/⏎ arranca o reinicia. Mismo shell que BallsWeb. */
-  #bar {
-    position: absolute; left: 0; right: 0; bottom: 0;
-    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
-    padding: 0 16px env(safe-area-inset-bottom);
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.85);
-    border-top: 1px solid rgba(255,255,255,0.08);
-    z-index: 3;
+  /* Cluster de botones de esquina (arriba-derecha): ⟳ reiniciar · ⓘ info · ⛶ pantalla · ✕ salir.
+     El look tenue de ✕/⛶/ⓘ lo da arcade-shell.css; acá sólo los posicionamos. */
+  #corner {
+    position: absolute; z-index: 10;
+    top: calc(8px + env(safe-area-inset-top));
+    right: calc(8px + env(safe-area-inset-right));
+    display: flex; gap: 8px;
   }
-  #ui { display: flex; gap: 8px; }
-  #ui button {
-    width: 48px; height: 48px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.22);
-    background: rgba(255,255,255,0.08);
-    color: #fff;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none;
-    transition: background 0.1s, transform 0.08s;
-    padding: 0;
-  }
-  #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
-  #ui button svg { display: block; width: 24px; height: 24px; pointer-events: none; }
-
-  /* Reset — reinicia la partida actual (mismos ajustes). Hueco a la derecha del bar. Mismo look que en Tron v1. */
+  #corner button { align-self: center; margin: 0; }                              /* normaliza el align-self/margin del shell */
   #btnReset {
-    width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; align-self: flex-end; margin-bottom: 6px;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
-    color: rgba(255,255,255,0.85);
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.55);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: none; padding: 0;
     transition: background 0.1s, transform 0.08s;
   }
   #btnReset svg { display: block; width: 15px; height: 15px; pointer-events: none; }
   #btnReset:active { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.6); color: #fff; transform: scale(0.9); }
-  /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
   #fpsOverlay {
     position: absolute;
-    right: 40px;
-    bottom: calc(env(safe-area-inset-bottom) + 8px);
-    font-family: monospace;
-    font-size: 13px;
-    color: rgba(255,255,255,0.9);
-    background: rgba(0,0,0,0.6);
-    padding: 3px 8px;
-    border-radius: 4px;
-    pointer-events: none;
-    display: none;
-    z-index: 9;
+    left: calc(8px + env(safe-area-inset-left));
+    top: calc(8px + env(safe-area-inset-top));
+    font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; line-height: 18px;
+    color: rgba(255,255,255,0.9); background: rgba(0,0,0,0.55); padding: 4px 6px;
+    pointer-events: none; display: none; z-index: 9;
   }
-
-
-
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">menú: tocá el texto para elegir · en juego: mitades de pantalla o ◄ ► para girar</div>
-  <div id="bar">
-  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-  </button>
-<div id="ui">
-      <button id="btnLeft"  aria-label="girar izquierda" title="Girar izquierda">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
-      </button>
-      <button id="btnRight" aria-label="girar derecha" title="Girar derecha">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
-      </button>
-    </div>
+  <div id="hint">en juego: tocá la mitad izq/der de la pantalla para doblar · la cámara te sigue</div>
+  <div id="corner">
     <button id="btnReset" aria-label="reiniciar" title="Reiniciar partida">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+    </button>
+    <button id="btnInfo" aria-label="info" title="Info / FPS">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
-    <button id="btnInfo" aria-label="info" title="Info / FPS">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+    <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
   </div>
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  TRON V2 — port web fiel de TronV2.py, con el shell mobile de BallsWeb.
-  //  Light-cycles que dejan estela; morís si tu frente choca contra cualquier
-  //  estela (incluida la propia). El campo hace wrap toroidal — no hay paredes.
+  //  TRON V2 — port web de TronV2.py con MUNDO GRANDE + cámara que sigue al jugador
+  //  (como Snake/CrazyTanks), borde y obstáculos blancos, y minimapa. Visuales de la
+  //  v1: paleta neón, bloom barato, cabeza que se desvanece al color base, fuente Orbitron.
   //
-  //  El original detecta colisiones leyendo píxeles (windowSurface.get_at).
-  //  Acá replicamos eso con una GRILLA DE OCUPACIÓN del tamaño del canvas
-  //  (lectura O(1) — getImageData por píxel sería letal para los scans de la IA).
-  //  La grilla = 1 donde hay estela; el canvas se dibuja en paralelo para mostrar.
+  //  Colisiones por GRILLA DE OCUPACIÓN del tamaño del MUNDO (no de la pantalla): grid=1 en
+  //  estelas, borde y obstáculos. Fuera del mundo también cuenta como pared. La estela viaja
+  //  a un canvas offscreen del mundo y la cámara blitea sólo la porción visible.
   // ════════════════════════════════════════════════════════════════════
-  const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));               // randint inclusivo (como random.randint)
+  const ri  = (a, b) => a + Math.floor(Math.random() * (b - a + 1));              // randint inclusivo
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const TAU = Math.PI * 2;
+
+  // ── TUNING ──
+  const SPEED_MULT  = 1.6;                                                         // velocidad de las cycles
+  const HEAD_FADE   = 0.6;                                                         // seg que tarda la cabeza en bajar al color base
+  const HEAD_GLOW   = 16;                                                          // shadowBlur del núcleo de la cabeza
+  const HEAD_DOT    = 2.0;                                                         // radio del núcleo blanco de la cabeza
+  const TRAIL_BLOOM = 6;                                                           // desenfoque del halo neón (0 = sin glow)
+  const BG          = '#03060d';                                                   // fondo casi negro
+  const FONT        = "'Orbitron', 'Segoe UI', system-ui, sans-serif";
+
+  // ── MUNDO ── más grande que la pantalla; la cámara sigue al jugador y se clampa al mundo.
+  const WORLD_W = 2400, WORLD_H = 1600;
+  const CELL    = 64;                                                              // paso de la grilla visual de arena
+  const GRID_ALPHA = 0.05;                                                         // opacidad de las rayas blancas del mapa
+  const BORDER  = 12;                                                              // grosor del borde blanco (px de mundo)
+  const AI_SCAN = 340;                                                             // tope de anticipación de la IA (px) — no escanear todo el mundo
+  // Minimapa: las estelas se dibujan NATIVAMENTE a esta resolución (no se dilata el trail grande), así el
+  // escalado al minimapa es limpio y fiel. Proporcional al mundo.
+  const MINI_W = 360, MINI_H = Math.round(MINI_W * WORLD_H / WORLD_W);
+  const MINI_S = MINI_W / WORLD_W;                                                  // factor mundo → minimapa
+
+  // ── IA (estilo V2: elige la dirección con más espacio libre) ──
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
 
-  // screenX/screenY del original (1280×720) ahora son responsive = tamaño del canvas.
-  let W = 0, H = 0, dpr = 1, scl = 1;                                              // scl = factor de fuente (los px del original eran sobre 1280×720)
-  let grid = new Uint8Array(0);                                                    // ocupación: grid[y*W+x] = 1 si hay estela
+  let W = 0, H = 0, dpr = 1, scl = 1;                                              // viewport (ventana)
+  let camX = 0, camY = 0;                                                          // esquina sup-izq de la cámara (coords de mundo)
+  let grid = new Uint8Array(WORLD_W * WORLD_H);                                    // ocupación del MUNDO
+  let trailCv = null, tctx = null;                                                // estela neón (mundo, transparente)
+  let bgCv = null, bctx = null;                                                    // fondo estático horneado (grilla + borde + obstáculos)
+  let glowCv = null, gctx = null;                                                  // buffer de glow a media resolución (viewport)
+  let miniCv = null, mctx = null;                                                  // estelas a resolución de minimapa (escalado limpio)
+  let obstacles = [];                                                              // sólo para referencia/depuración
 
-  const xper = p => p * W;
-  const yper = p => p * H;
-
-  // Lectura de ocupación con wrap toroidal y truncado tipo Python (floor + módulo positivo).
+  // ── OCUPACIÓN (mundo acotado: fuera del mundo = pared) ──
   function occ(fx, fy) {
-    let xi = Math.floor(fx), yi = Math.floor(fy);
-    xi = ((xi % W) + W) % W;
-    yi = ((yi % H) + H) % H;
-    return grid[yi * W + xi];
+    const xi = Math.floor(fx), yi = Math.floor(fy);
+    if (xi < 0 || xi >= WORLD_W || yi < 0 || yi >= WORLD_H) return 1;
+    return grid[yi * WORLD_W + xi];
   }
-  // Estampa un punto de estela (≈ el círculo radio-1 del original): 3×3 en la grilla + cuadradito en canvas.
-  // OJO: recorta (no envuelve) las celdas fuera de pantalla, igual que pygame.draw.circle. Si envolviera
-  // con módulo, al cruzar un borde dejaría una estela fantasma en el lado opuesto —justo donde el jugador
-  // reaparece— y moriría al wrappear. La colisión occ() sí envuelve (como el `% SCREEN` del original).
-  function stamp(x, y, color) {
-    const ix = Math.floor(x), iy = Math.floor(y);
+  function markCell(ix, iy) {
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
         const xi = ix + dx, yi = iy + dy;
-        if (xi < 0 || xi >= W || yi < 0 || yi >= H) continue;                     // clip, no wrap
-        grid[yi * W + xi] = 1;
+        if (xi < 0 || xi >= WORLD_W || yi < 0 || yi >= WORLD_H) continue;
+        grid[yi * WORLD_W + xi] = 1;
       }
     }
+  }
+  function markRect(x, y, w, h) {                                                  // ocupa un rect en la grilla
+    const x0 = Math.max(0, Math.floor(x)), y0 = Math.max(0, Math.floor(y));
+    const x1 = Math.min(WORLD_W, Math.ceil(x + w)), y1 = Math.min(WORLD_H, Math.ceil(y + h));
+    for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) grid[yy * WORLD_W + xx] = 1;
+  }
+  function markDisc(cx, cy, r) {
+    const x0 = Math.max(0, Math.floor(cx - r)), y0 = Math.max(0, Math.floor(cy - r));
+    const x1 = Math.min(WORLD_W, Math.ceil(cx + r)), y1 = Math.min(WORLD_H, Math.ceil(cy + r));
+    const r2 = r * r;
+    for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) {
+      const ddx = xx - cx, ddy = yy - cy;
+      if (ddx * ddx + ddy * ddy <= r2) grid[yy * WORLD_W + xx] = 1;
+    }
+  }
+
+  // Pinta un tramo de estela continuo (línea de (x0,y0) a (x1,y1)) en grilla + canvas offscreen.
+  function paintTrail(x0, y0, x1, y1, color, connect) {
+    if (connect) {
+      const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)));
+      for (let s = 0; s <= steps; s++) {
+        const u = s / steps;
+        markCell(Math.floor(x0 + (x1 - x0) * u), Math.floor(y0 + (y1 - y0) * u));
+      }
+      tctx.strokeStyle = color; tctx.lineWidth = 3; tctx.lineCap = 'round'; tctx.lineJoin = 'round';
+      tctx.beginPath(); tctx.moveTo(x0, y0); tctx.lineTo(x1, y1); tctx.stroke();
+      mctx.strokeStyle = color; mctx.lineWidth = 1.6; mctx.lineCap = 'round'; mctx.lineJoin = 'round';
+      mctx.beginPath(); mctx.moveTo(x0 * MINI_S, y0 * MINI_S); mctx.lineTo(x1 * MINI_S, y1 * MINI_S); mctx.stroke();
+    } else {
+      markCell(Math.floor(x1), Math.floor(y1));
+      tctx.fillStyle = color; tctx.fillRect(Math.floor(x1) - 1, Math.floor(y1) - 1, 3, 3);
+      mctx.fillStyle = color; mctx.beginPath(); mctx.arc(x1 * MINI_S, y1 * MINI_S, 0.9, 0, TAU); mctx.fill();
+    }
+  }
+
+  // ── COLORES neón (visuales de v1) ──
+  const PLAYER_COLORS = [ [0,240,255], [255,120,0], [120,255,30], [255,40,200] ];
+  const rgb  = c => `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
+  const rgba = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
+  const lerpC = (a, b, t) => [ a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t ];
+  function hot(base, t) {                                                          // cola → base ; cabeza → casi blanco
+    const wt = Math.max(0, t) * Math.max(0, t) * 0.75;
+    return [ base[0]+(255-base[0])*wt, base[1]+(255-base[1])*wt, base[2]+(255-base[2])*wt ];
+  }
+
+  function roundRectPath(c, x, y, w, h, r) {
+    r = Math.min(r, h / 2, w / 2);
+    c.beginPath();
+    c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+  }
+  // texto centrado con glow opcional + caja redondeada opcional (para JUGAR).
+  function createText(size, content, color, fx, fy, glow = 0, boxColor = null) {
+    const fp = Math.round(size * scl);
+    ctx.font = `600 ${fp}px ${FONT}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const px = W * fx, py = H * fy;
+    if (boxColor) {
+      const w = ctx.measureText(content).width, pad = fp * 0.45;
+      ctx.fillStyle = boxColor;
+      roundRectPath(ctx, px - w / 2 - pad, py - fp * 0.7, w + pad * 2, fp * 1.4, fp * 0.35);
+      ctx.fill();
+    }
+    if (glow > 0) { ctx.shadowColor = color; ctx.shadowBlur = glow; }
     ctx.fillStyle = color;
-    ctx.fillRect(ix - 1, iy - 1, 3, 3);                                           // el canvas recorta solo
+    ctx.fillText(content, px, py);
+    ctx.shadowBlur = 0;
+  }
+
+  // ════════════════ MUNDO: cámara, fondo horneado, obstáculos ════════════════
+  function updateCamera() {
+    // SIEMPRE el player 0 (el humano), vivo o muerto. Al morir, su x/y quedan congeladas → la cámara no
+    // se mueve a otro lado cuando perdés.
+    const p = players.find(q => q.id === 0) || players[0];
+    const px = p ? p.x : WORLD_W / 2, py = p ? p.y : WORLD_H / 2;
+    camX = Math.floor(Math.max(0, Math.min(px - W / 2, WORLD_W - W)));
+    camY = Math.floor(Math.max(0, Math.min(py - H / 2, WORLD_H - H)));
+    if (WORLD_W < W) camX = Math.floor((WORLD_W - W) / 2);                          // mundo más chico que viewport (raro): centrar
+    if (WORLD_H < H) camY = Math.floor((WORLD_H - H) / 2);
+  }
+
+  function startposFor(id, n) {
+    const cx = WORLD_W / 2, y = WORLD_H * 0.82, spread = WORLD_W * 0.12;
+    return [ cx + (id - (n - 1) / 2) * spread, y ];
+  }
+
+  // Genera obstáculos aleatorios (rect / disco / barra) evitando los spawns y el borde.
+  function genObstacles(spawns) {
+    const list = [];
+    const margin = WORLD_W * 0.05;
+    const clearR = Math.min(WORLD_W, WORLD_H) * 0.16;                              // zona libre alrededor de cada spawn
+    const target = ri(10, 16);
+    let attempts = 0;
+    while (list.length < target && attempts < 400) {
+      attempts++;
+      const kind = ri(0, 3);
+      let o;
+      if (kind === 0) {                                                            // rect
+        const w = rnd(WORLD_W * 0.05, WORLD_W * 0.13), h = rnd(WORLD_H * 0.06, WORLD_H * 0.16);
+        o = { kind, x: rnd(margin, WORLD_W - margin - w), y: rnd(margin, WORLD_H - margin - h), w, h };
+      } else if (kind === 1) {                                                     // disco
+        const r = rnd(WORLD_W * 0.03, WORLD_W * 0.065);
+        o = { kind, cx: rnd(margin + r, WORLD_W - margin - r), cy: rnd(margin + r, WORLD_H - margin - r), r };
+      } else {                                                                     // barra (horizontal o vertical)
+        const long = rnd(WORLD_W * 0.16, WORLD_W * 0.26), thin = rnd(20, 34);
+        const horiz = kind === 2;
+        const w = horiz ? long : thin, h = horiz ? thin : long;
+        o = { kind: 0, x: rnd(margin, WORLD_W - margin - w), y: rnd(margin, WORLD_H - margin - h), w, h };
+      }
+      // bounding circle del obstáculo
+      const ox = o.kind === 1 ? o.cx : o.x + o.w / 2;
+      const oy = o.kind === 1 ? o.cy : o.y + o.h / 2;
+      const orad = o.kind === 1 ? o.r : Math.hypot(o.w, o.h) / 2;
+      let ok = true;
+      for (const s of spawns) if (Math.hypot(ox - s[0], oy - s[1]) < clearR + orad) { ok = false; break; }
+      for (const q of list) {                                                       // no encimar demasiado
+        const qx = q.kind === 1 ? q.cx : q.x + q.w / 2, qy = q.kind === 1 ? q.cy : q.y + q.h / 2;
+        const qr = q.kind === 1 ? q.r : Math.hypot(q.w, q.h) / 2;
+        if (Math.hypot(ox - qx, oy - qy) < orad + qr + WORLD_W * 0.02) { ok = false; break; }
+      }
+      if (ok) list.push(o);
+    }
+    return list;
+  }
+
+  // ── DECORACIÓN "tech" (blanca) compartida por obstáculos y borde: relleno tenue + hatch diagonal +
+  // doble contorno + esquinas tipo brackets. Todo se hornea una vez en bgCv. ──
+  function detailRect(c, x, y, w, h) {
+    c.save();
+    c.fillStyle = 'rgba(255,255,255,0.07)'; c.fillRect(x, y, w, h);
+    c.beginPath(); c.rect(x, y, w, h); c.clip();                                   // hatch diagonal clippeado
+    c.strokeStyle = 'rgba(255,255,255,0.10)'; c.lineWidth = 1; c.beginPath();
+    for (let i = -h; i < w; i += 14) { c.moveTo(x + i, y); c.lineTo(x + i + h, y + h); }
+    c.stroke();
+    c.restore();
+    c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 2; c.strokeRect(x + 1, y + 1, w - 2, h - 2);
+    c.strokeStyle = 'rgba(255,255,255,0.30)'; c.lineWidth = 1; c.strokeRect(x + 5, y + 5, w - 10, h - 10);
+    c.strokeStyle = '#fff'; c.lineWidth = 2.5;                                     // brackets en las esquinas
+    const cl = Math.min(16, w * 0.3, h * 0.3);
+    c.beginPath();
+    c.moveTo(x, y + cl); c.lineTo(x, y); c.lineTo(x + cl, y);
+    c.moveTo(x + w - cl, y); c.lineTo(x + w, y); c.lineTo(x + w, y + cl);
+    c.moveTo(x + w, y + h - cl); c.lineTo(x + w, y + h); c.lineTo(x + w - cl, y + h);
+    c.moveTo(x + cl, y + h); c.lineTo(x, y + h); c.lineTo(x, y + h - cl);
+    c.stroke();
+  }
+  function detailDisc(c, cx, cy, r) {
+    c.save();
+    c.fillStyle = 'rgba(255,255,255,0.07)'; c.beginPath(); c.arc(cx, cy, r, 0, TAU); c.fill();
+    c.clip();                                                                      // hatch diagonal dentro del disco
+    c.strokeStyle = 'rgba(255,255,255,0.10)'; c.lineWidth = 1; c.beginPath();
+    for (let i = -2 * r; i < 2 * r; i += 14) { c.moveTo(cx - r + i, cy - r); c.lineTo(cx - r + i + 2 * r, cy + r); }
+    c.stroke();
+    c.restore();
+    c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 2; c.beginPath(); c.arc(cx, cy, r - 1, 0, TAU); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,0.30)'; c.lineWidth = 1; c.beginPath(); c.arc(cx, cy, r - 5, 0, TAU); c.stroke();
+    c.strokeStyle = 'rgba(255,255,255,0.45)'; c.beginPath(); c.arc(cx, cy, r * 0.32, 0, TAU); c.stroke();
+    c.fillStyle = '#fff'; c.beginPath(); c.arc(cx, cy, 2, 0, TAU); c.fill();
+    c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath();                        // 8 ticks radiales en el borde
+    for (let a = 0; a < TAU; a += TAU / 8) {
+      c.moveTo(cx + Math.cos(a) * (r - 1), cy + Math.sin(a) * (r - 1));
+      c.lineTo(cx + Math.cos(a) * (r - 8), cy + Math.sin(a) * (r - 8));
+    }
+    c.stroke();
+  }
+  // Borde del mundo con el MISMO motivo: banda tenue + doble frame + ticks + brackets grandes en esquinas.
+  function detailBorder(c) {
+    const B = BORDER;
+    c.fillStyle = 'rgba(255,255,255,0.06)';
+    c.fillRect(0, 0, WORLD_W, B); c.fillRect(0, WORLD_H - B, WORLD_W, B);
+    c.fillRect(0, 0, B, WORLD_H); c.fillRect(WORLD_W - B, 0, B, WORLD_H);
+    c.strokeStyle = 'rgba(255,255,255,0.9)'; c.lineWidth = 2; c.strokeRect(1, 1, WORLD_W - 2, WORLD_H - 2);
+    c.strokeStyle = 'rgba(255,255,255,0.4)'; c.lineWidth = 1; c.strokeRect(B, B, WORLD_W - 2 * B, WORLD_H - 2 * B);
+    c.strokeStyle = 'rgba(255,255,255,0.5)'; c.lineWidth = 1; c.beginPath();
+    for (let x = 60; x < WORLD_W; x += 60) { c.moveTo(x, 0); c.lineTo(x, B); c.moveTo(x, WORLD_H - B); c.lineTo(x, WORLD_H); }
+    for (let y = 60; y < WORLD_H; y += 60) { c.moveTo(0, y); c.lineTo(B, y); c.moveTo(WORLD_W - B, y); c.lineTo(WORLD_W, y); }
+    c.stroke();
+    c.strokeStyle = '#fff'; c.lineWidth = 3; const cl = 42; c.beginPath();
+    c.moveTo(0, cl); c.lineTo(0, 0); c.lineTo(cl, 0);
+    c.moveTo(WORLD_W - cl, 0); c.lineTo(WORLD_W, 0); c.lineTo(WORLD_W, cl);
+    c.moveTo(WORLD_W, WORLD_H - cl); c.lineTo(WORLD_W, WORLD_H); c.lineTo(WORLD_W - cl, WORLD_H);
+    c.moveTo(cl, WORLD_H); c.lineTo(0, WORLD_H); c.lineTo(0, WORLD_H - cl);
+    c.stroke();
+  }
+
+  // Hornea el fondo del mundo (grilla blanca tenue + borde + obstáculos detallados) en bgCv, y marca
+  // borde + obstáculos en la grilla de colisión.
+  function buildWorld() {
+    const n = gh.currentPlayers + 2;
+    const spawns = []; for (let i = 0; i < n; i++) spawns.push(startposFor(i, n));
+    obstacles = genObstacles(spawns);
+
+    bctx.setTransform(1, 0, 0, 1, 0, 0);
+    bctx.fillStyle = BG; bctx.fillRect(0, 0, WORLD_W, WORLD_H);
+
+    // grilla de arena (rayas blancas tenues)
+    bctx.strokeStyle = `rgba(255,255,255,${GRID_ALPHA})`; bctx.lineWidth = 1;
+    bctx.beginPath();
+    for (let x = CELL; x < WORLD_W; x += CELL) { bctx.moveTo(x + 0.5, 0); bctx.lineTo(x + 0.5, WORLD_H); }
+    for (let y = CELL; y < WORLD_H; y += CELL) { bctx.moveTo(0, y + 0.5); bctx.lineTo(WORLD_W, y + 0.5); }
+    bctx.stroke();
+
+    // obstáculos detallados (formas blancas tipo tech) + marca de colisión
+    for (const o of obstacles) {
+      if (o.kind === 1) { detailDisc(bctx, o.cx, o.cy, o.r); markDisc(o.cx, o.cy, o.r); }
+      else              { detailRect(bctx, o.x, o.y, o.w, o.h); markRect(o.x, o.y, o.w, o.h); }
+    }
+
+    // borde del mundo con el MISMO motivo detallado + marca de colisión
+    detailBorder(bctx);
+    markRect(0, 0, WORLD_W, BORDER); markRect(0, WORLD_H - BORDER, WORLD_W, BORDER);
+    markRect(0, 0, BORDER, WORLD_H); markRect(WORLD_W - BORDER, 0, BORDER, WORLD_H);
   }
 
   function clearField() {
     grid.fill(0);
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
+    tctx.setTransform(1, 0, 0, 1, 0, 0);
+    tctx.clearRect(0, 0, WORLD_W, WORLD_H);                                         // estela transparente
+    mctx.clearRect(0, 0, MINI_W, MINI_H);                                          // estela del minimapa
+    ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
   }
 
-  const barEl = document.getElementById('bar');
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const barH = barEl.offsetHeight;
     W = Math.max(1, Math.floor(window.innerWidth));
-    H = Math.max(1, Math.floor(window.innerHeight - barH));
+    H = Math.max(1, Math.floor(window.innerHeight));                              // canvas a pantalla completa (sin barra)
     canvas.width  = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    scl = Math.min(W / 1280, H / 720);                                            // mantiene el texto adentro como en el original
-    grid = new Uint8Array(W * H);
-    // Cambiar de tamaño invalida la pista; volvemos al menú (la grilla vieja no sirve).
-    backToMenu();
+    ctx.imageSmoothingEnabled = false;
+    scl = Math.min(W / 1280, H / 720);
+
+    // offscreens del MUNDO (1:1, sin dpr — la cámara los blitea escalando a viewport)
+    if (!trailCv) { trailCv = document.createElement('canvas'); trailCv.width = WORLD_W; trailCv.height = WORLD_H; tctx = trailCv.getContext('2d'); }
+    if (!bgCv)    { bgCv = document.createElement('canvas'); bgCv.width = WORLD_W; bgCv.height = WORLD_H; bctx = bgCv.getContext('2d'); }
+    if (!miniCv)  { miniCv = document.createElement('canvas'); miniCv.width = MINI_W; miniCv.height = MINI_H; mctx = miniCv.getContext('2d'); }
+    // buffer de glow a media resolución del VIEWPORT
+    glowCv = glowCv || document.createElement('canvas');
+    glowCv.width  = Math.max(1, Math.floor(W * dpr / 2));
+    glowCv.height = Math.max(1, Math.floor(H * dpr / 2));
+    gctx = glowCv.getContext('2d');
+    // NO reiniciamos al redimensionar: el mundo (grilla/estela/fondo) es de tamaño fijo y sobrevive un
+    // resize. Antes acá se llamaba backToMenu() y por eso el botón de fullscreen te sacaba al menú.
   }
   window.addEventListener('resize', resize);
 
-  // ── COLORES ──
-  const PLAYER_COLORS = [ [0,155,255], [255,0,155], [255,155,0], [0,255,155] ];
-  const rgb = c => `rgb(${c[0]},${c[1]},${c[2]})`;
-  const clamp255 = v => Math.max(0, Math.min(255, v | 0));
-  const modifyColorPerc = (c, off) => `rgb(${clamp255(c[0]*off)},${clamp255(c[1]*off)},${clamp255(c[2]*off)})`;
-
-  // texto centrado (port de createText; siempre 'center' en el original). size en px del original → ×scl.
-  function createText(size, content, color, fx, fy) {
-    ctx.font = Math.round(size * scl) + "px 'Century Gothic', 'Futura', system-ui, sans-serif";
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = color;
-    ctx.fillText(content, xper(fx), yper(fy));
-  }
-
-  // ════════════════ PLAYER (port de la clase Player) ════════════════
-  // directions[dir] = [vx, vy,  dx2,dy2,  dx4,dy4,  dx100,dy100]
-  //   [0,1]   = velocidad (px/s, ×deltaT×1.5)
-  //   [2,3]   = look-ahead inmediato (2 px) → muerte si está ocupado
-  //   [4,5]   = look-ahead medio (4 px) → la IA lo usa para anticipar
-  //   [6,7]   = scout lejano (≈100 px) que la IA randomiza cada 2 s
-  // NOTA: el immediate look-ahead [2,3] del original era asimétrico (derecha/abajo a 1 px), un ajuste
-  // al círculo radio-1 de pygame. Con la estela 3×3 (±1 px) de acá, 1 px caería sobre la propia estela
-  // y matarías al girar a derecha/abajo. Lo hacemos simétrico a 2 px (> medio-ancho de la estela).
+  // ════════════════ PLAYER ════════════════
+  // directions[dir] = [vx, vy, dx2,dy2, dx4,dy4, dx100,dy100]
   function dirTemplate() {
     return {
       0: [0,-150, 0,-2, 0,-4, 0,-100],   // arriba
@@ -221,28 +405,19 @@
       this.direction = 0;
       this.directions = dirTemplate();
       this.currentMode = mode;
-      this.leftpressed = false;
-      this.rightpressed = false;
-      this.stop = false;
-      this.alive = true;
-      this.aiTurnInCD = 0;
-      this.aiRandDistToTurnCD = 2;
-      this.maxDistanceDir = null;
-      this.premaxDistanceDir = null;
+      this.leftpressed = false; this.rightpressed = false;
+      this.stop = false; this.alive = true;
+      this.aiTurnInCD = 0; this.aiRandDistToTurnCD = 2;
+      this.maxDistanceDir = null; this.premaxDistanceDir = null;
 
-      const n = totalplayers;
-      const startpos = {
-        0: [ (n < 4 ? 0.75 : 0.8), 0.95 ],
-        1: [ (n < 4 ? 0.25 : 0.2), (n === 4 ? 0.65 : 0.95) ],
-        2: [ (n < 4 ? 0.5  : 0.6), (n === 4 ? 0.85 : 0.95) ],
-        3: [ 0.4, 0.75 ],
-      };
-      this.color = rgb(PLAYER_COLORS[id]);
-      this.x = xper(startpos[id][0]);
-      this.y = yper(startpos[id][1]);
+      const [sx, sy] = startposFor(id, totalplayers);
+      this.colorArr = PLAYER_COLORS[id];
+      this.color = rgb(this.colorArr);
+      this.x = sx; this.y = sy;
+      this.head = [];
+      this.lastX = null; this.lastY = null;
     }
 
-    // giro manual (botones / mitades de pantalla) — sólo el humano
     turnLeft()  { this.direction = (this.direction - 1 + 4) % 4; }
     turnRight() { this.direction = (this.direction + 1) % 4; }
 
@@ -250,32 +425,25 @@
       const d = this.directions;
 
       if (this.id === 0 || this.currentMode === 1) {
-        // ── HUMANO ── latch igual que el original: un giro por pulsación.
         if (!this.leftpressed && keys[this.left])  { this.direction = (this.direction - 1 + 4) % 4; this.leftpressed = true; }
         if (!this.rightpressed && keys[this.right]) { this.direction = (this.direction + 1) % 4;     this.rightpressed = true; }
         if (!keys[this.left])  this.leftpressed = false;
         if (!keys[this.right]) this.rightpressed = false;
       } else {
-        // ── IA ──
+        // ── IA (maxDistanceDir, escaneo capado a AI_SCAN) ──
         this.aiRandDistToTurnCD += dt;
         this.aiTurnInCD += dt;
-
         if (this.aiRandDistToTurnCD > 2) {
-          d[0][7] = ri(-100, -25);
-          d[1][6] = ri(25, 100);
-          d[2][7] = ri(25, 100);
-          d[3][6] = ri(-100, -25);
+          d[0][7] = ri(-100, -25); d[1][6] = ri(25, 100); d[2][7] = ri(25, 100); d[3][6] = ri(-100, -25);
           this.aiRandDistToTurnCD = 0;
         }
-
-        const maxDistances = [0, 0, 0, 0];
-        for (let dT = 2; dT < H; dT++) { if (occ(this.x, this.y - dT)) { maxDistances[0] = dT; break; } }   // arriba
-        for (let dB = 2; dB < H; dB++) { if (occ(this.x, this.y + dB)) { maxDistances[2] = dB; break; } }   // abajo
-        for (let dL = 2; dL < W; dL++) { if (occ(this.x - dL, this.y)) { maxDistances[3] = dL; break; } }   // izquierda
-        for (let dR = 2; dR < W; dR++) { if (occ(this.x + dR, this.y)) { maxDistances[1] = dR; break; } }   // derecha
-
+        const maxD = [0, 0, 0, 0];
+        for (let k = 2; k <= AI_SCAN; k++) { if (occ(this.x, this.y - k)) { maxD[0] = k; break; } if (k === AI_SCAN) maxD[0] = k; }
+        for (let k = 2; k <= AI_SCAN; k++) { if (occ(this.x, this.y + k)) { maxD[2] = k; break; } if (k === AI_SCAN) maxD[2] = k; }
+        for (let k = 2; k <= AI_SCAN; k++) { if (occ(this.x - k, this.y)) { maxD[3] = k; break; } if (k === AI_SCAN) maxD[3] = k; }
+        for (let k = 2; k <= AI_SCAN; k++) { if (occ(this.x + k, this.y)) { maxD[1] = k; break; } if (k === AI_SCAN) maxD[1] = k; }
         this.premaxDistanceDir = this.maxDistanceDir;
-        this.maxDistanceDir = indexOfMax(maxDistances);
+        this.maxDistanceDir = indexOfMax(maxD);
 
         if (this.aiTurnInCD > 0.05) {
           const dir = this.direction;
@@ -285,39 +453,91 @@
           else if (this.maxDistanceDir !== this.premaxDistanceDir) { this.direction = this.maxDistanceDir; this.aiTurnInCD = 0; }
           else if (ri(0, 1000) === 0) {
             const dR1 = (dir + 1) % 4, dL1 = (dir - 1 + 4) % 4;
-            const canTurnRight = occ(this.x + d[dR1][2], this.y + d[dR1][3]) === 0;
-            const canTurnLeft  = occ(this.x + d[dL1][2], this.y + d[dL1][3]) === 0;
-            if (ri(0, 1) === 0 && canTurnRight && occ(this.x + d[dR1][4], this.y + d[dR1][5]) === 0) {
-              this.direction = dR1;
-            } else if (canTurnLeft && occ(this.x + d[dL1][4], this.y + d[dL1][5]) === 0) {
-              this.direction = dL1;
-            }
+            const canR = occ(this.x + d[dR1][2], this.y + d[dR1][3]) === 0;
+            const canL = occ(this.x + d[dL1][2], this.y + d[dL1][3]) === 0;
+            if (ri(0, 1) === 0 && canR && occ(this.x + d[dR1][4], this.y + d[dR1][5]) === 0) this.direction = dR1;
+            else if (canL && occ(this.x + d[dL1][4], this.y + d[dL1][5]) === 0) this.direction = dL1;
             this.aiTurnInCD = 0;
           }
         }
       }
 
-      // wrap toroidal en los bordes (idéntico al original)
-      this.x = this.x > W ? 0 : this.x < 0 ? W : this.x;
-      this.y = this.y > H ? 0 : this.y < 0 ? H : this.y;
-
-      // muerte: si el frente (look-ahead 2 px) está ocupado
+      // muerte: COLISIÓN BARRIDA. La cycle avanza varios px por frame (más a FPS bajos), así que no
+      // alcanza con chequear un solo punto 2px adelante — saltaría por encima de una estela fina. Muestreo
+      // todo el tramo que recorrerá este frame, de 2px adelante hasta donde llegará la cabeza (+ margen).
       const dir = this.direction;
-      if (occ(this.x + d[dir][2], this.y + d[dir][3])) { this.alive = false; return; }
-
       if (!this.stop) {
-        this.x += d[dir][0] * dt * 1.5;
-        this.y += d[dir][1] * dt * 1.5;
+        const ux = Math.sign(d[dir][0]), uy = Math.sign(d[dir][1]);
+        const moveDist = Math.hypot(d[dir][0], d[dir][1]) * dt * SPEED_MULT;
+        const reach = moveDist + 2;
+        for (let s = 2; s <= reach; s += 1) {
+          if (occ(this.x + ux * s, this.y + uy * s)) { this.alive = false; return; }
+        }
+        this.x += d[dir][0] * dt * SPEED_MULT;
+        this.y += d[dir][1] * dt * SPEED_MULT;
+        this.head.push({ x: this.x, y: this.y, age: 0 });
       }
     }
 
-    draw() { stamp(this.x, this.y, this.color); }
+    draw() {
+      const far = Math.min(WORLD_W, WORLD_H) * 0.4;
+      const connect = this.lastX !== null && Math.hypot(this.x - this.lastX, this.y - this.lastY) <= far;
+      paintTrail(this.lastX, this.lastY, this.x, this.y, this.color, connect);
+      this.lastX = this.x; this.lastY = this.y;
+    }
+
+    // cola brillante (en coords de MUNDO; el caller aplica el offset de cámara). Segmentos conectados.
+    drawHead(dt) {
+      for (const h of this.head) h.age += dt;
+      this.head = this.head.filter(h => h.age <= HEAD_FADE);
+      if (!this.head.length) return;
+      ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      for (let k = 1; k < this.head.length; k++) {
+        const a = this.head[k - 1], b = this.head[k];
+        const t = 1 - b.age / HEAD_FADE;
+        ctx.strokeStyle = rgb(hot(this.colorArr, t));
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
+      }
+      if (this.alive && !this.stop) {
+        const tip = this.head[this.head.length - 1];
+        ctx.save();
+        ctx.shadowColor = this.color; ctx.shadowBlur = HEAD_GLOW;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(tip.x, tip.y, HEAD_DOT, 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+    }
   }
 
-  function indexOfMax(arr) {
-    let m = 0;
-    for (let i = 1; i < arr.length; i++) if (arr[i] > arr[m]) m = i;
-    return m;
+  function indexOfMax(arr) { let m = 0; for (let i = 1; i < arr.length; i++) if (arr[i] > arr[m]) m = i; return m; }
+
+  // ════════════════ MINIMAPA ════════════════
+  function drawMinimap() {
+    const mmW = Math.max(120, Math.min(W * 0.27, 240));
+    const mmH = mmW * WORLD_H / WORLD_W;
+    const mmX = W - mmW - 12, mmY = 48;                                           // derecha, DEBAJO del cluster de botones
+    const sx = mmW / WORLD_W, sy = mmH / WORLD_H;
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.globalAlpha = 0.45;                                                        // mapa (mundo) más transparente
+    ctx.drawImage(bgCv, 0, 0, WORLD_W, WORLD_H, mmX, mmY, mmW, mmH);                // mundo (grilla+borde+obstáculos)
+    ctx.globalAlpha = 1;                                                           // estelas: buffer nativo del minimapa → escalado limpio
+    ctx.drawImage(miniCv, 0, 0, MINI_W, MINI_H, mmX, mmY, mmW, mmH);
+    // jugadores: punto chico (halo blanco + núcleo) — chico para no tapar la línea de estela de abajo.
+    for (const p of players) {
+      if (!p.alive) continue;
+      const mx = mmX + p.x * sx, my = mmY + p.y * sy;
+      const rCore = p.id === 0 ? 3.5 : 2.5;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(mx, my, rCore + 1.5, 0, TAU); ctx.fill();
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(mx, my, rCore, 0, TAU); ctx.fill();
+    }
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1;                   // rectángulo de la cámara
+    ctx.strokeRect(mmX + camX * sx, mmY + camY * sy, Math.min(W, WORLD_W) * sx, Math.min(H, WORLD_H) * sy);
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(mmX, mmY, mmW, mmH);
   }
 
   // ════════════════ GAME HANDLER (menú + estado) ════════════════
@@ -326,95 +546,138 @@
     currentOption: 0,           // 0 = modo, 1 = cantidad de colores
     currentPlayers: 0,          // +2 → 2..4
     currentMode: 0,             // 0 = single, 1 = multi
-    keyPressed: false,
-    titleColor: PLAYER_COLORS[ri(0, 3)].slice(),
-    titleColorOffset: 1,
-    titleColorOffsetTimer: 0,
-    titleColorUpping: true,
+    keypressed: false,
   };
   let players = [];
 
   function aliveCount() { let n = 0; for (const p of players) if (p.alive) n++; return n; }
 
   function startGame() {
-    const n = gh.currentPlayers + 2;
     clearField();
+    buildWorld();
+    const n = gh.currentPlayers + 2;
     players = [];
     for (let i = 0; i < n; i++) players.push(new Player(i, n, gh.currentMode));
     bindControls();
     gh.menu = false;
+    updateCamera();
   }
   function restart() { startGame(); }
   function backToMenu() {
     clearField();
     players = [];
     gh.menu = true;
-    gh.keyPressed = true;                                                          // evita que una tecla sostenida dispare el menú al instante
+    gh.keypressed = true;
   }
 
-  // mapeo de teclas por jugador (igual que el original): P1 ←/↓, P2 Q/W, P3 O/P, P4 V/B
-  const CONTROLS = [
-    ['ArrowLeft', 'ArrowDown'],
-    ['KeyQ', 'KeyW'],
-    ['KeyO', 'KeyP'],
-    ['KeyV', 'KeyB'],
-  ];
-  function bindControls() {
-    for (const p of players) { p.left = CONTROLS[p.id][0]; p.right = CONTROLS[p.id][1]; }
-  }
+  const CONTROLS = [ ['ArrowLeft','ArrowDown'], ['KeyQ','KeyW'], ['KeyO','KeyP'], ['KeyV','KeyB'] ];
+  function bindControls() { for (const p of players) { p.left = CONTROLS[p.id][0]; p.right = CONTROLS[p.id][1]; } }
 
+  // ── MENÚ estilo v1 (filas tocables + ‹ › + glow + título neón que cicla + botón JUGAR) ──
+  // Sólo se juega contra la IA → una sola opción (cantidad de colores) + JUGAR.
+  const MENU_ROWS = { colors: 0.5, play: 0.78 };
+  function nearY(ly, frac) { return Math.abs(ly - H * frac) < H * 0.06; }
+  let hoverY = -1;
+  function hoverRow(frac) { return hoverY >= 0 && nearY(hoverY, frac); }
+  function menuChangeValue(delta) { gh.currentPlayers = (gh.currentPlayers + delta + 3) % 3; }
+  function tapMenu(lx, ly) {
+    const dir = lx < W * 0.5 ? -1 : 1;
+    if (nearY(ly, MENU_ROWS.colors))    gh.currentPlayers = (gh.currentPlayers + dir + 3) % 3;
+    else if (nearY(ly, MENU_ROWS.play)) startGame();
+  }
   function processMenu() {
-    if (!gh.keyPressed) {
-      const optDelta = keys.ArrowUp ? -1 : keys.ArrowDown ? 1 : 0;
-      gh.currentOption = (gh.currentOption + optDelta + 2) % 2;
-
-      const valDelta = keys.ArrowLeft ? -1 : keys.ArrowRight ? 1 : 0;
-      if (gh.currentOption === 0) gh.currentMode = (gh.currentMode + valDelta + 2) % 2;
-      else                        gh.currentPlayers = (gh.currentPlayers + valDelta + 3) % 3;
-
+    if (!gh.keypressed) {
+      if (keys.ArrowLeft)  { menuChangeValue(-1); gh.keypressed = true; }
+      if (keys.ArrowRight) { menuChangeValue(+1); gh.keypressed = true; }
       if (keys.Enter) startGame();
-
-      gh.keyPressed = keys.ArrowUp || keys.ArrowDown || keys.ArrowLeft || keys.ArrowRight;
     }
-    if (!keys.ArrowUp && !keys.ArrowDown && !keys.ArrowLeft && !keys.ArrowRight) gh.keyPressed = false;
+    if (!keys.ArrowLeft && !keys.ArrowRight) gh.keypressed = false;
   }
 
-  function drawMenu(dt) {
-    // título con color animado (port del oscilado de offset 0↔1.5 + cambio de color al tocar fondo)
-    if (gh.titleColorOffset > 1.5) gh.titleColorUpping = false;
-    if (gh.titleColorOffset < 0 && !gh.titleColorUpping) {
-      gh.titleColorUpping = true;
-      let c = gh.titleColor;
-      while (c === gh.titleColor) gh.titleColor = PLAYER_COLORS[ri(0, 3)];
-    }
-    gh.titleColorOffsetTimer += dt;
-    if (gh.titleColorOffsetTimer > 0.01) {
-      gh.titleColorOffset += (gh.titleColorUpping ? dt * 30 : -dt * 30);
-      gh.titleColorOffsetTimer = 0;
-    }
-    const titleColor = modifyColorPerc(gh.titleColor, gh.titleColorOffset);
-
-    ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-    createText(170, 'TRON', titleColor, 0.5, 0.2);
-    createText(50, gh.currentMode === 0 ? 'Single Player' : 'Multi Player',
-               gh.currentOption === 0 ? 'rgb(255,255,255)' : 'rgb(60,60,60)', 0.5, 0.5);
-    createText(50, (gh.currentPlayers + 2) + ' Colors',
-               gh.currentOption === 1 ? 'rgb(255,255,255)' : 'rgb(60,60,60)', 0.5, 0.65);
-    createText(25, 'Enter / ▶ to Start', 'rgb(100,100,150)', 0.5, 0.85);
-    createText(25, 'tocá el texto para elegir', 'rgb(100,100,150)', 0.5, 0.9);
+  function accentNow() {
+    const n = PLAYER_COLORS.length;
+    const t = (typeof T === 'number' && isFinite(T)) ? T : 0;
+    const pos = (((t / 3.4) % n) + n) % n;
+    const i = Math.floor(pos), f = pos - i;
+    return lerpC(PLAYER_COLORS[i], PLAYER_COLORS[(i + 1) % n], f * f * (3 - 2 * f));
+  }
+  function drawMenuBg() {
+    ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+    const step = Math.max(28, Math.round(Math.min(W, H) / 18));
+    ctx.strokeStyle = `rgba(255,255,255,0.05)`; ctx.lineWidth = 1; ctx.beginPath();
+    for (let x = 0; x <= W; x += step) { ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, H); }
+    for (let y = 0; y <= H; y += step) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
+    ctx.stroke();
+  }
+  function drawTitle(text, fx, fy, col) {
+    const fp = Math.round(220 * scl), px = W * fx, py = H * fy;
+    const breathe = 0.5 + 0.5 * Math.sin(T * 1.6);
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `900 ${fp}px ${FONT}`;
+    ctx.letterSpacing = (fp * 0.10).toFixed(1) + 'px';
+    const haloR = fp * 1.7;
+    const g = ctx.createRadialGradient(px, py, 0, px, py, haloR);
+    g.addColorStop(0, rgba(col, 0.16 + 0.12 * breathe)); g.addColorStop(1, rgba(col, 0));
+    ctx.fillStyle = g; ctx.fillRect(px - haloR, py - haloR, haloR * 2, haloR * 2);
+    ctx.shadowColor = rgb(col); ctx.fillStyle = rgb(col);
+    for (const blur of [40, 22, 0]) { ctx.shadowBlur = blur * (0.7 + 0.3 * breathe); ctx.fillText(text, px, py); }
+    ctx.shadowBlur = 12; ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.3 * breathe})`; ctx.fillText(text, px, py);
+    ctx.restore(); ctx.letterSpacing = '0px';
+  }
+  function drawOption(label, fy, selected, col) {
+    if (selected) createText(50, '‹  ' + label + '  ›', rgb(col), 0.5, fy, 18);
+    else          createText(46, label, 'rgb(120,128,142)', 0.5, fy, 0);
+  }
+  function drawPlay(fy, col) {
+    const hj = hoverRow(fy), pulse = 0.6 + 0.4 * Math.sin(T * 4);
+    const fp = Math.round(46 * scl), px = W * 0.5, py = H * fy, text = '▶ JUGAR';
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `700 ${fp}px ${FONT}`;
+    const w = ctx.measureText(text).width, padX = fp * 0.7, padY = fp * 0.42;
+    const bw = w + padX * 2, bh = fp + padY * 2, bx = px - bw / 2, by = py - bh / 2;
+    ctx.shadowColor = rgb(col); ctx.shadowBlur = hj ? 28 : 15;
+    ctx.lineWidth = 2; ctx.strokeStyle = rgba(col, hj ? 0.95 : 0.7);
+    roundRectPath(ctx, bx, by, bw, bh, bh * 0.5);
+    ctx.fillStyle = rgba(col, hj ? 0.20 : 0.10);
+    ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = hj ? 18 : 10;
+    ctx.fillStyle = `rgba(255,255,255,${0.82 + 0.18 * pulse})`;
+    ctx.fillText(text, px, py);
+    ctx.restore();
+  }
+  function drawMenu() {
+    drawMenuBg();
+    const col = accentNow();
+    drawTitle('TRON', 0.5, 0.2, col);
+    const dy = H * 0.35, dw = Math.min(W * 0.62, 520);
+    ctx.save();
+    ctx.strokeStyle = rgba(col, 0.55); ctx.shadowColor = rgb(col); ctx.shadowBlur = 12; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(W / 2 - dw / 2, dy); ctx.lineTo(W / 2 + dw / 2, dy); ctx.stroke();
+    ctx.restore();
+    drawOption((gh.currentPlayers + 2) + ' Colors', MENU_ROWS.colors, true, col);
+    drawPlay(MENU_ROWS.play, col);
+    createText(20, 'tocá la cantidad para cambiarla · vs IA', 'rgba(150,160,175,0.7)', 0.5, 0.9);
   }
 
   function drawWinner() {
-    const w = players.find(p => p.alive);
-    if (!w) return;
-    const name = 'Player ' + (w.id + 1);
-    createText(100, name + ' Wins!', w.color, 0.5, 0.45);
-    createText(60, 'Enter / ▶ to Restart', 'rgb(255,255,255)', 0.5, 0.6);
+    const alive = players.filter(p => p.alive);
+    if (alive.length === 1) {                                                      // un único sobreviviente → ganador
+      const w = alive[0];
+      createText(90, 'Player ' + (w.id + 1) + ' Wins!', w.color, 0.5, 0.45, 22, 'rgba(0,0,0,0.55)');
+    } else {                                                                       // el humano murió con varias IAs vivas
+      createText(90, 'Game Over', 'rgb(235,235,235)', 0.5, 0.45, 22, 'rgba(0,0,0,0.55)');
+    }
+    createText(40, 'tocá o Enter para reiniciar', 'rgb(220,220,220)', 0.5, 0.58, 0, 'rgba(0,0,0,0.55)');
   }
 
   // ════════════════ INPUT ════════════════
-  const keys = {};                                                                // e.code → bool
-  function gameOver() { return !gh.menu && aliveCount() <= 1; }
+  const keys = {};
+  // En single player el humano es el player 0: si muere y sólo quedan IAs, la ronda termina (no se sigue
+  // esperando a que las IAs se choquen entre sí). En multi todos son humanos → vale el "queda 1".
+  function humanDead() { if (gh.currentMode === 1) return false; const p0 = players.find(p => p.id === 0); return p0 && !p0.alive; }
+  function gameOver() { return !gh.menu && (aliveCount() <= 1 || humanDead()); }
 
   window.addEventListener('keydown', e => {
     keys[e.code] = true;
@@ -426,56 +689,69 @@
   });
   window.addEventListener('keyup', e => { keys[e.code] = false; });
 
-  // Toque en el canvas: en menú elige según la zona vertical; en juego gira al humano (mitades) o reinicia.
   canvas.addEventListener('pointerdown', e => {
     const r = canvas.getBoundingClientRect();
-    const fx = (e.clientX - r.left) / W, fy = (e.clientY - r.top) / H;
-    if (gh.menu) {
-      if (fy < 0.58)      { gh.currentOption = 0; gh.currentMode = (gh.currentMode + 1) % 2; }
-      else if (fy < 0.78) { gh.currentOption = 1; gh.currentPlayers = (gh.currentPlayers + 1) % 3; }
-      else                  startGame();
-    } else if (gameOver()) {
-      restart();
-    } else {
-      const p0 = players.find(p => p.id === 0 && p.alive);
-      if (p0) (fx < 0.5 ? p0.turnLeft() : p0.turnRight());
-    }
+    const lx = e.clientX - r.left, ly = e.clientY - r.top;
+    if (gh.menu) tapMenu(lx, ly);
+    else if (gameOver()) restart();
+    else { const p0 = players.find(p => p.id === 0 && p.alive); if (p0) (lx < W * 0.5 ? p0.turnLeft() : p0.turnRight()); }
   });
+  canvas.addEventListener('mousemove', e => {
+    const r = canvas.getBoundingClientRect();
+    hoverY = e.clientY - r.top;                                                    // sólo para iluminar JUGAR al pasar el mouse
+  });
+  canvas.addEventListener('mouseleave', () => { hoverY = -1; });
 
-  // botones de la barra. pointerdown (no click) para que respondan aun con otro toque activo (estilo BallsWeb).
-  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
-  function menuChangeValue(delta) {
-    if (gh.currentOption === 0) gh.currentMode = (gh.currentMode + delta + 2) % 2;
-    else                        gh.currentPlayers = (gh.currentPlayers + delta + 3) % 3;
-  }
-  function humanTurn(side) {
-    const p0 = players.find(p => p.id === 0 && p.alive);
-    if (p0) (side < 0 ? p0.turnLeft() : p0.turnRight());
-  }
-  tappable(document.getElementById('btnLeft'),  () => { gh.menu ? menuChangeValue(-1) : humanTurn(-1); });
-  tappable(document.getElementById('btnRight'), () => { gh.menu ? menuChangeValue(+1) : humanTurn(+1); });
-  tappable(document.getElementById('btnReset'), () => { if (!gh.menu) restart(); });   // mismo patrón que Tron v1: reinicia la partida actual
+  function tappable(el, fn) { el && el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
+  tappable(document.getElementById('btnReset'), () => { if (!gh.menu) restart(); });
 
   // ════════════════ LOOP ════════════════
-  let lastT = performance.now();
+  // dt medido contra el MISMO reloj (el now que entra) y clampeado — evita el crash de mobile por
+  // desfase de épocas entre performance.now() y el timestamp de rAF.
+  let lastT = null;
+  let T = 0;
   function loop(now) {
     if (typeof now !== 'number') now = performance.now();
-    const dt = Math.min((now - lastT) / 1000, 0.01);                              // deltaT = min(real, 0.01), igual que el original
+    if (lastT === null) lastT = now;
+    let dt = (now - lastT) / 1000;
     lastT = now;
+    if (!(dt >= 0) || dt > 0.05) dt = 0.01;
+    T += dt;
 
     if (gh.menu) {
       processMenu();
-      drawMenu(dt);
+      drawMenu();
     } else {
-      for (const p of players) {
-        if (!p.alive) continue;
-        p.process(dt);
-        if (p.alive) p.draw();                                                    // estampa estela sólo si sigue vivo tras el chequeo
+      for (const p of players) { if (!p.alive) continue; p.process(dt); if (p.alive) p.draw(); }
+      updateCamera();
+
+      // fondo del mundo visible
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(bgCv, camX, camY, Math.min(W, WORLD_W), Math.min(H, WORLD_H), 0, 0, Math.min(W, WORLD_W), Math.min(H, WORLD_H));
+
+      // halo neón de la estela (sólo la porción visible, a media resolución → barato)
+      if (TRAIL_BLOOM > 0) {
+        const gw = glowCv.width, gh2 = glowCv.height;
+        gctx.setTransform(1, 0, 0, 1, 0, 0);
+        gctx.clearRect(0, 0, gw, gh2);
+        gctx.filter = `blur(${TRAIL_BLOOM * 0.6}px)`;
+        gctx.drawImage(trailCv, camX, camY, Math.min(W, WORLD_W), Math.min(H, WORLD_H), 0, 0, gw, gh2);
+        gctx.filter = 'none';
+        ctx.imageSmoothingEnabled = true;
+        ctx.drawImage(glowCv, 0, 0, gw, gh2, 0, 0, W, H);
+        ctx.imageSmoothingEnabled = false;
       }
-      if (aliveCount() <= 1) {                                                     // game over: frenar a todos y mostrar ganador
-        for (const p of players) p.stop = true;
-        drawWinner();
-      }
+      // estela nítida
+      ctx.drawImage(trailCv, camX, camY, Math.min(W, WORLD_W), Math.min(H, WORLD_H), 0, 0, Math.min(W, WORLD_W), Math.min(H, WORLD_H));
+
+      // cabezas brillantes (en coords de mundo → offset de cámara)
+      ctx.save(); ctx.translate(-camX, -camY);
+      for (const p of players) p.drawHead(dt);
+      ctx.restore();
+
+      drawMinimap();
+
+      if (gameOver()) { for (const p of players) p.stop = true; drawWinner(); }
     }
     requestAnimationFrame(loop);
   }
@@ -489,34 +765,28 @@
   canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
   </script>
 
-  <!-- Shell del Arcade (exit + fullscreen + lock de orientación). data-orient: landscape/portrait/any. -->
+  <!-- Shell del Arcade (exit + fullscreen + lock de orientación). -->
   <script src="../../Arcade/arcade-shell.js" data-orient="landscape"></script>
 
   <div id="fpsOverlay">FPS: --</div>
   <script>
-    (function() {
+    (function () {
       let frameCount = 0, lastT = performance.now();
       const overlay = document.getElementById('fpsOverlay');
-      function loop() {
+      const btnInfo = document.getElementById('btnInfo');
+      let on = false;
+      if (btnInfo) btnInfo.addEventListener('pointerdown', e => { e.preventDefault(); on = !on; overlay.style.display = on ? 'block' : 'none'; btnInfo.classList.toggle('on', on); });
+      function tick() {
         frameCount++;
         const now = performance.now();
         if (now - lastT >= 500) {
-          const fps = Math.round(frameCount * 1000 / (now - lastT));
-          if (overlay.style.display !== 'none') overlay.textContent = 'FPS: ' + fps;
+          if (on) overlay.textContent = 'FPS: ' + Math.round(frameCount * 1000 / (now - lastT));
           frameCount = 0; lastT = now;
         }
-        requestAnimationFrame(loop);
+        requestAnimationFrame(tick);
       }
-      loop();
-      const btn = document.getElementById('btnInfo');
-      btn.addEventListener('click', () => {
-        const showing = overlay.style.display !== 'none';
-        overlay.style.display = showing ? 'none' : 'block';
-        btn.classList.toggle('on', !showing);
-      });
+      tick();
     })();
   </script>
-
-
 </body>
 </html>

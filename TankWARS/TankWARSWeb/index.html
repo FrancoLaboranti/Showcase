@@ -21,13 +21,21 @@
   }
   /* Resolución LÓGICA fija 1280×720 (igual que el pygame original); el canvas se estira para llenar la
      pantalla (escala no-uniforme). El juego es horizontal → en celular apaisado el estiramiento es mínimo. */
-  #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+  /* #stage envuelve TODO el juego. En vertical (celu con giro bloqueado) lo rotamos 90° por CSS para que el
+     juego SIEMPRE se vea landscape, sin usar la API de orientación (que mostraba un flash). resize() le setea
+     width/height/transform. Al tener transform, es el bloque contenedor de sus hijos position:fixed. */
+  #stage { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 100vw; height: 100vh; overflow: hidden; }
+  #c { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
 
   #hint {
-    position: absolute; left: 0; right: 0; top: calc(8px + env(safe-area-inset-top));
-    text-align: center; color: rgba(255,255,255,0.5);
-    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
-    transition: opacity 0.8s; z-index: 5; padding: 0 16px;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    max-width: min(88vw, 480px);
+    background: rgba(10,12,18,0.78); border: 1px solid rgba(255,255,255,0.10);
+    padding: 12px 20px; border-radius: 14px;
+    text-align: center; color: rgba(255,255,255,0.92);
+    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
+    pointer-events: none; transition: opacity 0.8s; z-index: 5;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
   /* ── Controles táctiles (joysticks hand-rolled + botones), al estilo CrazyTanks. En desktop se ocultan
@@ -40,7 +48,7 @@
   /* Safety zone: rectángulo (abajo-derecha) que cubre boost+misil con margen. Está por ENCIMA de la zona de
      puntería (#jAim) y por DEBAJO de los botones → absorbe el toque para que la palanca der NO se active ahí,
      pero los botones siguen funcionando. */
-  #aimSafe { position: fixed; right: 0; bottom: 0; width: calc(92px + env(safe-area-inset-right)); height: calc(150px + env(safe-area-inset-bottom)); z-index: 4; touch-action: none; }
+  #aimSafe { position: fixed; right: 0; bottom: 0; width: calc(92px + env(safe-area-inset-right)); height: calc(205px + env(safe-area-inset-bottom)); z-index: 4; touch-action: none; }
   .btn {
     width: 44px; height: 44px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.22);
@@ -50,8 +58,10 @@
     cursor: pointer; touch-action: none; padding: 0;
     transition: background 0.08s, transform 0.06s, box-shadow 0.12s, border-color 0.12s;
   }
-  .btn:hover { background: rgba(120,200,255,0.16); border-color: rgba(120,200,255,0.6); box-shadow: 0 0 14px rgba(120,200,255,0.6); }
-  .btn:active, .btn.on { background: rgba(120,200,255,0.30); border-color: rgba(120,200,255,0.55); transform: scale(0.93); }
+  /* Relleno NEUTRO como Pong: blanco tenue en reposo, blanco más fuerte al apretar (sin tinte celeste). El
+     hover sólo en dispositivos con mouse → en touch no queda "pegado". */
+  @media (hover: hover) { .btn:hover { background: rgba(255,255,255,0.16); border-color: rgba(255,255,255,0.4); } }
+  .btn:active, .btn.on { background: rgba(255,255,255,0.22); border-color: rgba(255,255,255,0.4); transform: scale(0.93); }
   .btn svg { display: block; width: 18px; height: 18px; pointer-events: none; }
   .btn.boost { background: rgba(255,210,60,0.16); border-color: rgba(255,210,60,0.5); }
   .btn.boost:active, .btn.boost.on { background: rgba(255,210,60,0.4); }
@@ -95,8 +105,8 @@
     border: 1px solid rgba(180,228,255,0.8);
   }
   /* Posición de descanso: cerca de los botones (esquinas inferiores). Izq cerca del exit, der cerca de boost/misil. */
-  #jMoveRest { left: 13%; bottom: 13%; }
-  #jAimRest  { left: 78%; bottom: 13%; border-color: rgba(255,90,60,0.35); box-shadow: inset 0 2px 14px rgba(0,0,0,0.5), 0 0 16px rgba(255,90,60,0.25); }
+  #jMoveRest { left: 25%; bottom: 13%; }
+  #jAimRest  { left: 75%; bottom: 13%; border-color: rgba(255,90,60,0.35); box-shadow: inset 0 2px 14px rgba(0,0,0,0.5), 0 0 16px rgba(255,90,60,0.25); }
   #jAimRest::after { background: radial-gradient(circle at 50% 35%, rgba(255,170,150,0.95), rgba(255,90,60,0.6) 70%); border-color: rgba(255,180,160,0.85); }
 
   /* Botones de esquina sup-der: pantalla completa / reiniciar / debug */
@@ -118,22 +128,9 @@
   #rotate svg { width: 88px; height: 88px; color: #78c8ff; animation: rotatehint 2.2s ease-in-out infinite; }
   #rotate p { font-size: 19px; letter-spacing: 0.06em; line-height: 1.5; }
   @keyframes rotatehint { 0%, 55%, 100% { transform: rotate(0deg); } 25%, 40% { transform: rotate(90deg); } }
-  /* Exit button — vuelta al menú raíz */
-  #btnExit {
-    position: absolute;
-    left: 6px;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
-    width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
-    color: rgba(255,255,255,0.85);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-    z-index: 10;
-  }
-  #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
+  /* Exit button — ahora vive en #padMenu (arriba-derecha) junto a los otros, con acento rojo. */
+  #padMenu #btnExit:hover { background: rgba(240,90,95,0.18); border-color: rgba(240,90,95,0.6); box-shadow: 0 0 14px rgba(240,90,95,0.5); }
+  #padMenu #btnExit:active { background: rgba(240,90,95,0.30); border-color: rgba(240,90,95,0.55); color: #fff; }
 
   /* Overlay de controles (lo abre #btnInfo, el circle-i de arriba-derecha). Fondo oscurecido + tarjeta. */
   #infoPanel { position: absolute; inset: 0; z-index: 15; display: none; align-items: center; justify-content: center; background: rgba(5,6,10,0.82); padding: 24px; }
@@ -146,27 +143,40 @@
   #infoPanel .row .k { color: rgba(255,255,255,0.55); }
   #infoPanel .row .v { color: #fff; font-weight: 600; text-align: right; }
   #infoPanel .foot { margin-top: 14px; text-align: center; color: rgba(255,255,255,0.45); font-size: 12px; letter-spacing: 0.04em; }
+
+  /* ── TIENDA (mejoras). Overlay full-screen; pausa el juego. 8 ítems en grilla 2×4. ── */
+  #shopPanel { position: absolute; inset: 0; z-index: 16; display: none; align-items: center; justify-content: center; background: rgba(5,6,10,0.86); padding: 16px; }
+  #shopPanel.show { display: flex; }
+  #shopPanel .shopCard { width: 100%; max-width: 620px; background: rgba(16,20,30,0.96); border: 1px solid rgba(120,200,255,0.35); border-radius: 14px; padding: 14px 16px; box-shadow: 0 0 30px rgba(120,200,255,0.25); }
+  #shopPanel .shopHead { text-align: center; color: #ffd23c; font-size: 18px; font-weight: 700; letter-spacing: 0.04em; margin-bottom: 12px; }
+  #shopPanel .shopGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  #shopPanel .shopItem {
+    display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+    padding: 8px 12px; border-radius: 10px; cursor: pointer; touch-action: none;
+    border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.05); color: #fff;
+    text-align: left; transition: background 0.08s, transform 0.06s, border-color 0.12s;
+  }
+  #shopPanel .shopItem:active { transform: scale(0.97); }
+  #shopPanel .shopItem .si-label { font-size: 14px; font-weight: 600; }
+  #shopPanel .shopItem .si-row { display: flex; justify-content: space-between; width: 100%; font-size: 13px; }
+  #shopPanel .shopItem .si-lvl { color: rgba(255,255,255,0.55); }
+  #shopPanel .shopItem .si-cost { font-weight: 700; }
+  #shopPanel .shopItem.afford { border-color: rgba(255,210,60,0.5); }
+  #shopPanel .shopItem.afford .si-cost { color: #ffd23c; }
+  #shopPanel .shopItem.afford:active { background: rgba(255,210,60,0.18); }
+  #shopPanel .shopItem.noafford { opacity: 0.7; }
+  #shopPanel .shopItem.noafford .si-cost { color: #e0504f; }
+  #shopPanel .shopItem.maxed { border-color: rgba(120,200,255,0.5); opacity: 0.85; }
+  #shopPanel .shopItem.maxed .si-cost, #shopPanel .shopItem.maxed .si-lvl { color: #78c8ff; }
+  #shopPanel .shopFoot { margin-top: 12px; text-align: center; color: rgba(255,255,255,0.45); font-size: 12px; letter-spacing: 0.04em; }
 </style>
-<script>/* arcade-embed-shim: corre embebido en la shell del Arcade (iframe) */
-(function () {
-  if (window.self === window.top) return;            // sólo embebido
-  var noop = function () { return Promise.resolve(); };
-  try { Element.prototype.requestFullscreen = noop; } catch (e) {}
-  try { Element.prototype.webkitRequestFullscreen = noop; } catch (e) {}
-  // El "salir al menú" del juego: en vez de navegar (recargaría el menú dentro del iframe),
-  // avisamos a la shell por postMessage. Capturamos el click antes que el handler del juego.
-  window.addEventListener('click', function (e) {
-    var ex = e.target && e.target.closest && e.target.closest('#btnExit, #btnHome');
-    if (!ex) return;
-    e.preventDefault(); e.stopImmediatePropagation();
-    try { parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (x) {}
-  }, true);
-})();
-</script>
 </head>
 <body>
+  <!-- #stage envuelve TODO el juego para poder rotarlo a landscape por CSS (ver resize()). Las palancas
+       hand-rolled (base/nub) se appendean a <body> (afuera de #stage) → quedan en coords de pantalla. -->
+  <div id="stage">
   <canvas id="c"></canvas>
-  <div id="hint">palanca izq = mover · palanca der = apuntar y disparar · 🚀 misil · ⚡ boost</div>
+  <div id="hint">movés con la palanca izquierda · apuntás y disparás con la derecha · 🚀 misil · ⚡ boost</div>
 
   <!-- Zona de MOVIMIENTO: joystick semi (mitad izquierda). Tocás donde quieras y aparece ahí; queda tenue. -->
   <div id="jMove" aria-label="mover"></div>
@@ -179,8 +189,11 @@
   <!-- Safety zone: absorbe toques sobre el rectángulo de boost/misil para no activar la palanca de puntería. -->
   <div id="aimSafe"></div>
 
-  <!-- Botones de acción (abajo-derecha): boost (acelerar) ARRIBA del misil. Van por encima de la zona de puntería. -->
+  <!-- Botones de acción (abajo-derecha): tienda ARRIBA, luego boost (acelerar), luego misil. Van por encima de la zona de puntería. -->
   <div id="actBtns">
+    <button class="btn" id="btnShop" aria-label="tienda" title="Tienda (mejoras)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h2l1.6 11a2 2 0 0 0 2 1.7h7a2 2 0 0 0 2-1.6L21.5 8H6.2"/><circle cx="10" cy="20" r="1.2" fill="currentColor" stroke="none"/><circle cx="18" cy="20" r="1.2" fill="currentColor" stroke="none"/></svg>
+    </button>
     <button class="btn boost" id="btnBoost" aria-label="boost" title="Boost">
       <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
     </button>
@@ -194,10 +207,14 @@
     <p>Girá el teléfono<br>TankWARS se juega en horizontal</p>
   </div>
 
+  <!-- TIENDA: overlay de mejoras (lo arma/cablea el script principal; pausa el juego mientras está abierta). -->
+  <div id="shopPanel"></div>
+
   <div id="padMenu">
     <button class="btn" id="btnFs" aria-label="pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
     <button class="btn" id="btnReset" aria-label="reiniciar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></button>
     <button class="btn" id="btnInfo" aria-label="controles" title="Controles"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg></button>
+    <button class="btn" id="btnExit" aria-label="salir al menu" title="Salir al menú"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
 
   <!-- Física rígida (matter-js 0.19.0, vendorizado) para los cuerpos: tanques (dinámicos) y muros
@@ -221,7 +238,7 @@
   // ── TUNING KNOBS ──
   const MOVE_SPEED      = 0.12;     // velocidad tope del PLAYER (fracción sper, px/s) — palanca omnidireccional, directa
   const DESKTOP_TURN    = 5;       // giro del cuerpo del PLAYER hacia la dirección WASD en desktop (rad/s) — suaviza el salto entre las 8 direcciones
-  const AIM_SPEED       = 0.3;     // velocidad del cursor de mira con la palanca der (mobile), fracción sper/s — la mira se mueve sobre el mapa
+  const AIM_SPEED       = 0.5;     // velocidad del cursor de mira con la palanca der (mobile), fracción sper/s — la mira se mueve sobre el mapa
   const AIM_DEAD        = 0.5;     // zona muerta de la palanca de mira: cerca del centro NO mueve; recién mueve pasada esta fracción (0..1)
   const AIM_MAGNET      = 0.08;    // imán de la mira hacia el enemigo más cercano (fracción/frame@60) — suave, no clavado
   const AIM_MAGNET_RANGE= 0.1;     // radio de captura del imán (fracción sper): sólo engancha si la mira ya está así de cerca
@@ -234,13 +251,15 @@
   const TURRET_TURN     = 14;       // seguimiento de la torreta del PLAYER hacia la mira (rad/s) → apuntado responsivo
   const PRIMARY_AS      = 0.125;    // cooldown base cañón (= 4x más rápido que el original 0.5)
   const PRIMARY_SCALE   = 0.25;     // daño por tiro del cañón (1/4; DPS igual)
-  const MISSILE_MAX     = 3;
+  const PLAYER_ATTACK   = 2;        // ataque base del PLAYER (era 1) → el doble de daño en cañón y misil
+  const RECOIL_MULT     = 0.2;      // escala del retroceso al disparar (1 = original; 0.2 = muy sutil; 0 = sin recoil)
+  const MISSILE_MAX     = 4;
   const MISSILE_REGEN   = 10;       // seg por misil
   const MISSILE_CONE    = Math.PI/5; // semi-ángulo del cono de auto-apuntado del misil (~36°)
   const SHIELD_CAP      = 5;
   const PLAYER_R        = 0.0128;   // radio en fracción sper
   const SHOT_SPEED      = 0.8;
-  const PLAYER_SPREAD   = Math.PI/22; // cono chico de dispersión del cañón del PLAYER (ángulo total, ~8°) — cubre más área
+  const PLAYER_SPREAD   = Math.PI/60; // cono chico de dispersión del cañón del PLAYER (ángulo total, ~3°) — apenas cubre un poco más
   const MISSILE_SPEED   = 0.48;
   const MAX_ENEMIES     = 14;
 
@@ -251,17 +270,32 @@
   const ctx = canvas.getContext('2d');
   const W = 1280, H = 720;
   let dpr = 1, scaleX = 1, scaleY = 1, cssW = 0, cssH = 0, lastVW = 0, lastVH = 0;
+  let stageRot = 0;   // 0 = landscape (sin rotar); 90 = vertical → rotamos #stage por CSS para forzar landscape
   // Heurística táctil estándar (puntero grueso + sin hover). Decide si mostrar joysticks/botones.
   const IS_TOUCH = (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches) || 'ontouchstart' in window;
+  const IS_EMBEDDED = (window.self !== window.top);
   function resize() {
-    lastVW = window.innerWidth; lastVH = window.innerHeight;
+    const iw = window.innerWidth, ih = window.innerHeight;
+    lastVW = iw; lastVH = ih;
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    cssW = canvas.clientWidth || window.innerWidth;
-    cssH = canvas.clientHeight || window.innerHeight;
+    // Si la pantalla está VERTICAL (en touch, no embebido), rotamos #stage 90° por CSS y le damos dimensiones
+    // landscape (alto×ancho intercambiados) → el juego siempre se ve apaisado, sin tocar la orientación del SO.
+    const stage = document.getElementById('stage');
+    const portrait = IS_TOUCH && !IS_EMBEDDED && ih > iw;
+    stageRot = portrait ? 90 : 0;
+    if (portrait) {
+      stage.style.width = ih + 'px'; stage.style.height = iw + 'px';
+      stage.style.transform = 'translate(-50%,-50%) rotate(90deg)';
+    } else {
+      stage.style.width = iw + 'px'; stage.style.height = ih + 'px';
+      stage.style.transform = 'translate(-50%,-50%)';
+    }
+    cssW = canvas.clientWidth || (portrait ? ih : iw);
+    cssH = canvas.clientHeight || (portrait ? iw : ih);
     scaleX = cssW / W; scaleY = cssH / H;
     canvas.width = Math.floor(cssW * dpr);
     canvas.height = Math.floor(cssH * dpr);
-    document.getElementById('rotate').style.display = (IS_TOUCH && cssH > cssW) ? 'flex' : 'none';
+    document.getElementById('rotate').style.display = 'none';   // ya no hace falta: forzamos landscape por CSS
   }
   window.addEventListener('resize', resize);
 
@@ -314,7 +348,7 @@
   // ── ESTADO GLOBAL (mimica los globals del original) ──
   let dt = 0, fr = 1;            // fr = dt*60 → escala la acumulación "por frame" del original
   let background = [0,0,0];
-  let tanks = [], enemies = [], shots = [], coins = [], walls = [], explosions = [];
+  let tanks = [], enemies = [], shots = [], coins = [], walls = [], explosions = [], lootBoxes = [];
   let player = null;
   const toRemove = new Set();
   const decay = (val, perFrame) => val * Math.pow(perFrame, fr);
@@ -461,6 +495,7 @@
       if (this.shieldOverheat >= 1) { this.shieldCD = 10; this.shieldOverheat = 0; }
     }
     recoil(amount) {
+      amount *= RECOIL_MULT;                                   // retroceso muy sutil (0 = sin recoil)
       const rec = this.turretAng + Math.PI;
       if (this.body) Body.translate(this.body, { x: Math.cos(rec)*amount, y: Math.sin(rec)*amount });
     }
@@ -518,12 +553,17 @@
       this.drawRadius = this.radius;
       this.x = xper(0.5); this.y = yper(0.5);
       this.color = [0,0,120];
-      this.regAttack = 1; this.regDefense = 1; this.regPrimaryShotAS = PRIMARY_AS;
+      this.regAttack = PLAYER_ATTACK; this.regDefense = 1; this.regPrimaryShotAS = PRIMARY_AS;
       this.regSecondaryShotAS = 1; this.regMoveSpeed = 1; this.regHealthRegenSpeed = 1;
-      this.attack = 1; this.defense = 1; this.primaryShotAS = PRIMARY_AS;
+      this.attack = PLAYER_ATTACK; this.defense = 1; this.primaryShotAS = PRIMARY_AS;
       this.secondaryShotAS = 1; this.moveSpeed = 1; this.healthRegenSpeed = 1;
       this.missileMax = MISSILE_MAX; this.missileStack = MISSILE_MAX; this.missileRegenCD = 0;
       this.boosting = false;
+      this.iceSlowCD = 0;   // los disparos de Icy frenan al jugador un instante (no estando en power mode)
+      // Power mode (lootbox 'power'): 30s con stats potenciados (defensa 0 = invulnerable, fuego rápido, x2 vel).
+      this.powerModeActiveTime = 0;
+      this.powHealthRegenSpeed = 0.0025; this.powAttack = 4; this.powDefense = 0;
+      this.powPrimaryShotAS = 0.0125; this.powSecondaryShotAS = 0.05; this.powMoveSpeed = 2;
       this.moneyToAdd = 0; this.moneyToAddCD = 0; this.coinGrabbedCD = 0;
       this.money = 0; this.score = 0;
       player = this;
@@ -532,6 +572,19 @@
       super.process();
       this.moneyToAddCD = Math.max(this.moneyToAddCD - dt, 0);
       this.coinGrabbedCD = Math.max(this.coinGrabbedCD - dt, 0);
+      this.iceSlowCD = Math.max(this.iceSlowCD - dt, 0);
+
+      // Power mode: mientras dura, los stats vivos toman los pow*; si no, los base (reg*, modificados por la tienda).
+      this.powerModeActiveTime = Math.max(this.powerModeActiveTime - dt, 0);
+      if (this.powerModeActiveTime > 0) {
+        this.attack = this.powAttack; this.defense = this.powDefense;
+        this.primaryShotAS = this.powPrimaryShotAS; this.secondaryShotAS = this.powSecondaryShotAS;
+        this.moveSpeed = this.powMoveSpeed;
+      } else {
+        this.attack = this.regAttack; this.defense = this.regDefense;
+        this.primaryShotAS = this.regPrimaryShotAS; this.secondaryShotAS = this.regSecondaryShotAS;
+        this.moveSpeed = this.regMoveSpeed;
+      }
 
       const inp = readInput();
       // Movimiento OMNIDIRECCIONAL: una sola palanca. La dirección de la palanca es la dirección de
@@ -539,7 +592,7 @@
       // instante. Seteamos la velocidad del cuerpo de matter acá (pisa la que puso Tank.process).
       this.boosting = inp.boost;
       const mag = Math.min(1, Math.hypot(inp.moveX, inp.moveY));
-      const spd = sper(MOVE_SPEED) * (this.boosting ? BOOST_MULT : 1) * mag;
+      const spd = sper(MOVE_SPEED) * this.moveSpeed * (this.boosting ? BOOST_MULT : 1) * mag * (this.iceSlowCD > 0 ? 0.4 : 1);
       // El MOVIMIENTO va SIEMPRE en la dirección de la palanca (instantáneo, máxima tracción, sin arco).
       // El ángulo del cuerpo es sólo VISUAL (apuntás con la torreta/mouse aparte), así que lo desacoplamos.
       let moveX = 0, moveY = 0;
@@ -608,16 +661,29 @@
       }
     }
     secondaryShotAction() {
-      if (this.secondaryShotCD > 0 || this.missileStack <= 0) return;
+      const powered = this.powerModeActiveTime > 0;
+      if (this.secondaryShotCD > 0) return;
+      if (!powered && this.missileStack <= 0) return;     // sin power, necesitás stack; con power, misiles infinitos
       new SecondaryShot(this);
       this.recoil(sper(0.012));
-      this.missileStack--; this.secondaryShotCD = 0.25;
+      if (!powered) {
+        this.missileStack--;
+        // Si el regen no estaba corriendo (stack venía lleno), arrancarlo ahora → si no, el frame siguiente
+        // regeneraba uno al instante (regenCD==0) y el primer misil salía "gratis".
+        if (this.missileRegenCD === 0) this.missileRegenCD = MISSILE_REGEN * this.regSecondaryShotAS;
+      }
+      this.secondaryShotCD = powered ? 10 * this.secondaryShotAS : 0.25;
     }
     draw() {
       const flash = this.hitCD > 0;
-      this.drawColor = flash ? modifyColor(this.color,112) : this.color;
+      this.drawColor = flash ? modifyColor(this.color,112) : this.coinGrabbedCD > 0 ? [255,255,0] : this.powerModeActiveTime > 0 ? randColor() : this.color;
       drawTankBody(this);
       if (this.shielded) circle(this.x, this.y, this.drawRadius*2.5, [52,204,255], this.drawRadius/5);
+      if (this.powerModeActiveTime > 0) {   // barra de tiempo de power mode arriba del tanque
+        const dr = this.drawRadius, tl = this.powerModeActiveTime / 30;
+        line(this.x-dr*1.5, this.y-dr*1.75, this.x-dr*1.5+dr*3, this.y-dr*1.75, [0,0,0], dr/3);
+        line(this.x-dr*1.425, this.y-dr*1.76, this.x-dr*1.425+dr*2.925*tl, this.y-dr*1.76, this.drawColor, dr/5);
+      }
       const a = this.ang, dr = this.drawRadius, c = modifyColorPerc(this.drawColor,2);
       // detalles del cuerpo
       line(this.x+Math.cos(a)*-dr*0.4+Math.cos(a+Math.PI/2)*dr, this.y+Math.sin(a)*-dr*0.4+Math.sin(a+Math.PI/2)*dr,
@@ -649,6 +715,7 @@
       this.targetX = W/2; this.targetY = H/2; this.targetRadius = 0;
       this.aimAngle = this.ang; this.aimPointX = 0; this.aimPointY = 0;
       this.dropCoins = 0; this.coinValue = 0; this.scoreValue = 0;
+      this.shieldUpCD = 0; this.useShield = false;   // useShield: el enemigo evalúa solo si levantar escudo ante disparos
       // punto scout (deambular) fuera de muros
       let tries = 0;
       do {
@@ -658,6 +725,11 @@
     }
     process() {
       super.process();
+      // escudo: la detección (shieldEval) sólo si el tipo la usa, pero el sostener-escudo (shieldUpCD) es
+      // universal → el Commander puede dispararle shieldEval a enemigos que normalmente no se escudan.
+      this.shieldUpCD = Math.max(this.shieldUpCD - dt, 0);
+      if (this.useShield) this.shieldEval();
+      if (this.shieldUpCD > 0) this.shieldAction();
       if (player) { this.targetX = player.x; this.targetY = player.y; this.targetRadius = player.radius; }
       if (!player || this.scoutModeTimer > 15) this.playerLocked = false;
 
@@ -713,11 +785,28 @@
       }
       return false;
     }
+    shieldEval() {
+      // si hay un disparo del jugador cerca, levantá el escudo y mantenelo medio segundo
+      for (const shot of shots) {
+        if (shot.isPlayerShot && getDistSq([this.x,this.y],[shot.x,shot.y]) < (this.radius*3)**2) {
+          this.shieldAction(); this.shieldUpCD = 0.5;
+        }
+      }
+    }
     draw() {
       this.drawColor = this.hitCD > 0 ? modifyColor(this.color,112) : this.color;
       drawTankBody(this);
       if (this.shielded) circle(this.x, this.y, this.drawRadius*2.5, [52,204,255], this.drawRadius/5);
       this.drawDetail();
+      if (this.drawAura) {   // buff del Commander: coronita de chispas grises sobre el tanque
+        const a = this.ang, dr = this.drawRadius;
+        circle(this.x, this.y - this.radius*3, dr*0.2, randColorGray(200,255));
+        for (let i = 0; i < 3; i++) {
+          const f = 0.7 - i*0.7;
+          circle(this.x+Math.cos(a)*dr*f+Math.cos(a+Math.PI/2)*dr*0.8, this.y+Math.sin(a)*dr*f+Math.sin(a+Math.PI/2)*dr*0.8, dr*0.2, randColorGray(100,255), dr/10);
+          circle(this.x+Math.cos(a)*dr*f+Math.cos(a+Math.PI/2)*-dr*0.8, this.y+Math.sin(a)*dr*f+Math.sin(a+Math.PI/2)*-dr*0.8, dr*0.2, randColorGray(100,255), dr/10);
+        }
+      }
       if (this.health < 1) {
         const dr = this.drawRadius;
         const hc = [cl(Math.abs(255*(this.health-0.5)-255)), cl(255*this.health), 0];
@@ -789,7 +878,250 @@
       drawTurret(this, 2, 4, 0.6);
     }
   }
-  const ENEMY_TYPES = { SmallPink, BasicRed, BasicBlue, Rhomb };
+  // ── enemigos intermedios ──
+  class Icy extends Enemy {
+    constructor() { super();
+      this.radius=sper(0.0128); this.drawRadius=this.radius; this.color=[0,125,150];
+      this.attack=0.5; this.defense=0.7; this.moveSpeed=0.9; this.primaryShotAS=0.5;
+      this.shieldAugment=-3; this.useShield=true; this.dropCoins=ri(8,12); this.coinValue=10; this.scoreValue=480;
+    }
+    fire() {                                   // marca sus disparos como "icy" para que frenen al jugador al impactar
+      const n = shots.length; this.primaryShotAction();
+      if (shots.length > n) shots[shots.length-1].icy = true;
+    }
+    process() {
+      super.process();
+      if (player && player.powerModeActiveTime === 0) {
+        for (const shot of shots) {
+          if (shot.icy && getDistSq([player.x,player.y],[shot.x,shot.y]) < player.radius*player.radius) player.iceSlowCD = 0.12;
+        }
+      }
+    }
+    drawDetail() {
+      const dr=this.drawRadius, dc=this.drawColor, c15=modifyColorPerc(dc,1.5), ta=this.turretAng;
+      for (let i=1;i<19;i++) { const rr=dr*(i%2===0?1.4:1.1); line(this.x,this.y,this.x+Math.cos(TAU*i/18)*rr,this.y+Math.sin(TAU*i/18)*rr,c15,dr/5); }
+      circle(this.x,this.y,dr,c15,dr/5);
+      line(this.x,this.y,this.x+Math.cos(ta)*dr*3,this.y+Math.sin(ta)*dr*3,modifyColorPerc(dc,2),dr/4);
+      circle(this.x,this.y,dr*0.7,modifyColorPerc(dc,2.5));
+    }
+  }
+  class Purple extends Enemy {
+    constructor() { super();
+      this.radius=sper(0.017); this.drawRadius=this.radius; this.color=[60,24,90];
+      this.attack=1.1; this.defense=1; this.moveSpeed=1; this.primaryShotAS=0.5;
+      this.shieldAugment=-4; this.useShield=true; this.dropCoins=ri(10,14); this.coinValue=15; this.scoreValue=630;
+    }
+    fire() { this.primaryShotAction(); this.secondaryShotAction(); }
+    drawDetail() {
+      const a=this.ang, ta=this.turretAng, dr=this.drawRadius, dc=this.drawColor, c2=modifyColorPerc(dc,2);
+      line(this.x+Math.cos(a)*-dr*0.4+Math.cos(a+Math.PI/2)*dr, this.y+Math.sin(a)*-dr*0.4+Math.sin(a+Math.PI/2)*dr,
+           this.x+Math.cos(a)*-dr+Math.cos(a+Math.PI/2)*-dr, this.y+Math.sin(a)*-dr+Math.sin(a+Math.PI/2)*-dr, c2, dr/4);
+      line(this.x,this.y,this.x+Math.cos(ta)*dr*2,this.y+Math.sin(ta)*dr*2,c2,dr/4);
+      line(this.x,this.y,this.x+Math.cos(ta)*dr*1.25,this.y+Math.sin(ta)*dr*1.25,modifyColorPerc(dc,2.25),dr/2);
+      circle(this.x,this.y,dr*0.6,modifyColorPerc(dc,2.5));
+    }
+  }
+  class Mortar extends Enemy {
+    constructor() { super();
+      this.radius=sper(0.0128); this.drawRadius=this.radius; this.color=[150,150,0];
+      this.attack=1; this.defense=1; this.moveSpeed=0.4; this.primaryShotAS=1; this.secondaryShotAS=0.3;
+      this.shieldAugment=-2; this.useShield=true; this.dropCoins=ri(12,17); this.coinValue=15; this.scoreValue=765;
+    }
+    fire() { this.secondaryShotAction(); }
+    drawDetail() {
+      const a=this.ang, ta=this.turretAng, dr=this.drawRadius, dc=this.drawColor, c15=modifyColorPerc(dc,1.5);
+      line(this.x-Math.cos(a)*dr*1.25, this.y-Math.sin(a)*dr*1.25, this.x+Math.cos(a)*dr*1.25, this.y+Math.sin(a)*dr*1.25, c15, dr/4);
+      line(this.x-Math.cos(a+Math.PI/2)*dr, this.y-Math.sin(a+Math.PI/2)*dr, this.x+Math.cos(a+Math.PI/2)*dr, this.y+Math.sin(a+Math.PI/2)*dr, c15, dr/4);
+      line(this.x,this.y,this.x+Math.cos(ta)*dr*1.5,this.y+Math.sin(ta)*dr*1.5,modifyColorPerc(dc,2.25),dr/2);
+      circle(this.x,this.y,dr*0.8,modifyColorPerc(dc,2.5));
+    }
+  }
+  class Invis extends Enemy {
+    constructor() { super();
+      this.radius=sper(0.0128); this.drawRadius=this.radius; this.healthRegenSpeed=0.005;
+      this.attack=4; this.defense=1; this.moveSpeed=0.7; this.primaryShotAS=3;
+      this.shieldAugment=-4.5; this.dropCoins=ri(13,18); this.coinValue=15; this.scoreValue=810;
+    }
+    process() { super.process(); this.color = background.slice(); }   // se camufla con el fondo (sólo lo delata la barra de vida)
+    drawDetail() {
+      const a=this.ang, ta=this.turretAng, dr=this.drawRadius, c=this.drawColor;
+      const P=(f,g)=>[this.x+Math.cos(a)*dr*f+Math.cos(a+Math.PI/2)*dr*g, this.y+Math.sin(a)*dr*f+Math.sin(a+Math.PI/2)*dr*g];
+      const seg=(p,q)=>line(p[0],p[1],q[0],q[1],c,dr/4);
+      seg(P(-0.4,1),P(-1,-1)); seg(P(1,1),P(0.4,-1)); seg(P(-0.4,1),P(0.4,-1));
+      seg(P(0.4,1),P(1,-1)); seg(P(-1,1),P(-0.4,-1)); seg(P(0.4,1),P(-0.4,-1));
+      line(this.x,this.y,this.x+Math.cos(ta)*dr*2,this.y+Math.sin(ta)*dr*2,c,dr/4);
+      circle(this.x,this.y,dr*0.6,c);
+    }
+  }
+  class Exploder extends Enemy {
+    constructor() { super();
+      this.radius=sper(0.0128); this.drawRadius=this.radius; this.color=[140,70,0];
+      this.attack=2; this.defense=1; this.moveSpeed=1; this.primaryShotAS=0.5;
+      this.shieldAugment=-4.5; this.dropCoins=ri(14,20); this.coinValue=15; this.scoreValue=900; this.exploded=false;
+    }
+    process() {
+      super.process();
+      if (this.health > 0 && this.health < 0.4) {     // por debajo del 40% se convierte en bomba: acelera, crece y revienta
+        this.color = randColorInRange(180,255,90,180,0,0);
+        this.vel += sper(0.0024)*fr; this.moveSpeed = 1.2;
+        this.drawRadius = rnd(this.radius, this.radius*1.5);
+        if (player && getDist([this.x,this.y],[player.x,player.y]) <= (this.radius+player.radius)*1.1) this.health = 0;
+      }
+      if (this.health <= 0 && !this.exploded) {        // explosión: daño en área (la baja/limpieza la hace Tank.process el próximo frame)
+        this.exploded = true;
+        if (player && getDist([this.x,this.y],[player.x,player.y]) < this.radius*6 && player.powerModeActiveTime === 0) {
+          player.health = Math.max(player.health - (player.shielded ? 0.1 : 0.4), 0); player.hitCD = 0.03;
+        }
+      }
+    }
+    drawDetail() {
+      const a=this.ang, ta=this.turretAng, dr=this.drawRadius, dc=this.drawColor, c15=modifyColorPerc(dc,1.5), c3=modifyColorPerc(dc,3);
+      for (let i=0;i<4;i++) { const g=-(0.6-i*0.4);
+        line(this.x+Math.cos(a)*-dr*1.25+Math.cos(a+Math.PI/2)*dr*g, this.y+Math.sin(a)*-dr*1.25+Math.sin(a+Math.PI/2)*dr*g,
+             this.x+Math.cos(a)*dr*1.25+Math.cos(a+Math.PI/2)*dr*g, this.y+Math.sin(a)*dr*1.25+Math.sin(a+Math.PI/2)*dr*g, c15, dr/4); }
+      line(this.x,this.y,this.x+Math.cos(ta)*dr*2,this.y+Math.sin(ta)*dr*2,c3,dr/3);
+      circle(this.x,this.y,dr*0.8,c3);
+    }
+  }
+
+  // ── jefes ──
+  class Commander extends Enemy {
+    constructor() { super();
+      this.radius=sper(0.0228); this.drawRadius=this.radius; this.healthRegenSpeed=0.01;
+      this.attack=1.5; this.defense=0.5; this.moveSpeed=0.8; this.primaryShotAS=0.1;
+      this.shieldAugment=0; this.useShield=true; this.dropCoins=ri(17,25); this.coinValue=20; this.scoreValue=1250;
+    }
+    process() {
+      super.process();
+      this.color = randColorGray(100,150);
+      // aura: a los enemigos cercanos les baja cooldowns y les arma el escudo; al morir, apaga las auras
+      for (const t of tanks) {
+        if (t.isPlayer || t === this) continue;
+        if (this.health <= 0) { t.drawAura = false; }
+        else if (getDist([this.x,this.y],[t.x,t.y]) < this.radius*10) {
+          t.drawAura = true;
+          t.primaryShotCD *= 0.9; t.secondaryShotCD *= 0.995; t.healthRegenCD *= 0.2;
+          if (t.shieldEval) t.shieldEval();
+        } else t.drawAura = false;
+      }
+    }
+    drawDetail() {
+      const a=this.ang, ta=this.turretAng, dr=this.drawRadius, dc=this.drawColor, c15=modifyColorPerc(dc,1.5), c25=modifyColorPerc(dc,2.5);
+      const P=(f,g)=>[this.x+Math.cos(a)*dr*f+Math.cos(a+Math.PI/2)*dr*g, this.y+Math.sin(a)*dr*f+Math.sin(a+Math.PI/2)*dr*g];
+      const seg=(p,q)=>line(p[0],p[1],q[0],q[1],c15,dr/4);
+      seg(P(-1.25,-1),P(1.25,0)); seg(P(-1.25,-1),P(-0.5,0)); seg(P(-1.25,1),P(1.25,0)); seg(P(-1.25,1),P(-0.5,0));
+      for (let i=0;i<3;i++) { const f=0.7-i*0.7; let p=P(f,0.8); circle(p[0],p[1],dr*0.2,c25,dr/8); p=P(f,-0.8); circle(p[0],p[1],dr*0.2,c25,dr/8); }
+      circle(this.x,this.y,dr*0.7,modifyColorPerc(dc,3));
+      line(this.x,this.y,this.x+Math.cos(ta)*dr*2,this.y+Math.sin(ta)*dr*2,c25,dr/3);
+    }
+  }
+  class Breeder extends Enemy {
+    constructor() { super();
+      this.radius=sper(0.032); this.drawRadius=this.radius; this.color=[75,0,75];
+      this.attack=1; this.defense=0.1; this.moveSpeed=0.2; this.shieldAugment=10; this.shieldChargeSpeed=2;
+      this.useShield=true; this.dropCoins=ri(21,30); this.coinValue=20; this.scoreValue=1500; this.spawnTimer=0;
+    }
+    fire() {}   // no dispara: sólo escudo + criar hijos
+    process() {
+      super.process();
+      this.spawnTimer = Math.max(this.spawnTimer - dt, 0);
+      if (this.spawnTimer === 0) { new BreederChild(this.x, this.y); this.spawnTimer = 10; }
+    }
+    drawDetail() {
+      const a=this.ang, dr=this.drawRadius, dc=this.drawColor, c15=modifyColorPerc(dc,1.5), c25=modifyColorPerc(dc,2.5);
+      const P=(f,g)=>[this.x+Math.cos(a)*dr*f+Math.cos(a+Math.PI/2)*dr*g, this.y+Math.sin(a)*dr*f+Math.sin(a+Math.PI/2)*dr*g];
+      const seg=(p,q)=>line(p[0],p[1],q[0],q[1],c15,dr/4);
+      seg(P(-1.25,0),P(1.25,0)); seg(P(0,-1),P(0,1)); seg(P(-1.25,-1),P(1.25,1)); seg(P(1.25,-1),P(-1.25,1));
+      circle(this.x,this.y,dr*0.9,c25,dr/5); circle(this.x,this.y,dr*0.6,c25,dr/5); circle(this.x,this.y,dr*0.3,c25);
+    }
+  }
+  class BreederChild extends SmallPink {
+    constructor(x,y) { super(); this.x = x; this.y = y; }
+  }
+  class BossGreen extends Enemy {
+    constructor() { super();
+      this.radius=sper(0.0256); this.drawRadius=this.radius; this.color=[0,100,0];
+      this.attack=2; this.defense=0.3; this.moveSpeed=0.5; this.primaryShotAS=0.7; this.shieldAugment=5; this.shieldChargeSpeed=2;
+      this.useShield=true; this.dropCoins=ri(28,40); this.coinValue=20; this.scoreValue=2000;
+    }
+    fire() { this.primaryShotAction(); this.secondaryShotAction(); }
+    drawDetail() {
+      const a=this.ang, ta=this.turretAng, dr=this.drawRadius, dc=this.drawColor, c15=modifyColorPerc(dc,1.5);
+      const P=(f,g)=>[this.x+Math.cos(a)*dr*f+Math.cos(a+Math.PI/2)*dr*g, this.y+Math.sin(a)*dr*f+Math.sin(a+Math.PI/2)*dr*g];
+      const seg=(p,q)=>line(p[0],p[1],q[0],q[1],c15,dr/4);
+      seg(P(0,-1),P(1.25,0)); seg(P(1.25,0),P(0,1)); seg(P(0,1),P(-1.25,0)); seg(P(-1.25,0),P(0,-1));
+      seg(P(-1.25,0),P(1.25,0)); seg(P(0,-1),P(0,1));
+      line(this.x,this.y,this.x+Math.cos(ta)*dr*2,this.y+Math.sin(ta)*dr*2,modifyColorPerc(dc,2),dr/4);
+      line(this.x,this.y,this.x+Math.cos(ta)*dr*1.25,this.y+Math.sin(ta)*dr*1.25,modifyColorPerc(dc,2.25),dr/2);
+      circle(this.x,this.y,dr*0.6,modifyColorPerc(dc,3));
+    }
+  }
+  class FinalBoss extends Enemy {
+    constructor() { super();
+      this.radius=sper(0.035); this.drawRadius=this.radius;
+      this.attack=2; this.defense=0.015; this.moveSpeed=1; this.primaryShotAS=0.2; this.secondaryShotAS=0.3;
+      this.shieldAugment=25; this.shieldChargeSpeed=3; this.useShield=true; this.shieldCharge=30;
+      this.dropCoins=50; this.coinValue=50; this.scoreValue=10000;
+      this.teleportCD=10; this.spawnCD=0; this.rageMode=false; this.maxDistToPlayer=sper(0.2);
+    }
+    fire() { this.primaryShotAction(); this.secondaryShotAction(); }
+    process() {
+      super.process();
+      this.teleportCD = Math.max(this.teleportCD - dt, 0);
+      this.spawnCD = Math.max(this.spawnCD - dt, 0);
+      // color según vida (rojo→verde)
+      const cr0 = Math.min(Math.abs(255*(this.health-0.5)-255),255), cg0 = Math.max(255*this.health,0);
+      this.color = randColorInRange(Math.floor(cr0/5),Math.floor(cr0/3),Math.floor(cg0/5),Math.floor(cg0/3),0,0);
+      // teletransporte: titila blanco-azulado y reaparece en un punto libre, encarando al jugador
+      if (this.teleportCD < 3 && player) {
+        this.color = randColorInRange(75,150,75,150,200,255);
+        this.drawRadius = rnd(this.radius*0.9, this.radius*1.1);
+        if (this.teleportCD === 0) {
+          let tries = 0;
+          do { this.x = ri(0,W); this.y = ri(0,H); }
+          while (++tries < 40 && walls.some(w => rectCollision([this.x-this.radius,this.y-this.radius,this.radius*2,this.radius*2],[w.x,w.y,w.width,w.height])));
+          this.ang = getAngle([this.x,this.y],[player.x,player.y]); this.turretAng = this.ang;
+          if (this.body) Body.setPosition(this.body, { x:this.x, y:this.y });
+          this.teleportCD = this.rageMode ? 5 : 20;
+        }
+      }
+      // bajo el 50% invoca tandas de 4 esbirros
+      if (this.health < 0.5 && this.spawnCD === 0 && enemies.length < 10) {
+        const T = [Icy, Mortar, Invis, Exploder][ri(0,3)];
+        for (let i = 0; i < 4; i++) new T();
+        this.spawnCD = 60;
+      }
+      // modo furia bajo el 20%
+      if (this.health < 0.2 && !this.rageMode) {
+        this.primaryShotAS = 0.01; this.secondaryShotAS = 0.1; this.moveSpeed = 1.5; this.teleportCD = 0.5; this.rageMode = true;
+      }
+      // al morir: VICTORIA y se llevan a todos los enemigos puestos
+      if (this.health <= 0) {
+        manager.victory = true;
+        for (const t of tanks) if (!t.isPlayer) t.health = 0;
+      }
+    }
+    drawDetail() {
+      const a=this.ang, ta=this.turretAng, dr=this.drawRadius;
+      const P=(f,g)=>[this.x+Math.cos(a)*dr*f+Math.cos(a+Math.PI/2)*dr*g, this.y+Math.sin(a)*dr*f+Math.sin(a+Math.PI/2)*dr*g];
+      for (let i=0;i<10;i++) {
+        const col = this.rageMode ? randColor() : modifyColorPerc(this.drawColor, 3-0.35*i);
+        const w = dr/(4+0.5*i), cr = dr*(0.2-0.01*i);
+        const seg=(p,q,ww)=>line(p[0],p[1],q[0],q[1],col,ww);
+        seg(P(0,-1),P(0,1),w);
+        seg(P(1.25,1),P(-0.9,0),w); seg(P(1.25,-1),P(-0.9,0),w); seg(P(-1.25,1),P(0.9,0),w); seg(P(-1.25,-1),P(0.9,0),w);
+        let p;
+        p=P(-0.9,0); circle(p[0],p[1],cr,col); p=P(0.9,0); circle(p[0],p[1],cr,col);
+        p=P(-1.25,-1); circle(p[0],p[1],cr,col); p=P(1.25,-1); circle(p[0],p[1],cr,col);
+        p=P(1.25,1); circle(p[0],p[1],cr,col); p=P(-1.25,1); circle(p[0],p[1],cr,col);
+        p=P(0,-1); circle(p[0],p[1],cr,col); p=P(0,1); circle(p[0],p[1],cr,col);
+        seg([this.x,this.y],[this.x+Math.cos(ta)*dr*2,this.y+Math.sin(ta)*dr*2],w);
+        seg([this.x,this.y],[this.x+Math.cos(ta)*dr*1.25,this.y+Math.sin(ta)*dr*1.25],dr/(2+0.5*i));
+        circle(this.x,this.y,dr*(0.7-0.04*i),col);
+      }
+    }
+  }
+  const ENEMY_TYPES = { SmallPink, BasicRed, BasicBlue, Rhomb, Purple, Icy, Mortar, Invis, Exploder, Commander, Breeder, BossGreen, FinalBoss };
 
   // ════════════════ DISPAROS ════════════════
   class PrimaryShot {
@@ -933,20 +1265,125 @@
     draw() { circle(this.x, this.y, this.radius, [255, ri(128,255), 0], this.radius/8); }
   }
 
+  // ════════════════ LOOTBOX (port del Pygame) ════════════════
+  // Caja que gira, vive 30s (se va a los 10), se rompe con disparos del player y dropea: power (10%),
+  // botiquín (20%) o monedas (70%). +100 al score al romperla.
+  class LootBox {
+    constructor() {
+      this.ang = rnd(0, TAU);
+      this.angVel = (Math.random() < 0.5 ? -1 : 1) * rnd(sper(0.002), sper(0.005));
+      this.startRadius = sper(0.0192); this.radius = this.startRadius;
+      this.lifeSpan = 30; this.health = 10; this.hitCD = 0; this.destroyed = false;
+      const chance = Math.random();
+      this.boxType = chance <= 0.1 ? 'power' : chance <= 0.3 ? 'firstAid' : 'coin';
+      // posición libre de muros y tanques
+      let tries = 0;
+      do {
+        this.x = rnd(xper(0.1), W - xper(0.1)); this.y = rnd(yper(0.1), H - yper(0.1));
+        var bad = walls.some(w => rectCollision([this.x-this.radius*1.5, this.y-this.radius*1.5, this.radius*3, this.radius*3], [w.x,w.y,w.width,w.height]))
+               || tanks.some(t => rectCollision([this.x-this.radius*1.5, this.y-this.radius*1.5, this.radius*3, this.radius*3], [t.x-t.radius, t.y-t.radius, t.radius*2, t.radius*2]));
+      } while (bad && ++tries < 30);
+      lootBoxes.push(this);
+    }
+    process() {
+      this.lifeSpan -= dt;
+      if (this.lifeSpan <= 10) { toRemove.add(this); return; }
+      this.hitCD = Math.max(this.hitCD - dt, 0);
+      this.ang += this.angVel * dt;
+      for (const shot of shots) {
+        if (shot.isPlayerShot && getDistSq([shot.x,shot.y],[this.x,this.y]) < this.radius*this.radius) {
+          this.health -= 1; this.hitCD = 0.05;
+          if (player) player.score += 100;
+          toRemove.add(shot);
+        }
+      }
+      if (this.health <= 0 && !this.destroyed) {
+        if (this.boxType === 'power' && player) { player.powerModeActiveTime = 30; player.secondaryShotCD = 0; }
+        else if (this.boxType === 'firstAid' && player) { player.health = Math.min(player.health + 0.33, 1); }
+        else if (this.boxType === 'coin') { for (let i = 0; i < ri(17,25); i++) new Coin(this.x, this.y, ri(20,40)); }
+        this.destroyed = true; toRemove.add(this);
+      }
+      this.radius = this.lifeSpan * this.startRadius / 30 + (this.hitCD > 0 ? rnd(this.radius*0.25, this.radius*0.5) : 0);
+    }
+    draw() {
+      const color = this.boxType === 'power' ? randColor() : this.boxType === 'firstAid' ? [100,255,0] : [74,46,6];
+      const dc = this.lifeSpan < 10.25 ? [50,50,50] : this.hitCD > 0 ? modifyColor(color,100) : color;
+      const symbol = this.boxType === 'power' ? 'P' : this.boxType === 'firstAid' ? '+' : '$';
+      const sc = (this.lifeSpan < 10.25 || this.hitCD > 0) ? [50,50,50]
+               : this.boxType === 'power' ? modifyColorPerc(color,3) : this.boxType === 'firstAid' ? [255,255,255] : [255,255,0];
+      const r = this.radius, a = this.ang, fill = modifyColorPerc(dc,0.9);
+      for (let i = 0; i < 10; i++) {
+        const rr = r*(1 - i*0.2);
+        line(this.x+Math.cos(a-Math.PI/2)*rr, this.y+Math.sin(a-Math.PI/2)*rr, this.x+Math.cos(a)*rr, this.y+Math.sin(a)*rr, fill, r/3);
+        line(this.x-Math.cos(a)*rr, this.y-Math.sin(a)*rr, this.x+Math.cos(a-Math.PI/2)*rr, this.y+Math.sin(a-Math.PI/2)*rr, fill, r/3);
+      }
+      // marco
+      line(this.x+Math.cos(a)*r, this.y+Math.sin(a)*r, this.x+Math.cos(a+Math.PI/2)*r, this.y+Math.sin(a+Math.PI/2)*r, dc, r/4);
+      line(this.x+Math.cos(a+Math.PI/2)*r, this.y+Math.sin(a+Math.PI/2)*r, this.x-Math.cos(a)*r, this.y-Math.sin(a)*r, dc, r/4);
+      line(this.x-Math.cos(a)*r, this.y-Math.sin(a)*r, this.x+Math.cos(a-Math.PI/2)*r, this.y+Math.sin(a-Math.PI/2)*r, dc, r/4);
+      line(this.x+Math.cos(a-Math.PI/2)*r, this.y+Math.sin(a-Math.PI/2)*r, this.x+Math.cos(a)*r, this.y+Math.sin(a)*r, dc, r/4);
+      text(symbol, sc, this.x, this.y, r*1.1, 'center');
+    }
+  }
+
   // ════════════════ MANAGER / OLEADAS ════════════════
   const manager = {
-    waveTime: 0, waveNumber: 0, gameover: false, wallColor: [120,120,120],
+    waveTime: 0, waveNumber: 0, gameover: false, victory: false, scoreEffectCD: 0, shopOpen: false, lootBoxCD: 0, wallColor: [120,120,120],
+    // Lista COMPLETA de 151 oleadas del original (TankWARS.py). Cada entrada: [tipo, cantidad, segundos].
+    // Jefes a las 49/74/99/119/149 y FinalBoss a la 150. waveTime 3600 = "esperá a limpiar la oleada".
     waveList: [
-      ['BasicRed',3,30],['BasicRed',4,25],['SmallPink',4,25],['BasicBlue',3,30],['BasicRed',5,25],
-      ['Rhomb',2,30],['BasicBlue',4,25],['SmallPink',6,20],['BasicRed',5,25],['Rhomb',3,30],
-      ['BasicBlue',5,25],['SmallPink',8,20],['BasicRed',6,25],['Rhomb',3,25],['BasicBlue',6,30],
+      ['BasicRed',3,30],['BasicRed',3,30],['BasicRed',4,30],['BasicRed',4,30],['BasicRed',4,30],
+      ['BasicRed',6,5],['BasicBlue',2,55],['BasicBlue',4,30],['BasicRed',6,30],['BasicBlue',5,30],
+      ['Rhomb',1,5],['BasicRed',3,55],['BasicBlue',4,30],['BasicRed',5,30],['Purple',1,30],
+      ['BasicRed',6,5],['SmallPink',4,55],['BasicBlue',4,5],['BasicRed',5,55],['Rhomb',2,30],
+      ['SmallPink',8,5],['SmallPink',4,55],['BasicBlue',3,30],['Rhomb',1,5],['Purple',1,55],
+      ['BasicRed',7,30],['BasicRed',7,5],['Mortar',1,55],['SmallPink',5,5],['BasicRed',7,55],
+      ['BasicBlue',5,30],['BasicRed',5,30],['BasicBlue',5,5],['BasicRed',5,55],['Rhomb',3,30],
+      ['Purple',2,30],['SmallPink',10,30],['Mortar',2,30],['Rhomb',2,5],['Rhomb',3,55],
+      ['BasicRed',6,30],['BasicRed',6,30],['BasicBlue',8,30],['SmallPink',7,5],['SmallPink',7,55],
+      ['BasicBlue',8,30],['BasicRed',6,5],['BasicBlue',4,55],['Purple',2,30],['BossGreen',1,3600],
+      ['BasicBlue',8,30],['Rhomb',4,30],['BasicBlue',8,30],['BasicRed',8,5],['Icy',2,55],
+      ['Mortar',2,5],['Purple',1,55],['Icy',1,5],['Rhomb',3,30],['BasicBlue',10,30],
+      ['Exploder',2,30],['Exploder',3,30],['Icy',2,5],['Exploder',2,5],['BasicRed',7,80],
+      ['BasicRed',10,30],['BasicBlue',10,30],['Purple',3,30],['Mortar',3,30],['Exploder',3,30],
+      ['Invis',2,30],['Invis',3,30],['Invis',2,5],['Invis',3,5],['Invis',4,80],
+      ['Rhomb',4,30],['Invis',3,5],['Icy',2,5],['BasicBlue',10,80],['BossGreen',2,3600],
+      ['SmallPink',8,5],['Rhomb',3,5],['SmallPink',4,80],['Rhomb',6,5],['SmallPink',10,55],
+      ['SmallPink',10,30],['SmallPink',6,5],['BasicBlue',8,55],['BasicRed',8,5],['Purple',3,55],
+      ['Rhomb',5,5],['SmallPink',7,55],['Rhomb',3,5],['Invis',3,5],['Icy',2,80],
+      ['BasicRed',15,30],['Mortar',3,5],['BasicBlue',12,55],['Exploder',3,5],['BossGreen',2,3600],
+      ['Commander',1,5],['BasicRed',6,1],['BasicBlue',7,54],['Invis',12,5],['Purple',3,55],
+      ['Icy',6,10],['Exploder',4,50],['Rhomb',7,1],['Mortar',4,59],['Rhomb',15,60],
+      ['Exploder',10,1],['Commander',1,59],['Breeder',1,1],['SmallPink',8,1],['Icy',4,58],
+      ['Commander',1,1],['Mortar',3,1],['Rhomb',4,1],['Purple',2,1],['BossGreen',1,3600],
+      ['Breeder',2,1],['Rhomb',6,1],['Icy',2,1],['Exploder',2,1],['Breeder',1,3600],
+      ['Invis',14,1],['Commander',1,59],['Mortar',9,60],['Purple',6,60],['BossGreen',3,3600],
+      ['Icy',1,1],['Exploder',4,1],['Invis',4,1],['Breeder',2,5],['Commander',1,3600],
+      ['Rhomb',6,1],['BossGreen',1,1],['BasicBlue',6,1],['Breeder',1,1],['Commander',1,3600],
+      ['Invis',4,4],['Mortar',4,4],['Icy',4,4],['Exploder',4,4],['Breeder',2,3600],
+      ['Purple',6,5],['Rhomb',10,55],['Breeder',4,5],['BossGreen',4,5],['Commander',2,3600],
+      ['FinalBoss',1,3600],
     ],
     process() {
       if (manager.gameover) return;
+      if (manager.victory) {   // tras vencer al FinalBoss, la plata sobrante se vuelca a puntaje de a poco
+        manager.scoreEffectCD = Math.max(manager.scoreEffectCD - dt, 0);
+        if (player && player.money > 0 && manager.scoreEffectCD === 0) {
+          const tr = player.money > 1000 ? 10 : 1;
+          player.money -= tr; player.score += tr*20; manager.scoreEffectCD = 0.01;
+        }
+        return;
+      }
       manager.waveTime = Math.max(manager.waveTime - dt, 0);
       if (manager.waveTime === 0 || enemies.length === 0) {
         const w = manager.waveList[manager.waveNumber];
         manager.callWave(w[0], w[1], w[2]);
+      }
+      // Lootboxes: aparecen cada 30-50s durante la oleada activa (waveTime < 100, casi siempre).
+      manager.lootBoxCD = Math.max(manager.lootBoxCD - dt, 0);
+      if (manager.lootBoxCD === 0 && manager.waveTime < 100) {
+        new LootBox();
+        manager.lootBoxCD = ri(30, 50);
       }
     },
     callWave(name, amount, waveTime) {
@@ -957,7 +1394,8 @@
       }
       manager.waveNumber = (manager.waveNumber + 1) % manager.waveList.length;
       manager.waveTime = waveTime;
-      for (let i = 0; i < amount; i++) {
+      const n = Math.max(Math.floor(amount*0.5), 1);   // modo NORMAL del original: mitad de enemigos (redondeo abajo, mín 1)
+      for (let i = 0; i < n; i++) {
         if (enemies.length >= MAX_ENEMIES) break;
         new ENEMY_TYPES[name]();
       }
@@ -976,6 +1414,7 @@
   const btnState = { missile: false, boost: false };
   const moveVec = { x: 0, y: 0 };                 // palanca de movimiento (hand-rolled), y en coords pantalla (+ abajo)
   const aimVec  = { x: 0, y: 0, active: false };  // palanca de puntería (hand-rolled, mobile): dirección de la mira + dispara
+  let aimDown = false;                            // palanca der TOCADA → dispara aunque la aprietes en el centro (sin zona muerta)
 
   function readInput() {
     // vector de movimiento: teclado (4 direcciones) + palanca, clampeado a magnitud 1
@@ -995,13 +1434,17 @@
         aimY = clampN(aimY + (aimVec.y / am) * sp, 0, H);
       }
     }
-    // IMÁN de puntería (mobile): vos acercás la mira al tanque que querés; cuando YA está cerca (dentro del
-    // radio de captura) el imán la engancha suave hacia él (no clavada). Si no hay tanque cerca, apuntás libre.
-    if (IS_TOUCH && enemies.length) {
+    // IMÁN de puntería (mobile): vos acercás la mira al blanco que querés; cuando YA está cerca (dentro del
+    // radio de captura) el imán la engancha suave hacia él (no clavada). Enganchan ENEMIGOS y LOOTBOXES.
+    if (IS_TOUCH && (enemies.length || lootBoxes.length)) {
       let bx = 0, by = 0, bd = Infinity;
       for (const e of enemies) {
         const d = getDistSq([aimX, aimY], [e.x, e.y]);
         if (d < bd) { bd = d; bx = e.x; by = e.y; }
+      }
+      for (const b of lootBoxes) {
+        const d = getDistSq([aimX, aimY], [b.x, b.y]);
+        if (d < bd) { bd = d; bx = b.x; by = b.y; }
       }
       const r = sper(AIM_MAGNET_RANGE);
       if (bd < r * r) {                                       // sólo si la mira YA está cerca de un tanque
@@ -1013,7 +1456,7 @@
     return {
       moveX: mx, moveY: my,
       aimX, aimY,
-      primary: mouseLeft || canvasPointers.size > 0 || aimVec.active,
+      primary: mouseLeft || canvasPointers.size > 0 || aimVec.active || aimDown,
       missile: mouseRight || btnState.missile,
       boost: keys.has('shift') || btnState.boost,
     };
@@ -1025,7 +1468,14 @@
   addEventListener('blur', () => keys.clear());
 
   // canvas: mouse (desktop) apunta+dispara; touch (mobile) apunta+dispara donde tocás. Coords → lógicas.
-  function logicalPos(e) { const r = canvas.getBoundingClientRect(); return [(e.clientX-r.left)/scaleX, (e.clientY-r.top)/scaleY]; }
+  // Toque (coords de pantalla) → coords lógicas del juego. Si #stage está rotado 90° (vertical), mapeamos
+  // la pantalla al sistema rotado: stageX = clientY, stageY = innerW - clientX.
+  function logicalPos(e) {
+    let sx, sy;
+    if (stageRot === 90) { sx = e.clientY; sy = window.innerWidth - e.clientX; }
+    else { const r = canvas.getBoundingClientRect(); sx = e.clientX - r.left; sy = e.clientY - r.top; }
+    return [sx / scaleX, sy / scaleY];
+  }
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('pointerdown', e => {
     tryAutoFs(e);
@@ -1064,6 +1514,86 @@
   holdBtn('btnMissile', 'missile');
   holdBtn('btnBoost', 'boost');
   document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); startGame(); });
+
+  // ════════════════ TIENDA / MEJORAS (port del shop del Pygame) ════════════════
+  // 8 upgrades. Cada compra: si alcanza la plata y el nivel ≤ 10, descuenta, aplica el stat, y la próxima
+  // cuesta +15%. Modifican los valores base (reg*) y los "vivos" para que tengan efecto inmediato.
+  const UPGRADES = [
+    { key:'dmg',    label:'Daño',           cost:1400, lvl:1 },
+    { key:'def',    label:'Defensa',        cost:1200, lvl:1 },
+    { key:'as',     label:'Cadencia cañón', cost:1300, lvl:1 },
+    { key:'as2',    label:'Recarga misil',  cost:1250, lvl:1 },
+    { key:'shcap',  label:'Escudo: capac.', cost:1200, lvl:1 },
+    { key:'shreg',  label:'Escudo: regen',  cost:1300, lvl:1 },
+    { key:'hpreg',  label:'Regen vida',     cost:1100, lvl:1 },
+    { key:'mspeed', label:'Velocidad',      cost:1100, lvl:1 },
+  ];
+  UPGRADES.forEach(u => u.base = u.cost);                       // snapshot del costo inicial para reiniciar
+  function resetShop() { UPGRADES.forEach(u => { u.cost = u.base; u.lvl = 1; }); if (shopBuilt) updateShop(); }
+  function applyUpgrade(key) {
+    const p = player; if (!p) return;
+    switch (key) {
+      case 'dmg':    p.regAttack += 0.2; p.attack = p.regAttack; break;
+      case 'def':    p.regDefense -= 0.08; p.defense = p.regDefense; break;
+      case 'as':     p.regPrimaryShotAS = Math.max(p.regPrimaryShotAS - 0.01, 0.025); p.primaryShotAS = p.regPrimaryShotAS; break;
+      case 'as2':    p.regSecondaryShotAS = Math.max(p.regSecondaryShotAS - 0.08, 0.2); p.secondaryShotAS = p.regSecondaryShotAS; break;
+      case 'shcap':  p.shieldAugment += 1; break;
+      case 'shreg':  p.shieldChargeSpeed += 0.2; break;
+      case 'hpreg':  p.regHealthRegenSpeed = Math.max(p.regHealthRegenSpeed - 0.095, 0.05); p.healthRegenSpeed = p.regHealthRegenSpeed; break;
+      case 'mspeed': p.regMoveSpeed += 0.05; p.moveSpeed = p.regMoveSpeed; break;
+    }
+  }
+  function buyUpgrade(u) {
+    if (!player || u.lvl > 10 || player.money < u.cost) return;
+    player.money -= u.cost;
+    applyUpgrade(u.key);
+    u.cost += Math.floor(u.cost * 0.15);
+    u.lvl++;
+    updateShop();
+  }
+  const shopPanel = document.getElementById('shopPanel');
+  const btnShop = document.getElementById('btnShop');
+  let shopBuilt = false;
+  function buildShop() {
+    const card = document.createElement('div'); card.className = 'shopCard';
+    const head = document.createElement('div'); head.className = 'shopHead'; head.id = 'shopMoney'; card.appendChild(head);
+    const grid = document.createElement('div'); grid.className = 'shopGrid';
+    for (const u of UPGRADES) {
+      const b = document.createElement('button'); b.className = 'shopItem';
+      b.innerHTML = '<span class="si-label"></span><span class="si-row"><span class="si-lvl"></span><span class="si-cost"></span></span>';
+      b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); buyUpgrade(u); });
+      u._el = b; grid.appendChild(b);
+    }
+    card.appendChild(grid);
+    const foot = document.createElement('div'); foot.className = 'shopFoot'; foot.textContent = 'tocá afuera para cerrar';
+    card.appendChild(foot);
+    shopPanel.appendChild(card);
+    // Tocar el fondo oscuro (fuera de la tarjeta) también cierra. La tarjeta y los ítems no propagan acá.
+    shopPanel.addEventListener('pointerdown', e => { if (e.target === shopPanel) { e.preventDefault(); toggleShop(false); } });
+    shopBuilt = true;
+  }
+  function updateShop() {
+    if (!shopBuilt) buildShop();
+    document.getElementById('shopMoney').textContent = '🪙 ' + (player ? player.money : 0);
+    for (const u of UPGRADES) {
+      const maxed = u.lvl > 10, afford = player && player.money >= u.cost;
+      u._el.querySelector('.si-label').textContent = u.label;
+      u._el.querySelector('.si-lvl').textContent = maxed ? 'Lvl max' : 'Lvl ' + u.lvl;
+      u._el.querySelector('.si-cost').textContent = maxed ? 'MAX' : u.cost;
+      u._el.classList.toggle('maxed', maxed);
+      u._el.classList.toggle('afford', !maxed && afford);
+      u._el.classList.toggle('noafford', !maxed && !afford);
+    }
+  }
+  function toggleShop(open) {
+    manager.shopOpen = open;
+    shopPanel.classList.toggle('show', open);
+    btnShop.classList.toggle('on', open);
+    if (open) updateShop();
+  }
+  btnShop.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); toggleShop(!manager.shopOpen); });
+  // Desktop: TAB abre/cierra la tienda (como el original).
+  addEventListener('keydown', e => { if (e.key === 'Tab') { e.preventDefault(); toggleShop(!manager.shopOpen); } });
   // El cableado del overlay de info (#infoPanel) se hace en el <script> del final, porque ese div se declara
   // después de este bloque y acá document.getElementById('infoPanel') daría null.
 
@@ -1102,9 +1632,12 @@
       let dx = e.clientX - ox, dy = e.clientY - oy;
       const d = Math.hypot(dx, dy);
       if (d > BASE_R) { dx = dx/d*BASE_R; dy = dy/d*BASE_R; }            // el nub se clampa al borde de la base
-      knob.style.left = (ox+dx)+'px'; knob.style.top = (oy+dy)+'px';
-      out.mag = Math.min(1, d / BASE_R); out.x = dx / BASE_R; out.y = dy / BASE_R;
-      if (d > DEAD) out.ang = Math.atan2(dy, dx);
+      knob.style.left = (ox+dx)+'px'; knob.style.top = (oy+dy)+'px';    // el nub sigue al dedo en coords de PANTALLA
+      // Dirección de salida en coords del JUEGO: si #stage está rotado 90°, rotamos el vector (pantalla→juego).
+      let gx = dx, gy = dy;
+      if (stageRot === 90) { gx = dy; gy = -dx; }
+      out.mag = Math.min(1, d / BASE_R); out.x = gx / BASE_R; out.y = gy / BASE_R;
+      if (d > DEAD) out.ang = Math.atan2(gy, gx);
       out.active = out.mag > aDead;
     });
     const end = e => {
@@ -1130,31 +1663,52 @@
     });
     createJoystick(document.getElementById('jAim'), {
       target: aimVec, activeDead: 0, rgb: '255,90,60', knobRgb: '255,170,150', knobBorderRgb: '255,180,160',
-      onStart: () => { if (restAim) restAim.style.display = 'none'; },
-      onEnd:   () => { if (restAim) restAim.style.display = '';     },
+      onStart: () => { aimDown = true;  if (restAim) restAim.style.display = 'none'; },
+      onEnd:   () => { aimDown = false; if (restAim) restAim.style.display = '';     },
     });
   }
   function setupJoysticks() {}   // compat: las palancas hand-rolled se crean una vez y se posicionan solas (nada que recrear al rotar)
 
   // ── PANTALLA COMPLETA (saca la barra del navegador en mobile). iOS Safari falla en silencio. ──
+  const EMBEDDED = (window.self !== window.top);
   const fsTarget = document.documentElement;
   const _reqFs  = fsTarget.requestFullscreen || fsTarget.webkitRequestFullscreen;
   const _exitFs = document.exitFullscreen || document.webkitExitFullscreen;
   function isFs()    { return !!(document.fullscreenElement || document.webkitFullscreenElement); }
+  // Landscape se fuerza por CSS (rotando #stage en resize), NO por la API de orientación → sin "flash" de giro.
   function enterFs() { if (_reqFs)  { const p = _reqFs.call(fsTarget); if (p && p.catch) p.catch(() => {}); } }
   function exitFs()  { if (_exitFs) _exitFs.call(document); }
   function toggleFs(){ isFs() ? exitFs() : enterFs(); }
-  function syncFsIcon() { document.body.classList.toggle('fs-on', isFs()); }
+  // Embebido en la shell del Arcade: same-origin → llamamos requestFullscreen DIRECTO sobre el
+  // doc padre para preservar el user-activation del tap. postMessage perdía la activación.
+  function toggleFsEmbedded() {
+    try {
+      const topDoc = window.top.document;
+      if (topDoc.fullscreenElement || topDoc.webkitFullscreenElement) {
+        (topDoc.exitFullscreen || topDoc.webkitExitFullscreen).call(topDoc);
+      } else {
+        const el = topDoc.documentElement;
+        const req = el.requestFullscreen || el.webkitRequestFullscreen;
+        const p = req.call(el);
+        if (p && p.catch) p.catch(() => {});
+      }
+    } catch (e) {
+      try { window.parent.postMessage({ type: 'arcade:fullscreen' }, '*'); } catch (e2) {}
+    }
+  }
+  function syncFsIcon() { document.body.classList.toggle('fs-on', isFs() || EMBEDDED); }
   function onViewportChange() { syncFsIcon(); requestAnimationFrame(() => { resize(); setupJoysticks(); }); }
   document.addEventListener('fullscreenchange', onViewportChange);
   document.addEventListener('webkitfullscreenchange', onViewportChange);
   window.addEventListener('orientationchange', onViewportChange);
-  document.getElementById('btnFs').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); toggleFs(); });
-  let autoFsDone = false;
-  function tryAutoFs(e) { if (autoFsDone) return; autoFsDone = true; if (e && e.pointerType === 'mouse') return; if (!isFs()) enterFs(); }
-  // Las zonas de joystick cubren el canvas, así que el primer toque no llega a su pointerdown → escuchamos
-  // a nivel ventana para el auto-fullscreen (ignora mouse).
-  addEventListener('pointerdown', tryAutoFs);
+  // Embebido: la shell nos avisa su estado de FS para sincronizar el ícono.
+  window.addEventListener('message', e => { if (e.data && e.data.type === 'arcade:fs-state') document.body.classList.toggle('fs-on', !!e.data.on); });
+  syncFsIcon();
+  document.getElementById('btnFs').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); EMBEDDED ? toggleFsEmbedded() : toggleFs(); });
+  // Auto-fullscreen DESACTIVADO: el primer toque (ej: abrir info) disparaba una transición de FS async que
+  // dejaba el viewport trabado en portrait al cerrar info, y sólo el botón de FS lo reacomodaba. El usuario
+  // entra a fullscreen con el botón cuando quiere. (tryAutoFs queda como no-op por compatibilidad.)
+  function tryAutoFs() {}
 
   // En desktop ocultamos los pads táctiles (se juega con teclado + mouse) y el cursor del SO sobre el
   // canvas (apuntás con la torreta, no hace falta ver la flecha). Los botones siguen con su cursor propio.
@@ -1196,21 +1750,41 @@
       text('Score: ' + player.score, [255,255,255], xper(0.08), yper(0.082), sper(0.0192));
       if (player.moneyToAdd > 0) text('+ ' + player.moneyToAdd, [128,128,0], xper(0.008), yper(0.108), sper(0.0192));
 
-      // pips de misiles, columna abajo-izquierda (subidos ~50px para no pisar el botón de salir)
+      // pips de misiles, columna abajo-izquierda (subidos ~50px para no pisar el botón de salir).
+      // Un puntito por misil hasta MISSILE_MAX (4), en COLOR DEL JUGADOR. El que se está regenerando muestra
+      // el cooldown estilo reloj (relleno horario desde arriba). Los vacíos van como contorno tenue.
+      const pipColor = modifyColorPerc(player.color, 3);        // color del jugador (brillante para que se vea)
+      const pipR = sper(0.0085), pipX = xper(0.016);
+      const regenInterval = MISSILE_REGEN * player.regSecondaryShotAS;
       for (let i = 0; i < player.missileMax; i++) {
-        const c = i < player.missileStack ? [52,204,255] : [50,50,50];
-        circle(xper(0.015), yper(0.95) - 50 - sper(0.02)*i, sper(0.007), c);
+        const py = yper(0.95) - 50 - sper(0.022)*i;
+        if (i < player.missileStack) {
+          circle(pipX, py, pipR, pipColor);                    // misil cargado: lleno
+        } else if (i === player.missileStack && regenInterval > 0) {
+          const prog = clampN(1 - player.missileRegenCD / regenInterval, 0, 1);  // 0→1 mientras recarga
+          circle(pipX, py, pipR, background);                  // base = color del fondo (la parte vacía "no está")
+          ctx.beginPath(); ctx.moveTo(pipX, py);               // sector "reloj" horario desde las 12
+          ctx.arc(pipX, py, pipR, -Math.PI/2, -Math.PI/2 + prog*TAU, false);
+          ctx.closePath(); ctx.fillStyle = rgb(pipColor); ctx.fill();
+          circle(pipX, py, pipR, pipColor, pipR/5);            // borde
+        } else {
+          circle(pipX, py, pipR, [60,60,60], pipR/5);          // vacío: contorno
+        }
       }
 
       // crosshair en el punto de mira (mouse en desktop, último toque en mobile)
       const recoil = Math.max(player.primaryShotCD*150/player.primaryShotAS*0.01, 1);
-      const cc = player.secondaryShotCD > 0 ? [75,75,75] : modifyColorPerc(player.color,3);
+      const cc = (player.powerModeActiveTime <= 0 && (player.secondaryShotCD > 0 || player.missileStack <= 0)) ? [75,75,75] : modifyColorPerc(player.color,3);
       circle(aimX, aimY, sper(0.0075)*recoil, cc, sper(0.01)/5);
       line(aimX-sper(0.0095)*recoil, aimY, aimX+sper(0.009)*recoil, aimY, cc, sper(0.01)/5);
       line(aimX, aimY-sper(0.0095)*recoil, aimX, aimY+sper(0.009)*recoil, cc, sper(0.01)/5);
     }
 
-    if (manager.gameover) {
+    if (manager.victory) {
+      text('¡VICTORIA!', [255,255,255], W/2, H*0.45, sper(0.09), 'center');
+      text('Score: ' + lastScore, [255,255,0], W/2, H*0.55, sper(0.045), 'center');
+      text('Reiniciar ↻', [200,200,200], W/2, H*0.62, sper(0.025), 'center');
+    } else if (manager.gameover) {
       text('GAME OVER', [255,255,255], W/2, H*0.45, sper(0.09), 'center');
       text('Score: ' + lastScore, [255,255,0], W/2, H*0.55, sper(0.045), 'center');
       text('Reiniciar ↻', [200,200,200], W/2, H*0.62, sper(0.025), 'center');
@@ -1235,9 +1809,11 @@
   function startGame() {
     Composite.clear(world, false);                 // saca todos los cuerpos (tanques + muros) del mundo
     physAcc = 0;
-    tanks = []; enemies = []; shots = []; coins = []; walls = []; explosions = [];
+    tanks = []; enemies = []; shots = []; coins = []; walls = []; explosions = []; lootBoxes = [];
     toRemove.clear();
-    manager.waveTime = 0; manager.waveNumber = 0; manager.gameover = false;
+    manager.waveTime = 0; manager.waveNumber = 0; manager.gameover = false; manager.victory = false; manager.scoreEffectCD = 0; manager.lootBoxCD = 0;
+    if (typeof toggleShop === 'function') toggleShop(false);   // cerrar tienda si estaba abierta
+    resetShop();                                               // costos/niveles de mejoras a base
     player = null;
     new Player();
     manager.wallColor = randColorInRange(50,255,50,255,50,255);
@@ -1251,6 +1827,7 @@
       if (enemies.includes(s)) enemies.splice(enemies.indexOf(s),1);
       if (shots.includes(s)) { shots.splice(shots.indexOf(s),1); new Explosion(s.x,s.y,s.missile?s.radius*2:s.radius/2); }
       if (coins.includes(s)) coins.splice(coins.indexOf(s),1);
+      if (lootBoxes.includes(s)) lootBoxes.splice(lootBoxes.indexOf(s),1);
       if (walls.includes(s)) { walls.splice(walls.indexOf(s),1); if (s.body) World.remove(world, s.body); }
       if (explosions.includes(s)) explosions.splice(explosions.indexOf(s),1);
     }
@@ -1266,9 +1843,13 @@
     fr = dt * 60;
     dtSmoothed = dtSmoothed*0.9 + dt*0.1;
 
-    // Algunos navegadores móviles no disparan 'resize' al rotar → re-evaluar acá (también ajusta el aviso
-    // de orientación y la address-bar).
-    if (window.innerWidth !== lastVW || window.innerHeight !== lastVH) resize();
+    // Algunos navegadores móviles no disparan 'resize' al rotar / al mostrar-ocultar overlays o la address-bar.
+    // Re-evaluamos acá comparando innerW/H, el tamaño REAL del canvas, Y que la rotación del #stage coincida con
+    // la orientación actual del viewport. Esto último garantiza que si quedó trabado (ej: abrir/cerrar info hizo
+    // flip-flop de dimensiones), el frame siguiente lo corrige solo → siempre landscape.
+    const wantRot = (IS_TOUCH && !IS_EMBEDDED && window.innerHeight > window.innerWidth) ? 90 : 0;
+    if (wantRot !== stageRot || window.innerWidth !== lastVW || window.innerHeight !== lastVH ||
+        canvas.clientWidth !== cssW || canvas.clientHeight !== cssH) resize();
 
     background = walls.length ? modifyColorPerc(manager.wallColor,0.2) : randColorGray(0,5);
     if (player) lastScore = player.score;
@@ -1278,24 +1859,28 @@
     ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, 0, 0);
     ctx.fillStyle = rgb(background); ctx.fillRect(0,0,W,H);
 
-    // update
-    manager.process();
-    for (const w of walls) w.process();
-    // Control hand-rolled de cada tanque (setea la velocidad de su cuerpo de matter)…
-    for (const t of tanks) t.process();
-    // …matter integra y resuelve choques (tanque↔muro, tanque↔tanque)…
-    stepPhysics(dt);
-    // …y leemos las posiciones corregidas de vuelta a los objetos del juego.
-    for (const t of tanks) if (t.body) { t.x = t.body.position.x; t.y = t.body.position.y; }
-    for (const s of shots) s.process();
-    for (const c of coins) c.process();
-    for (const e of explosions) e.process();
-    if (!player && !manager.gameover) new Player();
-    purge();
+    // update — se PAUSA mientras la tienda está abierta (como el original con TAB).
+    if (!manager.shopOpen) {
+      manager.process();
+      for (const w of walls) w.process();
+      // Control hand-rolled de cada tanque (setea la velocidad de su cuerpo de matter)…
+      for (const t of tanks) t.process();
+      // …matter integra y resuelve choques (tanque↔muro, tanque↔tanque)…
+      stepPhysics(dt);
+      // …y leemos las posiciones corregidas de vuelta a los objetos del juego.
+      for (const t of tanks) if (t.body) { t.x = t.body.position.x; t.y = t.body.position.y; }
+      for (const s of shots) s.process();
+      for (const c of coins) c.process();
+      for (const b of lootBoxes) b.process();
+      for (const e of explosions) e.process();
+      if (!player && !manager.gameover) new Player();
+      purge();
+    }
 
     // draw
     for (const c of coins) c.draw();
     for (const w of walls) w.draw();
+    for (const b of lootBoxes) b.draw();
     for (const t of tanks) t.draw();
     for (const s of shots) s.draw();
     for (const e of explosions) e.draw();
@@ -1315,9 +1900,6 @@
   setTimeout(() => hint.style.opacity = '0', 6000);
   canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
   </script>
-  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-  </button>
   <div id="infoPanel">
     <div class="card">
       <h2>TANKWARS</h2>
@@ -1328,13 +1910,21 @@
         <div class="row"><span class="k">Disparar cañón</span><span class="v">Click izq</span></div>
         <div class="row"><span class="k">Misil</span><span class="v">Click der</span></div>
         <div class="row"><span class="k">Boost</span><span class="v">Shift</span></div>
+        <div class="row"><span class="k">Tienda</span><span class="v">TAB</span></div>
       </div>
       <div class="foot">tocá para cerrar</div>
     </div>
   </div>
   <script>
     document.getElementById('btnExit').addEventListener('click', () => {
-      if (confirm('¿Salir al menú?')) location.href = '../../';
+      // Embebido en la shell del Arcade: postMessage para volver al menú sin recargar el iframe.
+      // Suelto: navegamos directo (sin confirm — mismo patrón que el resto de los juegos).
+      if (window.self !== window.top) {
+        try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {}
+        return;
+      }
+      try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch {}
+      location.href = '../../Arcade/';
     });
     // Info / controles: el botón circle-i (arriba-derecha) abre el overlay. Se cablea acá porque #infoPanel
     // recién existe en el DOM en este punto (está declarado arriba de este script).
@@ -1342,7 +1932,15 @@
       const btnInfo = document.getElementById('btnInfo');
       const infoPanel = document.getElementById('infoPanel');
       if (!btnInfo || !infoPanel) return;
-      const toggleInfo = show => { infoPanel.classList.toggle('show', show); btnInfo.classList.toggle('on', show); };
+      const toggleInfo = show => {
+        infoPanel.classList.toggle('show', show);
+        btnInfo.classList.toggle('on', show);
+        // Mostrar/ocultar el overlay puede mover la address-bar y dejar el viewport con dims que el loop no
+        // detecta como cambio → el layout quedaba trabado en portrait al CERRAR info. Forzamos resize() (vía el
+        // evento que ya está enganchado), ahora y de nuevo cuando la address-bar terminó de acomodarse.
+        window.dispatchEvent(new Event('resize'));
+        setTimeout(() => window.dispatchEvent(new Event('resize')), 250);
+      };
       btnInfo.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); toggleInfo(!infoPanel.classList.contains('show')); });
       infoPanel.addEventListener('pointerdown', e => { e.preventDefault(); toggleInfo(false); });
       // En mobile no mostramos la tabla de controles de teclado/mouse.
@@ -1351,5 +1949,6 @@
       if (isTouch && ic) ic.style.display = 'none';
     })();
   </script>
+  </div><!-- /#stage -->
 </body>
 </html>

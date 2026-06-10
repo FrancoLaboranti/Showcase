@@ -24,7 +24,7 @@ The top of [Balls.py](Balls.py) is a block of named constants — that's the int
 | `R` (rising edge) | Respawn: clear all balls and spawn the same count again with freshly randomized colors/sizes/styles/voices. Resets `Ball._nextId`. |
 | `SPACE` (held) | Global debug overlay (mouse pos/velocity/speed, ball count, mouse-velocity vector). Per-ball stats for ball id=1, plus a brighter halo around id=1 to spot it. **Top-10 speed bar chart** under the mouse panel: ranks the 10 fastest balls each frame, bar fill = ball's own color, sleeper labels go gray + `zZz`. |
 | `F` (toggle) | FPS overlay. |
-| `1` / `2` / `3` | Switch `WALL_MODE` (rebuilds wall segments). |
+| `1` / `2` / `3` / `4` | Switch `WALL_MODE` (rebuilds wall segments). |
 | `ESC` | Quit. |
 
 ## Physics — pymunk space
@@ -51,11 +51,12 @@ Each shape has a `ball_ref` back-pointer to its `Ball` so callbacks can find pit
 
 ## WALL_MODE
 
-Three modes selected by `1`/`2`/`3` keys, rebuilt via `buildWalls()`:
+Four modes selected by `1`/`2`/`3`/`4` keys, rebuilt via `buildWalls()`:
 
 1. All four walls bounce (default).
-2. Sides wrap, top/floor bounce.
-3. No walls — wrap in both axes.
+2. Sides open (top/floor bounce, x-axis wrap).
+3. Top/floor open (sides bounce, y-axis wrap).
+4. No walls — wrap in both axes.
 
 Walls are `pymunk.Segment` capsules of radius `WALL_THICKNESS=2` sitting **just outside the screen**, so the collision face lines up exactly with the screen edge (e.g. left wall capsule from `x=-2t` to `x=0`, face at `x=0`). Wrap teleporting happens in `Ball.process()` step 6 — pymunk has no native wrapping.
 

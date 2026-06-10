@@ -22,57 +22,70 @@
     user-select: none; -webkit-user-select: none;
     font-family: var(--font);
   }
-  /* Canvas ocupa el espacio ARRIBA de la barra — mismo layout que BallsWeb/TatetiWeb. */
-  #c { display: block; position: absolute; top: 0; left: 0; }
+  /* Canvas a pantalla completa (sin barra inferior) — la UI son botones de esquina + menú en canvas,
+     al estilo CrazyTanks. */
+  #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
 
   #hint {
-    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
-    text-align: center; color: rgba(255,255,255,0.5);
+    position: absolute; bottom: calc(10px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
+    max-width: min(88vw, 480px);
+    background: rgba(10,12,18,0.78); border: 1px solid rgba(255,255,255,0.10);
+    padding: 12px 20px; border-radius: 14px;
+    text-align: center; color: rgba(255,255,255,0.92);
     font-family: 'Segoe UI', system-ui, sans-serif;   /* sans legible para la frase larga */
-    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
-    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
+    pointer-events: none; transition: opacity 0.8s; z-index: 2;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
-  /* Barra inferior — mismo bezel que el resto de los ports. */
-  #bar {
-    position: absolute; left: 0; right: 0; bottom: 0;
-    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
-    padding: 0 16px env(safe-area-inset-bottom);
+  /* ── UI de esquina (estilo CrazyTanks): sin barra inferior; botones chicos camuflados arriba a la
+     derecha. El menú y el setup se operan en el canvas. ── */
+  .cbtn {
+    position: absolute; top: calc(8px + env(safe-area-inset-top));
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.55);
     display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.85);
-    border-top: 1px solid rgba(255,255,255,0.08);
-    z-index: 3;
+    cursor: pointer; touch-action: none; padding: 0; z-index: 10;
+    transition: background 0.1s, transform 0.08s, border-color 0.12s, color 0.12s;
   }
-  #ui { display: flex; gap: 8px; }
-  #ui button {
-    width: 48px; height: 48px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.22);
-    background: rgba(255,255,255,0.08);
-    color: #fff;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none;
-    transition: background 0.1s, transform 0.08s;
-    padding: 0;
-    font-size: 17px; font-weight: 700; letter-spacing: 0.02em;
-  }
-  #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
-  #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
-  #ui #btnReset svg { width: 21px; height: 21px; }
-  /* botón de fuego encendido (tinte naranja) */
-  #ui #btnFire.on { background: rgba(255,140,0,0.30); border-color: rgba(255,150,0,0.6); color: #ffb347; }
+  .cbtn svg { display: block; width: 15px; height: 15px; pointer-events: none; }
+  .cbtn:focus { outline: none; }
+  /* hover SÓLO con mouse real: en touch, :hover se queda "pegado" tras el toque (efecto de último
+     seleccionado). Con (hover: hover) los teléfonos no lo aplican. */
+  @media (hover: hover) { .cbtn:hover { color: #fff; border-color: rgba(120,200,255,0.5); } }
+  .cbtn:active { transform: scale(0.9); }
+  /* cluster derecho, de afuera hacia adentro: ✕ salir · ⓘ info · ⛶ pantalla · ⮌ atrás · ⏸ pausa */
+  #btnExit  { right: calc(8px + env(safe-area-inset-right)); }
+  #btnInfo  { right: calc(46px + env(safe-area-inset-right)); }
+  #btnFull  { right: calc(84px + env(safe-area-inset-right)); }
+  #btnBack  { right: calc(122px + env(safe-area-inset-right)); }
+  #btnPause { right: calc(160px + env(safe-area-inset-right)); }
+  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; }
+  #btnInfo.on     { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+  /* atrás: visible en setup del menú y en partido. pausa: sólo en partido. (clases las pone syncUI) */
+  #btnBack, #btnPause { display: none; }
+  body.canback #btnBack  { display: flex; }
+  body.playing #btnPause { display: flex; }
+  /* ícono fullscreen: expandir / contraer según body.fs-on */
+  #btnFull .ic-exit { display: none; }
+  body.fs-on #btnFull .ic-enter { display: none; }
+  body.fs-on #btnFull .ic-exit  { display: block; }
 
-  /* Pads de control (mobile): dos botones APILADOS (arriba = subir, abajo = bajar), en las
-     esquinas inferiores sobre la barra. padR = jugador 1 (derecha) · padL = jugador 2 (izq, sólo 2P). */
+  /* Pads de control (mobile): dos botones APILADOS (arriba = subir, abajo = bajar), en las esquinas
+     inferiores. Sólo durante el partido y en pantalla táctil. padR = jugador 1 · padL = jugador 2 (2P). */
   .pad {
     position: absolute; z-index: 5; touch-action: none;
-    display: flex; flex-direction: column; gap: 8px;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);   /* pegados al margen inferior, en la esquina */
+    display: none; flex-direction: column; gap: 6px;
+    bottom: calc(env(safe-area-inset-bottom) + 4px);
   }
-  #padL { left: calc(6px + env(safe-area-inset-left)); display: none; }   /* esquina abajo-izquierda (P2, sólo 2P) */
-  body.two #padL { display: flex; }            /* la izquierda sólo aparece en 2 jugadores */
-  #padR { right: calc(6px + env(safe-area-inset-right)); }                /* esquina abajo-derecha (P1) */
+  #padL { left: calc(6px + env(safe-area-inset-left)); }
+  #padR { right: calc(6px + env(safe-area-inset-right)); }
+  body.touch.playing #padR      { display: flex; }   /* jugador 1 siempre */
+  body.touch.playing.two #padL  { display: flex; }   /* jugador 2 sólo en 2P */
   .ctl {
-    width: 128px; height: 68px; border-radius: 16px;
+    width: 124px; height: 50px; border-radius: 16px;
     border: 1px solid rgba(255,255,255,0.2);
     background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.85);
     display: flex; align-items: center; justify-content: center;
@@ -80,29 +93,11 @@
     transition: background 0.08s, transform 0.06s;
   }
   .ctl svg { display: block; width: 32px; height: 32px; pointer-events: none; }
-  .ctl.held { background: rgba(120,200,255,0.30); border-color: rgba(120,200,255,0.6); transform: scale(0.94); }
-
-  /* Info y pantalla completa: botones secundarios. Mismo brillo tenue que el ✕ para camuflarse
-     con el fondo, y pegados al borde INFERIOR de la barra (un nivel más abajo que los del juego). */
-  #btnInfo, #btnFull {
-    width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; align-self: flex-end; margin-bottom: 6px;
-    border: 1px solid rgba(255,255,255,0.16);
-    background: rgba(255,255,255,0.04);
-    color: rgba(255,255,255,0.45);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-  }
-  #btnInfo svg, #btnFull svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnInfo:active, #btnFull:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
-  #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
-  /* Pantalla completa: muestra "expandir" o "contraer" según body.fs-on (igual que CrazyTanks) */
-  #btnFull .ic-exit { display: none; }
-  body.fs-on #btnFull .ic-enter { display: none; }
-  body.fs-on #btnFull .ic-exit  { display: block; }
-  /* Embebido en la shell del Arcade: el fullscreen lo maneja la shell (toggearlo acá rompe el
-     calce de la rotación CSS y reaparece la barra/cámara). Lo ocultamos; queda en la web suelta. */
-  body.embedded #btnFull { display: none; }
+  /* al apretar, el relleno toma el color de la paleta que controla: derecha = jugador 1 (cian),
+     izquierda = jugador 2 (magenta, sólo 2P). */
+  .ctl.held { transform: scale(0.94); }
+  #padR .ctl.held { background: rgba(90,225,255,0.30);  border-color: rgba(90,225,255,0.6); }
+  #padL .ctl.held { background: rgba(255,95,205,0.30); border-color: rgba(255,95,205,0.6); }
 
   /* Aviso de orientación: Pong se juega en HORIZONTAL. Se muestra (vía JS) cuando la pantalla está vertical. */
   #rotate {
@@ -115,56 +110,31 @@
   #rotate p { font-size: 18px; letter-spacing: 0.05em; line-height: 1.6; }
   @keyframes rotatehint { 0%, 55%, 100% { transform: rotate(0deg); } 25%, 40% { transform: rotate(-90deg); } }
 
-  /* Exit (✕) — botón secundario. Mismo brillo tenue que ⛶/ⓘ (camuflado con el fondo) y
-     pegado al borde INFERIOR de la barra (un nivel más abajo que los del juego). */
-  #btnExit {
-    width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; align-self: flex-end; margin-bottom: 6px;
-    border: 1px solid rgba(255,255,255,0.16);
-    background: rgba(255,255,255,0.04);
-    color: rgba(255,255,255,0.45);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-  }
-  #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
-
-  /* Barra centralizada: TODO en una fila centrada — ✕ · botones de juego · ⛶ · ⓘ.
-     (#bar ya es flex con justify-content:center arriba; sólo agregamos separación.) */
-  #bar { gap: 8px; }
-
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">▲ sube · ▼ baja · botones: jugadores · puntos · fuego · pausa</div>
-  <div id="bar">
-  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+  <div id="hint">tocá una opción del menú · en partido: ↑/↓ (W/S en 2P)</div>
+
+  <!-- UI de esquina (estilo CrazyTanks), de afuera hacia adentro: salir · info · pantalla · atrás · pausa -->
+  <button class="cbtn" id="btnExit" aria-label="salir" title="Salir">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
-<div id="ui">
-      <button id="btnMode"  aria-label="jugadores" title="1 / 2 jugadores">1P</button>
-      <button id="btnPoints" aria-label="puntos"   title="Puntos para ganar">10</button>
-      <button id="btnFire"  aria-label="fuego"     title="Modo fuego">
-        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2c1 3-1 4.5-2.2 6C8.4 9.6 8 11 8 12.5 8 9 6.5 8 6.5 8 5.2 9.6 4 11.4 4 14a8 8 0 0 0 16 0c0-3.6-2.4-6-4.2-8.2C13.7 3.6 13 2.8 12 2zm0 17a3.2 3.2 0 0 1-3.2-3.2c0-1.8 1.3-2.8 2-4 .9 1.1 2 1.8 2.6 3 .3.6.4 1 .4 1.4A2.9 2.9 0 0 1 12 19z"/></svg>
-      </button>
-      <button id="btnPause" aria-label="pausa"     title="Pausa">
-        <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
-      </button>
-      <button id="btnReset" aria-label="reiniciar" title="Reiniciar partida">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
-      </button>
-    </div>
-    <button id="btnFull" aria-label="pantalla completa" title="Pantalla completa">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
-    </button>
-    <button id="btnInfo" aria-label="info" title="Info">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
-    </button>
-  </div>
+  <button class="cbtn" id="btnInfo" aria-label="info" title="Info (FPS)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <button class="cbtn" id="btnFull" aria-label="pantalla completa" title="Pantalla completa">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+  </button>
+  <button class="cbtn" id="btnBack" aria-label="atrás" title="Atrás / salir al menú">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg>
+  </button>
+  <button class="cbtn" id="btnPause" aria-label="pausa" title="Pausa">
+    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+  </button>
 
-  <!-- Controles, alineados a los extremos de la barra (no centrados con los botones de juego).
-       izq sube · der baja. padR = jugador 1 (derecha) · padL = jugador 2 (izquierda, sólo 2P). -->
+  <!-- Controles de movimiento (mobile, sólo en partido). izq sube · der baja.
+       padR = jugador 1 (derecha) · padL = jugador 2 (izquierda, sólo 2P). -->
   <div class="pad" id="padL" aria-label="control jugador 2">
     <button class="ctl" data-side="L" data-dir="up" aria-label="subir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg></button>
     <button class="ctl" data-side="L" data-dir="dn" aria-label="bajar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg></button>
@@ -218,40 +188,66 @@
   const FIRE_SPIN_DIV   = 2.8;     // english extra en llamas
   const SLOW_PADDLE_FRAC= 0.25;    // si |velPaleta| < esto (H/s) → amansa el ángulo (vy ×0.5)
 
-  const FIRE_STREAK     = 3;       // racha para prenderse fuego
+  const FIRE_STREAK     = 2;       // racha para prenderse fuego
   const SERVE_DELAY     = 0.7;     // pausa (s) antes de lanzar el saque
 
   // IA (modo 1 jugador) — juega con intención: predice el rebote, se posiciona y "tira" angulando
   // la pelota lejos del rival. Buena pero no perfecta (error de puntería + despistes ocasionales).
-  const AI_SPEED_MULT   = 0.98;    // velocidad de la CPU vs el jugador (<1 = un poco más lenta)
-  const AI_ERROR_FRAC   = 0.06;    // error de puntería (fracción de H) que se suma al objetivo
-  const AI_REACT_FRAC   = 0.80;    // reacciona apenas la pelota cruza esta fracción de W hacia ella (proactiva)
-  const AI_FLICK_TIME   = 0.18;    // seg antes del impacto en que empieza a "barrer" la paleta para angular el tiro
-  const AI_AIM_FRAC     = 0.30;    // durante el barrido, cuánto se permite alejar del punto de impacto (fracción de paleta) → sigue cubriendo la pelota
-  const AI_MIX_CHANCE   = 0.30;    // a veces apunta al lado random en vez de lejos del rival (impredecible)
-  // Ciclos de juego: alterna períodos "smart" (predice + angula) con períodos "dumb" (juega mal, como
-  // el failtest del Pong original). El timer garantiza que cada tanto baje el nivel → humana y ganable.
-  const AI_SMART_MIN    = 2.5;     // duración (s) mínima de un período bueno
-  const AI_SMART_MAX    = 5.0;     // máxima → pasado esto SIEMPRE entra a un período malo
-  const AI_DUMB_MIN     = 0.7;     // duración (s) de un período malo
-  const AI_DUMB_MAX     = 1.8;
-  const AI_DUMB_SPEED   = 0.55;    // qué tan lenta se vuelve durante un período malo
-  const AI_DUMB_DEADZONE= 0.11;    // dead-zone (fracción de H): en período malo sólo se mueve si la pelota está lejos
-  const AI_IDLE_AMP     = 0.045;   // amplitud del vaivén suave (fracción de min(W,H)) para no quedarse muerta
-  const AI_IDLE_FREQ    = 2.2;     // velocidad del vaivén suave (rad/s)
-  // Siesta: cada tanto la IA se queda LITERALMENTE dormida sin moverse. Sobreescribe el movimiento,
-  // pero el resto de la lógica (ciclos, predicción) sigue procesándose por debajo.
-  const AI_AWAKE_MIN    = 4.0;     // seg despierta entre siestas
-  const AI_AWAKE_MAX    = 9;
-  const AI_SLEEP_MIN    = 0.8;     // duración de la siesta (no hace NADA)
-  const AI_SLEEP_MAX    = 2.0;
+  // AI_BASE = valores de la CPU "equilibrada" (magenta). Cada contrincante (OPPONENTS, abajo) parte
+  // de acá y pisa algunas claves para tener una PERSONALIDAD distinta. La config efectiva vive en `A`.
+  const AI_BASE = {
+    SPEED_MULT:   0.98,   // velocidad de la CPU vs el jugador (<1 = un poco más lenta)
+    ERROR_FRAC:   0.06,   // error de puntería (fracción de H) que se suma al objetivo
+    REACT_FRAC:   0.80,   // reacciona apenas la pelota cruza esta fracción de W hacia ella (proactiva)
+    FLICK_TIME:   0.18,   // seg antes del impacto en que empieza a "barrer" la paleta para angular el tiro
+    AIM_FRAC:     0.30,   // durante el barrido, cuánto se permite alejar del punto de impacto (fracción de paleta)
+    MIX_CHANCE:   0.30,   // a veces apunta al lado random en vez de lejos del rival (impredecible)
+    SMART_MIN:    2.5,    // duración (s) mínima de un período bueno (predice + angula)
+    SMART_MAX:    5.0,    // máxima → pasado esto SIEMPRE entra a un período "dumb" (juega mal, como el original)
+    DUMB_MIN:     0.7,    // duración (s) de un período malo
+    DUMB_MAX:     1.8,
+    DUMB_SPEED:   0.55,   // qué tan lenta se vuelve durante un período malo
+    DUMB_DEADZONE:0.11,   // dead-zone (fracción de H): en período malo sólo se mueve si la pelota está lejos
+    IDLE_AMP:     0.045,  // amplitud del vaivén suave (fracción de min(W,H)) para no quedarse muerta
+    IDLE_FREQ:    2.2,    // velocidad del vaivén suave (rad/s)
+    AWAKE_MIN:    4.0,    // seg despierta entre siestas (se queda LITERALMENTE dormida sin moverse)
+    AWAKE_MAX:    9,
+    SLEEP_MIN:    0.8,    // duración de la siesta
+    SLEEP_MAX:    2.0,
+  };
+  // Contrincantes (modo 1 jugador): color de la paleta + overrides de IA → cada uno juega distinto.
+  // glow = color del resplandor (para el negro, que es oscuro, usa un gris claro para que se vea).
+  const OPPONENTS = [
+    // Magenta — equilibrada (la de siempre): sin overrides.
+    { name: 'Magenta', letter: 'M', col: [255, 95, 205], glow: [255, 95, 205], ai: {} },
+    // Verde — agresiva/tryhard: rápida, precisa, reacciona temprano, angula mucho, casi no se despista ni duerme.
+    { name: 'Verde', letter: 'V', col: [80, 230, 140], glow: [90, 245, 150], ai: {
+      SPEED_MULT: 1.08, ERROR_FRAC: 0.025, REACT_FRAC: 0.92, MIX_CHANCE: 0.45, FLICK_TIME: 0.22,
+      SMART_MIN: 4, SMART_MAX: 7, DUMB_MIN: 0.4, DUMB_MAX: 0.9, DUMB_SPEED: 0.7,
+      AWAKE_MIN: 8, AWAKE_MAX: 14, SLEEP_MIN: 0.4, SLEEP_MAX: 0.9 } },
+    // Negro — el muro/defensivo: muy precisa posicionándose pero casi nunca angula (devuelve plano), no duerme.
+    { name: 'Negro', letter: 'N', col: [58, 60, 76], glow: [185, 195, 215], ai: {
+      SPEED_MULT: 1.05, ERROR_FRAC: 0.02, REACT_FRAC: 0.95, MIX_CHANCE: 0.05, FLICK_TIME: 0.10, AIM_FRAC: 0.18,
+      SMART_MIN: 6, SMART_MAX: 10, DUMB_MIN: 0.3, DUMB_MAX: 0.6, DUMB_SPEED: 0.8, IDLE_AMP: 0.02,
+      AWAKE_MIN: 14, AWAKE_MAX: 22, SLEEP_MIN: 0.3, SLEEP_MAX: 0.6 } },
+    // Amarillo — errático/payaso: tira para cualquier lado, mucho vaivén, se despista y duerme seguido. Fácil/gracioso.
+    { name: 'Amarillo', letter: 'A', col: [255, 225, 70], glow: [255, 235, 90], ai: {
+      SPEED_MULT: 0.95, ERROR_FRAC: 0.09, MIX_CHANCE: 0.7, IDLE_AMP: 0.09, IDLE_FREQ: 3.2,
+      SMART_MIN: 1.5, SMART_MAX: 3, DUMB_MIN: 1.2, DUMB_MAX: 2.6, DUMB_SPEED: 0.45,
+      AWAKE_MIN: 2.5, AWAKE_MAX: 5, SLEEP_MIN: 1.0, SLEEP_MAX: 2.2 } },
+    // Celeste — principiante tranquilo: lenta, reacciona tarde, error grande, dead-zone amplia. Fácil.
+    { name: 'Celeste', letter: 'C', col: [120, 210, 255], glow: [140, 220, 255], ai: {
+      SPEED_MULT: 0.85, ERROR_FRAC: 0.11, REACT_FRAC: 0.62, FLICK_TIME: 0.12, MIX_CHANCE: 0.2,
+      DUMB_DEADZONE: 0.16, DUMB_SPEED: 0.4, SMART_MIN: 2, SMART_MAX: 4, DUMB_MIN: 1.0, DUMB_MAX: 2.2,
+      AWAKE_MIN: 3.5, AWAKE_MAX: 7, SLEEP_MIN: 1.0, SLEEP_MAX: 2.0 } },
+  ];
   const SCORE_LABELS    = ['5', '10', '20', '40', '∞'];
   const WIN_POINTS      = [5, 10, 20, 40, null];   // null = práctica (sin fin)
 
   // ── ESTADO ──
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
-  const barEl = document.getElementById('bar');
+  let bgCanvas = null;             // fondo estático (gradiente + grilla) horneado una vez por resize y blitteado
   let W = 0, H = 0, dpr = 1;
   let portrait = false;   // true = pantalla vertical → se muestra el aviso y se congela el juego (Pong va en horizontal)
 
@@ -259,17 +255,39 @@
   let twoPlayers = false;          // false = 1 jugador (CPU paleta izq)
   let ptsIdx = 1;                  // índice en WIN_POINTS (arranca en 10)
   let fireEnabled = true;
+  let oppIdx = 0;                  // contrincante elegido (índice en OPPONENTS) — sólo importa en 1 jugador
+  let A = { ...AI_BASE };          // config de IA efectiva del contrincante actual
+  function applyOpponent() { A = { ...AI_BASE, ...OPPONENTS[oppIdx].ai }; }
+
+  // DESAFÍO: jugás 1 game (a 10) contra cada rival en orden fácil → difícil. Ganás → siguiente; perdés → fin.
+  let challenge = false, challengeIdx = 0;
+  const CHALLENGE_ORDER = [3, 4, 0, 1, 2];   // Amarillo → Celeste → Magenta → Verde → Negro
 
   // match
-  let state = 'play';              // 'play' | 'paused' | 'over'
+  let state = 'menu';              // 'menu' | 'play' | 'paused' | 'over'
+  let menulevel = 0;               // 0 = elegir modo · 1 = setup (rival/puntos/fuego)
+  let menuOption = 0;              // fila seleccionada dentro del nivel actual
+  let confirmQuit = false;         // overlay "¿salir al menú?" durante el partido
   let winner = 0;                  // 1 = jug.1 (der), 2 = jug.2 (izq)
   let j1score = 0, j2score = 0;
   let j1racha = 0, j2racha = 0;
+  let j1pulse = 0, j2pulse = 0;    // 1→0: "golpe" visual del marcador al sumar (se nota el punto)
   let showDebug = false;
 
-  // paletas (cy = centro vertical en px, vel = velocidad px/s)
-  const right = { cy: 0, vel: 0, onFire: false };  // jugador 1
-  const left  = { cy: 0, vel: 0, onFire: false };  // jugador 2 / CPU
+  // paletas (cy = centro vertical en px, vel = velocidad px/s). freezeT/powerFireT: timers de powers (modo ladrillos)
+  const right = { cy: 0, vel: 0, onFire: false, freezeT: 0, powerFireT: 0 };  // jugador 1
+  const left  = { cy: 0, vel: 0, onFire: false, freezeT: 0, powerFireT: 0 };  // jugador 2 / CPU
+
+  // ── MODO LADRILLOS (Pong + Breakout) ──
+  let bricksMode = false;
+  let balls = [];                  // varias bolas: {x,y,vx,vy,fire,last,trail,px,py,rx,ry,delay}
+  let bricks = [];                 // ladrillos sobre la red: {x,y,w,h,power}
+  let drops = [];                  // tokens de poder que caen al lado del que rompió: {x,y,vx,vy,type,side,windup,trail}
+  const BRICK_BALLS = 3;           // bolas simultáneas al arrancar
+  const BRICK_BALLS_MAX = 6;       // tope (con el power de bola extra)
+  const BRICK_SPEED = 0.72;        // las bolas van un poco más lentas en este modo
+  const BRICK_POWER_CHANCE = 0.3;  // proba de que un ladrillo sea "con poder" (marcado en dorado)
+  const BRICK_ROWS = 9;            // ladrillos apilados a lo largo de toda la red
 
   // pelota
   let bx = 0, by = 0, bvx = 0, bvy = 0, serveCD = 0;
@@ -296,6 +314,10 @@
   const NEON_BALL = [195, 245, 255];       // pelota
   const NEON_GRID = [70, 140, 210];        // grilla de fondo
   const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a == null ? 1 : a})`;
+  // color efectivo de la paleta izquierda: en 2P es el jugador 2 (magenta); en 1P, el contrincante elegido.
+  // `glow` puede diferir del cuerpo (p.ej. el negro tiene cuerpo oscuro pero resplandor gris claro).
+  const leftCol  = () => twoPlayers ? NEON_P2 : OPPONENTS[oppIdx].col;
+  const leftGlow = () => twoPlayers ? NEON_P2 : OPPONENTS[oppIdx].glow;
 
   // ── GETTERS DE GEOMETRÍA (dependientes de la resolución actual) ──
   const paddleH = () => Math.min(PADDLE_H_FRAC * H, PADDLE_H_MAX_FRAC * Math.min(W, H));
@@ -334,8 +356,8 @@
   }
 
   function scorePoint(scorer) {
-    if (scorer === 1) { j1score++; j1racha++; j2racha = 0; }
-    else              { j2score++; j2racha++; j1racha = 0; }
+    if (scorer === 1) { j1score++; j1racha++; j2racha = 0; j1pulse = 1; }
+    else              { j2score++; j2racha++; j1racha = 0; j2pulse = 1; }
     fireball = false; firetrail = false; fireTop = false; fireBot = false; fireNet = false;
     updateFireStates();
     const cond = WIN_POINTS[ptsIdx];
@@ -351,7 +373,7 @@
   // ── FÍSICA ──
   function updatePaddle(p, dt, isCPU, isRight) {
     let maxSpd = paddleSpeed() * (p.onFire ? FIRE_SPEED_MULT : 1);
-    if (isCPU) maxSpd *= AI_SPEED_MULT * aiSpeedScale;
+    if (isCPU) maxSpd *= A.SPEED_MULT * aiSpeedScale;
     if (isCPU && aiSleeping) { p.vel = 0; return; }   // dormida: no hace NADA (sobreescribe el resto)
     if (isCPU) {
       if (aiFlickVel !== 0) {
@@ -360,7 +382,7 @@
         // paleta esté en movimiento en el contacto → la pelota sale angulada (no plana).
         p.vel = aiFlickVel;
         p.cy += p.vel * dt;
-        const span = paddleH() * AI_AIM_FRAC;
+        const span = paddleH() * A.AIM_FRAC;
         p.cy = clampN(p.cy, aiBaseY - span, aiBaseY + span);
       } else {
         // CPU posicionándose: persigue aiTarget
@@ -414,7 +436,7 @@
 
   // vaivén suave (seno) para que la paleta respire sin teletransportarse — amplitud chica.
   function idleSway() {
-    return Math.sin(performance.now() / 1000 * AI_IDLE_FREQ) * AI_IDLE_AMP * Math.min(W, H);
+    return Math.sin(performance.now() / 1000 * A.IDLE_FREQ) * A.IDLE_AMP * Math.min(W, H);
   }
 
   function updateAI(dt) {
@@ -424,49 +446,49 @@
     aiSleepCD -= dt;
     if (aiSleepCD <= 0) {
       aiSleeping = !aiSleeping;
-      aiSleepCD = aiSleeping ? rnd(AI_SLEEP_MIN, AI_SLEEP_MAX) : rnd(AI_AWAKE_MIN, AI_AWAKE_MAX);
+      aiSleepCD = aiSleeping ? rnd(A.SLEEP_MIN, A.SLEEP_MAX) : rnd(A.AWAKE_MIN, A.AWAKE_MAX);
     }
 
     // CICLO bueno/malo: el timer fuerza un período "dumb" cada tanto (juega mal como el original).
     aiModeCD -= dt;
     if (aiModeCD <= 0) {
-      if (aiMode === 'smart') { aiMode = 'dumb';  aiModeCD = rnd(AI_DUMB_MIN, AI_DUMB_MAX); }
-      else                    { aiMode = 'smart'; aiModeCD = rnd(AI_SMART_MIN, AI_SMART_MAX); }
+      if (aiMode === 'smart') { aiMode = 'dumb';  aiModeCD = rnd(A.DUMB_MIN, A.DUMB_MAX); }
+      else                    { aiMode = 'smart'; aiModeCD = rnd(A.SMART_MIN, A.SMART_MAX); }
     }
     aiFlickVel = 0;
 
     if (aiMode === 'dumb') {
       // PERÍODO MALO: no predice, sigue la y ACTUAL de la pelota con dead-zone y lento, sin angular.
       // Contra una pelota que rebota llega tarde/al lugar equivocado → pierde puntos, bien humano.
-      aiSpeedScale = AI_DUMB_SPEED;
+      aiSpeedScale = A.DUMB_SPEED;
       aiWasApproaching = false;
-      if (bvx < 0 && Math.abs(by - left.cy) > AI_DUMB_DEADZONE * H) aiTarget = by;
+      if (bvx < 0 && Math.abs(by - left.cy) > A.DUMB_DEADZONE * H) aiTarget = by;
       else aiTarget = left.cy + idleSway();                  // si no, se queda (apenas respira)
       return;
     }
 
     // PERÍODO BUENO
     aiSpeedScale = 1;
-    const approaching = bvx < 0 && bx < W * AI_REACT_FRAC;   // viene y ya cruzó el umbral de reacción
+    const approaching = bvx < 0 && bx < W * A.REACT_FRAC;   // viene y ya cruzó el umbral de reacción
     if (approaching) {
       // al empezar un intercambio entrante, elige hacia dónde devolver: lejos del rival (intención),
       // con una chance de tirar al azar para no ser predecible.
       if (!aiWasApproaching) {
         aiAimDir = right.cy < H / 2 ? 1 : -1;                // rival arriba → manda abajo (y viceversa)
-        if (Math.random() < AI_MIX_CHANCE) aiAimDir = Math.random() < 0.5 ? -1 : 1;
-        aiError = rnd(-1, 1) * AI_ERROR_FRAC * Math.min(W, H);  // sesgo de puntería fijo para este intercambio
+        if (Math.random() < A.MIX_CHANCE) aiAimDir = Math.random() < 0.5 ? -1 : 1;
+        aiError = rnd(-1, 1) * A.ERROR_FRAC * Math.min(W, H);  // sesgo de puntería fijo para este intercambio
       }
       aiWasApproaching = true;
       const pred = predictBallY();
       aiBaseY = (pred == null ? by : pred) + aiError;
       const faceX = leftX() + paddleW() + ballR();
       const tHit = Math.max(0, (bx - faceX) / Math.abs(bvx || 1));
-      const span = paddleH() * AI_AIM_FRAC;
-      if (tHit < AI_FLICK_TIME && Math.abs(left.cy - aiBaseY) <= span) {
+      const span = paddleH() * A.AIM_FRAC;
+      if (tHit < A.FLICK_TIME && Math.abs(left.cy - aiBaseY) <= span) {
         // YA posicionada y a punto de pegar: BARRE la paleta a velocidad fija en la dirección del tiro.
         // Como el spin sale de la velocidad de la paleta, la pelota sale angulada y fuerte (no plana).
         // Sólo si ya llegó: si está lejos, sigue persiguiendo (abajo) — sin teletransporte.
-        aiFlickVel = aiAimDir * paddleSpeed() * AI_SPEED_MULT;
+        aiFlickVel = aiAimDir * paddleSpeed() * A.SPEED_MULT;
       } else {
         aiTarget = aiBaseY;                                  // posicionarse (si no llega a tiempo, pierde: justo)
       }
@@ -502,7 +524,7 @@
     bvy += p.vel / SPIN_DIV;
     bvx = clampN(bvx, -vxMax(), vxMax());
     // chispas en el color de la paleta (naranja si está en llamas)
-    const col = p.onFire ? [255, 170, 40] : (isRight ? NEON_P1 : NEON_P2);
+    const col = p.onFire ? [255, 170, 40] : (isRight ? NEON_P1 : leftGlow());
     burst(bx, by, col, 12, Math.min(W, H) * 0.6, ballR() * 0.5, 0.4);
   }
 
@@ -531,14 +553,292 @@
     else if (bx + r < 0) scorePoint(1); // sale por la izquierda → falló jug.2 → punto jug.1
   }
 
+  // ════════════ MODO LADRILLOS ════════════
+  // Varias bolas + un clúster de ladrillos en el centro. Romper un ladrillo suma 1 punto al ÚLTIMO que
+  // tocó esa bola y le da un power al azar. Gana por puntos totales (a 10), no por goles: las bolas que
+  // se van por un lado reaparecen sin sumar. 1 jugador (der) contra la CPU (izq).
+  function makeBall(dir) {
+    const r = ballR();
+    return { x: W / 2, y: rnd(r, H - r), vx: dir * VX0_FRAC * W * rnd(0.8, 1.1) * BRICK_SPEED,
+             vy: rnd(-1, 1) * VY0_FRAC * H * 0.6 * BRICK_SPEED, fire: false, last: 0,
+             trail: [], px: W / 2, py: H / 2, rx: W / 2, ry: H / 2, entry: 0 };
+  }
+  function respawnBall(b) {
+    const r = ballR();
+    b.x = W / 2; b.y = rnd(r, H - r);
+    b.vx = (Math.random() < 0.5 ? -1 : 1) * VX0_FRAC * W * rnd(0.8, 1.1) * BRICK_SPEED;
+    b.vy = rnd(-1, 1) * VY0_FRAC * H * 0.6 * BRICK_SPEED;
+    b.fire = false; b.last = 0; b.trail.length = 0; b.px = b.x; b.py = b.y; b.entry = 0;
+  }
+  function setupBricks() {
+    bricks = [];
+    const bw = W * 0.026, gap = H * 0.012;            // compacto: poco espacio entre ladrillos
+    const top = H * 0.05, avail = H * 0.9;            // a lo largo de casi toda la red
+    const bh = (avail - (BRICK_ROWS - 1) * gap) / BRICK_ROWS;
+    const x = W / 2 - bw / 2;
+    for (let i = 0; i < BRICK_ROWS; i++) {
+      // power = null (normal) | 'fire' (naranja) | 'ball' (cian). El color del ladrillo ya anticipa el token.
+      const power = Math.random() < BRICK_POWER_CHANCE ? (Math.random() < 0.5 ? 'fire' : 'ball') : null;
+      bricks.push({ x, y: top + i * (bh + gap), w: bw, h: bh, power });
+    }
+  }
+  function startBricks() {
+    bricksMode = true; challenge = false; twoPlayers = false; ptsIdx = 1;   // a 10 puntos
+    oppIdx = 0; applyOpponent();
+    j1score = 0; j2score = 0;
+    right.cy = left.cy = H / 2; right.vel = left.vel = 0;
+    right.onFire = left.onFire = false;
+    right.freezeT = left.freezeT = 0; right.powerFireT = left.powerFireT = 0;
+    fireball = false; fireTop = fireBot = fireNet = false;
+    setupBricks();
+    balls = []; for (let i = 0; i < BRICK_BALLS; i++) balls.push(makeBall(i % 2 ? -1 : 1));
+    drops = [];
+    winner = 0; confirmQuit = false; state = 'play';
+    embers.length = 0; sparks.length = 0;
+    syncUI();
+  }
+  // CPU: persigue la bola entrante más cercana (reusa el "chase" de updatePaddle vía aiTarget).
+  function bricksAI() {
+    aiSleeping = false; aiFlickVel = 0; aiSpeedScale = 1;
+    let best = null, bestX = Infinity;
+    for (const b of balls) if (b.vx < 0 && b.x < bestX) { bestX = b.x; best = b; }
+    aiTarget = best ? best.y + rnd(-1, 1) * A.ERROR_FRAC * Math.min(W, H) * 0.5 : H / 2;
+  }
+  function stepBricks(dt) {
+    for (const p of [right, left]) {
+      if (p.freezeT > 0) p.freezeT -= dt;
+      if (p.powerFireT > 0) { p.powerFireT -= dt; p.onFire = p.powerFireT > 0; }
+    }
+    bricksAI();
+    updatePaddle(right, dt, false, true);
+    updatePaddle(left, dt, true, false);
+    for (const b of balls) { b.px = b.x; b.py = b.y; stepBall(b, dt); }
+  }
+  function stepBall(b, dt) {
+    const r = ballR();
+    if (b.entry > 0) {                                   // dash diagonal de entrada (rápido); al terminar normaliza
+      b.entry -= dt;
+      if (b.entry <= 0) {
+        const target = VX0_FRAC * W * BRICK_SPEED, sp = Math.hypot(b.vx, b.vy) || 1;
+        b.vx *= target / sp; b.vy *= target / sp;        // misma dirección, velocidad del modo
+      }
+    }
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    b.trail.push({ x: b.x, y: b.y }); if (b.trail.length > 16) b.trail.shift();
+    if (b.y > H - r) { b.y = H - r; b.vy = -Math.abs(b.vy) * WALL_ACCEL; }
+    if (b.y < r)     { b.y = r;     b.vy =  Math.abs(b.vy) * WALL_ACCEL; }
+    paddleHitBall(b, right, true);
+    paddleHitBall(b, left, false);
+    if (b.entry <= 0) b.vy = clampN(b.vy, -vyMax() * BRICK_SPEED, vyMax() * BRICK_SPEED);   // no frenar el dash
+    for (const k of bricks) if (b.x + r > k.x && b.x - r < k.x + k.w && b.y + r > k.y && b.y - r < k.y + k.h) { breakBrick(k, b); break; }
+    // gol: si la bola sale por un lado, punto para el RIVAL (sin power) y reaparece. NO corta la ronda:
+    // la ronda sólo termina cuando alguien llega al total de puntos.
+    if (b.x - r > W)      { addBrickPoint(2); respawnBall(b); }   // salió por la derecha → punto jug.2
+    else if (b.x + r < 0) { addBrickPoint(1); respawnBall(b); }   // salió por la izquierda → punto jug.1
+  }
+  function paddleHitBall(b, p, isRight) {
+    const pw = paddleW(), ph = paddleH(), r = ballR();
+    const px = isRight ? rightX() : leftX();
+    const movingInto = isRight ? b.vx > 0 : b.vx < 0;
+    if (!movingInto) return;
+    if (!(b.x + r > px && b.x - r < px + pw)) return;
+    if (!(b.y + r > p.cy - ph / 2 && b.y - r < p.cy + ph / 2)) return;
+    b.x = isRight ? px - r : px + pw + r;
+    b.vx = -b.vx * BOUNCE_ACCEL;
+    b.vy += p.vel / SPIN_DIV;
+    if (p.onFire) { b.vx *= FIRE_BALL_MULT; b.fire = true; }
+    b.vx = clampN(b.vx, -vxMax() * BRICK_SPEED, vxMax() * BRICK_SPEED);
+    b.vy = clampN(b.vy, -vyMax() * BRICK_SPEED, vyMax() * BRICK_SPEED);
+    b.last = isRight ? 1 : 2;                            // quién tocó por última vez (para el punto/power)
+    const col = p.onFire ? [255, 170, 40] : (isRight ? NEON_P1 : leftGlow());
+    burst(b.x, b.y, col, 8, Math.min(W, H) * 0.5, r * 0.5, 0.35);
+  }
+  function breakBrick(k, b) {
+    // reflejar la bola por el lado de menor penetración
+    const r = ballR(), cx = k.x + k.w / 2, cy = k.y + k.h / 2;
+    const dx = b.x - cx, dy = b.y - cy;
+    const penX = (k.w / 2 + r) - Math.abs(dx), penY = (k.h / 2 + r) - Math.abs(dy);
+    if (penX < penY) { b.x += (dx < 0 ? -1 : 1) * penX; b.vx = (dx < 0 ? -1 : 1) * Math.abs(b.vx); }
+    else             { b.y += (dy < 0 ? -1 : 1) * penY; b.vy = (dy < 0 ? -1 : 1) * Math.abs(b.vy); }
+    const bcol = k.power === 'fire' ? [255, 150, 40] : k.power === 'ball' ? [120, 220, 255] : [150, 210, 255];
+    burst(cx, cy, bcol, 18, Math.min(W, H) * 0.7, r * 0.6, 0.5);
+    bricks.splice(bricks.indexOf(k), 1);
+    // los ladrillos NO suman puntos (eso es sólo por goles). El de color SUELTA un token (fuego/bola)
+    // que cae hacia el lado del que la tocó — hay que atraparlo con la paleta.
+    if ((b.last === 1 || b.last === 2) && k.power) spawnDrop(cx, cy, b.last, k.power);
+    if (!bricks.length) setupBricks();                  // reaparece la columna → la ronda sigue
+  }
+  function addBrickPoint(scorer) {
+    if (scorer === 1) { j1score++; j1pulse = 1; } else { j2score++; j2pulse = 1; }
+    const cond = WIN_POINTS[ptsIdx];
+    if (cond != null && (j1score >= cond || j2score >= cond)) { winner = scorer; state = 'over'; }
+  }
+  // ── DROPS DE PODER (hay que atraparlos con la paleta) ──
+  const dropR = () => Math.max(9, Math.min(W, H) * 0.022);
+  function spawnDrop(x, y, side, type) {                 // side = quién rompió (1 der / 2 izq); type del ladrillo
+    const dir = side === 1 ? 1 : -1;                     // cae hacia el lado del que rompió
+    drops.push({ x, y, vx: dir * W * 0.16, vy: rnd(-1, 1) * H * 0.04, type, side, windup: 0.45, trail: [] });
+  }
+  function updateDrops(dt) {
+    const r = dropR();
+    for (let i = drops.length - 1; i >= 0; i--) {
+      const d = drops[i];
+      if (d.windup > 0) { d.windup -= dt; continue; }    // anticipación: quieto/pulsando antes de salir
+      d.trail.push({ x: d.x, y: d.y }); if (d.trail.length > 10) d.trail.shift();
+      d.x += d.vx * dt; d.y += d.vy * dt;
+      if (d.y < r) { d.y = r; d.vy = Math.abs(d.vy); }
+      if (d.y > H - r) { d.y = H - r; d.vy = -Math.abs(d.vy); }
+      const p = d.side === 1 ? right : left, pw = paddleW(), ph = paddleH();
+      const px = d.side === 1 ? rightX() : leftX();
+      const reached = d.side === 1 ? d.x + r >= px : d.x - r <= px + pw;   // llegó al plano de la paleta
+      if (reached) {
+        if (d.y + r > p.cy - ph / 2 && d.y - r < p.cy + ph / 2) {          // ¡atrapado!
+          applyDrop(d.side, d.type);
+          burst(d.x, d.y, d.type === 'fire' ? [255, 170, 40] : [120, 220, 255], 14, Math.min(W, H) * 0.6, r * 0.5, 0.4);
+          drops.splice(i, 1); continue;
+        }
+      }
+      if (d.x < -r * 3 || d.x > W + r * 3) drops.splice(i, 1);             // se pasó de largo → perdido
+    }
+  }
+  function applyDrop(side, type) {
+    const self = side === 1 ? right : left;
+    if (type === 'fire') { self.powerFireT = 10; return; }   // paleta en llamas 10s
+    // bola extra: sale de TU lado hacia el rival con un DASH DIAGONAL rápido (animación de entrada),
+    // sin importar dónde esté la paleta. Tras el dash se normaliza a la velocidad del modo.
+    if (balls.length >= BRICK_BALLS_MAX) return;
+    const dir = side === 1 ? -1 : 1, r = ballR();
+    const nb = makeBall(dir);
+    nb.x = side === 1 ? rightX() - r * 2 : leftX() + paddleW() + r * 2;
+    nb.y = self.cy;
+    const fast = VX0_FRAC * W * 2.0 * BRICK_SPEED;          // dash: ~2× la velocidad normal
+    nb.vx = dir * fast;
+    nb.vy = (Math.random() < 0.5 ? -1 : 1) * fast * 0.85;   // fuerte componente vertical → diagonal + rebote
+    nb.last = side; nb.entry = 0.34;                        // dura el dash; al terminar se normaliza
+    nb.px = nb.x; nb.py = nb.y; nb.rx = nb.x; nb.ry = nb.y;
+    balls.push(nb);
+  }
+  function emitFireBricks() {
+    const r = ballR(), s = Math.min(W, H);
+    for (const [p, isR] of [[right, true], [left, false]]) {
+      if (!p.onFire) continue;
+      const pw = paddleW(), cx = (isR ? rightX() : leftX()) + pw / 2, ph = paddleH();
+      if (Math.random() < 0.6) spawnEmber(cx + rnd(-1, 1) * pw * 0.4, p.cy + rnd(-ph / 2, ph / 2),
+        rnd(-1, 1) * s * 0.05, -rnd(s * 0.1, s * 0.3), rnd(0.3, 0.6), rnd(pw * 0.5, pw * 1.2), 2);
+    }
+    for (const b of balls) {
+      if (!b.fire) continue;
+      for (let i = 0; i < 2; i++) spawnEmber(b.x + rnd(-r, r) * 0.6, b.y + rnd(-r, r) * 0.6,
+        -b.vx * 0.12 + rnd(-1, 1) * s * 0.2, -b.vy * 0.12 + rnd(-1, 1) * s * 0.2,
+        rnd(0.2, 0.5), rnd(r * 0.4, r * 0.8), 0);
+    }
+  }
+  function drawBricks() {
+    const s = Math.min(W, H), t = performance.now() / 1000;
+    for (const k of bricks) {
+      const rr = Math.min(k.w, k.h) * 0.25;
+      ctx.save();
+      if (k.power) {
+        // ladrillo CON PODER: color según el token que suelta (naranja=fuego, cian=bola), con glow y
+        // un núcleo que pulsa → se ve qué da antes de romperlo.
+        const pul = 0.6 + 0.4 * Math.sin(t * 5);
+        const col = k.power === 'fire' ? [255, 150, 40] : [120, 220, 255];
+        ctx.shadowColor = rgba(col, 0.9); ctx.shadowBlur = s * 0.025 * pul;
+        ctx.fillStyle = rgba(col, 0.22 + 0.14 * pul);
+        roundRect(k.x, k.y, k.w, k.h, rr); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = rgba(col, 0.95); ctx.lineWidth = Math.max(1.5, s * 0.0035);
+        roundRect(k.x, k.y, k.w, k.h, rr); ctx.stroke();
+        ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.45 * pul})`;       // núcleo pulsante (indicador)
+        ctx.beginPath(); ctx.arc(k.x + k.w / 2, k.y + k.h / 2, Math.min(k.w, k.h) * 0.26, 0, TAU); ctx.fill();
+      } else {
+        ctx.shadowColor = 'rgba(120,200,255,0.5)'; ctx.shadowBlur = s * 0.02;
+        ctx.fillStyle = 'rgba(150,210,255,0.16)';
+        roundRect(k.x, k.y, k.w, k.h, rr); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(185,225,255,0.85)'; ctx.lineWidth = Math.max(1.5, s * 0.003);
+        roundRect(k.x, k.y, k.w, k.h, rr); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+  // tokens de poder cayendo hacia el lado del que rompió (hay que atraparlos)
+  function drawDrops() {
+    const tt = performance.now() / 1000;
+    for (const d of drops) {
+      const r = dropR();
+      const wob = d.windup > 0 ? (1 - d.windup / 0.45) : 1;
+      const sc = 0.45 + 0.55 * Math.min(1, wob * 1.3);    // escala-in durante la anticipación
+      const pul = 0.6 + 0.4 * Math.sin(tt * 8);
+      const col = d.type === 'fire' ? [255, 150, 40] : [120, 220, 255];
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      for (let i = 1; i < d.trail.length; i++) {           // estela "llegando"
+        const t = i / d.trail.length, a = d.trail[i - 1], c = d.trail[i];
+        ctx.strokeStyle = rgba(col, 0.18 * t); ctx.lineWidth = r * 1.2 * t;
+        ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+      }
+      const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, r * 2.6 * sc);
+      g.addColorStop(0, rgba(col, 0.7 * pul)); g.addColorStop(1, rgba(col, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.x, d.y, r * 2.6 * sc, 0, TAU); ctx.fill();
+      if (d.windup > 0) {                                  // anillo de anticipación antes de salir
+        ctx.strokeStyle = rgba(col, 0.5 * pul); ctx.lineWidth = r * 0.3;
+        ctx.beginPath(); ctx.arc(d.x, d.y, r * (1.9 + 0.6 * pul), 0, TAU); ctx.stroke();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      // chip CUADRADO redondeado (forma distinta a las bolas, que son redondas) + ícono según el tipo
+      const sz = r * sc * 1.7;
+      ctx.fillStyle = rgba(col, 0.95);
+      roundRect(d.x - sz / 2, d.y - sz / 2, sz, sz, sz * 0.28); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = Math.max(1, r * 0.12);
+      roundRect(d.x - sz / 2, d.y - sz / 2, sz, sz, sz * 0.28); ctx.stroke();
+      ctx.fillStyle = 'rgba(255,255,255,0.95)';
+      if (d.type === 'fire') {                            // ícono llama: triángulo apuntando arriba
+        ctx.beginPath();
+        ctx.moveTo(d.x, d.y - sz * 0.26);
+        ctx.lineTo(d.x + sz * 0.22, d.y + sz * 0.22);
+        ctx.lineTo(d.x - sz * 0.22, d.y + sz * 0.22);
+        ctx.closePath(); ctx.fill();
+      } else {                                            // ícono bola: aro
+        ctx.lineWidth = Math.max(1.5, r * 0.18); ctx.strokeStyle = 'rgba(255,255,255,0.95)';
+        ctx.beginPath(); ctx.arc(d.x, d.y, sz * 0.26, 0, TAU); ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+  function drawBallObj(b) {
+    const r = ballR(), x = b.rx, y = b.ry;
+    const col = b.fire ? [255, 180, 50] : NEON_BALL;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.lineCap = 'round';
+    for (let i = 1; i < b.trail.length; i++) {
+      const t = i / b.trail.length, a = b.trail[i - 1], c = b.trail[i];
+      ctx.strokeStyle = rgba(col, 0.12 * t); ctx.lineWidth = r * 2 * (0.3 + 0.7 * t);
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+    }
+    const gr = r * 2.2, g = ctx.createRadialGradient(x, y, 0, x, y, gr);
+    if (b.fire) { g.addColorStop(0, 'rgba(255,220,150,0.6)'); g.addColorStop(1, 'rgba(255,60,0,0)'); }
+    else { g.addColorStop(0, rgba(NEON_BALL, 0.55)); g.addColorStop(1, rgba(NEON_P1, 0)); }
+    ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, gr, 0, TAU); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+    const cg = ctx.createRadialGradient(x - r * 0.35, y - r * 0.35, r * 0.05, x, y, r);
+    if (b.fire) { cg.addColorStop(0, '#fffdf2'); cg.addColorStop(0.5, 'rgba(255,196,80,1)'); cg.addColorStop(1, 'rgba(214,96,12,1)'); }
+    else { cg.addColorStop(0, '#fff'); cg.addColorStop(0.5, rgba(NEON_BALL, 1)); cg.addColorStop(1, 'rgba(64,150,200,1)'); }
+    ctx.fillStyle = cg; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
+  }
+
   // ── INPUT ──
   const keys = new Set();
   addEventListener('keydown', e => {
     const k = e.key.toLowerCase();
     keys.add(k);
-    if (k === 'arrowup' || k === 'arrowdown' || k === ' ') e.preventDefault();
-    if (k === 'p' || k === 'escape') togglePause();
-    if ((k === 'enter' || k === ' ') && state === 'over') newMatch();
+    if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
+    if (state === 'menu') { if (!e.repeat) handleMenuKey(k); return; }   // navegación del menú
+    if (k === 'escape') { onBack(); return; }                           // ESC: abre/cierra "¿salir?"
+    if (confirmQuit) { if (k === 'enter' || k === ' ') backToMenu(); return; }  // confirmar salida
+    if (k === 'p') togglePause();
+    if ((k === 'enter' || k === ' ') && state === 'over') overAdvance();
   });
   addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
   addEventListener('blur', () => keys.clear());
@@ -554,44 +854,144 @@
   }
   document.querySelectorAll('.ctl').forEach(holdCtl);
 
-  // Detección de PC (sin pantalla táctil): ahí se juega con teclado, así que ocultamos los pads.
+  // Detección de PC (sin pantalla táctil): ahí se juega con teclado. Los pads se muestran/ocultan por
+  // CSS según body.touch.playing — acá sólo seteamos la clase.
   const isTouch = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
                   || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-  if (!isTouch) {
-    document.getElementById('padR').style.display = 'none';
-    document.getElementById('padL').style.display = 'none';
-  }
+  document.body.classList.toggle('touch', isTouch);
 
-  // Toque directo en el canvas: reinicia (fin de partida) o reanuda (pausa). El juego se maneja
-  // con los botones de control, así que acá sólo viven esos atajos + descartar el hint.
+  // Toque directo en el canvas: opera el menú (elegir/ajustar), confirma salida, reinicia (fin de
+  // partida) o reanuda (pausa). Coords relativas al canvas (= px lógicos, no hay escala interna).
   canvas.addEventListener('pointerdown', e => {
-    // (el auto-fullscreen lo dispara el listener global de pointerdown en captura)
     hint.style.opacity = '0';
-    if (state === 'over') newMatch();
-    else if (state === 'paused') togglePause();
+    const rect = canvas.getBoundingClientRect();
+    const lx = e.clientX - rect.left, ly = e.clientY - rect.top;
+    if (state === 'menu')   { tapMenu(lx, ly); return; }
+    if (confirmQuit)        { tapConfirm(lx, ly); return; }
+    if (state === 'over')   { overAdvance(); return; }
+    if (state === 'paused') { togglePause(); return; }
   });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-  // ── BOTONES ──
-  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
-  const btnMode = document.getElementById('btnMode');
-  const btnPoints = document.getElementById('btnPoints');
-  const btnFire = document.getElementById('btnFire');
-  const btnPause = document.getElementById('btnPause');
-  const btnInfo = document.getElementById('btnInfo');
-
-  function refreshButtons() {
-    btnMode.textContent = twoPlayers ? '2P' : '1P';
-    btnPoints.textContent = SCORE_LABELS[ptsIdx];
-    btnFire.classList.toggle('on', fireEnabled);
-    document.body.classList.toggle('two', twoPlayers);   // muestra la palanca izquierda en 2P
+  // ── MENÚ (estilo CrazyTanks): nivel 0 = elegir modo · nivel 1 = setup (rival/puntos/fuego) ──
+  // Filas del nivel 0 (modo), con su Y en fracción de H.
+  function menuLevel0() {
+    return [
+      { key: '1p',        label: 'Un Jugador',    y: 0.40 },
+      { key: '2p',        label: 'Dos Jugadores', y: 0.49 },
+      { key: 'challenge', label: 'Desafío',       y: 0.58 },
+      { key: 'bricks',    label: 'Ladrillos',     y: 0.67 },
+      { key: 'exit',      label: 'Salir',         y: 0.76 },
+    ];
   }
-  tappable(btnMode, () => { twoPlayers = !twoPlayers; refreshButtons(); newMatch(); });
-  tappable(btnPoints, () => { ptsIdx = (ptsIdx + 1) % WIN_POINTS.length; refreshButtons(); newMatch(); });
-  tappable(btnFire, () => { fireEnabled = !fireEnabled; refreshButtons(); updateFireStates(); });
-  tappable(btnPause, togglePause);
-  tappable(document.getElementById('btnReset'), () => newMatch());
+  // Filas del setup (nivel 1): en 2P se omite "Rival". Centradas verticalmente según cuántas haya.
+  function menuSetupRows() {
+    const keys = twoPlayers ? ['puntos', 'fuego'] : ['rival', 'puntos', 'fuego'];
+    const span = 0.12, mid = 0.55, y0 = mid - span * (keys.length - 1) / 2;
+    return keys.map((key, i) => ({ key, y: y0 + i * span }));
+  }
+  const PLAY_BTN_Y = 0.85;
+  function setupRowLabel(key) {
+    if (key === 'rival')  return 'Rival: ' + OPPONENTS[oppIdx].name;
+    if (key === 'puntos') return 'Puntos: ' + (WIN_POINTS[ptsIdx] == null ? 'Práctica' : SCORE_LABELS[ptsIdx]);
+    return 'Fuego: ' + (fireEnabled ? 'Sí' : 'No');
+  }
+  function setupCycle(key, dir) {
+    if (key === 'rival')       { oppIdx = (oppIdx + dir + OPPONENTS.length) % OPPONENTS.length; applyOpponent(); }
+    else if (key === 'puntos') { ptsIdx = (ptsIdx + dir + WIN_POINTS.length) % WIN_POINTS.length; }
+    else                         fireEnabled = !fireEnabled;
+  }
+  // navegación con teclado
+  function handleMenuKey(k) {
+    if (k === 'arrowup'    || k === 'w') menuMove(-1);
+    else if (k === 'arrowdown'  || k === 's') menuMove(1);
+    else if (k === 'arrowleft'  || k === 'a') menuAdjust(-1);
+    else if (k === 'arrowright' || k === 'd') menuAdjust(1);
+    else if (k === 'enter' || k === ' ')      menuConfirm();
+    else if (k === 'escape')                  onBack();
+  }
+  function menuMove(d)   { const n = (menulevel === 0 ? menuLevel0() : menuSetupRows()).length; menuOption = (menuOption + d + n) % n; }
+  function menuAdjust(d) { if (menulevel !== 1) return; const r = menuSetupRows()[menuOption]; if (r) setupCycle(r.key, d); }
+  function menuConfirm() {
+    if (menulevel === 0) {
+      const r = menuLevel0()[menuOption];
+      if (r.key === '1p')           { twoPlayers = false; gotoSetup(); }
+      else if (r.key === '2p')      { twoPlayers = true;  gotoSetup(); }
+      else if (r.key === 'challenge') startChallenge();
+      else if (r.key === 'bricks')    startBricks();
+      else                            exitToArcade();
+    } else startGame();
+  }
+  function gotoSetup() { menulevel = 1; menuOption = 0; applyOpponent(); syncUI(); }
+
+  // toque sobre el menú (coords del canvas)
+  function tapMenu(lx, ly) {
+    const near = f => Math.abs(ly - f * H) < H * 0.06;
+    if (menulevel === 0) {
+      const rows = menuLevel0();
+      for (let i = 0; i < rows.length; i++) if (near(rows[i].y)) { menuOption = i; menuConfirm(); return; }
+    } else {
+      const dir = lx < W / 2 ? -1 : 1;                  // mitad izq/der = anterior/siguiente valor
+      const rows = menuSetupRows();
+      for (let i = 0; i < rows.length; i++) if (near(rows[i].y)) { menuOption = i; setupCycle(rows[i].key, dir); return; }
+      if (near(PLAY_BTN_Y)) startGame();
+    }
+  }
+  function tapConfirm(lx, ly) {
+    if (ly > H * 0.52 && ly < H * 0.68) { if (lx < W / 2) backToMenu(); else confirmQuit = false; }
+  }
+
+  // ── TRANSICIONES DE ESTADO ──
+  function startGame()  { challenge = false; bricksMode = false; applyOpponent(); newMatch(); confirmQuit = false; syncUI(); }   // newMatch pone state='play'
+  function rematch()    { if (bricksMode) { startBricks(); return; } newMatch(); confirmQuit = false; syncUI(); }
+  function startChallenge() {
+    challenge = true; bricksMode = false; challengeIdx = 0;
+    twoPlayers = false; ptsIdx = 1;                  // 1 jugador, games a 10
+    oppIdx = CHALLENGE_ORDER[0]; applyOpponent();
+    newMatch(); confirmQuit = false; syncUI();
+  }
+  // acción al tocar/Enter en la pantalla de fin de partido
+  function overAdvance() {
+    if (!challenge) { rematch(); return; }
+    if (winner === 1) {                              // ganaste este game
+      if (challengeIdx >= CHALLENGE_ORDER.length - 1) { backToMenu(); return; }   // venciste a todos
+      challengeIdx++;
+      oppIdx = CHALLENGE_ORDER[challengeIdx]; applyOpponent();
+      newMatch(); confirmQuit = false; syncUI();
+    } else {
+      backToMenu();                                  // perdiste → fin del desafío
+    }
+  }
+  function backToMenu() {
+    state = 'menu'; menulevel = 0; menuOption = twoPlayers ? 1 : 0; confirmQuit = false; challenge = false; bricksMode = false;
+    embers.length = 0; sparks.length = 0; ballTrail.length = 0; balls = []; bricks = []; drops = [];
+    syncUI();
+  }
+  function onBack() {
+    if (state === 'menu') { if (menulevel === 1) { menulevel = 0; menuOption = twoPlayers ? 1 : 0; syncUI(); } return; }
+    if (state === 'over') { backToMenu(); return; }
+    confirmQuit = !confirmQuit;                         // en partido: abre/cierra "¿salir al menú?"
+  }
+  function exitToArcade() {
+    if (window.self !== window.top) { try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {} return; }
+    try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch {}
+    location.href = '../../Arcade/';
+  }
+  // clases del body que prenden/apagan botones de esquina y pads
+  function syncUI() {
+    const b = document.body.classList;
+    b.toggle('playing', state === 'play' || state === 'paused');
+    b.toggle('two', twoPlayers);
+    b.toggle('canback', state !== 'menu' || menulevel === 1);   // atrás visible en setup y en partido
+    btnInfo.classList.toggle('on', showDebug);
+  }
+
+  // ── BOTONES DE ESQUINA ──
+  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
+  const btnInfo = document.getElementById('btnInfo');
   tappable(btnInfo, () => { showDebug = !showDebug; btnInfo.classList.toggle('on', showDebug); });
+  tappable(document.getElementById('btnBack'), onBack);
+  tappable(document.getElementById('btnPause'), togglePause);
 
   // ── PANTALLA COMPLETA + ORIENTACIÓN ───────────────────────────────────────
   // Bloque auto-contenido y REUTILIZABLE. Para portarlo a otro juego: copialo tal
@@ -642,8 +1042,24 @@
   document.addEventListener('webkitfullscreenchange', syncFsIcon);
   syncFsIcon();   // estado inicial correcto del ícono
   tappable(document.getElementById('btnFull'), () => {
-    // Embebido: el fullscreen lo maneja la shell → le pedimos que togglee (no tocamos el iframe).
-    if (EMBEDDED) { try { window.parent.postMessage({ type: 'arcade:fullscreen' }, '*'); } catch (e) {} return; }
+    // Embebido: same-origin con la shell → llamamos requestFullscreen DIRECTO sobre el doc
+    // padre para preservar el user-activation del tap (postMessage lo perdía y Chrome rechazaba).
+    if (EMBEDDED) {
+      try {
+        const topDoc = window.top.document;
+        if (topDoc.fullscreenElement || topDoc.webkitFullscreenElement) {
+          (topDoc.exitFullscreen || topDoc.webkitExitFullscreen).call(topDoc);
+        } else {
+          const el = topDoc.documentElement;
+          const req = el.requestFullscreen || el.webkitRequestFullscreen;
+          const p = req.call(el);
+          if (p && p.catch) p.catch(() => {});
+        }
+      } catch (e) {
+        try { window.parent.postMessage({ type: 'arcade:fullscreen' }, '*'); } catch (e2) {}
+      }
+      return;
+    }
     isFs() ? exitFs() : enterFs();
   });
   // Embebido: la shell nos avisa su estado de fullscreen para mantener el ícono sincronizado.
@@ -677,10 +1093,9 @@
   // ── RESIZE ──
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const barH = barEl.offsetHeight;
     const oldH = H || 1;
     W = window.innerWidth;
-    H = window.innerHeight - barH;
+    H = window.innerHeight;                              // canvas a pantalla completa (sin barra)
     canvas.width  = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width  = W + 'px';
@@ -690,31 +1105,38 @@
     const f = H / oldH;
     right.cy *= f; left.cy *= f; by *= f;
     // Pong se juega en horizontal: si la pantalla está vertical, mostrar el aviso de rotar.
-    portrait = window.innerHeight > window.innerWidth;
+    // Embebido: la shell del Arcade rota el iframe por CSS → el cartel NUNCA se muestra (evita
+    // que se quede trabado si resize() ve cssH>cssW por un instante durante transiciones de FS).
+    portrait = !EMBEDDED && window.innerHeight > window.innerWidth;
     document.getElementById('rotate').style.display = portrait ? 'flex' : 'none';
+    bakeBackground();                                   // re-hornear el fondo estático al nuevo tamaño
   }
   window.addEventListener('resize', resize);
 
+  // Hornea el fondo ESTÁTICO (gradiente radial + grilla) en un canvas offscreen una sola vez por resize.
+  // Antes esto se redibujaba cada frame (un fill de gradiente a pantalla completa + ~30 líneas) — el mayor
+  // costo de render en mobile. Ahora se blittea de una. Las "paredes" (que se prenden fuego) siguen vivas.
+  function bakeBackground() {
+    if (!bgCanvas) bgCanvas = document.createElement('canvas');
+    bgCanvas.width = canvas.width; bgCanvas.height = canvas.height;
+    const g = bgCanvas.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const grad = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.05, W / 2, H / 2, Math.max(W, H) * 0.72);
+    grad.addColorStop(0, '#0d1830'); grad.addColorStop(0.6, '#070b18'); grad.addColorStop(1, '#020308');
+    g.fillStyle = grad; g.fillRect(0, 0, W, H);
+    const step = Math.max(26, Math.min(W, H) * 0.06);
+    g.lineWidth = 1; g.strokeStyle = rgba(NEON_GRID, 0.10);
+    g.beginPath();
+    for (let x = (W / 2) % step; x <= W; x += step) { g.moveTo(x, 0); g.lineTo(x, H); }
+    for (let y = (H / 2) % step; y <= H; y += step) { g.moveTo(0, y); g.lineTo(W, y); }
+    g.stroke();
+  }
+
   // ── DRAW ──
   function drawBackground() {
-    // gradiente radial: centro azulado, bordes casi negros → profundidad/viñeteado
-    const g = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.05, W / 2, H / 2, Math.max(W, H) * 0.72);
-    g.addColorStop(0, '#0d1830');
-    g.addColorStop(0.6, '#070b18');
-    g.addColorStop(1, '#020308');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, W, H);
-
-    // grilla tenue (futurista), centrada
-    const step = Math.max(26, Math.min(W, H) * 0.06);
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = rgba(NEON_GRID, 0.10);
-    ctx.beginPath();
-    for (let x = (W / 2) % step; x <= W; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x, H); }
-    for (let y = (H / 2) % step; y <= H; y += step) { ctx.moveTo(0, y); ctx.lineTo(W, y); }
-    ctx.stroke();
-
-    // marco neón arriba/abajo (las "paredes"). Cada borde se prende fuego por separado.
+    // blittear el fondo horneado (gradiente + grilla) a 1:1 en device-px (ignora la transform dpr del ctx)
+    if (bgCanvas) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(bgCanvas, 0, 0); ctx.restore(); }
+    // marco neón arriba/abajo (las "paredes"). Cada borde se prende fuego por separado (dinámico).
     drawFrameLine(1.5, fireTop);
     drawFrameLine(H - 1.5, fireBot);
   }
@@ -752,13 +1174,17 @@
     const y = p.cy - ph / 2;
     const r = Math.min(pw, ph) * 0.45, s = Math.min(W, H);
     const onF = p.onFire;
-    const col = onF ? [255, 140, 30] : (isRight ? NEON_P1 : NEON_P2);
+    // izquierda: en 2P es magenta, en 1P el color del contrincante elegido. `glow` puede diferir del
+    // cuerpo (negro = cuerpo oscuro + resplandor gris claro, así se ve sobre el fondo).
+    const col  = onF ? [255, 140, 30] : (isRight ? NEON_P1 : leftCol());
+    const glow = onF ? [255, 140, 30] : (isRight ? NEON_P1 : leftGlow());
     // glow exterior: en fuego es naranja pero con blur contenido para no desdibujar el cuerpo
     ctx.save();
-    ctx.shadowColor = rgba(col, 0.95);
+    ctx.shadowColor = rgba(glow, 0.95);
     ctx.shadowBlur = s * (onF ? 0.042 : 0.05);
     ctx.fillStyle = rgba(col, 0.9);
-    roundRect(x, y, pw, ph, r); ctx.fill(); ctx.fill();
+    roundRect(x, y, pw, ph, r); ctx.fill();          // 1 sola pasada con shadow (el doble fill duplicaba el blur, caro)
+    ctx.shadowBlur = 0; ctx.fill();                  // cuerpo sólido encima, sin re-blurear
     ctx.restore();
     // núcleo claro con sheen vertical (glossy): más brillante arriba — define bien la paleta
     const inset = pw * 0.30;
@@ -841,11 +1267,11 @@
   function emitFire() {
     const r = ballR(), s = Math.min(W, H);
     if (fireball) {
-      for (let i = 0; i < 4; i++)                 // brasas (cuerpo del fuego)
+      for (let i = 0; i < 3; i++)                 // brasas (cuerpo del fuego)
         spawnEmber(bx + rnd(-r, r) * 0.6, by + rnd(-r, r) * 0.6,
           -bvx * 0.12 + rnd(-1, 1) * s * 0.25, -bvy * 0.12 + rnd(-1, 1) * s * 0.25,
           rnd(0.25, 0.55), rnd(r * 0.4, r * 0.9), 0);
-      for (let i = 0; i < 2; i++)                 // chispas (rápidas, blancas, cortas)
+      if (Math.random() < 0.7)                    // chispa (rápida, blanca, corta)
         spawnEmber(bx, by,
           -bvx * 0.05 + rnd(-1, 1) * s * 0.55, -bvy * 0.05 + rnd(-1, 1) * s * 0.55,
           rnd(0.12, 0.3), rnd(r * 0.12, r * 0.32), 1);
@@ -857,7 +1283,7 @@
       if (Math.random() < 0.7)                    // brasas: suben desde el centro, repartidas a lo alto
         spawnEmber(cx + rnd(-1, 1) * pw * 0.4, p.cy + rnd(-ph / 2, ph / 2),
           rnd(-1, 1) * s * 0.05, -rnd(s * 0.1, s * 0.3),
-          rnd(0.3, 0.6), rnd(pw * 0.5, pw * 1.2), 0);
+          rnd(0.3, 0.6), rnd(pw * 0.5, pw * 1.2), 2);
       if (Math.random() < 0.35)                   // alguna chispa saltando hacia el campo
         spawnEmber(cx, p.cy + rnd(-ph / 2, ph / 2),
           (isR ? -1 : 1) * rnd(s * 0.1, s * 0.4), rnd(-1, 1) * s * 0.2,
@@ -865,11 +1291,11 @@
     }
     // llamas a lo largo de los elementos prendidos (bordes y red)
     const fsz = () => rnd(r * 0.35, r * 0.8);
-    if (fireBot) for (let i = 0; i < 2; i++)       // piso → llamas que suben
+    if (fireBot && Math.random() < 0.6)            // piso → llamas que suben
       spawnEmber(rnd(0, W), H - rnd(0, r), rnd(-1, 1) * s * 0.06, -rnd(s * 0.12, s * 0.3), rnd(0.3, 0.6), fsz(), 0);
-    if (fireTop) for (let i = 0; i < 2; i++)       // techo → llamas que cuelgan hacia adentro
+    if (fireTop && Math.random() < 0.6)            // techo → llamas que cuelgan hacia adentro
       spawnEmber(rnd(0, W), rnd(0, r), rnd(-1, 1) * s * 0.06, rnd(s * 0.04, s * 0.12), rnd(0.3, 0.55), fsz(), 0);
-    if (fireNet) for (let i = 0; i < 2; i++)       // red → llamas a lo largo del centro
+    if (fireNet && Math.random() < 0.6)            // red → llamas a lo largo del centro
       spawnEmber(W / 2 + rnd(-r, r) * 0.6, rnd(0, H), rnd(-1, 1) * s * 0.05, -rnd(s * 0.08, s * 0.22), rnd(0.3, 0.55), fsz(), 0);
   }
   function updateEmbers(dt) {
@@ -892,6 +1318,11 @@
       if (e.kind === 1) {                       // chispa: blanco-amarillo brillante
         ctx.fillStyle = `rgba(255,255,${Math.round(200 * t)},${0.85 * t})`;
         ctx.beginPath(); ctx.arc(e.x, e.y, e.size * (0.4 + 0.6 * t), 0, TAU); ctx.fill();
+      } else if (e.kind === 2) {                // brasa de paleta: dorado/naranja más vívido y opaco
+        const g = Math.round(120 + 130 * t);
+        const b = Math.round(70 * t * t);
+        ctx.fillStyle = `rgba(255,${g},${b},${0.72 * t})`;
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.size * (0.35 + 0.65 * t), 0, TAU); ctx.fill();
       } else {                                  // brasa: amarillo → rojo profundo
         const g = Math.round(70 + 165 * t);
         const b = Math.round(40 * t * t);
@@ -927,7 +1358,12 @@
     ctx.globalCompositeOperation = 'lighter';
     for (const p of sparks) {
       const t = Math.max(0, p.life / p.max);
-      ctx.fillStyle = rgba(p.col, 0.85 * t);
+      // núcleo blanco-brillante cuando recién salta (t≈1) → vira al color de la paleta al apagarse: más punchy
+      const k = 0.55 * t;   // mezcla hacia blanco, fuerte al inicio
+      const c = [p.col[0] + (255 - p.col[0]) * k,
+                 p.col[1] + (255 - p.col[1]) * k,
+                 p.col[2] + (255 - p.col[2]) * k];
+      ctx.fillStyle = rgba(c, 0.95 * t);
       ctx.beginPath(); ctx.arc(p.x, p.y, p.size * (0.3 + 0.7 * t), 0, TAU); ctx.fill();
     }
     ctx.globalCompositeOperation = 'source-over';
@@ -935,19 +1371,25 @@
 
   function drawScores() {
     if (WIN_POINTS[ptsIdx] == null) return;   // práctica: sin marcador
-    const fs = Math.round(Math.min(60, H * 0.082));
-    ctx.font = `700 ${fs}px ${FONT}`;
+    const fs0 = Math.round(Math.min(60, H * 0.082));
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    const c2 = fireNet ? [255, 180, 50] : NEON_P2;   // izq = jug.2 (magenta)
-    const c1 = fireNet ? [255, 180, 50] : NEON_P1;   // der = jug.1 (cian)
+    const c2 = fireNet ? [255, 180, 50] : leftGlow();   // izq = jug.2 / contrincante
+    const c1 = fireNet ? [255, 180, 50] : NEON_P1;      // der = jug.1 (cian)
     ctx.save();
-    ctx.shadowBlur = fs * 0.45;
-    ctx.shadowColor = rgba(c2, 0.85); ctx.fillStyle = rgba(c2, 0.95);
-    ctx.fillText(String(j2score), W * 0.25, H * 0.045);
-    ctx.shadowColor = rgba(c1, 0.85); ctx.fillStyle = rgba(c1, 0.95);
-    ctx.fillText(String(j1score), W * 0.75, H * 0.045);
+    drawScoreNum(String(j2score), W * 0.25, c2, j2pulse, fs0);
+    drawScoreNum(String(j1score), W * 0.75, c1, j1pulse, fs0);
     ctx.restore();
+  }
+  // al sumar (pulse 1→0): el número PEGA UN SALTO (más grande), vira a blanco y refulge → se nota el punto.
+  function drawScoreNum(txt, x, col, pulse, fs0) {
+    const fs = Math.round(fs0 * (1 + 0.5 * pulse));
+    ctx.font = `700 ${fs}px ${FONT}`;
+    ctx.shadowColor = rgba(col, 0.85);
+    ctx.shadowBlur = fs * (0.3 + pulse);
+    const cc = [col[0] + (255 - col[0]) * pulse, col[1] + (255 - col[1]) * pulse, col[2] + (255 - col[2]) * pulse];
+    ctx.fillStyle = rgba(cc, 0.95);
+    ctx.fillText(txt, x, H * 0.045);
   }
 
   function drawFireLabels() {
@@ -988,9 +1430,21 @@
   function drawOver() {
     ctx.fillStyle = 'rgba(6,8,14,0.58)';
     ctx.fillRect(0, 0, W, H);
-    let big;
-    if (twoPlayers) big = winner === 1 ? 'GANA JUGADOR 1' : 'GANA JUGADOR 2';
-    else            big = winner === 1 ? '¡GANASTE!' : 'GANA LA CPU';
+    let big, sub = 'tocá: revancha   ·   atrás: menú';
+    if (bricksMode) {
+      big = winner === 1 ? '¡GANASTE!' : 'GANA ' + OPPONENTS[oppIdx].name.toUpperCase();
+      sub = `puntos ${j1score} - ${j2score}  ·  tocá: revancha  ·  atrás: menú`;
+    } else if (challenge) {
+      const total = CHALLENGE_ORDER.length;
+      const oppName = OPPONENTS[CHALLENGE_ORDER[challengeIdx]].name;
+      if (winner === 1) {
+        if (challengeIdx >= total - 1) { big = '¡DESAFÍO SUPERADO!'; sub = `venciste a los ${total} · tocá: menú`; }
+        else { big = 'VENCISTE A ' + oppName.toUpperCase(); sub = 'siguiente: ' + OPPONENTS[CHALLENGE_ORDER[challengeIdx + 1]].name + ' · tocá para seguir'; }
+      } else {
+        big = 'GANA ' + oppName.toUpperCase(); sub = `rivales vencidos: ${challengeIdx}/${total} · tocá: menú`;
+      }
+    } else if (twoPlayers) big = winner === 1 ? 'GANA JUGADOR 1' : 'GANA JUGADOR 2';
+    else                   big = winner === 1 ? '¡GANASTE!' : 'GANA ' + OPPONENTS[oppIdx].name.toUpperCase();
     const s = Math.min(W, H);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     // glow según gane por fuego o no
@@ -1007,8 +1461,62 @@
     ctx.font = `500 ${ss}px ${FONT}`;
     ctx.fillStyle = 'rgba(200,210,230,0.7)';
     ctx.letterSpacing = '0.16em';
-    ctx.fillText('TOCÁ PARA JUGAR DE NUEVO', W / 2, H / 2 + bs * 0.7);
+    ctx.fillText(sub, W / 2, H / 2 + bs * 0.7);
     ctx.letterSpacing = '0px';
+  }
+
+  // Cartel de progreso del desafío (centro-arriba, entre los marcadores).
+  function drawChallengeBadge() {
+    const s = Math.min(W, H), o = OPPONENTS[CHALLENGE_ORDER[challengeIdx]];
+    mtext(`DESAFÍO  ${challengeIdx + 1}/${CHALLENGE_ORDER.length}  ·  ${o.name}`,
+      Math.min(15, s * 0.026), o.glow, W / 2, H * 0.04, 0, 0.85, 700);
+  }
+
+  // texto de menú: Orbitron centrado con glow opcional (color = [r,g,b]).
+  function mtext(txt, px, col, x, y, glow, alpha, weight) {
+    ctx.font = `${weight || 700} ${px}px ${FONT}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (glow) { ctx.shadowColor = rgba(col, 1); ctx.shadowBlur = glow; }
+    ctx.fillStyle = rgba(col, alpha == null ? 1 : alpha);
+    ctx.fillText(txt, x, y);
+    ctx.shadowBlur = 0;
+  }
+
+  // MENÚ: fondo de cancha + red, título PONG neón, y las filas del nivel actual (modo o setup).
+  function drawMenu() {
+    drawBackground();
+    drawNet();
+    const s = Math.min(W, H), t = performance.now() / 1000;
+    const pulse = 0.5 + 0.5 * Math.sin(t * 2.2);
+    const cyan = NEON_P1, dim = [150, 165, 195];
+    mtext('PONG', Math.min(118, s * 0.17), cyan, W / 2, H * 0.25, s * 0.05 * (0.6 + 0.4 * pulse), 1, 900);
+    if (menulevel === 0) {
+      menuLevel0().forEach((r, i) => {
+        const on = menuOption === i;
+        mtext(r.label, Math.min(42, s * 0.06), on ? cyan : dim, W / 2, r.y * H, on ? s * 0.03 : 0, on ? 1 : 0.75, 700);
+      });
+      mtext('↑ ↓ elegí  ·  Enter / tocá', Math.min(14, s * 0.024), dim, W / 2, H * 0.86, 0, 0.6, 500);
+    } else {
+      menuSetupRows().forEach((r, i) => {
+        const on = menuOption === i;
+        const label = setupRowLabel(r.key);
+        const col = (r.key === 'rival') ? OPPONENTS[oppIdx].glow : cyan;
+        mtext(on ? `‹  ${label}  ›` : label, Math.min(34, s * 0.05), on ? col : dim, W / 2, r.y * H, on ? s * 0.025 : 0, on ? 1 : 0.78, 700);
+      });
+      const pp = 0.6 + 0.4 * Math.sin(t * 4);
+      mtext('▶ JUGAR', Math.min(40, s * 0.058), [120 + 120 * pp, 235, 150], W / 2, PLAY_BTN_Y * H, s * 0.03, 1, 900);
+      mtext('‹ › cambian  ·  Enter / JUGAR arranca  ·  atrás vuelve', Math.min(13, s * 0.022), dim, W / 2, H * 0.93, 0, 0.55, 500);
+    }
+  }
+
+  // Confirmación de salida al menú durante el partido (SÍ izq / NO der).
+  function drawConfirm() {
+    ctx.fillStyle = 'rgba(6,8,14,0.74)'; ctx.fillRect(0, 0, W, H);
+    const s = Math.min(W, H);
+    mtext('¿SALIR AL MENÚ?', Math.min(42, s * 0.062), [255, 255, 255], W / 2, H * 0.4, s * 0.04, 1, 900);
+    mtext('SÍ', Math.min(34, s * 0.052), [255, 120, 120], W * 0.4, H * 0.6, s * 0.03, 1, 900);
+    mtext('NO', Math.min(34, s * 0.052), NEON_P1,         W * 0.6, H * 0.6, s * 0.03, 1, 900);
+    mtext('se pierde el partido', Math.min(13, s * 0.022), [180, 190, 210], W / 2, H * 0.72, 0, 0.65, 500);
   }
 
   // HUD de FPS, estilo BallsWeb: panel monoespaciado arriba a la izquierda.
@@ -1033,8 +1541,8 @@
     if (twoPlayers || !aiSleeping) return;
     const s = Math.min(W, H);
     ctx.save();
-    ctx.fillStyle = rgba(NEON_P2, 0.85);
-    ctx.shadowColor = rgba(NEON_P2, 0.6); ctx.shadowBlur = s * 0.02;
+    ctx.fillStyle = rgba(leftGlow(), 0.85);
+    ctx.shadowColor = rgba(leftGlow(), 0.6); ctx.shadowBlur = s * 0.02;
     ctx.font = `700 ${Math.round(s * 0.05)}px ${FONT}`;
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.fillText('Zzz', leftX() + paddleW() + s * 0.02, left.cy - paddleH() / 2 - s * 0.015);
@@ -1067,43 +1575,78 @@
 
     FIRE = `rgb(255,${rndi(128, 255)},0)`;
 
-    if (state === 'play' && !portrait) {   // en vertical el juego queda congelado tras el aviso
+    const playing = state === 'play' && !portrait && !confirmQuit;   // en vertical / confirmación → congelado
+    if (playing) {
       acc += dt;
       let steps = 0;
       while (acc >= FIXED_DT && steps < 8) {            // pasos fijos; "recupera" varios si hubo lag
-        prevBx = bx; prevBy = by;                       // estado previo para interpolar el render
-        if (!twoPlayers) updateAI(FIXED_DT);
-        updatePaddle(right, FIXED_DT, false, true);
-        updatePaddle(left, FIXED_DT, !twoPlayers, false);
-        updateBall(FIXED_DT);
+        if (bricksMode) {
+          stepBricks(FIXED_DT);
+        } else {
+          prevBx = bx; prevBy = by;                     // estado previo para interpolar el render
+          if (!twoPlayers) updateAI(FIXED_DT);
+          updatePaddle(right, FIXED_DT, false, true);
+          updatePaddle(left, FIXED_DT, !twoPlayers, false);
+          updateBall(FIXED_DT);
+        }
         acc -= FIXED_DT;
         steps++;
-        if (state !== 'play') break;   // gol que termina el partido: cortar el catch-up (si no, suma de más)
+        if (state !== 'play') break;   // gol/punto que termina la partida: cortar el catch-up
       }
       if (acc > FIXED_DT) acc %= FIXED_DT;              // si se capó el catch-up, descartar el exceso
       const alpha = acc / FIXED_DT;                     // fracción no simulada → render interpolado
-      rbx = prevBx + (bx - prevBx) * alpha;
-      rby = prevBy + (by - prevBy) * alpha;
-      emitFire();
+      if (bricksMode) {
+        for (const b of balls) { b.rx = b.px + (b.x - b.px) * alpha; b.ry = b.py + (b.y - b.py) * alpha; }
+        emitFireBricks();
+      } else {
+        rbx = prevBx + (bx - prevBx) * alpha;
+        rby = prevBy + (by - prevBy) * alpha;
+        emitFire();
+      }
+    } else if (bricksMode) {
+      for (const b of balls) { b.rx = b.x; b.ry = b.y; }
     } else {
       rbx = bx; rby = by;
     }
-    if (state !== 'paused') { updateEmbers(dt); updateSparks(dt); }   // siguen extinguiéndose salvo en pausa
+    if (state !== 'paused' && !confirmQuit) { updateEmbers(dt); updateSparks(dt); }
+    if (bricksMode && state === 'play' && !confirmQuit) updateDrops(dt);   // tokens caen/se atrapan (frame-rate)
+    j1pulse = Math.max(0, j1pulse - dt / 0.55);          // decae el "golpe" del marcador (~0.55s)
+    j2pulse = Math.max(0, j2pulse - dt / 0.55);
 
     // render
-    drawBackground();
-    drawNet();
-    drawScores();
-    drawFireLabels();
-    drawPaddle(left, false);
-    drawPaddle(right, true);
-    drawAISleep();
-    drawEmbers();
-    drawSparks();
-    drawBall();
-
-    if (state === 'paused') drawPause();
-    if (state === 'over') drawOver();
+    if (state === 'menu') {
+      drawMenu();
+    } else if (bricksMode) {
+      drawBackground();
+      drawNet();
+      drawScores();
+      drawFireLabels();
+      drawBricks();
+      drawPaddle(left, false);
+      drawPaddle(right, true);
+      drawEmbers();
+      drawSparks();
+      drawDrops();
+      for (const b of balls) drawBallObj(b);
+      if (state === 'paused' && !confirmQuit) drawPause();
+      if (state === 'over') drawOver();
+      if (confirmQuit) drawConfirm();
+    } else {
+      drawBackground();
+      drawNet();
+      drawScores();
+      drawFireLabels();
+      drawPaddle(left, false);
+      drawPaddle(right, true);
+      drawAISleep();
+      drawEmbers();
+      drawSparks();
+      drawBall();
+      if (challenge) drawChallengeBadge();
+      if (state === 'paused' && !confirmQuit) drawPause();
+      if (state === 'over') drawOver();
+      if (confirmQuit) drawConfirm();
+    }
     drawDebugHUD();
 
     requestAnimationFrame(loop);
@@ -1111,13 +1654,12 @@
 
   // ── INIT ──
   resize();
-  refreshButtons();
   right.cy = left.cy = H / 2;
-  newMatch();
+  syncUI();                       // arranca en el menú (state = 'menu')
   loop();
 
   const hint = document.getElementById('hint');
-  if (!isTouch) hint.textContent = 'movés con ↑ / ↓ (y W / S en 2 jugadores) · botones: jugadores · puntos · fuego · pausa';
+  if (!isTouch) hint.textContent = 'menú: ↑↓ y Enter · en partido: ↑/↓ (y W/S en 2P) · P pausa · Esc menú';
   setTimeout(() => hint.style.opacity = '0', 5000);
   </script>
   <script>

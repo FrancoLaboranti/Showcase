@@ -24,10 +24,14 @@
   }
 
   #hint {
-    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
-    text-align: center; color: rgba(255,255,255,0.5);
-    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
-    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    max-width: min(88vw, 480px);
+    background: rgba(10,12,18,0.78); border: 1px solid rgba(255,255,255,0.10);
+    padding: 12px 20px; border-radius: 14px;
+    text-align: center; color: rgba(255,255,255,0.92);
+    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
+    pointer-events: none; transition: opacity 0.8s; z-index: 2;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
   /* Bottom bar: contains the count + the three action buttons. Opaque-ish background so it reads as a
@@ -40,9 +44,10 @@
     background: rgba(0,0,0,0.85);
     border-top: 1px solid rgba(255,255,255,0.08);
     z-index: 3;
+    gap: 3px;
   }
   #ui {
-    display: flex; gap: 8px;
+    display: flex; gap: 3px;
   }
   #ui button {
     width: 48px; height: 48px; border-radius: 50%;
@@ -69,7 +74,7 @@
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">arrastrá para tirar · usá ↑ para saltar · +/− para las bolas</div>
+  <div id="hint">arrastrá una bola para tirarla · ↑ hace saltar a todas · +/− agrega o quita</div>
   <div id="bar">
   <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -126,8 +131,8 @@
   const INITIAL_BALLS    = 1;
   const GROWTH_RATE      = 250;    // px/s de la animación de crecer/encoger (como pymunk).
 
-  const GRAB_GAIN        = 0.5;
-  const GRAB_MAX_SPEED   = 55;
+  const GRAB_GAIN        = 1;      // bumped from 0.5 → la bola sigue al cursor sin lag visible en desktop. El cap GRAB_MAX_SPEED sigue actuando como freno anti-tunneling.
+  const GRAB_MAX_SPEED   = 120;    // bumped from 55 (px/step en matter ≈ 5700 px/s a 60fps) → permite flicks rápidos sin clampear.
   const MOUSE_SMOOTH_TC  = 0.04;   // time constant (sec) of the pointer-velocity low-pass — port of pymunk's MOUSE_SMOOTH_TC. Frame-rate independent via smoothing = 1 - exp(-dt/TC).
 
   const JUMP_VELOCITY    = 22;
@@ -157,7 +162,11 @@
 
   let W = 0, H = 0, dpr = 1;
   let walls = [];
-  let wallMode = 1;                                                                // 1 = all 4 walls (default), 2 = sides wrap + top/floor bounce, 3 = all wrap (no walls). Port of WALL_MODE from pymunk.
+  // physicsScale: las constantes de velocidad (gravedad, jump, grab cap, umbrales de sonido y roll) están
+  // en unidades de matter (px/step). Sin escalar, a más resolución todo se ve "más lento" o "más débil"
+  // porque la misma cantidad de píxeles ocupa menos pantalla. Recomputamos en resize() = min(W,H)/720.
+  let physicsScale = 1;
+  let wallMode = 1;                                                                // 1 = todas las paredes, 2 = sin laterales (techo+piso, wrap horizontal), 3 = sin techo/piso (laterales, wrap vertical), 4 = sin ninguna pared (wrap ambos ejes). Port extendido de WALL_MODE.
   const pinnedBodies = new Map();                                                  // body → {x, y} for every pinned ball; position+velocity overwritten each frame so they stay nailed. Grabbing a pinned ball unpins it automatically.
   let showDebug = false;                                                           // toggles the debug HUD (FPS, off-screen count)
 
@@ -166,11 +175,11 @@
     walls = [];
     const t = 600;                                                                 // thick offscreen so a ball pushed past the edge stays inside the capsule and gets shoved back in — same intent as WALL_THICKNESS=100 in pymunk
     const opt = { isStatic: true, restitution: BALL_WALL_RESTITUTION, friction: 0.4 };
-    if (wallMode === 1) {                                                          // mode 1: top + floor at the screen edge
+    if (wallMode === 1 || wallMode === 2) {                                        // techo + piso en modos 1 y 2
       walls.push(Bodies.rectangle(W/2, -t/2,    W + 2*t, t, opt));
       walls.push(Bodies.rectangle(W/2, H + t/2, W + 2*t, t, opt));
     }
-    if (wallMode === 1 || wallMode === 2) {                                        // side walls at the screen edge in mode 1 AND mode 2
+    if (wallMode === 1 || wallMode === 3) {                                        // laterales en modos 1 y 3
       walls.push(Bodies.rectangle(-t/2, H/2,    t, H + 2*t, opt));
       walls.push(Bodies.rectangle(W + t/2, H/2, t, H + 2*t, opt));
     }
@@ -187,6 +196,8 @@
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    physicsScale = Math.min(W, H) / 720;                                           // baseline = 720px; a 1440 todo se mueve 2× en matter units (= mismo screen-fraction/seg)
+    engine.gravity.y = GRAVITY_Y * physicsScale;
     buildWalls();
   }
   window.addEventListener('resize', resize);
@@ -501,21 +512,20 @@
 
   function wrapBalls() {
     // Teleport balls that left the playfield in the wrap-active axes — pymunk has no native wrapping either; same idea.
-    if (wallMode === 1) return;                                                    // mode 1: all walls present, no wrap
+    if (wallMode === 1) return;                                                    // mode 1: paredes cerradas, no wrap
     for (const e of balls) {
       if (e.state !== 'live') continue;
       if (pinnedBodies.has(e.body)) continue;
       const r = e.body.circleRadius;
       const p = e.body.position;
       let nx = p.x, ny = p.y;
-      // mode 2: vertical wrap (top/floor open). mode 3: wrap in both axes.
-      if (wallMode === 2 || wallMode === 3) {
-        if (ny < -r) ny = H + r;
-        else if (ny > H + r) ny = -r;
-      }
-      if (wallMode === 3) {
+      if (wallMode === 2 || wallMode === 4) {                                      // wrap horizontal cuando no hay laterales
         if (nx < -r) nx = W + r;
         else if (nx > W + r) nx = -r;
+      }
+      if (wallMode === 3 || wallMode === 4) {                                      // wrap vertical cuando no hay techo/piso
+        if (ny < -r) ny = H + r;
+        else if (ny > H + r) ny = -r;
       }
       if (nx !== p.x || ny !== p.y) Body.setPosition(e.body, { x: nx, y: ny });
     }
@@ -553,7 +563,7 @@
       if (e.state !== 'live') continue;
       if (isGrabbedBody(e.body)) continue;
       if (pinnedBodies.has(e.body)) continue;                                      // pinned balls don't jump — and even though they're static, setVelocity would shift positionPrev and leak as a kick when unpinned
-      Body.setVelocity(e.body, { x: e.body.velocity.x, y: -JUMP_VELOCITY });
+      Body.setVelocity(e.body, { x: e.body.velocity.x, y: -JUMP_VELOCITY * physicsScale });
     }
   }
 
@@ -666,23 +676,25 @@
   tappable(document.getElementById('btnReset'), reset);
   tappable(document.getElementById('btnJump'), jumpAll);
 
-  // Wall mode: cycles 1 → 2 → 3 → 1. SVG per modo (encapsulado / túnel / abriéndose).
+  // Wall mode: cycles 1 → 2 → 3 → 4 → 1. SVG per modo (encapsulado / túnel / wrap / infinito).
   // Rebuilds the wall set on each tap.
   const WALL_ICONS = {
     // 1 = caja completa (rect cerrado)
     1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg>',
-    // 2 = dos paredes laterales (túnel, techo y piso abiertos)
-    2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M7 4v16M17 4v16"/></svg>',
-    // 3 = 4 flechas en diagonal desde el centro hacia afuera (abriéndose / wrap)
-    3: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10 4 4M4 9V4h5M14 10l6-6M15 4h5v5M10 14l-6 6M4 15v5h5M14 14l6 6M20 15v5h-5"/></svg>',
+    // 2 = techo + piso (dos rayas horizontales, los lados abiertos)
+    2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M4 7h16M4 17h16"/></svg>',
+    // 3 = laterales (dos rayas verticales, techo/piso abiertos)
+    3: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M7 4v16M17 4v16"/></svg>',
+    // 4 = sin paredes (4 flechas diagonales abriéndose)
+    4: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10 4 4M4 9V4h5M14 10l6-6M15 4h5v5M10 14l-6 6M4 15v5h5M14 14l6 6M20 15v5h-5"/></svg>',
   };
   const btnWall = document.getElementById('btnWall');
   btnWall.innerHTML = WALL_ICONS[wallMode];
   tappable(btnWall, () => {
-    wallMode = (wallMode % 3) + 1;
+    wallMode = (wallMode % 4) + 1;
     btnWall.innerHTML = WALL_ICONS[wallMode];
     buildWalls();
-    if (wallMode !== 1) stopAllRolls();                                            // sin piso, no hay rolls que seguir
+    if (wallMode !== 1 && wallMode !== 2) stopAllRolls();                          // sin piso (modos 3/4), no hay rolls que seguir
   });
 
   // Pin: tap toggles the pinned state of each currently-grabbed ball. Pinning makes the body STATIC
@@ -691,7 +703,7 @@
   // and KEEPS the grab so you can drag it away immediately. Tap with nothing grabbed is a no-op.
   // Other ways to clear pins: reset, or minus to remove the ball.
   const btnPin = document.getElementById('btnPin');
-  tappable(btnPin, () => {
+  function togglePinGrabbed() {
     for (const ps of pointers.values()) {
       if (!ps.grab) continue;
       const body = ps.grab.body;
@@ -707,6 +719,16 @@
       }
     }
     btnPin.classList.toggle('on', pinnedBodies.size > 0);
+  }
+  tappable(btnPin, togglePinGrabbed);
+
+  // Keyboard (desktop): Q pinea/despinea la bola actualmente agarrada (mismo toggle que el botón
+  // chinche), Space hace saltar a todas (mismo que el botón ↑). Tienen que ser keydown con repeat-skip
+  // para no spamear si el usuario deja la tecla apretada. preventDefault en Space evita el scroll.
+  window.addEventListener('keydown', e => {
+    if (e.repeat) return;
+    if (e.code === 'KeyQ') { togglePinGrabbed(); }
+    else if (e.code === 'Space') { e.preventDefault(); audioResume(); jumpAll(); }
   });
 
   // Debug HUD toggle.
@@ -821,7 +843,7 @@
     for (const pair of ev.pairs) {
       const { bodyA, bodyB } = pair;
       const vrel = Vector.magnitude(Vector.sub(bodyA.velocity, bodyB.velocity));
-      if (vrel < VTHR_AUDIBLE) continue;
+      if (vrel < VTHR_AUDIBLE * physicsScale) continue;
 
       const grabbed = isGrabbedBody(bodyA) || isGrabbedBody(bodyB);
       const wallHit = bodyA.isStatic || bodyB.isStatic;
@@ -834,10 +856,13 @@
       // Los sonidos InHand NO se dispararan acá — viven en updateBagSounds(), que cuenta cuántas bolas
       // toca el grabbed cada frame y sólo dispara cuando el contador ≥ BAG_MIN_CONTACTS. Mientras tanto
       // los clicks fuertes/suaves siguen el flujo normal igual que para bolas libres.
-      const intensity = (vrel - VTHR_AUDIBLE) / (VTHR_HARD - VTHR_AUDIBLE);
-      if (false && vrel >= VTHR_HARD && !grabbed) {                                // MarbleClick DESACTIVADO de momento — todo hit fuerte cae a MarbleLowClick. Restaurar quitando `false &&`.
+      const vthrAud = VTHR_AUDIBLE * physicsScale;
+      const vthrMed = VTHR_MED * physicsScale;
+      const vthrHard = VTHR_HARD * physicsScale;
+      const intensity = (vrel - vthrAud) / (vthrHard - vthrAud);
+      if (false && vrel >= vthrHard && !grabbed) {                                 // MarbleClick DESACTIVADO de momento — todo hit fuerte cae a MarbleLowClick. Restaurar quitando `false &&`.
         tryPlay('MarbleClick', Math.min(1, intensity), pitch);
-      } else if (vrel >= VTHR_MED) {
+      } else if (vrel >= vthrMed) {
         tryPlay('MarbleLowClick', intensity, pitch);
       } else {
         // baja velocidad: el sample específico depende de qué chocó.
@@ -875,9 +900,9 @@
       if (e.state !== 'live' || b.isStatic) { stopRollNode(e); continue; }
       const r = b.circleRadius;
       const distToFloor = H - b.position.y - r;                                    // 0 = tocando piso, >0 = arriba, <0 = pasado
-      const onFloor = wallMode === 1 && distToFloor < r * ROLL_NEAR_FLOOR_FRAC && distToFloor > -r * 1.5;
+      const onFloor = (wallMode === 1 || wallMode === 2) && distToFloor < r * ROLL_NEAR_FLOOR_FRAC && distToFloor > -r * 1.5;
       const hSpeed = Math.abs(b.velocity.x);
-      const rolling = onFloor && hSpeed > ROLL_MIN_HSPEED;
+      const rolling = onFloor && hSpeed > ROLL_MIN_HSPEED * physicsScale;
       if (rolling) {
         if (!e.rollNode) {
           const src = actx.createBufferSource();
@@ -888,7 +913,7 @@
           try { src.start(); } catch {}
           e.rollNode = { src, gain };
         }
-        const t = Math.min(1, (hSpeed - ROLL_MIN_HSPEED) / (ROLL_FULL_HSPEED - ROLL_MIN_HSPEED));
+        const t = Math.min(1, (hSpeed - ROLL_MIN_HSPEED * physicsScale) / ((ROLL_FULL_HSPEED - ROLL_MIN_HSPEED) * physicsScale));
         const target = t * 0.35;                                                   // tope de gain del roll para no tapar los clicks
         const k = 1 - Math.exp(-dt / ROLL_ATTACK_TC);
         e.rollNode.gain.gain.value += (target - e.rollNode.gain.gain.value) * k;
@@ -945,7 +970,8 @@
       const tx = ps.x + ps.grab.offX, ty = ps.y + ps.grab.offY;
       let vx = (tx - b.position.x)*GRAB_GAIN, vy = (ty - b.position.y)*GRAB_GAIN;
       const sp = Math.hypot(vx, vy);
-      if (sp > GRAB_MAX_SPEED) { vx *= GRAB_MAX_SPEED/sp; vy *= GRAB_MAX_SPEED/sp; }
+      const cap = GRAB_MAX_SPEED * physicsScale;
+      if (sp > cap) { vx *= cap/sp; vy *= cap/sp; }
       Body.setVelocity(b, { x: vx, y: vy });
       Body.setAngularVelocity(b, 0);
     }

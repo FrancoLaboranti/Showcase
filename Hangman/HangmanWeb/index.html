@@ -137,16 +137,17 @@
     font-size: 12px; color: rgba(255,255,255,0.3);
   }
   /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css (incluido en <head>). */
+  /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
   #fpsOverlay {
     position: absolute;
-    right: 40px;
-    bottom: calc(env(safe-area-inset-bottom) + 8px);
-    font-family: monospace;
+    left: calc(8px + env(safe-area-inset-left));
+    top: calc(8px + env(safe-area-inset-top));
+    font-family: ui-monospace, Menlo, Consolas, monospace;
     font-size: 13px;
+    line-height: 18px;
     color: rgba(255,255,255,0.9);
-    background: rgba(0,0,0,0.6);
-    padding: 3px 8px;
-    border-radius: 4px;
+    background: rgba(0,0,0,0.55);
+    padding: 4px 6px;
     pointer-events: none;
     display: none;
     z-index: 9;
@@ -1371,8 +1372,12 @@ VACCINE|SCIENCE|trains immunity
       }
       loop();
       const btn = document.getElementById('btnInfo');
-      btn.addEventListener('click', () => {
-        const showing = overlay.style.display !== 'none';
+      btn.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        // El overlay arranca con display:none POR CSS — el style inline está vacío "", así que
+        // comparamos con === 'block' (estado visible explícito) en vez de !== 'none' (que daba true
+        // al inicio y se comía el primer tap).
+        const showing = overlay.style.display === 'block';
         overlay.style.display = showing ? 'none' : 'block';
         btn.classList.toggle('on', !showing);
       });

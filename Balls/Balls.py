@@ -350,12 +350,12 @@ class Ball(Sprite):
         r = self.radius
         pos = self.body.position
         x, y = pos.x, pos.y
-        if WALL_MODE != 1:                                                          # sides wrap in MODE 2 or 3
+        if WALL_MODE in (2, 4):                                                     # x-axis wrap en los modos sin laterales (2 = techo+piso, 4 = sin nada)
             if x < -r:
                 x = screenX + r
             elif x > screenX + r:
                 x = -r
-        if WALL_MODE == 3:                                                          # top/bottom also wrap in MODE 3
+        if WALL_MODE in (3, 4):                                                     # y-axis wrap en los modos sin techo/piso (3 = sólo laterales, 4 = sin nada)
             if y < -r:
                 y = screenY + r
             elif y > screenY + r:
@@ -927,9 +927,11 @@ def buildWalls():
     segs = []
     if WALL_MODE == 1:
         segs = sides + topbot
-    elif WALL_MODE == 2:
+    elif WALL_MODE == 2:                                                            # sin laterales: techo y piso, wrap horizontal
         segs = topbot
-    # MODE 3: no walls
+    elif WALL_MODE == 3:                                                            # sin techo/piso: laterales, wrap vertical
+        segs = sides
+    # MODE 4: sin paredes, wrap en ambos ejes — segs queda vacío.
     for (a, b) in segs:
         seg = pymunk.Segment(space.static_body, a, b, t)
         seg.elasticity = BALL_WALL_RESTITUTION                                     # fallback only — pre_solve callback overrides this on every contact
@@ -1026,6 +1028,7 @@ while True:
     if keys[pygame.K_1]:   newMode = 1
     elif keys[pygame.K_2]: newMode = 2
     elif keys[pygame.K_3]: newMode = 3
+    elif keys[pygame.K_4]: newMode = 4                                              # sin paredes ni wrap — las bolas se van al vacío y se quedan ahí
     if newMode != WALL_MODE:
         WALL_MODE = newMode
         buildWalls()

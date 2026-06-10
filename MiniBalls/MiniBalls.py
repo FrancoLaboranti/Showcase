@@ -80,7 +80,8 @@ class Ball(Sprite):
         self.x += math.cos(self.forceAng)*self.forceSpeed*deltaT
         self.y += math.sin(self.forceAng)*self.forceSpeed*deltaT + math.sin(-math.pi/2)*self.floorBounce*deltaT
 
-        if self.x < 0 + self.radius or self.x > screenX - self.radius:
+        # Rebote contra laterales (sólo en los modos que tienen pared lateral: 1 y 3)
+        if WALL_MODE in (1, 3) and (self.x < 0 + self.radius or self.x > screenX - self.radius):
             self.x = 0 + self.radius if self.x < 0 + self.radius else screenX - self.radius
             self.forceSpeed *= 0.9
 
@@ -99,11 +100,12 @@ class Ball(Sprite):
             elif math.pi/2 >= self.forceAng >= math.pi*0.3:                    # bounce R to L bot side (weak angle)
                 self.forceAng += math.pi*0.3
             elif math.pi*0.7 >= self.forceAng >= math.pi/2:                    # bounce L to R bot side (weak angle)
-                self.forceAng += -math.pi*0.3                
+                self.forceAng += -math.pi*0.3
             else:                                                              # direct horizontal bounce
                 self.forceAng += math.pi
 
-        if self.y < 0 + self.radius or self.y > screenY - self.radius:
+        # Rebote contra techo/piso (sólo en los modos que los tienen: 1 y 2)
+        if WALL_MODE in (1, 2) and (self.y < 0 + self.radius or self.y > screenY - self.radius):
             self.y = 0 + self.radius if self.y < 0 + self.radius else screenY - self.radius
 
             if self.y == 0 + self.radius:
@@ -115,6 +117,16 @@ class Ball(Sprite):
                     self.forceAng = -self.forceAng
 
                 self.floorBounce = min(self.fallTime * 1000, 600) if self.fallTime > 0.01 else 0
+
+        # Wrap horizontal (modos sin laterales: 2 y 4)
+        if WALL_MODE in (2, 4):
+            if self.x < -self.radius:   self.x = screenX + self.radius
+            elif self.x > screenX + self.radius: self.x = -self.radius
+
+        # Wrap vertical (modos sin techo/piso: 3 y 4)
+        if WALL_MODE in (3, 4):
+            if self.y < -self.radius:   self.y = screenY + self.radius
+            elif self.y > screenY + self.radius: self.y = -self.radius
 
         self.forceSpeed = max(self.forceSpeed * 0.9995 if self.forceSpeed > 100 else 0, 500)
 
@@ -139,6 +151,8 @@ class Ball(Sprite):
         return self != ball and getDist((self.x, self.y),(ball.x, ball.y)) < self.radius + ball.radius
 
 pygame.init()
+
+WALL_MODE = 1                                                                      # 1=todas las paredes, 2=sin laterales (techo+piso, wrap horizontal), 3=sin techo/piso (laterales, wrap vertical), 4=sin paredes (wrap en ambos ejes). Teclas 1/2/3/4 para cambiar.
 
 screenX = 1280
 screenY = 720
@@ -213,6 +227,8 @@ while True:
 
     keys = pygame.key.get_pressed()
     showInfo = keys[pygame.K_SPACE]
+    # WALL_MODE se cambia más abajo en el loop de eventos (KEYDOWN, no polling) — el get_pressed()
+    # parecía tener un comportamiento raro con K_2 puntual en este setup.
 
     mouseX, mouseY = pygame.mouse.get_pos()
     mouseLeft, _, mouseRight = pygame.mouse.get_pressed()
@@ -232,6 +248,10 @@ while True:
     for sprite in sprites:
         sprite.process()
         sprite.draw()
+
+    # Indicador permanente del WALL_MODE actual (esquina arriba-derecha) — útil para confirmar que las
+    # teclas 1/2/3/4 están cambiando algo, especialmente cuando el cambio visual es sutil.
+    createText(16, "MODO: %d" % WALL_MODE, 'topright', (180,180,180), xper(0.99), yper(0.02))
 
     if showInfo:
         createText(20, "Previous point: %s" % str(prevMousePos),'topleft',(0,200,0),xper(0.01),yper(0.015))
@@ -259,6 +279,12 @@ while True:
                     if not ball.removing and sprites.index(ball) > 0:
                         ball.removing = True
                         break
+        if event.type == pygame.KEYDOWN:
+            if   event.key == pygame.K_1: WALL_MODE = 1
+            elif event.key == pygame.K_2: WALL_MODE = 2
+            elif event.key == pygame.K_3: WALL_MODE = 3
+            elif event.key == pygame.K_4: WALL_MODE = 4
+            print(f"[MiniBalls] KEYDOWN key={event.key} scancode={event.scancode} → WALL_MODE={WALL_MODE}")
         if event.type == QUIT:
             pygame.quit()
             sys.exit()

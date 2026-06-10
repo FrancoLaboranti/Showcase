@@ -12,7 +12,7 @@
 <title>CrazyTanks</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@600;700&family=Russo+One&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -29,10 +29,14 @@
   #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
 
   #hint {
-    position: absolute; left: 0; right: 0; top: calc(8px + env(safe-area-inset-top));
-    text-align: center; color: rgba(255,255,255,0.5);
-    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
-    transition: opacity 0.8s; z-index: 5; padding: 0 16px;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    max-width: min(88vw, 480px);
+    background: rgba(10,12,18,0.78); border: 1px solid rgba(255,255,255,0.10);
+    padding: 12px 20px; border-radius: 14px;
+    text-align: center; color: rgba(255,255,255,0.92);
+    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
+    pointer-events: none; transition: opacity 0.8s; z-index: 5;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
   /* ── Controles en pantalla (touch). En desktop el teclado sigue siendo el camino principal; estos
@@ -45,8 +49,8 @@
   .row { display: flex; gap: 8px; align-items: center; }
   .btn {
     width: 38px; height: 38px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.22);
-    background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
     color: #fff;
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: none; padding: 0;
@@ -59,6 +63,15 @@
   /* Joystick ÚNICO de movimiento (hand-rolled): se agarra en cualquier punto del lado izquierdo de la
      pantalla y aparece centrado en el dedo. El vector marca el rumbo; el disparo es automático. */
   #jMove { position: fixed; left: 0; bottom: 0; width: 48%; height: 86%; z-index: 4; touch-action: none; }
+  /* Botones de acción (abajo-derecha): nitro (boost) arriba, disparo (misil) abajo. */
+  #actBtns { position: fixed; right: calc(12px + env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  #actBtns .btn { width: 54px; height: 54px; position: relative; }
+  #actBtns .btn svg { width: 22px; height: 22px; }
+  .btn.fireBtn  { background: rgba(255,90,60,0.18);  border-color: rgba(255,90,60,0.5); }
+  .btn.fireBtn:active, .btn.fireBtn.on   { background: rgba(255,90,60,0.45);  border-color: rgba(255,120,90,0.8); box-shadow: 0 0 14px rgba(255,90,60,0.6); }
+  .btn.nitroBtn { background: rgba(80,220,255,0.16); border-color: rgba(80,220,255,0.5); color: #aef0ff; }
+  .btn.nitroBtn:active, .btn.nitroBtn.on { background: rgba(80,220,255,0.42); border-color: rgba(140,235,255,0.85); box-shadow: 0 0 14px rgba(80,220,255,0.6); }
+  #nitroRing, #fireRing { position: absolute; inset: -3px; border-radius: 50%; pointer-events: none; }
   /* (Estilo del nub: ahora inline en createJoystick; estas reglas .nipple quedan sin uso pero inofensivas.) */
   .nipple .back {
     background: radial-gradient(circle at 50% 38%, rgba(255,255,255,0.10), rgba(255,255,255,0.03) 70%) !important;
@@ -73,7 +86,8 @@
     opacity: 1 !important;
   }
   /* Botones de menú (esquina sup-der): Enter / Esc */
-  #padMenu { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right)); z-index: 4; display: flex; gap: 8px; }
+  /* Fullscreen + atrás: a la izquierda del cluster info/salir (que van pegados a la esquina). */
+  #padMenu { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: calc(80px + env(safe-area-inset-right)); z-index: 4; display: flex; gap: 8px; }
   #padMenu .btn { width: 30px; height: 30px; }
   #padMenu .btn svg { width: 14px; height: 14px; }
   /* Ícono de pantalla completa: muestra "expandir" o "contraer" según el estado (body.fs-on) */
@@ -91,14 +105,14 @@
   #rotate svg { width: 88px; height: 88px; color: #78c8ff; animation: rotatehint 2.2s ease-in-out infinite; }
   #rotate p { font-size: 19px; letter-spacing: 0.06em; line-height: 1.5; }
   @keyframes rotatehint { 0%, 55%, 100% { transform: rotate(0deg); } 25%, 40% { transform: rotate(-90deg); } }
-  /* Exit button — vuelta al menú raíz */
+  /* Exit button — pegado a la esquina superior derecha (el más al borde) */
   #btnExit {
     position: absolute;
-    left: 6px;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    right: calc(8px + env(safe-area-inset-right));
+    top: calc(8px + env(safe-area-inset-top));
     width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
     color: rgba(255,255,255,0.85);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: none; padding: 0;
@@ -107,14 +121,14 @@
   }
   #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
   #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
-  /* Info (FPS) — esquina abajo-der, flotante. */
+  /* Info (FPS) — arriba a la derecha, al lado del de salir (a su izquierda). */
   #btnInfo {
     position: absolute;
-    right: 6px;
-    bottom: calc(env(safe-area-inset-bottom) + 4px);
+    right: calc(44px + env(safe-area-inset-right));
+    top: calc(8px + env(safe-area-inset-top));
     width: 28px; height: 28px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.45);
-    background: rgba(0,0,0,0.55);
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
     color: rgba(255,255,255,0.85);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: none; padding: 0;
@@ -123,46 +137,44 @@
   }
   #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
   #btnInfo:active, #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+  /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
   #fpsOverlay {
     position: absolute;
-    right: 40px;
-    bottom: calc(env(safe-area-inset-bottom) + 8px);
-    font-family: monospace;
+    left: calc(8px + env(safe-area-inset-left));
+    top: calc(8px + env(safe-area-inset-top));
+    font-family: ui-monospace, Menlo, Consolas, monospace;
     font-size: 13px;
+    line-height: 18px;
     color: rgba(255,255,255,0.9);
-    background: rgba(0,0,0,0.6);
-    padding: 3px 8px;
-    border-radius: 4px;
+    background: rgba(0,0,0,0.55);
+    padding: 4px 6px;
     pointer-events: none;
     display: none;
     z-index: 9;
   }
 
 </style>
-<script>/* arcade-embed-shim: corre embebido en la shell del Arcade (iframe) */
-(function () {
-  if (window.self === window.top) return;            // sólo embebido
-  var noop = function () { return Promise.resolve(); };
-  try { Element.prototype.requestFullscreen = noop; } catch (e) {}
-  try { Element.prototype.webkitRequestFullscreen = noop; } catch (e) {}
-  // El "salir al menú" del juego: en vez de navegar (recargaría el menú dentro del iframe),
-  // avisamos a la shell por postMessage. Capturamos el click antes que el handler del juego.
-  window.addEventListener('click', function (e) {
-    var ex = e.target && e.target.closest && e.target.closest('#btnExit, #btnHome');
-    if (!ex) return;
-    e.preventDefault(); e.stopImmediatePropagation();
-    try { parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (x) {}
-  }, true);
-})();
-</script>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">palanca (lado izq): apuntá hacia dónde ir · 🔴 disparar · teclado: flechas/WASD + espacio</div>
+  <div id="hint">palanca = mover · botón rojo (bomba) = disparar · botón celeste (llama) = nitro (juntá los orbes celestes) · teclado: flechas + espacio + shift</div>
 
   <!-- Zona de movimiento: joystick ÚNICO y DINÁMICO. Tocá en cualquier punto del lado izquierdo y la
        palanca aparece ahí. El vector marca el rumbo del tanque. -->
   <div id="jMove" aria-label="mover"></div>
+
+  <!-- Botones de acción (abajo-derecha): nitro (llama, celeste) arriba, disparo (BOMBA, rojo) abajo.
+       Íconos propios de CrazyTanks (no los de TankWARS: ni misil ni rayo). -->
+  <div id="actBtns">
+    <button class="btn nitroBtn" id="btnNitro" aria-label="nitro" title="Nitro">
+      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12.5 2c.6 3-1.4 4-1.4 6.3 0 1 .7 1.7 1.6 1.7 1.2 0 1.7-1 1.6-2.2 1.7 1.3 2.7 3.4 2.7 5.5a5.5 5.5 0 0 1-11 0c0-2.7 1.7-4.6 3-6.1C10.9 5.3 11.8 3.7 12.5 2z"/></svg>
+      <span id="nitroRing"></span>
+    </button>
+    <button class="btn fireBtn" id="btnFire" aria-label="disparar" title="Disparar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" stroke="none"/><path d="M15 9.5 18 6.5" stroke-width="2"/><circle cx="18.8" cy="5.6" r="1.7" fill="currentColor" stroke="none"/><path d="M20.5 3.6 21.7 2.6M20.2 6.4 21.6 6.7M17.6 3.3 17.2 1.9" stroke-width="1.4"/></svg>
+      <span id="fireRing"></span>
+    </button>
+  </div>
 
 
   <!-- Aviso: girá el teléfono a horizontal -->
@@ -186,6 +198,9 @@
 // ── DIMENSIÓN LÓGICA — 1280×720 (16:9, las dimensiones originales de los mapas) ──
 const SCREEN_X = 1280;
 const SCREEN_Y = 720;
+// Las 10 pistas originales se agrandan a un mundo MAP_SCALE× (con cámara que sigue al jugador). El diseño
+// es el mismo, sólo escalado: el tanque se ve igual en pantalla y el mapa es más grande. Subí/bajá a gusto.
+const MAP_SCALE = 2;
 
 // ── TUNING ──
 // El pygame original corría SIN cap de FPS, así que sus incrementos de vel/ang_vel por-frame
@@ -247,6 +262,31 @@ let dpr = 1, scaleX = 1, scaleY = 1, cssW = 0, cssH = 0;
 // blitea cada frame en vez de re-dibujar cientos de figuras — clave para los FPS en mobile.
 let bgCanvas = null, bgReady = false, bgTrack = -1, bgW = 0, bgH = 0;
 
+// ── MUNDO + CÁMARA ──
+// Cada pista vive en un mundo de W×H unidades lógicas. Default = pantalla (1280×720) → la pista entra
+// entera y NO hay cámara (idéntico al comportamiento viejo). Las pistas GRANDES (las que genera el skill
+// de niveles) declaran un mundo mayor en WORLDS[track] y entonces se activa la cámara que sigue al jugador.
+// La "ventana" visible siempre es de SCREEN_X×SCREEN_Y unidades del mundo (mismo zoom que antes), y se
+// scrollea dentro del mundo grande.
+const WORLDS = {};                                                    // { [track]: [w, h] } — sólo pistas grandes (se llenan abajo)
+const THEMES = {};                                                    // override de tema por pista (las generadas fijan el suyo)
+const TRACK_POLY = {};                                                // { [track]: {outer, inner, theme} } → dibujo SUAVE del corredor
+const BIG_START = {};                                                 // largadas por pista generada: { [track]: [[x,y,ang]×4] }
+const BIG_VERTICAL = {};                                              // meta vertical? por pista generada (default: horizontal)
+function themeOf(track) { return THEMES[track] !== undefined ? THEMES[track] : Math.floor(track / 2) % 5; }
+function worldW(track) { return (WORLDS[track] && WORLDS[track][0]) || SCREEN_X; }
+function worldH(track) { return (WORLDS[track] && WORLDS[track][1]) || SCREEN_Y; }
+function isBigWorld(track) { return worldW(track) > SCREEN_X || worldH(track) > SCREEN_Y; }
+let camX = 0, camY = 0;                                               // esquina sup-izq de la vista (coords del mundo)
+function updateCamera(track) {
+  if (!isBigWorld(track)) { camX = 0; camY = 0; return; }
+  const ww = worldW(track), hh = worldH(track);
+  const p = tanks.find(t => !t.ai) || tanks[0];
+  const px = p ? p.x : ww / 2, py = p ? p.y : hh / 2;
+  camX = Math.max(0, Math.min(px - SCREEN_X / 2, ww - SCREEN_X));     // centra en el jugador, clamp al mundo
+  camY = Math.max(0, Math.min(py - SCREEN_Y / 2, hh - SCREEN_Y));
+}
+
 let lastVW = 0, lastVH = 0;                                            // disparadores del poll (innerWidth/Height crudos)
 function resize() {
   lastVW = window.innerWidth; lastVH = window.innerHeight;
@@ -260,7 +300,11 @@ function resize() {
   scaleY = cssH / SCREEN_Y;
   canvas.width  = Math.floor(cssW * dpr);                             // solo el buffer; el tamaño visual lo fija el CSS
   canvas.height = Math.floor(cssH * dpr);
-  document.getElementById('rotate').style.display = (cssH > cssW) ? 'flex' : 'none';
+  // Embebido en la shell del Arcade: la shell rota el iframe por CSS para garantizar landscape,
+  // así que el cartel de "gira el teléfono" NUNCA se muestra (resize() puede ver cssH>cssW por
+  // un instante durante transiciones de FS y dejarlo trabado).
+  const isEmbedded = (window.self !== window.top);
+  document.getElementById('rotate').style.display = (!isEmbedded && cssH > cssW) ? 'flex' : 'none';
 }
 window.addEventListener('resize', resize);
 
@@ -542,31 +586,85 @@ const FINISHLINES = [
 ];
 
 // posiciones de salida por pista/tanque [x, y, ang]
-function startposFor(track, id) {
-  const SP = [
-    [[xper(0.25),yper(0.07),0],[xper(0.21),yper(0.11),0],[xper(0.25),yper(0.15),0],[xper(0.21),yper(0.19),0]],
-    [[xper(0.68),yper(0.83),0],[xper(0.64),yper(0.87),0],[xper(0.68),yper(0.91),0],[xper(0.64),yper(0.95),0]],
-    [[xper(0.97),yper(0.4),Math.PI/2],[xper(0.95),yper(0.34),Math.PI/2],[xper(0.93),yper(0.4),Math.PI/2],[xper(0.91),yper(0.34),Math.PI/2]],
-    [[xper(0.54),yper(0.57),-Math.PI/2],[xper(0.56),yper(0.63),-Math.PI/2],[xper(0.58),yper(0.57),-Math.PI/2],[xper(0.6),yper(0.63),-Math.PI/2]],
-    [[xper(0.56),yper(0.05),Math.PI],[xper(0.6),yper(0.09),Math.PI],[xper(0.56),yper(0.13),Math.PI],[xper(0.6),yper(0.17),Math.PI]],
-    [[xper(0.36),yper(0.86),Math.PI],[xper(0.4),yper(0.89),Math.PI],[xper(0.36),yper(0.92),Math.PI],[xper(0.4),yper(0.95),Math.PI]],
-    [[xper(0.05),yper(0.65),-Math.PI/2],[xper(0.07),yper(0.72),-Math.PI/2],[xper(0.09),yper(0.65),-Math.PI/2],[xper(0.11),yper(0.72),-Math.PI/2]],
-    [[xper(0.46),yper(0.32),0],[xper(0.42),yper(0.36),0],[xper(0.46),yper(0.4),0],[xper(0.42),yper(0.44),0]],
-    [[xper(0.9),yper(0.07),Math.PI],[xper(0.94),yper(0.11),Math.PI],[xper(0.9),yper(0.15),Math.PI],[xper(0.94),yper(0.19),Math.PI]],
-    [[xper(0.75),yper(0.72),Math.PI],[xper(0.79),yper(0.72),Math.PI],[xper(0.83),yper(0.72),Math.PI],[xper(0.87),yper(0.72),Math.PI]],
-  ];
-  return SP[track][id];
+// Camina la polilínea de waypoints HACIA ATRÁS desde la meta (tp[0]) una distancia `dist` (coords de mundo).
+// Devuelve [x, y, ang] sobre el centro de la pista mirando en el sentido de carrera → la grilla sigue las
+// curvas y nunca cae fuera del circuito, sea cual sea la cantidad de tanques.
+function pointBackAlong(tp, dist) {
+  const n = tp.length; let i = 0, rem = dist;
+  while (i < n * 2) {
+    const a = tp[((-i) % n + n) % n], b = tp[((-i - 1) % n + n) % n];
+    const seg = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
+    if (rem <= seg) {
+      const f = rem / seg;
+      return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, Math.atan2(a[1] - b[1], a[0] - b[0])];
+    }
+    rem -= seg; i++;
+  }
+  const a = tp[0], b = tp[n - 1];
+  return [a[0], a[1], Math.atan2(a[1] - b[1], a[0] - b[0])];
 }
 
-const TANK_COLORS = [[150,0,0],[50,50,255],[75,0,75],[200,155,0]];
-const TANK_CONTROLS = [['UP','DOWN','LEFT','RIGHT','SPACE'], ['W','S','A','D','LCTRL']];
+const GRID_COLS = 4;                                                  // tanques por fila en la grilla de largada
+function startposFor(track, id) {
+  const tp = TRACKPOINT_MAPS[track];                                  // ya en coords de mundo (originales escaladas + generadas)
+  const col = id % GRID_COLS, row = Math.floor(id / GRID_COLS);
+  // Parrilla ESCALONADA: cada columna arranca un poco más atrás (diagonal tipo largada de carrera) y las
+  // filas bien separadas → siempre queda aire entre tanques (lateral 56 + escalón 34).
+  const [cx, cy, ang] = pointBackAlong(tp, 80 + row * 105 + col * 34);
+  const px = -Math.sin(ang), py = Math.cos(ang);                      // perpendicular al sentido de carrera
+  const side = (col - (GRID_COLS - 1) / 2) * 56;                      // separación lateral dentro de la fila
+  return [cx + px * side, cy + py * side, ang];
+}
+
+const TANK_COUNT = 16;
+// ── SKINS: pool grande y diverso. Cada skin = color base + librea (patrón `p`, 2º color `a`, 3º color `a2`).
+// Los primeros SELECTABLE_COUNT son los elegibles por el jugador (los más distintos entre sí, grilla 4×3).
+// En cada carrera el jugador usa el suyo y las IA reciben skins AL AZAR (sin repetir) del pool entero.
+const SELECTABLE_COUNT = 12;
+const SKINS = [
+  // ── 12 elegibles (bien diferentes) ──
+  { name:'Scarlet',   color:[225,45,45],   p:'centerStripe', a:[245,245,250], a2:[24,24,28]   },
+  { name:'Azure',     color:[40,110,255],  p:'twinStripe',   a:[245,205,40],  a2:[245,245,250] },
+  { name:'Emerald',   color:[30,200,90],   p:'checker',      a:[245,245,250], a2:[24,24,28]    },
+  { name:'Amber',     color:[240,200,40],  p:'hazard',       a:[24,24,28],    a2:[245,80,40]   },
+  { name:'Violet',    color:[150,55,225],  p:'chevron',      a:[60,235,255],  a2:[245,245,250] },
+  { name:'Tangerine', color:[245,125,25],  p:'flames',       a:[255,225,70],  a2:[40,30,70]    },
+  { name:'Aqua',      color:[30,205,215],  p:'splitDiag',    a:[235,40,150],  a2:[24,24,28]    },
+  { name:'Rose',      color:[245,85,170],  p:'dots',         a:[250,250,255], a2:[120,40,170]  },
+  { name:'Lime',      color:[165,225,45],  p:'bolt',         a:[26,26,30],    a2:[245,245,250] },
+  { name:'Teal',      color:[25,160,150],  p:'tiger',        a:[255,150,40],  a2:[245,245,250] },
+  { name:'Crimson',   color:[195,25,95],   p:'rally',        a:[245,210,90],  a2:[245,245,250] },
+  { name:'Cobalt',    color:[60,80,210],   p:'diagStripes',  a:[245,245,250], a2:[60,235,255]  },
+  // ── extras para variedad de la IA ──
+  { name:'Magenta',   color:[225,40,190],  p:'splitDiag',    a:[180,245,60],  a2:[24,24,28]    },
+  { name:'Gold',      color:[220,170,50],  p:'noseFade',     a:[30,30,36],    a2:[245,245,250] },
+  { name:'Mint',      color:[95,230,160],  p:'gridLines',    a:[34,42,38],    a2:[245,245,250] },
+  { name:'Sky',       color:[95,175,255],  p:'chevron',      a:[235,60,60],   a2:[245,245,250] },
+  { name:'Coral',     color:[255,115,95],  p:'twinStripe',   a:[30,40,90],    a2:[245,245,250] },
+  { name:'Indigo',    color:[110,50,170],  p:'dots',         a:[80,235,255],  a2:[245,245,250] },
+  { name:'Olive',     color:[150,165,40],  p:'hazard',       a:[24,24,28],    a2:[245,80,40]   },
+  { name:'Steel',     color:[120,140,165], p:'edgeTrim',     a:[245,245,250], a2:[60,235,255]  },
+];
+let playerSkinIdx = 0;                                                // skin elegida por el jugador (índice en SKINS, 0..11)
+let raceSkins = [];                                                  // skins asignadas por slot de carrera (se rearma cada carrera)
+
+// Asigna skins a los `nTanks` de la carrera: el jugador (slot 0) usa su elección; el resto, al azar sin repetir.
+function assignRaceSkins(nTanks) {
+  const pool = SKINS.map((_, i) => i).filter(i => i !== playerSkinIdx);
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  raceSkins = [SKINS[playerSkinIdx]];
+  for (let i = 1; i < nTanks; i++) raceSkins.push(SKINS[pool[(i - 1) % pool.length]]);
+}
+
+const TANK_CONTROLS = ['UP','DOWN','LEFT','RIGHT','SPACE'];           // único jugador (tanque 0); el resto es IA
 const TRACK_NAMES = ['Park','Hallways','Messy','Portal','Zig Zag','Smiley','Twain Portals','Snail','Combined','Boxes'];
-const COLOR_NAMES = ['Red','Blue','Purple','Yellow'];
+// TRACK_COUNT se define más abajo, DESPUÉS de generar las pistas grandes (así las incluye en el selector).
+const tankName = t => (t.skin && t.skin.name) || 'Tank';             // nombre del sponsor para los carteles de fin
 
 // ════════════════ ESTADO GLOBAL + LISTAS DE SPRITES ════════════════
 let deltaT = 0;
 const keys = {};
-let sprites = [], trackpoints = [], walls = [], tanks = [], bombs = [];
+let sprites = [], trackpoints = [], walls = [], tanks = [], bombs = [], pickups = [];
 
 function addSprite(s) { sprites.push(s); return s; }
 function removeFromList(arr, item) { const i = arr.indexOf(item); if (i >= 0) arr.splice(i, 1); }
@@ -581,15 +679,24 @@ engine.gravity.x = 0; engine.gravity.y = 0;
 const world = engine.world;
 const PHYS_STEP = 1000 / 60;                 // paso fijo (las velocidades quedan en px/frame a 60fps)
 // — Tuning del manejo (px/frame y rad/frame a 60fps; subí/bajá a gusto) —
-const TANK_SPEED   = 8;                     // velocidad máx adelante (~720 px/s). Ojo: muy alto = atraviesa paredes finas.
-const TANK_REVERSE = 4;                      // velocidad máx atrás
+const TANK_SPEED   = 12;                    // velocidad máx adelante. Ojo: muy alto = atraviesa paredes finas.
+const TANK_REVERSE = 5;                       // velocidad máx atrás
 const TANK_ACCEL   = 0.07;                   // suavizado hacia la velocidad objetivo (0..1): bajo = acelera/frena gradual (acumula)
 const TANK_AIRDRAG = 0.02;                   // fricción del aire del cuerpo: baja = mantiene/acumula velocidad
 const TANK_TURN    = 0.045;                  // giro del jugador a dirección máxima (rad/frame, ~2.7 rad/s) — menos ágil
 const AI_TURN_K    = 3.0;                    // qué tan fuerte la IA corrige el rumbo hacia el waypoint
+const AI_LOOKAHEAD = 4;                       // cuántos waypoints adelante mira la IA (más chico = sigue mejor las curvas)
 const MOVE_STEER_K = 2.8;                    // palanca única: qué tan fuerte gira hacia el rumbo apuntado
-const AUTOFIRE_RANGE = xper(0.55);           // alcance del auto-disparo del jugador (px)
-const AIM_CONE = 0.18;                        // semicono frontal (rad, ~10°): solo dispara si el enemigo está adelante
+const SPIN_TIME = 1.1;                        // duración del trompo al recibir un disparo (s)
+const SPIN_RATE = 0.13;                       // velocidad del trompo (rad/frame ≈ 1.4 vueltas en SPIN_TIME)
+// — Nitro (boost) e ítems de nitro en la pista —
+const NITRO_MULT  = 1.8;                     // multiplicador de velocidad mientras se usa el nitro
+const NITRO_DRAIN = 0.4;                     // carga/seg que consume el boost (1/0.4 ≈ 2.5s de boost a tope)
+const NITRO_PICK  = 0.25;                    // carga que da cada ítem (1/4 del tanque)
+const NITRO_MAX   = 1;
+const PICKUP_COUNT = 6;                      // ítems de nitro presentes en la pista a la vez
+const PICKUP_FADE  = 0.35;                   // duración (s) de la animación de aparecer/desaparecer
+const PICKUP_FLASH = 0.55;                   // duración (s) del destello celeste sobre el tanque al agarrar nitro
 const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // ¿Hay una pared entre dos puntos? (muestreo del segmento) → el auto-disparo no tira contra paredes.
@@ -606,11 +713,14 @@ function clearPhysics() { Composite.clear(world, false); }   // saca todos los c
 
 // ════════════════ TANK ════════════════
 class Tank {
-  constructor(i, playermode, track, racelength, difficulty) {
+  constructor(i, track, racelength, difficulty) {
     this.id = i;
-    this.radius = xper(0.0115);
-    this.vel = 0; this.ang_vel = 0; this.psteer = 0;
+    this.radius = xper(0.016);                                        // más grande
+    this.vel = 0; this.ang_vel = 0; this.psteer = 0; this.spin_timer = 0; this.spin_dir = 1; this.pickup_flash = 0;
     this.shoot_cooling = 0;
+    this.nitro = 0;                                                   // carga de nitro 0..1 (se junta con ítems de la pista)
+    this.nitro_thresh = rnd(0.45, 0.85);                              // IA: cuánta carga junta antes de usarlo (personalidad)
+    this.nitro_engaged = false;                                        // IA: ¿está soltando el nitro ahora? (histéresis)
     this.lap_progress = 0; this.pre_lap_progress = 0;
     this.lap_checkpoint = 0; this.laps = 0;
     this.track = track; this.rank = 0; this.racetime = 0;
@@ -618,22 +728,23 @@ class Tank {
     this.start = false; this.pause = false; this.finished = false;
     this.wrongway = false;
     this.wrongwayalert_timer = 1; this.wrongwayalert_cooling = 0; this.wrongwayalert_showing = 0;
-    this.ai = this.id === 0 ? false : (this.id === 1 && playermode === 1) ? false : true;
+    this.ai = this.id !== 0;                                          // sólo el tanque 0 es el jugador
     this.ai_difficulty = difficulty;
     this.ai_timer = 1; this.ai_cooling = 1; this.ai_acel = 0; this.ai_turn = 0; this.ai_shoot = 0;
     this.showhitbox = false;
 
     [this.start_x, this.start_y, this.start_ang] = startposFor(this.track, this.id);
     this.x = this.start_x; this.y = this.start_y; this.ang = this.start_ang;
-    this.color = TANK_COLORS[this.id];
+    this.skin = raceSkins[this.id] || SKINS[this.id % SKINS.length];   // skin (color + librea) asignada para esta carrera
+    this.color = this.skin.color;
 
-    if (!this.ai) [this.forward, this.reverse, this.left, this.right, this.shoot] = TANK_CONTROLS[this.id];
+    if (!this.ai) [this.forward, this.reverse, this.left, this.right, this.shoot] = TANK_CONTROLS;
 
     // Cuerpo físico: rectángulo redondeado (mejor ramming que un círculo, sin engancharse en esquinas).
     const r = this.radius;
-    this.body = Bodies.rectangle(this.x, this.y, r * 2.0, r * 1.6, {
+    this.body = Bodies.rectangle(this.x, this.y, r * 2.5, r * 1.45, {  // alargado: largo (adelante) > ancho (lateral)
       angle: this.ang, frictionAir: TANK_AIRDRAG, friction: 0.02, restitution: 0.3,
-      chamfer: { radius: r * 0.45 }, label: 'tank',
+      chamfer: { radius: r * 0.35 }, label: 'tank',
     });
     Composite.add(world, this.body);
 
@@ -646,7 +757,7 @@ class Tank {
     this.pre_lap_progress = this.lap_progress;
     this.shoot_cooling = Math.max(this.shoot_cooling - deltaT, 0);
 
-    if (!this.finished) { this.rank = tanks.length; this.racetime += deltaT; }
+    if (!this.finished) this.racetime += deltaT;                     // el rank lo calcula updateRanks() (con histéresis)
 
     let steer = 0, throttle = 0;                                       // ∈ [-1, 1]
 
@@ -664,9 +775,9 @@ class Tank {
       }
       steer    = clampN(steer, -1, 1);
       throttle = clampN(throttle, -1, 1);
-      // Auto-disparo: dispara SOLO hacia adelante (donde apunta el cañón = this.ang) y únicamente cuando
-      // hay un enemigo alineado al frente, en rango y con la línea despejada. El jugador no dispara a mano.
-      if (this.shoot_cooling === 0 && this.findTarget()) {
+      // Disparo MANUAL hacia adelante (botón de disparo / barra espaciadora). El botón sólo controla al jugador 1.
+      const wantFire = keys[this.shoot] || (this.id === 0 && btnState.fire);
+      if (wantFire && this.shoot_cooling === 0) {
         addSprite(new Bomb(this.color, this.radius, this.x, this.y, this.ang, this.vel));
         this.shoot_cooling = 2;
       }
@@ -693,7 +804,7 @@ class Tank {
         this.lap_progress = closest_point.id * 100 / trackpoints.length;
 
         if (this.ai) {
-          const target_point = trackpoints[(closest_point.id + 8) % trackpoints.length];
+          const target_point = trackpoints[(closest_point.id + AI_LOOKAHEAD) % trackpoints.length];
           target_point.color = [0, 150, 0];
           const point_ang = getangle2(this.ang, [this.x, this.y], [target_point.x, target_point.y]);
           let diff = point_ang - this.ang;                             // rumbo relativo al waypoint adelantado
@@ -711,31 +822,41 @@ class Tank {
 
     // ── Aplicar al cuerpo Matter ──
     const b = this.body;
-    // Dirección: velocidad angular directa cuando hay input (feel responsivo, sin inercia); si no, amortiguar
-    // (deja que los choques/bombas impriman spin y se vaya frenando).
-    if (Math.abs(steer) > 0.001) Body.setAngularVelocity(b, steer * TANK_TURN);
-    else                          Body.setAngularVelocity(b, b.angularVelocity * 0.85);
-    // Motor: velocidad objetivo a lo largo del heading; suavizado hacia ella (cede ante colisiones del motor).
-    const target = throttle > 0 ? TANK_SPEED * throttle : throttle < 0 ? -TANK_REVERSE * (-throttle) : 0;
-    const fx = Math.cos(b.angle), fy = Math.sin(b.angle);
-    Body.setVelocity(b, { x: b.velocity.x + (fx * target - b.velocity.x) * TANK_ACCEL,
-                          y: b.velocity.y + (fy * target - b.velocity.y) * TANK_ACCEL });
+    if (this.spin_timer > 0) {
+      // TROMPO por impacto de bomba: gira sin control y frena, ignorando el input por un rato.
+      this.spin_timer -= deltaT;
+      Body.setAngularVelocity(b, this.spin_dir * SPIN_RATE);
+      Body.setVelocity(b, { x: b.velocity.x * 0.9, y: b.velocity.y * 0.9 });
+    } else {
+      // Dirección: velocidad angular directa cuando hay input (feel responsivo, sin inercia); si no, amortiguar.
+      if (Math.abs(steer) > 0.001) Body.setAngularVelocity(b, steer * TANK_TURN);
+      else                          Body.setAngularVelocity(b, b.angularVelocity * 0.85);
+      // NITRO: boost de velocidad hacia adelante mientras se usa y haya carga.
+      // La IA NO lo usa apenas lo junta: acumula hasta su umbral y recién lo suelta en RECTA (poco giro);
+      // lo corta al entrar en curva y lo retoma en la próxima recta si le queda carga.
+      let wantBoost;
+      if (this.ai) {
+        const straight = Math.abs(steer) < 0.28;
+        if (!this.nitro_engaged && this.nitro >= this.nitro_thresh && straight) this.nitro_engaged = true;
+        if (this.nitro <= 0.02 || !straight) this.nitro_engaged = false;
+        wantBoost = this.nitro_engaged;
+      } else {
+        wantBoost = (this.id === 0 && btnState.nitro) || keys.SHIFT;
+      }
+      let boostMult = 1;
+      if (wantBoost && this.nitro > 0 && throttle > 0) { boostMult = NITRO_MULT; this.nitro = Math.max(0, this.nitro - NITRO_DRAIN * deltaT); }
+      // Motor: velocidad objetivo a lo largo del heading; suavizado hacia ella.
+      const target = (throttle > 0 ? TANK_SPEED * throttle : throttle < 0 ? -TANK_REVERSE * (-throttle) : 0) * boostMult;
+      const fx = Math.cos(b.angle), fy = Math.sin(b.angle);
+      Body.setVelocity(b, { x: b.velocity.x + (fx * target - b.velocity.x) * TANK_ACCEL,
+                            y: b.velocity.y + (fy * target - b.velocity.y) * TANK_ACCEL });
+    }
 
     if (this.lap_progress > 0 && this.lap_progress < 5) this.lap_checkpoint = 1;
     if (this.lap_progress > 95 && this.lap_progress < 100 && this.lap_checkpoint === 1) this.lap_checkpoint = 2;
     if (this.lap_progress === 0) {
       if (this.lap_checkpoint === 2 && !this.finished) this.laps += 1;
       this.lap_checkpoint = 0;
-    }
-
-    // Ranking (la colisión tanque-tanque ya la resuelve Matter; acá solo se calcula la posición en carrera).
-    for (const tank of tanks) {
-      if (tank === this) continue;
-      if (!this.finished && !tank.finished) {
-        if (this.laps > tank.laps) this.rank -= 1;
-        else if (this.laps === tank.laps && this.lap_progress > tank.lap_progress && this.lap_checkpoint !== 0) this.rank -= 1;
-        else if (this.laps === tank.laps && this.lap_progress <= tank.lap_progress && tank.lap_checkpoint === 0) this.rank -= 1;
-      }
     }
 
     if (closest_point !== null && closest_point.id !== 0) {
@@ -766,25 +887,39 @@ class Tank {
 
   draw() {
     const r = this.radius, fin = this.finished;
+    if (this.pickup_flash > 0) this.pickup_flash = Math.max(0, this.pickup_flash - deltaT);
 
-    // sombra suave debajo del tanque → profundidad
-    ctx.save();
-    ctx.globalAlpha = 0.22; ctx.fillStyle = '#000';
-    ctx.beginPath(); ctx.ellipse(this.x + r*0.12, this.y + r*0.22, r*1.05, r*0.92, 0, 0, TAU); ctx.fill();
-    ctx.restore();
+    // Destello de nitro: halo celeste DETRÁS del tanque (se desvanece).
+    if (this.pickup_flash > 0) {
+      const f = this.pickup_flash / PICKUP_FLASH;                     // 1 → 0
+      ctx.save();
+      ctx.globalAlpha = 0.45 * f; drawCircle(this.x, this.y, r*1.7, [120, 230, 255]);
+      ctx.globalAlpha = 0.25 * f; drawCircle(this.x, this.y, r*2.4, [120, 230, 255]);
+      ctx.restore();
+    }
 
-    paintTank(this.x, this.y, this.ang, r, this.color, 1, fin);
+    paintTank(this.x, this.y, this.ang, r, this.color, 1, fin, this.skin);
+
+    // Destello de nitro: onda expansiva celeste ENCIMA (crece y se desvanece).
+    if (this.pickup_flash > 0) {
+      const f = this.pickup_flash / PICKUP_FLASH;
+      ctx.save();
+      ctx.globalAlpha = 0.8 * f; ctx.strokeStyle = 'rgba(160,238,255,1)'; ctx.lineWidth = Math.max(1.5, r*0.16);
+      ctx.beginPath(); ctx.arc(this.x, this.y, r*(1.1 + 1.7*(1-f)), 0, TAU); ctx.stroke();
+      ctx.restore();
+    }
 
     if (this.showhitbox) strokeRect(this.x-r*0.75, this.y-r*0.75, r*1.5, r*1.5, [255,255,0]);
 
     const rankFont = SCREEN_X < 1000 ? RS_font : S_font;
-    if (this.racetime > 1) {
-      const rk = this.rank === 1 ? '1st' : this.rank === 2 ? '2nd' : this.rank === 3 ? '3rd' : '4th';
-      createText(rankFont, `${rk} - ${Math.min(this.laps+1, this.racelength)}/${this.racelength}`, modifyColor(this.color,100), modifyColor(this.color,-50),
-        xper(0.07 + (this.rank-1)*0.135), yper(0.04));
+    if (this.id === 0 && this.racetime > 1) {
+      // tarjeta de posición SOLO del jugador: fija arriba-izquierda (translate(cam) la despega del scroll).
+      ctx.save(); ctx.translate(camX, camY);
+      drawPosCard(this.rank, tanks.length, this.color, this.laps, this.racelength, this.skin);
+      ctx.restore();
     }
     if (fin) {
-      const rk = this.rank === 1 ? '1st!' : this.rank === 2 ? '2nd!' : this.rank === 3 ? '3rd' : '4th';
+      const rk = this.rank + ordinalSuffix(this.rank) + (this.rank === 1 ? '!' : '');
       createText(rankFont, rk, modifyColor(this.color,150), null, this.x, this.y - r*2, 10);
     }
 
@@ -804,7 +939,7 @@ class Bomb {
   constructor(tankColor, tankRadius, tankX, tankY, tankAng, tankVel) {
     this.color = tankColor; this.radius = tankRadius * 0.3;
     this.x = tankX; this.y = tankY; this.ang = tankAng;
-    this.vel = Math.max(tankVel * 2, 1000);
+    this.vel = Math.max(tankVel * 2.2, 1300);                         // un poco más rápido que antes
     this.pause = false;
     bombs.push(this);
   }
@@ -817,14 +952,15 @@ class Bomb {
       if (tank.color !== this.color && !tank.finished &&
           rectColision([this.x-this.radius*0.75, this.y-this.radius*0.75, this.radius*1.5, this.radius*1.5],
                         [tank.x-tank.radius*0.75, tank.y-tank.radius*0.75, tank.radius*1.5, tank.radius*1.5])) {
-        // spin-out: trompo violento + casi frena (sobre el cuerpo físico)
-        Body.setAngularVelocity(tank.body, (ri(0,1) === 0 ? -1 : 1) * 0.5);
-        Body.setVelocity(tank.body, { x: tank.body.velocity.x * 0.1, y: tank.body.velocity.y * 0.1 });
+        // impacto: el tanque víctima pega una VUELTA (trompo) sin control y casi frena.
+        tank.spin_timer = SPIN_TIME; tank.spin_dir = (ri(0,1) === 0 ? -1 : 1);
+        Body.setVelocity(tank.body, { x: tank.body.velocity.x * 0.15, y: tank.body.velocity.y * 0.15 });
         removeFromList(bombs, this); removeFromList(sprites, this);
         return;
       }
     }
-    if (this.x > SCREEN_X+this.radius || this.x < 0-this.radius || this.y > SCREEN_Y+this.radius || this.y < 0-this.radius) {
+    const tr = sprites[0] ? sprites[0].track : 0, WW = worldW(tr), HH = worldH(tr);
+    if (this.x > WW+this.radius || this.x < 0-this.radius || this.y > HH+this.radius || this.y < 0-this.radius) {
       removeFromList(bombs, this); removeFromList(sprites, this);
     }
   }
@@ -843,6 +979,66 @@ class Bomb {
     drawCircle(this.x, this.y, r, modifyColorPerc(this.color, 1.6));
     drawCircle(this.x, this.y, r*0.5, [255, 255, 230]);                // núcleo brillante
     ctx.restore();
+  }
+}
+
+// ════════════════ ÍTEM DE NITRO ════════════════
+// Aparece cerca de un waypoint (con offset, no sobre la raya), con animación de aparecer/desaparecer.
+// Tiene VIDA LIMITADA: si no lo agarrás antes de `ttl`, se desvanece y reaparece en otro lado.
+class NitroPickup {
+  constructor(x, y) { this.x = x; this.y = y; this.r = xper(0.014); this.age = 0; this.ttl = rnd(6, 10); pickups.push(this); }
+  scale() {                                                           // 0→1 al aparecer, 1→0 al expirar (anim)
+    const inn = Math.min(1, this.age / PICKUP_FADE);
+    const out = this.age > this.ttl ? Math.max(0, 1 - (this.age - this.ttl) / PICKUP_FADE) : 1;
+    return Math.min(inn, out);
+  }
+  process() {
+    this.age += deltaT;
+    if (this.age >= this.ttl + PICKUP_FADE) { this._remove(); return; }   // expiró (terminó el fade-out)
+    if (this.age < this.ttl) {                                        // sólo se puede agarrar mientras no esté expirando
+      for (const t of tanks) {
+        if (t.finished) continue;
+        if (getdist([this.x, this.y], [t.x, t.y]) < this.r + t.radius) {
+          t.nitro = Math.min(NITRO_MAX, t.nitro + NITRO_PICK);
+          t.pickup_flash = PICKUP_FLASH;                              // destello celeste sobre el tanque
+          this._remove(); return;
+        }
+      }
+    }
+  }
+  _remove() { removeFromList(pickups, this); removeFromList(sprites, this); }
+  draw() {
+    const s = this.scale(); if (s <= 0.01) return;
+    const pulse = 0.6 + 0.4 * Math.sin(T * 5 + this.x * 0.01), r = this.r * (0.45 + 0.55 * s);   // crece/achica con la anim
+    ctx.save();
+    ctx.globalAlpha = 0.30 * pulse * s; drawCircle(this.x, this.y, r * 1.8, [90, 220, 255]);    // halo cian
+    ctx.globalAlpha = s;
+    drawCircle(this.x, this.y, r, [10, 30, 45]);                       // base oscura
+    drawCircle(this.x, this.y, r * 0.86, [90, 220, 255]);            // disco cian
+    ctx.fillStyle = rgb([10, 35, 55]);                                // glifo (rayo)
+    ctx.beginPath();
+    ctx.moveTo(this.x + r*0.12, this.y - r*0.55);
+    ctx.lineTo(this.x - r*0.34, this.y + r*0.08);
+    ctx.lineTo(this.x - r*0.02, this.y + r*0.08);
+    ctx.lineTo(this.x - r*0.12, this.y + r*0.55);
+    ctx.lineTo(this.x + r*0.36, this.y - r*0.10);
+    ctx.lineTo(this.x + r*0.02, this.y - r*0.10);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+function pointInWall(x, y) { for (const w of walls) if (x > w.x && x < w.x + w.width && y > w.y && y < w.y + w.height) return true; return false; }
+// Mantiene PICKUP_COUNT ítems: cerca de un waypoint pero con offset (no sobre la raya), sin pisar paredes
+// ni encimarse. Al expirar/recogerse, el loop respawnea otro en otro lado → los ítems "rotan" por la pista.
+function ensureNitroPickups() {
+  if (!trackpoints.length) return;
+  let guard = 0;
+  while (pickups.length < PICKUP_COUNT && guard++ < 60) {
+    const tp = trackpoints[ri(1, trackpoints.length - 1)];           // evita el waypoint 0 (largada/meta)
+    const a = rnd(0, TAU), d = rnd(xper(0.012), xper(0.05));          // offset aleatorio fuera de la raya
+    const x = tp.x + Math.cos(a) * d, y = tp.y + Math.sin(a) * d;
+    if (pointInWall(x, y) || pickups.some(p => getdist([p.x, p.y], [x, y]) < xper(0.045))) continue;
+    addSprite(new NitroPickup(x, y));
   }
 }
 
@@ -888,7 +1084,7 @@ class TrackPoint {
     const fl = FINISHLINES[this.track];
     if (this.id === 0) {
       const W = [255, 255, 255];
-      if ([0,1,4,5,7,8,9].includes(this.track)) {                      // meta VERTICAL (la raya corre en y; ancho de banda = fl[1])
+      if ([0,1,4,5,7,8,9].includes(this.track) || BIG_VERTICAL[this.track]) {   // meta VERTICAL (la raya corre en y; ancho de banda = fl[1])
         const x0 = this.x - fl[1], len = 2*fl[0], top = this.y - fl[0];
         const sq = fl[1] / 2, rows = Math.max(1, Math.round(len / sq)), cell = len / rows;
         for (let r = 0; r < rows; r++)
@@ -907,41 +1103,94 @@ class TrackPoint {
       }
     }
 
-    if (this.id === trackpoints.length - 1) {
-      for (const tank of tanks) {
-        const sx = tank.start_x, sy = tank.start_y, r = tank.radius, W = [255,255,255];
-        if (tank.start_ang === 0) {
-          drawLine([sx+r, sy-r], [sx+r, sy+r], W, 2);
-          drawLine([sx+r/2, sy+r], [sx+r, sy+r], W, 2);
-          drawLine([sx+r/2, sy-r], [sx+r, sy-r], W, 2);
-        }
-        if (tank.start_ang === Math.PI) {
-          drawLine([sx-r, sy-r], [sx-r, sy+r], W, 2);
-          drawLine([sx-r/2, sy+r], [sx-r, sy+r], W, 2);
-          drawLine([sx-r/2, sy-r], [sx-r, sy-r], W, 2);
-        }
-        if (tank.start_ang === Math.PI/2) {
-          drawLine([sx-r, sy+r], [sx+r, sy+r], W, 2);
-          drawLine([sx-r, sy+r], [sx-r, sy+r/2], W, 2);
-          drawLine([sx+r, sy+r], [sx+r, sy+r/2], W, 2);
-        }
-        if (tank.start_ang === -Math.PI/2) {
-          drawLine([sx-r, sy-r], [sx+r, sy-r], W, 2);
-          drawLine([sx-r, sy-r], [sx-r, sy-r/2], W, 2);
-          drawLine([sx+r, sy-r], [sx+r, sy-r/2], W, 2);
-        }
-      }
-    }
   }
 }
 
 // ════════════════ MAIN HANDLER (menús + estado) ════════════════
 const MAP_COUNTS = [[5,128],[8,204],[13,163],[19,255],[10,203],[12,157],[17,257],[10,204],[15,264],[12,125]];
 
+// ── Agrandar las 10 pistas originales: mundo MAP_SCALE× + geometría escalada (mismo diseño, más grande).
+for (let t = 0; t < 10; t++) {
+  WORLDS[t] = [SCREEN_X * MAP_SCALE, SCREEN_Y * MAP_SCALE];
+  WALL_MAPS[t] = WALL_MAPS[t].map(r => r.map(v => v * MAP_SCALE));
+  TRACKPOINT_MAPS[t] = TRACKPOINT_MAPS[t].map(p => [p[0] * MAP_SCALE, p[1] * MAP_SCALE]);
+  FINISHLINES[t] = FINISHLINES[t].map(v => v * MAP_SCALE);
+}
+
+// ── 5 CIRCUITOS generados, uno por temática. La línea de carrera es un polígono NO CONVEXO (con chicanes y
+// recodos → dobla a AMBOS lados, no en círculo). El corredor tiene paredes a ambos lados: se rellena lo de
+// AFUERA del offset exterior y lo de ADENTRO del interior (offset perpendicular = ancho constante).
+// Geometría verificada en Python (0 waypoints en pared, 0 largadas inválidas en las 5).
+function _sarea(p) { let a = 0, n = p.length; for (let i = 0; i < n; i++) { const A = p[i], B = p[(i+1)%n]; a += A[0]*B[1] - B[0]*A[1]; } return a/2; }
+function _offset(poly, d) {                                          // offset perpendicular del polígono por d
+  const n = poly.length, lines = [];
+  for (let i = 0; i < n; i++) { const a = poly[i], b = poly[(i+1)%n], L = Math.hypot(b[0]-a[0], b[1]-a[1]) || 1, ux = (b[0]-a[0])/L, uy = (b[1]-a[1])/L; lines.push([a[0]-uy*d, a[1]+ux*d, ux, uy]); }
+  const res = [];
+  for (let i = 0; i < n; i++) {
+    const l1 = lines[(i-1+n)%n], l2 = lines[i], den = l1[2]*(-l2[3]) - l1[3]*(-l2[2]);
+    if (Math.abs(den) < 1e-9) { res.push([l2[0], l2[1]]); continue; }
+    const t = ((l2[0]-l1[0])*(-l2[3]) - (l2[1]-l1[1])*(-l2[2])) / den;
+    res.push([l1[0]+l1[2]*t, l1[1]+l1[3]*t]);
+  }
+  return res;
+}
+function _densify(v, step) {
+  const wp = [], n = v.length;
+  for (let j = 0; j < n; j++) { const a = v[j], b = v[(j+1)%n], L = Math.hypot(b[0]-a[0], b[1]-a[1]), k = Math.max(1, Math.round(L/step)); for (let t = 0; t < k; t++) wp.push([Math.round(a[0]+(b[0]-a[0])*t/k), Math.round(a[1]+(b[1]-a[1])*t/k)]); }
+  return wp;
+}
+function _cross(poly, ym) { const xs = [], n = poly.length; for (let j = 0; j < n; j++) { const a = poly[j], b = poly[(j+1)%n]; if ((a[1]<=ym&&ym<b[1])||(b[1]<=ym&&ym<a[1])) xs.push(a[0]+(b[0]-a[0])*(ym-a[1])/(b[1]-a[1])); } xs.sort((p,q)=>p-q); return xs; }
+function _pairs(xs) { const r = []; for (let i = 0; i+1 < xs.length; i += 2) r.push([xs[i], xs[i+1]]); return r; }
+function _subtract(A, B) { const res = []; for (const [a0,a1] of A) { let segs = [[a0,a1]]; for (const [b0,b1] of B) { const ns = []; for (const [s0,s1] of segs) { if (b1<=s0||b0>=s1) ns.push([s0,s1]); else { if (s0<b0) ns.push([s0,b0]); if (b1<s1) ns.push([b1,s1]); } } segs = ns; } res.push(...segs); } return res; }
+function _complement(I, lo, hi) { I = I.slice().sort((p,q)=>p[0]-q[0]); const res = []; let x = lo; for (const [a,b] of I) { if (a>x) res.push([x,a]); x = Math.max(x,b); } if (x<hi) res.push([x,hi]); return res.filter(([a,b]) => b-a > 15); }
+function _ringWalls(outer, inner, W, H, bands) {                    // paredes a ambos lados del corredor
+  const rects = [];
+  for (let i = 0; i < bands; i++) {
+    const ya = H*i/bands, yb = H*(i+1)/bands, ym = (ya+yb)/2;
+    const corr = _subtract(_pairs(_cross(outer, ym)), _pairs(_cross(inner, ym)));
+    for (const [a,b] of _complement(corr, 0, W)) rects.push([Math.round(a), Math.round(ya), Math.round(b-a), Math.round(yb-ya)+1]);
+  }
+  return rects;
+}
+const BIG_TRACKS = [
+  { name:'Parque GP',      theme:0, w:2800, h:1700, half:150, bands:26, base:[[500,360],[2000,360],[2300,360],[2500,560],[2500,1140],[2300,1340],[1750,1340],[1600,1120],[1400,1120],[1250,1340],[700,1340],[500,1140],[420,800],[500,560]] },        // estadio + chicane abajo
+  { name:'Desierto L',     theme:1, w:2900, h:2000, half:150, bands:30, base:[[450,320],[2450,320],[2600,520],[2600,1480],[2400,1680],[1450,1680],[1300,1480],[1300,1080],[1120,920],[450,920],[280,620]] },                                          // forma de L (recodo)
+  { name:'Glaciar',        theme:2, w:2900, h:1900, half:150, bands:30, base:[[520,340],[1500,340],[1650,560],[2380,560],[2580,760],[2580,1560],[2380,1760],[1400,1760],[1250,1540],[520,1540],[320,1340],[320,540]] },                          // crank en Z (rectas a dos niveles + escalón diagonal)
+  { name:'Neón Slalom',    theme:3, w:2800, h:1700, half:145, bands:26, base:[[520,380],[900,380],[1050,200],[1250,200],[1400,380],[2300,380],[2500,580],[2500,1120],[2300,1320],[1400,1320],[1250,1500],[1050,1500],[900,1320],[520,1320],[340,950],[340,580]] },  // chicanes arriba y abajo
+  { name:'Volcán Hairpin', theme:4, w:2900, h:2050, half:145, bands:32, base:[[520,1710],[2380,1710],[2580,1510],[2580,490],[2380,290],[2080,290],[1900,490],[1900,1210],[1740,1360],[1320,1360],[1160,1210],[1160,490],[980,290],[520,290],[320,490],[320,1510]] },  // herradura con hairpin (invertida: viene de abajo)
+];
+for (const cfg of BIG_TRACKS) {
+  const idx = TRACK_NAMES.length, cx = cfg.w/2, cy = cfg.h/2, base = cfg.base;
+  const o1 = _offset(base, cfg.half), o2 = _offset(base, -cfg.half);
+  const outer = Math.abs(_sarea(o1)) > Math.abs(_sarea(o2)) ? o1 : o2, inner = (outer === o1) ? o2 : o1;
+  TRACK_NAMES.push(cfg.name);
+  THEMES[idx] = cfg.theme;
+  WORLDS[idx] = [cfg.w, cfg.h];
+  WALL_MAPS.push(_ringWalls(outer, inner, cfg.w, cfg.h, Math.round(cfg.h / 38)));   // tiras finas = colisión (invisibles, baked)
+  TRACK_POLY[idx] = { outer, inner, theme: cfg.theme };               // polígonos = dibujo suave
+  let wp = _densify(base, 80);
+  let best = 0, bd = 1e9;                                            // largada: punto del lado derecho a media altura (tramo recto)
+  for (let i = 0; i < wp.length; i++) if (wp[i][0] > cx && Math.abs(wp[i][1]-cy) < bd) { bd = Math.abs(wp[i][1]-cy); best = i; }
+  wp = wp.slice(best).concat(wp.slice(0, best));
+  TRACKPOINT_MAPS.push(wp);
+  const dx = wp[1][0]-wp[0][0], dy = wp[1][1]-wp[0][1], L = Math.hypot(dx,dy), ux = dx/L, uy = dy/L, ppx = -uy, ppy = ux, ang = Math.atan2(dy,dx), b0 = wp[0];
+  BIG_START[idx] = [[70,55],[140,55],[70,-55],[140,-55]].map(([bk,sd]) => [Math.round(b0[0]-ux*bk+ppx*sd), Math.round(b0[1]-uy*bk+ppy*sd), ang]);
+  BIG_VERTICAL[idx] = Math.abs(dx) >= Math.abs(dy);                  // meta vertical si el tanque cruza yendo en horizontal
+  FINISHLINES.push([150, 13]);
+  MAP_COUNTS.push([WALL_MAPS[idx].length, TRACKPOINT_MAPS[idx].length]);
+}
+const TRACK_COUNT = TRACK_NAMES.length;                               // incluye las pistas generadas
+// Orden del MENÚ de carrera libre: cada circuito va al final de su grupo temático (los datos siguen en 10..14).
+const TRACK_ORDER = [0, 1, 10,  2, 3, 11,  4, 5, 12,  6, 7, 13,  8, 9, 14];
+function trackStep(track, dir) {                                      // avanza/retrocede en el orden del menú
+  const i = TRACK_ORDER.indexOf(track), n = TRACK_ORDER.length;
+  return TRACK_ORDER[((i < 0 ? 0 : i) + dir + n) % n];
+}
+
 class MainHandler {
   constructor() {
     this.menu = true; this.menulevel = 0; this.option = 0;
-    this.playermode = 0; this.laps = 1; this.difficulty = 1; this.track = 0;
+    this.laps = 1; this.difficulty = 1; this.track = 0;
     this.choose_option = [0,1,2];
     this.keypressed = false; this.f1_pressed = false; this.f2_pressed = false;
     this.tournament = false;
@@ -953,6 +1202,7 @@ class MainHandler {
     [this.nWalls, this.nTrackpoints] = MAP_COUNTS[this.track];
 
     if (this.menu) {
+      if (this.menulevel === 2) { this.processPicker(); return; }      // selector de tanque (grilla 4×3)
       if (this.menulevel === 0) this.choose_option = [0,1,2];
       if (this.menulevel === 1 && !this.tournament) this.choose_option = [0,1,2,3];
 
@@ -971,31 +1221,29 @@ class MainHandler {
         }
         if (keys.LEFT) {
           if (this.menulevel === 1) {
-            if (this.option === 0) this.playermode = (this.playermode - 1 + 2) % 2;
             if (this.option === 1) this.laps = (this.laps - 1 + 3) % 3;
             if (this.option === 2) this.difficulty = (this.difficulty - 1 + 4) % 4;
-            if (this.option === 3) this.track = (this.track - 1 + 10) % 10;
+            if (this.option === 3) this.track = trackStep(this.track, -1);
           }
           this.keypressed = true;
         }
         if (keys.RIGHT) {
           if (this.menulevel === 1) {
-            if (this.option === 0) this.playermode = (this.playermode + 1) % 2;
             if (this.option === 1) this.laps = (this.laps + 1) % 3;
             if (this.option === 2) this.difficulty = (this.difficulty + 1) % 4;
-            if (this.option === 3) this.track = (this.track + 1) % 10;
+            if (this.option === 3) this.track = trackStep(this.track, 1);
           }
           this.keypressed = true;
         }
         if (keys.RETURN) {
           if (this.menulevel === 0) this.pickOption0(this.option);
-          else if (this.menulevel === 1) this.startRace();
+          else if (this.menulevel === 1) { if (this.option === 4) this.menulevel = 2; else this.startRace(); }
           this.keypressed = true;
         }
         if (keys.ESCAPE) {
           if (this.menulevel === 1) {
             this.menulevel = 0; this.option = this.tournament ? 1 : 0;
-            this.playermode = 0; this.laps = 1; this.difficulty = 1; this.track = 0;
+            this.laps = 1; this.difficulty = 1; this.track = 0;
             this.keypressed = true;
           }
           // menulevel 0 ESC = quit (no-op en web)
@@ -1030,27 +1278,32 @@ class MainHandler {
     // opt 2 = Exit (no-op en web)
   }
   startRace() {                                                        // menulevel 1: arrancar la carrera
-    if (IS_TOUCH) this.playermode = 0;                                 // en táctil siempre un jugador
     clearPhysics();                                                    // mundo limpio antes de crear los cuerpos
     const [nW, nT] = MAP_COUNTS[this.track];
     for (let i = 0; i < nT; i++) addSprite(new TrackPoint(i, this.track));
-    for (let i = 0; i < nW; i++) addSprite(new Wall(i, this.track, Math.floor(this.track/2)));
-    for (let i = 0; i < 4; i++) addSprite(new Tank(i, this.playermode, this.track, this.laps, this.difficulty));
-    addSprite(new AuxiliaryHandler(this.playermode, this.laps, this.track, this.difficulty, this.tournament, this.tank_points, this.tank_times));
+    for (let i = 0; i < nW; i++) addSprite(new Wall(i, this.track, themeOf(this.track)));
+    const nTanks = this.tournament ? 4 : TANK_COUNT;                   // el torneo mantiene 4 (tabla/puntaje original); carrera libre = 16
+    assignRaceSkins(nTanks);                                           // jugador = su elección; IA = skins al azar (sin repetir)
+    for (let i = 0; i < nTanks; i++) addSprite(new Tank(i, this.track, this.laps, this.difficulty));
+    addSprite(new AuxiliaryHandler(this.laps, this.track, this.difficulty, this.tournament, this.tank_points, this.tank_times));
     this.menu = false;
   }
   confirmExit() {                                                      // confirmar salida de carrera al menú
     for (const s of sprites.slice()) if (s !== this) removeFromList(sprites, s);
-    clearPhysics(); trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0;
+    clearPhysics(); trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0; pickups.length = 0;
     if (sprites.length === 1) {
-      this.menulevel = 0; this.option = 0; this.playermode = 0; this.laps = 1; this.difficulty = 1; this.track = 0;
+      this.menulevel = 0; this.option = 0; this.laps = 1; this.difficulty = 1; this.track = 0;
       this.menu = true; this.confirmQuit = false;
       this.tank_points = [0,0,0,0]; this.tank_times = [0,0,0,0];
     }
   }
-  // hover del mouse → mueve la selección a la opción debajo del cursor (mismo mapa de filas que tapMenu)
-  hoverFocus(ly) {
+  // hover del mouse → mueve la selección a la opción/celda debajo del cursor (mismo mapa que tapMenu)
+  hoverFocus(ly, lx) {
     const near = (f) => Math.abs(ly - yper(f)) < yper(0.05);
+    if (this.menulevel === 2) {
+      for (const cell of this.pickerCells()) if (Math.abs(lx - cell.cx) < cell.cw/2 && Math.abs(ly - cell.cy) < cell.ch/2) { playerSkinIdx = cell.idx; return; }
+      return;
+    }
     if (this.menulevel === 0) {
       if (near(0.5)) this.option = 0; else if (near(0.6)) this.option = 1; else if (near(0.7)) this.option = 2;
     } else {
@@ -1061,6 +1314,11 @@ class MainHandler {
   tapMenu(lx, ly) {
     const near = (frac) => Math.abs(ly - yper(frac)) < yper(0.05);
     const dir = lx < xper(0.5) ? -1 : 1;                               // mitad izq/der = anterior/siguiente
+    if (this.menulevel === 2) {                                        // selector de tanque: tocar una celda elige y vuelve
+      for (const cell of this.pickerCells()) if (Math.abs(lx - cell.cx) < cell.cw/2 && Math.abs(ly - cell.cy) < cell.ch/2) { playerSkinIdx = cell.idx; this.menulevel = 1; return; }
+      if (ly > yper(0.84) || ly < yper(0.2)) this.menulevel = 1;       // tocar fuera de la grilla = volver
+      return;
+    }
     if (this.menulevel === 0) {
       if (near(0.5)) this.pickOption0(0);
       else if (near(0.6)) this.pickOption0(1);
@@ -1069,22 +1327,70 @@ class MainHandler {
       for (const { opt, y } of this.menuRowDefs()) {
         if (!near(y)) continue;
         this.option = opt;
-        if (opt === 0)      this.playermode = (this.playermode + dir + 2) % 2;
-        else if (opt === 1) this.laps       = (this.laps + dir + 3) % 3;
+        if (opt === 1)      this.laps       = (this.laps + dir + 3) % 3;
         else if (opt === 2) this.difficulty = (this.difficulty + dir + 4) % 4;
-        else if (opt === 3) { if (!this.tournament) this.track = (this.track + dir + 10) % 10; }
+        else if (opt === 3) { if (!this.tournament) this.track = trackStep(this.track, dir); }
+        else if (opt === 4) this.menulevel = 2;                        // abrir selector de tanque
         return;
       }
       if (near(0.88)) this.startRace();                                // botón JUGAR
     }
   }
 
-  // Opciones del setup (menulevel 1) según dispositivo: en táctil se omite "jugadores" (opt 0).
-  menuOpts() { return IS_TOUCH ? [1, 2, 3] : [0, 1, 2, 3]; }
-  // Filas del setup con su posición Y, centradas verticalmente según cuántas haya (3 en táctil, 4 en PC).
+  // Opciones del setup (menulevel 1): vueltas / dificultad / mapa / tanque.
+  menuOpts() { return [1, 2, 3, 4]; }
+  // Filas del setup con su posición Y, centradas verticalmente según cuántas haya.
   menuRowDefs() {
-    const opts = this.menuOpts(), span = 0.1, mid = 0.6, y0 = mid - span*(opts.length - 1)/2;
+    const opts = this.menuOpts(), span = 0.095, mid = 0.56, y0 = mid - span*(opts.length - 1)/2;
     return opts.map((opt, i) => ({ opt, y: y0 + i*span }));
+  }
+
+  // ── Selector de tanque (grilla 4×3 de los SELECTABLE_COUNT skins elegibles) ──
+  pickerCells() {
+    const cells = [], cols = 4;
+    const x0 = xper(0.205), y0 = yper(0.34), gw = xper(0.59), gh = yper(0.46);
+    const cw = gw / cols, ch = gh / 3;
+    for (let i = 0; i < SELECTABLE_COUNT; i++) {
+      const c = i % cols, r = Math.floor(i / cols);
+      cells.push({ idx: i, cx: x0 + cw*(c + 0.5), cy: y0 + ch*(r + 0.5), cw, ch });
+    }
+    return cells;
+  }
+  processPicker() {
+    const cols = 4, n = SELECTABLE_COUNT;
+    if (!this.keypressed) {
+      let moved = true;
+      if (keys.LEFT)        playerSkinIdx = (playerSkinIdx + n - 1) % n;
+      else if (keys.RIGHT)  playerSkinIdx = (playerSkinIdx + 1) % n;
+      else if (keys.UP)     playerSkinIdx = (playerSkinIdx + n - cols) % n;
+      else if (keys.DOWN)   playerSkinIdx = (playerSkinIdx + cols) % n;
+      else if (keys.RETURN || keys.ESCAPE) this.menulevel = 1;          // confirmar / volver al setup
+      else moved = false;
+      if (moved) this.keypressed = true;
+    }
+    if (!keys.LEFT && !keys.RIGHT && !keys.UP && !keys.DOWN && !keys.RETURN && !keys.ESCAPE) this.keypressed = false;
+  }
+  drawPicker(menucolor) {
+    createText(Math.round(M_font*0.95), 'Elegí tu tanque', menucolor, null, xper(0.5), yper(0.24), 16);
+    for (const cell of this.pickerCells()) {
+      const sk = SKINS[cell.idx], on = cell.idx === playerSkinIdx;
+      const pw = cell.cw*0.86, ph = cell.ch*0.86;
+      // panel de la celda
+      roundRectPath(cell.cx - pw/2, cell.cy - ph/2, pw, ph, ph*0.14);
+      const g = ctx.createLinearGradient(0, cell.cy - ph/2, 0, cell.cy + ph/2);
+      g.addColorStop(0, on ? 'rgba(34,38,54,0.95)' : 'rgba(18,20,30,0.82)');
+      g.addColorStop(1, on ? 'rgba(14,16,26,0.95)' : 'rgba(8,9,15,0.82)');
+      ctx.fillStyle = g; ctx.fill();
+      // borde: glow del color del tanque si está seleccionado
+      roundRectPath(cell.cx - pw/2, cell.cy - ph/2, pw, ph, ph*0.14);
+      if (on) { ctx.strokeStyle = rgb(modifyColor(sk.color, 60)); ctx.lineWidth = 3; ctx.shadowColor = rgb(sk.color); ctx.shadowBlur = 16; ctx.stroke(); ctx.shadowBlur = 0; }
+      else    { ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1.5; ctx.stroke(); }
+      // preview del tanque (apuntando arriba) + nombre
+      paintTank(cell.cx, cell.cy - ph*0.1, -Math.PI/2, Math.min(cell.cw, cell.ch)*0.26, sk.color, 1, false, sk);
+      createText(Math.round(S_font*0.92), sk.name, on ? [245,245,250] : [150,155,170], null, cell.cx, cell.cy + ph*0.34);
+    }
+    const hint = IS_TOUCH ? 'Tocá un tanque para elegirlo' : '← → ↑ ↓ para moverte · ENTER para confirmar';
+    createText(Math.round(S_font*1.0), hint, [180,185,200], null, xper(0.5), yper(0.86), 0);
   }
 
   draw() {
@@ -1099,7 +1405,7 @@ class MainHandler {
         const a = T*0.35 + i*Math.PI/2;
         const cx = SCREEN_X*0.5 + Math.cos(a)*SCREEN_X*0.33;
         const cy = SCREEN_Y*0.5 + Math.sin(a)*SCREEN_Y*0.34;
-        paintTank(cx, cy, a + Math.PI/2, xper(0.022), TANK_COLORS[i], 0.16);
+        paintTank(cx, cy, a + Math.PI/2, xper(0.022), SKINS[i].color, 0.16, false, SKINS[i]);
       }
 
       const dim = [140, 80, 150], lock = [70, 70, 80];
@@ -1117,20 +1423,22 @@ class MainHandler {
         const tn = TRACK_NAMES[this.track], diffNames = ['Easy','Normal','Hard','Very Hard'];
         const lapsName = this.laps === 0 ? 'Short (10 laps)' : this.laps === 1 ? 'Normal (20 laps)' : 'Long (40 laps)';
         const wrap = (on, s) => on ? `< ${s} >` : s;
-        const labelFor = opt => opt === 0 ? (this.playermode === 0 ? 'Single Player' : 'Two Players')
-                              : opt === 1 ? lapsName
+        const labelFor = opt => opt === 1 ? lapsName
                               : opt === 2 ? `Difficulty: ${diffNames[this.difficulty]}`
-                              : `Map: ${tn}`;
+                              : opt === 3 ? `Map: ${tn}`
+                              : `Tanque: ${SKINS[playerSkinIdx].name} ▸`;
         createText(B_font, 'CrazyTanks', menucolor, null, xper(0.5), yper(0.2), 28);
         for (const { opt, y } of this.menuRowDefs()) {
           const on = this.option === opt;
           const col = opt === 3 ? (on ? menucolor : (this.tournament ? lock : dim)) : sel(on);
           createText(M_font, wrap(on, labelFor(opt)), col, null, xper(0.5), yper(y), gl(on));
+          if (opt === 4) paintTank(xper(0.78), yper(y), 0, xper(0.018), SKINS[playerSkinIdx].color, 1, false, SKINS[playerSkinIdx]);
         }
         // botón JUGAR (tocá/click para arrancar) — pulsa, y se ilumina al hover
         const hj = rowHover(0.88), playPulse = 0.6 + 0.4*Math.sin(T*4);
         createText(M_font, '▶ JUGAR', [120 + 120*playPulse, 230, 150], modifyColorPerc(menucolor, hj ? 0.32 : 0.12), xper(0.5), yper(0.88), hj ? 30 : 16);
       }
+      if (this.menulevel === 2) this.drawPicker(menucolor);
     }
     // en carrera el fondo (piso+deco+meta+paredes) se blitea horneado desde el loop — nada que hacer acá
   }
@@ -1138,8 +1446,8 @@ class MainHandler {
 
 // ════════════════ AUXILIARY HANDLER (cuenta regresiva, pausa, scoring) ════════════════
 class AuxiliaryHandler {
-  constructor(playermode, laps, track, difficulty, tournament, tankpoints, tanktimes) {
-    this.playermode = playermode; this.laps = laps; this.track = track; this.difficulty = difficulty;
+  constructor(laps, track, difficulty, tournament, tankpoints, tanktimes) {
+    this.laps = laps; this.track = track; this.difficulty = difficulty;
     this.racestart_timer = 5; this.racestart_cooling = 0;
     this.playerfinished = [false, false, false, false];
     this.racefinished = false; this.post_race_option = 0;
@@ -1160,13 +1468,13 @@ class AuxiliaryHandler {
         for (const tank of tanks) { tank.start = true; if (tank.finished) this.playerfinished[tank.id] = tank.finished; }
       }
 
-      if (this.playermode === 0 && this.playerfinished[0]) for (const tank of tanks) { tank.finished = true; tank.ai = true; }
-      if (this.playermode === 0 && this.playerfinished[1] && this.playerfinished[2] && this.playerfinished[3]) for (const tank of tanks) { tank.finished = true; tank.ai = true; }
-      if (this.playermode === 1 && this.playerfinished[0] && this.playerfinished[1]) for (const tank of tanks) { tank.finished = true; tank.ai = true; }
-      if (this.playermode === 1 && this.playerfinished[0] && this.playerfinished[2] && this.playerfinished[3]) for (const tank of tanks) { tank.finished = true; tank.ai = true; }
-      if (this.playermode === 1 && this.playerfinished[1] && this.playerfinished[2] && this.playerfinished[3]) for (const tank of tanks) { tank.finished = true; tank.ai = true; }
-
-      if (this.playerfinished[0] && this.playerfinished[1] && this.playerfinished[2] && this.playerfinished[3]) this.racefinished = true;
+      // La carrera termina cuando el JUGADOR (tanque 0) cruza su última vuelta, O cuando ya terminaron TODAS
+      // las IA (aunque al jugador le falten vueltas).
+      const aisDone = tanks.length > 1 && tanks.every(t => t.id === 0 || t.finished);
+      if (this.playerfinished[0] || aisDone) {
+        for (const tank of tanks) { tank.finished = true; tank.ai = true; }
+        this.racefinished = true;
+      }
 
       if (this.racestart_cooling > this.racestart_timer) {
         if (!this.p_pressed && keys.P) {
@@ -1216,12 +1524,14 @@ class AuxiliaryHandler {
   _rebuildRace() {
     const main = sprites[0];
     for (const s of sprites.slice()) if (s !== main && s !== this) removeFromList(sprites, s);
-    clearPhysics(); trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0;
+    clearPhysics(); trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0; pickups.length = 0;
     if (sprites.length === 2) {
       for (let i = 0; i < this.nTrackpoints; i++) addSprite(new TrackPoint(i, this.track));
-      for (let i = 0; i < this.nWalls; i++) addSprite(new Wall(i, this.track, Math.floor(this.track/2)));
-      for (let i = 0; i < 4; i++) addSprite(new Tank(i, this.playermode, this.track, this.laps, this.difficulty));
-      addSprite(new AuxiliaryHandler(this.playermode, this.laps, this.track, this.difficulty, this.tournament, this.tank_points, this.tank_times));
+      for (let i = 0; i < this.nWalls; i++) addSprite(new Wall(i, this.track, themeOf(this.track)));
+      const nTanks = this.tournament ? 4 : TANK_COUNT;
+      assignRaceSkins(nTanks);                                          // re-randomiza la IA en cada revancha
+      for (let i = 0; i < nTanks; i++) addSprite(new Tank(i, this.track, this.laps, this.difficulty));
+      addSprite(new AuxiliaryHandler(this.laps, this.track, this.difficulty, this.tournament, this.tank_points, this.tank_times));
       removeFromList(sprites, this);
     }
   }
@@ -1229,9 +1539,9 @@ class AuxiliaryHandler {
   _backToMenu(tournament) {
     const main = sprites[0];
     for (const s of sprites.slice()) if (s !== main && s !== this) removeFromList(sprites, s);
-    clearPhysics(); trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0;
+    clearPhysics(); trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0; pickups.length = 0;
     if (sprites.length === 2) {
-      main.menulevel = 0; main.option = 0; main.playermode = 0; main.laps = 1; main.difficulty = 1; main.track = 0;
+      main.menulevel = 0; main.option = 0; main.laps = 1; main.difficulty = 1; main.track = 0;
       main.menu = true; main.keypressed = true;
       if (tournament) { main.tank_points = [0,0,0,0]; main.tank_times = [0,0,0,0]; }
       removeFromList(sprites, this);
@@ -1246,9 +1556,10 @@ class AuxiliaryHandler {
     if (sprites.length === 2) {
       [this.nWalls, this.nTrackpoints] = MAP_COUNTS[this.track + 1];
       for (let i = 0; i < this.nTrackpoints; i++) addSprite(new TrackPoint(i, this.track + 1));
-      for (let i = 0; i < this.nWalls; i++) addSprite(new Wall(i, this.track + 1, Math.floor((this.track+1)/2)));
-      for (let i = 0; i < 4; i++) addSprite(new Tank(i, this.playermode, this.track + 1, this.laps, this.difficulty));
-      addSprite(new AuxiliaryHandler(this.playermode, this.laps, this.track + 1, this.difficulty, this.tournament, this.tank_points, this.tank_times));
+      for (let i = 0; i < this.nWalls; i++) addSprite(new Wall(i, this.track + 1, themeOf(this.track + 1)));
+      assignRaceSkins(4);                                             // torneo: 4 tanques, IA al azar
+      for (let i = 0; i < 4; i++) addSprite(new Tank(i, this.track + 1, this.laps, this.difficulty));
+      addSprite(new AuxiliaryHandler(this.laps, this.track + 1, this.difficulty, this.tournament, this.tank_points, this.tank_times));
       removeFromList(sprites, this);
     }
   }
@@ -1286,6 +1597,7 @@ class AuxiliaryHandler {
   }
 
   draw() {
+    ctx.save(); ctx.translate(camX, camY);                            // HUD fijo a pantalla (neutraliza el scroll de la cámara)
     const c = this.racestart_cooling;
     if (c > 1 && c < this.racestart_timer) {
       let txt = '', seg = 0;
@@ -1308,13 +1620,13 @@ class AuxiliaryHandler {
     if (this.racefinished) {
       if (!this.tournament) {
         for (const tank of tanks) if (tank.rank === 1)
-          createText(B_font, `¡${COLOR_NAMES[tank.id]} Wins!`, modifyColor(tank.color,75), null, xper(0.5), yper(0.35), 30);
+          createText(B_font, `¡${tankName(tank)} Wins!`, modifyColor(tank.color,75), null, xper(0.5), yper(0.35), 30);
         createText(M_font, 'Rematch',      this.post_race_option === 0 ? [255,255,255] : [150,150,150], null, xper(0.5), yper(0.55), selGlow(this.post_race_option === 0));
         createText(M_font, 'Back to Menu', this.post_race_option === 1 ? [255,255,255] : [150,150,150], null, xper(0.5), yper(0.65), selGlow(this.post_race_option === 1));
       } else {
         if (this.table_cooldown < this.table_timer) {
           for (const tank of tanks) if (tank.rank === 1)
-            createText(B_font, `¡${COLOR_NAMES[tank.id]} Wins!`, modifyColor(tank.color,75), null, xper(0.5), yper(0.5), 30);
+            createText(B_font, `¡${tankName(tank)} Wins!`, modifyColor(tank.color,75), null, xper(0.5), yper(0.5), 30);
         } else {
           // panel redondeado semi-transparente
           ctx.save();
@@ -1350,13 +1662,13 @@ class AuxiliaryHandler {
             createText(tf, `${tourneyrank}°`, this.pointsaccounted ? modifyColor(tank.color,75) : [255,255,255], null, xper(0.31), pos_in_table);
             createText(tf, `${points} pts.`, modifyColor(tank.color,75), null, xper(0.67), pos_in_table);
             if (this.pointsaccounted && this.tournamentfinished && tourneyrank === 1)
-              createText(M_font, `¡${COLOR_NAMES[tank.id]} is the Champion!`, randcolorGray(55,255), null, xper(0.5), yper(0.16), 22);
+              createText(M_font, `¡${tankName(tank)} is the Champion!`, randcolorGray(55,255), null, xper(0.5), yper(0.16), 22);
             if (!this.pointsaccounted) {
               const rk = tank.rank === 1 ? '1st!' : tank.rank === 2 ? '2nd!' : tank.rank === 3 ? '3rd' : '4th';
               createText(28, rk, modifyColor(tank.color,75), null, xper(0.55), pos_in_table);
             }
 
-            paintTank(xper(0.42), pos_in_table, -Math.PI/2, tank.radius, tank.color, 1, false);
+            paintTank(xper(0.42), pos_in_table, -Math.PI/2, tank.radius, tank.color, 1, false, tank.skin);
           }
         }
 
@@ -1371,6 +1683,7 @@ class AuxiliaryHandler {
       ctx.save(); ctx.globalAlpha = 0.45; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, SCREEN_X, SCREEN_Y); ctx.restore();
       createText(B_font, 'PAUSE', randcolorGray(155,255), null, xper(0.5), yper(0.5), 22);
     }
+    ctx.restore();                                                     // cierra el translate(cam) del HUD
   }
 }
 
@@ -1388,48 +1701,193 @@ function drawLine(p1, p2, color, lw = 1) {
   ctx.beginPath(); ctx.moveTo(p1[0], p1[1]); ctx.lineTo(p2[0], p2[1]); ctx.stroke();
 }
 
+// ════════════════ LIBREAS (cada tanque = un "sponsor" con patrón y color de acento propios) ════════════════
+// Una por color de tanque. `p` = patrón dibujado sobre el casco (recortado a su forma); `a` = color de acento.
+// `p` = patrón sobre el casco; `a` = 2º color (cubre buena parte → bicolor real); `a2` = 3º color (aro torreta + remate).
+// Dibuja el patrón de la librea `L` ({p,a,a2}) sobre el casco local (origen en el centro, +x = adelante), recortado al casco.
+function drawLivery(L, HL, HW, r, tint, a0) {
+  const acc = rgb(tint(L.a));
+  ctx.save();
+  roundRectPath(-HL, -HW, HL*2, HW*2, r*0.26); ctx.clip();
+  ctx.fillStyle = acc; ctx.strokeStyle = acc; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  switch (L.p) {
+    case 'centerStripe': ctx.fillRect(-HL, -HW*0.4, HL*2, HW*0.8); break;
+    case 'twinStripe':   ctx.fillRect(-HL, -HW*0.66, HL*2, HW*0.3); ctx.fillRect(-HL, HW*0.36, HL*2, HW*0.3); break;
+    case 'checker': {
+      const cols = 7, rows = 4, cw = (HL*2)/cols, ch = (HW*2)/rows;
+      for (let i=0;i<cols;i++) for (let j=0;j<rows;j++) if ((i+j)%2===0) ctx.fillRect(-HL+i*cw, -HW+j*ch, cw+0.6, ch+0.6);
+      break; }
+    case 'hazard': {
+      ctx.lineWidth = r*0.2;
+      for (let xx=-HL-HW*2; xx<HL+HW; xx+=r*0.5) { ctx.beginPath(); ctx.moveTo(xx, -HW); ctx.lineTo(xx+HW*2, HW); ctx.stroke(); }
+      break; }
+    case 'chevron': {
+      ctx.lineWidth = r*0.16;
+      for (let k=0;k<4;k++){ const cx=-HL*0.75 + k*HL*0.52; ctx.beginPath(); ctx.moveTo(cx,-HW*0.85); ctx.lineTo(cx+HW*0.75,0); ctx.lineTo(cx,HW*0.85); ctx.stroke(); }
+      break; }
+    case 'flames': {
+      for (const s of [-1,1]) { ctx.beginPath(); ctx.moveTo(-HL, s*HW); ctx.lineTo(HL*0.15, s*HW*0.5);
+        ctx.lineTo(-HL*0.25, s*HW*0.18); ctx.lineTo(HL*0.05, 0); ctx.lineTo(-HL, 0); ctx.closePath(); ctx.fill(); }
+      break; }
+    case 'carbon': {
+      ctx.globalAlpha = a0*0.32; ctx.lineWidth = Math.max(0.6, r*0.04);
+      for (let xx=-HL; xx<HL+HW*2; xx+=r*0.18){ ctx.beginPath(); ctx.moveTo(xx,-HW); ctx.lineTo(xx-HW*2,HW); ctx.stroke(); ctx.beginPath(); ctx.moveTo(xx-HW*2,-HW); ctx.lineTo(xx,HW); ctx.stroke(); }
+      break; }
+    case 'dots': {
+      const sp=r*0.46; for(let xx=-HL+sp*0.5; xx<HL; xx+=sp) for(let yy=-HW+sp*0.35; yy<HW; yy+=sp){ ctx.beginPath(); ctx.arc(xx,yy,r*0.13,0,TAU); ctx.fill(); }
+      break; }
+    case 'bolt': {
+      ctx.lineWidth=r*0.18; ctx.beginPath(); ctx.moveTo(-HL*0.85,-HW*0.55); ctx.lineTo(-HL*0.15,-HW*0.12);
+      ctx.lineTo(-HL*0.4,HW*0.05); ctx.lineTo(HL*0.75,HW*0.45); ctx.stroke(); break; }
+    case 'tiger': {
+      ctx.lineWidth=r*0.12; for(let k=0;k<6;k++){ const cx=-HL*0.85 + k*HL*0.36; ctx.beginPath(); ctx.moveTo(cx,-HW); ctx.quadraticCurveTo(cx+HW*0.45,0,cx,HW); ctx.stroke(); }
+      break; }
+    case 'splitDiag': { ctx.beginPath(); ctx.moveTo(-HL,-HW); ctx.lineTo(HL,-HW); ctx.lineTo(-HL,HW); ctx.closePath(); ctx.fill(); break; }
+    case 'rally': {
+      ctx.fillRect(-HL,-HW*0.98, HL*2, HW*0.3); ctx.fillRect(-HL, HW*0.68, HL*2, HW*0.3);
+      ctx.fillRect(HL*0.42,-HW, HL*0.22, HW*2); break; }
+    case 'edgeTrim': { ctx.lineWidth=r*0.16; roundRectPath(-HL+r*0.13,-HW+r*0.13, HL*2-r*0.26, HW*2-r*0.26, r*0.2); ctx.stroke(); break; }
+    case 'noseFade': {
+      const ng=ctx.createLinearGradient(HL,0,-HL*0.25,0); ng.addColorStop(0, acc); ng.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=ng; ctx.fillRect(-HL,-HW,HL*2,HW*2); break; }
+    case 'diagStripes': {
+      ctx.lineWidth=r*0.16; for(let xx=-HL-HW*2; xx<HL+HW; xx+=r*0.62){ ctx.beginPath(); ctx.moveTo(xx,-HW); ctx.lineTo(xx+HW*2,HW); ctx.stroke(); } break; }
+    case 'gridLines': {
+      ctx.globalAlpha=a0*0.5; ctx.lineWidth=Math.max(0.6,r*0.05);
+      for(let xx=-HL; xx<HL; xx+=r*0.3){ ctx.beginPath(); ctx.moveTo(xx,-HW); ctx.lineTo(xx,HW); ctx.stroke(); }
+      for(let yy=-HW; yy<HW; yy+=r*0.3){ ctx.beginPath(); ctx.moveTo(-HL,yy); ctx.lineTo(HL,yy); ctx.stroke(); } break; }
+  }
+  ctx.restore();
+}
+
 // ════════════════ TANQUE REUTILIZABLE (carrera, tabla de torneo, menú ambiente) ════════════════
 // Mismo render de treads+cuerpo del original, extraído para no duplicarlo. `alpha` permite fantasmas
-// translúcidos (tanques de fondo en el menú); `finished` aplica el tinte apagado.
-function paintTank(x, y, ang, r, color, alpha = 1, finished = false) {
+// translúcidos (tanques de fondo en el menú); `finished` aplica el tinte apagado. `livery` ({p,a,a2}) pinta la
+// librea del sponsor (patrón + acentos); null = casco liso.
+function paintTank(x, y, ang, r, color, alpha = 1, finished = false, livery = null) {
   ctx.save();
   if (alpha !== 1) ctx.globalAlpha = alpha;
   const a0 = ctx.globalAlpha;
-  const tint = finished ? (c => modifyColorPerc(c, 0.4)) : (c => c);    // tinte apagado al terminar la carrera
-  const cos = Math.cos(ang), sin = Math.sin(ang);
+  const tint = finished ? (c => modifyColorPerc(c, 0.45)) : (c => c);
+  const body = tint(color), dark = tint(modifyColor(color, -55)), darker = tint(modifyColor(color, -95)), light = tint(modifyColor(color, 65));
 
-  // Sombra de apoyo: da profundidad y "despega" el tanque del piso.
-  ctx.globalAlpha = a0 * 0.30; ctx.fillStyle = '#000';
-  ctx.beginPath(); ctx.ellipse(x + r*0.13, y + r*0.18, r*1.12, r*0.98, ang, 0, Math.PI*2); ctx.fill();
+  // Sombra de apoyo (mundo) → profundidad.
+  ctx.globalAlpha = a0 * 0.26; ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.ellipse(x + Math.cos(ang)*r*0.1 + r*0.1, y + Math.sin(ang)*r*0.1 + r*0.18, r*1.4, r*0.85, ang, 0, Math.PI*2); ctx.fill();
   ctx.globalAlpha = a0;
 
-  // Orugas / cuerpo: bandas perpendiculares al avance (look de treads del original).
-  const lines = 17;
-  for (let layer = 0; layer < 2; layer++) {
-    for (let i = 0; i < lines; i++) {
-      const px = x + Math.cos(ang + Math.PI/2) * (-r + 2*r*(i/lines) + ((r*2)/lines - 1)/2);
-      const py = y + Math.sin(ang + Math.PI/2) * (-r + 2*r*(i/lines) + ((r*2)/lines - 1)/2);
-      const length = Math.abs(i - Math.floor(lines/2)) < lines*0.2 ? r*0.7 : r;
-      const col = layer === 0 ? tint(modifyColor(color,-50)) : tint(color);
-      const lw  = layer === 0 ? Math.max(Math.trunc((r*5)/lines - 1), 1) : Math.max(Math.trunc((r*2)/lines - 1), 1);
-      drawLine([px + cos*-length, py + sin*-length], [px + cos*length, py + sin*length], col, lw);
-    }
+  ctx.translate(x, y); ctx.rotate(ang);                                // coords locales: adelante = +x
+  const rr = (px, py, w, h, rad, c) => { roundRectPath(px, py, w, h, rad); ctx.fillStyle = (typeof c === 'string') ? c : rgb(c); ctx.fill(); };
+
+  // Proporción ALARGADA: largo (adelante = x) > ancho (lateral = y).
+  const HL = r*1.25, HW = r*0.62;                                     // medio-largo / medio-ancho del casco
+  // Orugas: dos bandas oscuras a lo largo, con tacos.
+  for (const s of [-1, 1]) {
+    rr(-HL - r*0.08, s*(HW + r*0.12) - r*0.26, HL*2 + r*0.16, r*0.52, r*0.14, darker);
+    ctx.fillStyle = rgb(dark);
+    for (let i = 0; i < 8; i++) ctx.fillRect(-HL + (HL*2)*(i+0.5)/8 - r*0.045, s*(HW + r*0.12) - r*0.23, r*0.09, r*0.46);
+  }
+  // Casco: rectángulo redondeado alargado con gradiente (luz arriba) + borde oscuro.
+  const hg = ctx.createLinearGradient(0, -HW, 0, HW);
+  hg.addColorStop(0, rgb(light)); hg.addColorStop(0.55, rgb(body)); hg.addColorStop(1, rgb(dark));
+  rr(-HL, -HW, HL*2, HW*2, r*0.26, hg);
+  // Librea del sponsor sobre el casco (debajo de placa/paneles/torreta).
+  if (livery) drawLivery(livery, HL, HW, r, tint, a0);
+  roundRectPath(-HL, -HW, HL*2, HW*2, r*0.26); ctx.strokeStyle = rgb(darker); ctx.lineWidth = Math.max(1, r*0.08); ctx.stroke();
+  // Detalle: placa frontal (glacis) + líneas de panel transversales + tornillos en las esquinas.
+  rr(HL - r*0.5, -HW + r*0.06, r*0.42, HW*2 - r*0.12, r*0.1, dark);
+  ctx.strokeStyle = rgb(modifyColor(color, -75)); ctx.lineWidth = Math.max(1, r*0.05);
+  ctx.beginPath();
+  for (const px of [-r*0.55, -r*0.05, r*0.45]) { ctx.moveTo(px, -HW + r*0.08); ctx.lineTo(px, HW - r*0.08); }
+  ctx.stroke();
+  ctx.fillStyle = rgb(darker);
+  for (const sx of [-HL + r*0.22, HL - r*0.22]) for (const sy of [-HW + r*0.18, HW - r*0.18]) { ctx.beginPath(); ctx.arc(sx, sy, r*0.065, 0, Math.PI*2); ctx.fill(); }
+  // Cañón cónico + boca (largo, hacia adelante).
+  rr(r*0.1, -r*0.15, r*1.7, r*0.3, r*0.07, dark);
+  rr(r*0.1, -r*0.08, r*1.45, r*0.16, r*0.05, body);
+  drawCircle(r*1.86, 0, r*0.2, darker); drawCircle(r*1.86, 0, r*0.11, [10,10,12]);
+  // Torreta: domo con gradiente radial + borde + escotilla + brillo.
+  const tg = ctx.createRadialGradient(-r*0.14, -r*0.16, r*0.04, 0, 0, r*0.58);
+  tg.addColorStop(0, rgb(light)); tg.addColorStop(1, rgb(dark));
+  drawCircle(0, 0, r*0.56, darker);
+  ctx.beginPath(); ctx.arc(0, 0, r*0.46, 0, Math.PI*2); ctx.fillStyle = tg; ctx.fill();
+  drawCircle(r*0.08, r*0.04, r*0.24, dark); drawCircle(r*0.08, r*0.04, r*0.24, darker, Math.max(1, r*0.05));
+  ctx.globalAlpha = a0 * 0.6; drawCircle(-r*0.16, -r*0.18, r*0.14, [255,255,255]); ctx.globalAlpha = a0;
+  // Aro de acento del sponsor (3er color) en el borde de la torreta (ata la librea al diseño).
+  if (livery) {
+    ctx.strokeStyle = rgb(tint(livery.a2 || livery.a)); ctx.lineWidth = Math.max(1, r*0.08);
+    ctx.beginPath(); ctx.arc(0, 0, r*0.5, 0, Math.PI*2); ctx.stroke();
   }
 
-  // Cañón: base oscura ancha + caño claro fino + boca redondeada.
-  const bx = x + cos*r*1.7, by = y + sin*r*1.7;
-  drawLine([x, y], [bx, by], tint(modifyColor(color,-40)), Math.max(2, Math.trunc(r*0.44)));
-  drawLine([x, y], [bx, by], tint(modifyColor(color,15)),  Math.max(1, Math.trunc(r*0.22)));
-  drawCircle(bx, by, r*0.18, tint(modifyColor(color,-25)));
+  ctx.restore();
+}
 
-  // Torreta: base + domo claro + borde, con un brillo (gloss) arriba-izquierda.
-  drawCircle(x, y, r*0.64, tint(modifyColor(color,-25)));
-  drawCircle(x, y, r*0.5,  tint(modifyColor(color,60)));
-  drawCircle(x, y, r*0.5,  tint(modifyColor(color,15)), Math.max(1, r*0.07));
-  ctx.globalAlpha = a0 * 0.5;
-  drawCircle(x - r*0.16, y - r*0.18, r*0.17, [255,255,255]);
-  ctx.globalAlpha = a0;
+function ordinalSuffix(n) {
+  const v = n % 100; if (v >= 11 && v <= 13) return 'th';
+  return n % 10 === 1 ? 'st' : n % 10 === 2 ? 'nd' : n % 10 === 3 ? 'rd' : 'th';
+}
 
+// Tarjeta de posición del JUGADOR (única, arriba-izquierda). Número grande en Russo One + datos en Rajdhani.
+function drawPosCard(rank, total, color, laps, racelength, livery = null) {
+  const x = xper(0.014), y = yper(0.024), w = xper(0.185), h = yper(0.15), rad = h * 0.16;
+  const medal = rank === 1 ? [255,215,90] : rank === 2 ? [215,220,230] : rank === 3 ? [210,140,75] : [150,160,175];
+  ctx.save();
+  ctx.textBaseline = 'alphabetic';
+
+  // panel con sombra + gradiente
+  ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 4;
+  roundRectPath(x, y, w, h, rad);
+  const g = ctx.createLinearGradient(x, y, x, y + h);
+  g.addColorStop(0, 'rgba(22,25,36,0.92)'); g.addColorStop(1, 'rgba(8,9,15,0.92)');
+  ctx.fillStyle = g; ctx.fill();
+  ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+
+  // barra de acento (color del jugador) arriba
+  ctx.save(); roundRectPath(x, y, w, h, rad); ctx.clip();
+  const bar = ctx.createLinearGradient(x, y, x + w, y);
+  bar.addColorStop(0, rgb(color)); bar.addColorStop(1, rgb(modifyColorPerc(color, 0.35)));
+  ctx.fillStyle = bar; ctx.fillRect(x, y, w, h * 0.07); ctx.restore();
+
+  // borde con glow del color del jugador
+  roundRectPath(x, y, w, h, rad);
+  ctx.lineWidth = 2; ctx.strokeStyle = rgb(modifyColor(color, 40));
+  ctx.shadowColor = rgb(color); ctx.shadowBlur = 10; ctx.stroke(); ctx.shadowBlur = 0;
+
+  // divisor entre POSICIÓN y VUELTA
+  const midx = x + w * 0.54;
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.moveTo(midx, y + h * 0.24); ctx.lineTo(midx, y + h * 0.84); ctx.stroke();
+
+  ctx.textAlign = 'left';
+  // ── POSICIÓN ──
+  ctx.fillStyle = 'rgba(200,206,220,0.6)';
+  ctx.letterSpacing = '2px';
+  ctx.font = `700 ${Math.round(h * 0.15)}px 'Rajdhani', sans-serif`;
+  ctx.fillText('POSICIÓN', x + w * 0.08, y + h * 0.28);
+  ctx.letterSpacing = '0px';
+
+  const numStr = String(rank), numX = x + w * 0.07;
+  ctx.font = `${Math.round(h * 0.48)}px 'Russo One', sans-serif`;
+  ctx.fillStyle = rgb(medal);
+  ctx.shadowColor = rgb(medal); ctx.shadowBlur = rank === 1 ? 14 : 6;
+  ctx.fillText(numStr, numX, y + h * 0.74); ctx.shadowBlur = 0;
+  const numW = ctx.measureText(numStr).width;
+  ctx.font = `700 ${Math.round(h * 0.17)}px 'Rajdhani', sans-serif`;
+  ctx.fillStyle = rgb(medal); ctx.fillText(ordinalSuffix(rank), numX + numW + 3, y + h * 0.46);
+  ctx.fillStyle = 'rgba(190,196,210,0.7)'; ctx.fillText('/ ' + total, numX + numW + 3, y + h * 0.7);
+
+  // ── VUELTA ──
+  ctx.fillStyle = 'rgba(200,206,220,0.6)';
+  ctx.letterSpacing = '2px';
+  ctx.font = `700 ${Math.round(h * 0.15)}px 'Rajdhani', sans-serif`;
+  ctx.fillText('VUELTA', midx + w * 0.06, y + h * 0.28);
+  ctx.letterSpacing = '0px';
+  ctx.font = `700 ${Math.round(h * 0.34)}px 'Rajdhani', sans-serif`;
+  ctx.fillStyle = '#eef1f7';
+  ctx.fillText(Math.min(laps + 1, racelength) + '/' + racelength, midx + w * 0.06, y + h * 0.66);
+
+  // mini-tanque del color del jugador (esquina inferior derecha)
+  paintTank(x + w * 0.9, y + h * 0.82, 0, h * 0.12, color, 1, false, livery);   // mini-tanque con la librea del jugador
   ctx.restore();
 }
 
@@ -1447,13 +1905,14 @@ function mulberry32(a) {
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
-function getDeco(track) {
+function getDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
   if (decoCache[track]) return decoCache[track];
   const rng = mulberry32(((track + 1) * 2654435761) >>> 0);
-  const theme = Math.floor(track / 2);
+  const theme = themeOf(track);
   const items = [];
-  for (let i = 0; i < 80; i++) {
-    const x = rng() * SCREEN_X, y = rng() * SCREEN_Y, s = 0.5 + rng();
+  const N = Math.round(80 * (ww * hh) / (SCREEN_X * SCREEN_Y));        // densidad constante: más mundo = más deco
+  for (let i = 0; i < N; i++) {
+    const x = rng() * ww, y = rng() * hh, s = 0.5 + rng();
     let shape, col, alpha, r, extra = 0;
     if (theme === 0) {                                                // ASFALTO: grava clara, grietas oscuras, manchas de aceite (nada de pasto)
       const k = rng();
@@ -1470,16 +1929,16 @@ function getDeco(track) {
   decoCache[track] = { theme, items };
   return decoCache[track];
 }
-function drawDeco(track) {
-  const { theme, items } = getDeco(track);
+function drawDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
+  const { theme, items } = getDeco(track, ww, hh);
   // grilla tenue para dar sensación de "arena"
   const g = BASE_THEME[theme];
   ctx.globalAlpha = 0.08;
   ctx.strokeStyle = rgb(theme === 2 ? [120,120,140] : modifyColorPerc(g, 1.6));
   ctx.lineWidth = 1;
   ctx.beginPath();
-  for (let gx = 0; gx <= SCREEN_X; gx += xper(0.0625)) { ctx.moveTo(gx, 0); ctx.lineTo(gx, SCREEN_Y); }
-  for (let gy = 0; gy <= SCREEN_Y; gy += yper(0.111)) { ctx.moveTo(0, gy); ctx.lineTo(SCREEN_X, gy); }
+  for (let gx = 0; gx <= ww; gx += xper(0.0625)) { ctx.moveTo(gx, 0); ctx.lineTo(gx, hh); }
+  for (let gy = 0; gy <= hh; gy += yper(0.111)) { ctx.moveTo(0, gy); ctx.lineTo(ww, gy); }
   ctx.stroke();
   // scatter temático
   for (const it of items) {
@@ -1512,10 +1971,11 @@ function drawDeco(track) {
     }
   }
   ctx.globalAlpha = 1; ctx.lineCap = 'butt';
-  // viñeta: oscurece sutilmente los bordes del piso → profundidad
-  const vg = ctx.createRadialGradient(SCREEN_X/2, SCREEN_Y/2, SCREEN_Y*0.32, SCREEN_X/2, SCREEN_Y/2, SCREEN_Y*0.95);
+  // viñeta: oscurece sutilmente los bordes del piso → profundidad (centrada en el mundo)
+  const vr = Math.hypot(ww, hh) * 0.5;
+  const vg = ctx.createRadialGradient(ww/2, hh/2, Math.min(ww,hh)*0.32, ww/2, hh/2, vr);
   vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.34)');
-  ctx.fillStyle = vg; ctx.fillRect(0, 0, SCREEN_X, SCREEN_Y);
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, ww, hh);
 }
 
 // ════════════════ MOTIVOS SOBRE LOS OBSTÁCULOS (temática por bioma) ════════════════
@@ -1523,7 +1983,7 @@ function drawDeco(track) {
 // escala con el grosor de la pared, así los bordes finos quedan como textura y los bloques como "bosque".
 function getWallMotifs(w) {
   if (w._motifs) return w._motifs;
-  const theme = Math.floor(w.track / 2);
+  const theme = themeOf(w.track);
   const rng = mulberry32(((w.track*131 + w.id*977 + 7) >>> 0));
   const thick = Math.min(w.width, w.height);
   const mr = Math.min(thick * 0.42, xper(0.02));
@@ -1618,6 +2078,7 @@ const KEYMAP = {
   ArrowUp: 'UP', ArrowDown: 'DOWN', ArrowLeft: 'LEFT', ArrowRight: 'RIGHT',
   Space: 'SPACE', KeyW: 'W', KeyS: 'S', KeyA: 'A', KeyD: 'D',
   ControlLeft: 'LCTRL', Enter: 'RETURN', Escape: 'ESCAPE', KeyP: 'P', KeyF: 'F', F1: 'F1', F2: 'F2',
+  ShiftLeft: 'SHIFT', ShiftRight: 'SHIFT',
 };
 window.addEventListener('keydown', e => {
   const name = KEYMAP[e.code];
@@ -1635,6 +2096,20 @@ for (const el of document.querySelectorAll('[data-k]')) {
   el.addEventListener('pointercancel', release);
   el.addEventListener('pointerleave', release);
 }
+
+// ── BOTONES DE ACCIÓN (mantener apretado): disparo / nitro. Alimentan al jugador 1. ──
+const btnState = { fire: false, nitro: false };
+function holdBtn(id, key) {
+  const el = document.getElementById(id); if (!el) return;
+  const down = e => { e.preventDefault(); btnState[key] = true;  el.classList.add('on'); try { el.setPointerCapture(e.pointerId); } catch {} };
+  const up   = e => { e.preventDefault(); btnState[key] = false; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+  el.addEventListener('pointerleave', up);
+}
+holdBtn('btnFire', 'fire');
+holdBtn('btnNitro', 'nitro');
 
 // ── PALANCA ANALÓGICA hand-rolled (reemplaza nipplejs) ──
 // Aparece donde tocás dentro de su zona y se dibuja con DOM (base + nub). Robusta ante multitouch vía
@@ -1694,6 +2169,7 @@ function setupJoysticks() {}   // compat: la palanca hand-rolled se crea una vez
 // ── PANTALLA COMPLETA. En mobile saca la barra del navegador. iOS Safari NO soporta la Fullscreen API
 //    en elementos arbitrarios → ahí falla en silencio (la alternativa es "agregar a pantalla de inicio",
 //    que con los metas PWA abre sin barra). El botón está en la esquina sup-der, al lado del de atrás. ──
+const EMBEDDED = (window.self !== window.top);
 const fsTarget = document.documentElement;
 const _reqFs  = fsTarget.requestFullscreen || fsTarget.webkitRequestFullscreen;
 const _exitFs = document.exitFullscreen || document.webkitExitFullscreen;
@@ -1701,7 +2177,24 @@ function isFs()    { return !!(document.fullscreenElement || document.webkitFull
 function enterFs() { if (_reqFs)  { const p = _reqFs.call(fsTarget); if (p && p.catch) p.catch(() => {}); } }
 function exitFs()  { if (_exitFs) _exitFs.call(document); }
 function toggleFs(){ isFs() ? exitFs() : enterFs(); }
-function syncFsIcon() { document.body.classList.toggle('fs-on', isFs()); }
+// Embebido en la shell del Arcade: same-origin → llamamos requestFullscreen DIRECTO sobre el doc
+// padre para preservar el user-activation del tap. postMessage perdía la activación.
+function toggleFsEmbedded() {
+  try {
+    const topDoc = window.top.document;
+    if (topDoc.fullscreenElement || topDoc.webkitFullscreenElement) {
+      (topDoc.exitFullscreen || topDoc.webkitExitFullscreen).call(topDoc);
+    } else {
+      const el = topDoc.documentElement;
+      const req = el.requestFullscreen || el.webkitRequestFullscreen;
+      const p = req.call(el);
+      if (p && p.catch) p.catch(() => {});
+    }
+  } catch (e) {
+    try { window.parent.postMessage({ type: 'arcade:fullscreen' }, '*'); } catch (e2) {}
+  }
+}
+function syncFsIcon() { document.body.classList.toggle('fs-on', isFs() || EMBEDDED); }
 // Al entrar/salir de fullscreen (o rotar) el viewport cambia → re-ajustar el canvas y RECREAR los
 // joysticks, que si no quedan descolocados con la geometría vieja. Diferido un frame para que el layout
 // ya esté aplicado cuando nipplejs mida.
@@ -1709,8 +2202,11 @@ function onViewportChange() { syncFsIcon(); requestAnimationFrame(() => { resize
 document.addEventListener('fullscreenchange', onViewportChange);
 document.addEventListener('webkitfullscreenchange', onViewportChange);
 window.addEventListener('orientationchange', onViewportChange);
+// Embebido: la shell nos avisa su estado de FS para sincronizar el ícono.
+window.addEventListener('message', e => { if (e.data && e.data.type === 'arcade:fs-state') document.body.classList.toggle('fs-on', !!e.data.on); });
+syncFsIcon();
 const btnFs = document.getElementById('btnFs');
-btnFs.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); toggleFs(); });
+btnFs.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); EMBEDDED ? toggleFsEmbedded() : toggleFs(); });
 
 // (El auto-fullscreen en el primer toque se quitó: se comía el primer tap. La pantalla completa ahora es
 //  solo manual, con el botón de la esquina sup-der.)
@@ -1746,7 +2242,7 @@ canvas.addEventListener('pointermove', e => {
   // hover = foco: la opción debajo del mouse pasa a estar "seleccionada" (dispara todos sus efectos)
   const main = sprites[0];
   if (!main) return;
-  if (main.menu) main.hoverFocus(hover.y);
+  if (main.menu) main.hoverFocus(hover.y, hover.x);
   else { const aux = sprites[sprites.length - 1]; if (aux && aux.hoverFocus) aux.hoverFocus(hover.y); }
 });
 canvas.addEventListener('pointerleave', () => { hover.on = false; });
@@ -1754,20 +2250,57 @@ function rowHover(frac) { return hover.on && Math.abs(hover.y - yper(frac)) < yp
 
 // Hornea el fondo estático de la pista en un canvas offscreen (una vez por pista). Intercambia el ctx
 // global temporalmente para reusar fillScreen/drawDeco/Wall.draw/TrackPoint.draw tal cual.
+// Camino cerrado SUAVE por una poligonal (curvas cuadráticas por los puntos medios → esquinas redondeadas).
+function smoothPath(p) {
+  const n = p.length, mid = i => [(p[i][0]+p[(i+1)%n][0])/2, (p[i][1]+p[(i+1)%n][1])/2];
+  const m0 = mid(n-1); ctx.moveTo(m0[0], m0[1]);
+  for (let i = 0; i < n; i++) { const m = mid(i); ctx.quadraticCurveTo(p[i][0], p[i][1], m[0], m[1]); }
+  ctx.closePath();
+}
+// Corredor SUAVE de las pistas generadas: rellena lo de afuera del outer y lo de adentro del inner, con
+// curvas (sin escalones). La colisión sigue siendo las tiras de pared (invisibles). theme = color de pared.
+function drawSmoothCorridor(poly, ww, hh) {
+  const wallc = THEME_WALL[poly.theme], edge = modifyColor(wallc, -45), hi = modifyColor(wallc, 35);
+  ctx.fillStyle = rgb(wallc);
+  ctx.beginPath(); ctx.rect(0, 0, ww, hh); smoothPath(poly.outer); ctx.fill('evenodd');   // afuera del outer
+  ctx.beginPath(); smoothPath(poly.inner); ctx.fill();                                     // adentro del inner
+  // bordes (bevel): highlight fino + línea oscura en ambos contornos
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = rgb(hi);   ctx.lineWidth = Math.max(2, xper(0.0035)); ctx.beginPath(); smoothPath(poly.outer); ctx.stroke(); ctx.beginPath(); smoothPath(poly.inner); ctx.stroke();
+  ctx.strokeStyle = rgb(edge); ctx.lineWidth = Math.max(1.5, xper(0.002)); ctx.beginPath(); smoothPath(poly.outer); ctx.stroke(); ctx.beginPath(); smoothPath(poly.inner); ctx.stroke();
+}
+
 function bakeBackground(track) {
   bgReady = false;                                                     // mientras está en false, Wall/TrackPoint SÍ dibujan
-  bgW = canvas.width; bgH = canvas.height;
+  const ww = worldW(track), hh = worldH(track), poly = TRACK_POLY[track];
+  bgW = Math.ceil(ww * scaleX * dpr); bgH = Math.ceil(hh * scaleY * dpr);   // el horneado cubre TODO el mundo
   if (!bgCanvas) bgCanvas = document.createElement('canvas');
   bgCanvas.width = bgW; bgCanvas.height = bgH;
   const bc = bgCanvas.getContext('2d');
   bc.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, 0, 0);
   ctx = bc;
-  fillScreen(THEME_FLOOR[Math.floor(track / 2)]);
-  drawDeco(track);
+  fillRect(0, 0, ww, hh, THEME_FLOOR[themeOf(track)]);
+  drawDeco(track, ww, hh);
   for (const tp of trackpoints) tp.draw();                             // meta + grilla de largada (debajo)
-  for (const w of walls) w.draw();                                     // paredes + motivos (encima)
+  if (poly) drawSmoothCorridor(poly, ww, hh);                          // pistas generadas: paredes SUAVES (curvas)
+  else for (const w of walls) w.draw();                                // pistas originales: paredes con motivos
   ctx = mainCtx;
   bgTrack = track; bgReady = true;
+}
+
+// Ranking con HISTÉRESIS: mantiene un orden estable y solo intercambia dos tanques cuando el de atrás
+// supera al de adelante por un margen (RANK_EPS vueltas) → no parpadea cuando van casi emparejados.
+let rankOrder = [];
+const RANK_EPS = 0.02;                                                // ~2% de vuelta de ventaja para adelantar
+function updateRanks() {
+  if (rankOrder.length !== tanks.length || rankOrder.some(t => tanks.indexOf(t) < 0)) rankOrder = tanks.slice();
+  const prog = t => t.laps + t.lap_progress / 100;                    // progreso total de carrera
+  for (let i = 0; i < rankOrder.length - 1; i++) {
+    if (prog(rankOrder[i+1]) > prog(rankOrder[i]) + RANK_EPS) {
+      const tmp = rankOrder[i]; rankOrder[i] = rankOrder[i+1]; rankOrder[i+1] = tmp;
+    }
+  }
+  for (let i = 0; i < rankOrder.length; i++) rankOrder[i].rank = i + 1;
 }
 
 // ════════════════ LOOP PRINCIPAL ════════════════
@@ -1775,7 +2308,55 @@ let lastT = performance.now();
 let showFPS = false, fKeyPrev = false, dtSmoothed = 1/60;              // overlay de FPS (tecla F)
 let T = 0;                                                             // tiempo acumulado para animaciones (menú, cuenta regresiva)
 const jMoveZone = document.getElementById('jMove');
-let padsShown = false;   // arranca oculto (en el menú / desktop)
+const actBtns = document.getElementById('actBtns'), nitroRing = document.getElementById('nitroRing'), fireRing = document.getElementById('fireRing');
+let padsShown = false, btnsShown = false;   // arrancan ocultos (en el menú)
+
+// ── MINIMAPA (basado en el de Snake): recuadro arriba-derecha con la forma del mundo, los tanques (jugador
+// resaltado), los ítems de nitro y el recuadro de la cámara. Se dibuja en coords de PANTALLA (fijo). ──
+function drawMinimap() {
+  const main0 = sprites[0];
+  if (!main0 || main0.menu || !tanks.length) return;
+  const tr = main0.track, ww = worldW(tr), hh = worldH(tr);
+  const mmW = xper(0.17), mmH = mmW * (hh / ww);                       // mismo aspecto que el mundo
+  const mmX = SCREEN_X - mmW - xper(0.012), mmY = yper(0.15);          // arriba-derecha, debajo de los botones
+  const sc = mmW / ww, rad = yper(0.018);
+  const mx = wx => mmX + wx * sc, my = wy => mmY + wy * sc;
+  const accent = modifyColor(THEME_WALL[themeOf(tr)] || [120,120,120], 55);
+  ctx.save();
+  // panel redondeado con gradiente + recorte
+  roundRectPath(mmX, mmY, mmW, mmH, rad);
+  const bg = ctx.createLinearGradient(mmX, mmY, mmX, mmY + mmH);
+  bg.addColorStop(0, 'rgba(12,16,22,0.78)'); bg.addColorStop(1, 'rgba(5,7,11,0.82)');
+  ctx.fillStyle = bg; ctx.fill();
+  ctx.save(); roundRectPath(mmX, mmY, mmW, mmH, rad); ctx.clip();
+  // paredes (silueta suave tintada al tema)
+  ctx.fillStyle = rgb(modifyColorPerc(accent, 0.7));
+  ctx.globalAlpha = 0.55;
+  for (const w of walls) ctx.fillRect(mx(w.x), my(w.y), Math.max(0.6, w.width*sc), Math.max(0.6, w.height*sc));
+  ctx.globalAlpha = 1;
+  // recuadro de la cámara (lo que ves) — sutil
+  ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.2;
+  ctx.strokeRect(mx(camX), my(camY), SCREEN_X*sc, SCREEN_Y*sc);
+  // ítems de nitro (celestes con glow)
+  for (const p of pickups) {
+    ctx.globalAlpha = 0.35; ctx.fillStyle = 'rgba(90,220,255,1)'; ctx.beginPath(); ctx.arc(mx(p.x), my(p.y), 4.5, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(mx(p.x), my(p.y), 2.2, 0, TAU); ctx.fill();
+  }
+  // tanques: punto con halo; el jugador con anillo pulsante
+  const pulse = 0.6 + 0.4 * Math.sin(T * 4);
+  for (const t of tanks) {
+    const dx = mx(t.x), dy = my(t.y);
+    ctx.globalAlpha = 0.3; ctx.fillStyle = rgb(modifyColor(t.color, 80)); ctx.beginPath(); ctx.arc(dx, dy, t.ai ? 4 : 6, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(dx, dy, t.ai ? 3 : 3.6, 0, TAU); ctx.fill();
+    if (!t.ai) { ctx.strokeStyle = `rgba(255,255,255,${0.5 + 0.5*pulse})`; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(dx, dy, 5 + 2*pulse, 0, TAU); ctx.stroke(); }
+  }
+  ctx.restore();
+  // marco con glow del color del tema
+  ctx.strokeStyle = `rgba(${accent[0]},${accent[1]},${accent[2]},0.28)`; ctx.lineWidth = 5; roundRectPath(mmX, mmY, mmW, mmH, rad); ctx.stroke();
+  ctx.strokeStyle = `rgba(${accent[0]},${accent[1]},${accent[2]},0.85)`; ctx.lineWidth = 1.8; roundRectPath(mmX, mmY, mmW, mmH, rad); ctx.stroke();
+  ctx.restore();
+}
+
 function loop(now) {
   if (typeof now !== 'number') now = performance.now();
   deltaT = Math.min((now - lastT) / 1000, 0.05);                       // clamp 50ms, igual que el original
@@ -1796,16 +2377,19 @@ function loop(now) {
 
   const main0 = sprites[0];
   if (main0 && !main0.menu) {
-    // fondo estático horneado (se re-hornea sólo si cambió la pista o el tamaño del canvas)
-    if (!bgReady || bgTrack !== main0.track || bgW !== canvas.width || bgH !== canvas.height) bakeBackground(main0.track);
+    updateCamera(main0.track);                                        // sigue al jugador (cam 0,0 si la pista entra en pantalla)
+    // fondo estático horneado (se re-hornea sólo si cambió la pista o la escala del canvas)
+    const ew = Math.ceil(worldW(main0.track) * scaleX * dpr), eh = Math.ceil(worldH(main0.track) * scaleY * dpr);
+    if (!bgReady || bgTrack !== main0.track || bgW !== ew || bgH !== eh) bakeBackground(main0.track);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    ctx.drawImage(bgCanvas, 0, 0);                                     // blit 1:1 en píxeles de dispositivo
+    const sx = Math.round(camX * scaleX * dpr), sy = Math.round(camY * scaleY * dpr);   // región visible del mundo
+    ctx.drawImage(bgCanvas, sx, sy, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
   } else {
-    bgReady = false;                                                   // en menú: invalidar para re-hornear al volver a carrera
+    bgReady = false; camX = 0; camY = 0;                              // en menú: invalidar para re-hornear al volver a carrera
   }
 
-  // Transform a coords lógicas, escala para llenar la pantalla (landscape)
-  ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, 0, 0);
+  // Transform a coords del MUNDO, con la cámara restada (para pistas chicas camX=camY=0 → idéntico a antes)
+  ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, -camX * scaleX * dpr, -camY * scaleY * dpr);
 
   // process + draw por sprite. Paredes y trackpoints ya están en el fondo horneado → su draw es no-op.
   for (const sprite of sprites.slice()) { sprite.process(); sprite.draw(); }
@@ -1816,17 +2400,25 @@ function loop(now) {
   const racing = tanks.length > 0;
   if (racing && main0 && !main0.menu && !tanks[0].pause) {
     Engine.update(engine, PHYS_STEP);
+    const ww = worldW(main0.track), hh = worldH(main0.track);
     for (const t of tanks) {
       const b = t.body, r = t.radius;
-      let px = b.position.x, py = b.position.y, wrapped = false;       // wrap de pantalla (como el original)
-      if (px > SCREEN_X + r) { px = -r; wrapped = true; } else if (px < -r) { px = SCREEN_X + r; wrapped = true; }
-      if (py > SCREEN_Y + r) { py = -r; wrapped = true; } else if (py < -r) { py = SCREEN_Y + r; wrapped = true; }
-      if (wrapped) Body.setPosition(b, { x: px, y: py });
+      let px = b.position.x, py = b.position.y, moved = false;
+      // wrap al BORDE DEL MUNDO (las pistas cerradas tienen paredes de borde → nunca llegan; las de portales
+      // sí cruzan por los huecos y aparecen del otro lado, igual que el original pero a escala del mundo).
+      if (px > ww + r) { px = -r; moved = true; } else if (px < -r) { px = ww + r; moved = true; }
+      if (py > hh + r) { py = -r; moved = true; } else if (py < -r) { py = hh + r; moved = true; }
+      if (moved) Body.setPosition(b, { x: px, y: py });
       t.x = b.position.x; t.y = b.position.y; t.ang = b.angle;
       t.vel = Math.hypot(b.velocity.x, b.velocity.y) * 60;             // px/s (para la velocidad de salida de las bombas)
     }
+    ensureNitroPickups();                                             // mantiene los ítems de nitro en la pista
+    updateRanks();                                                    // posiciones estables (con histéresis)
   }
 
+  // HUD del loop (minimapa + FPS + confirmación): fijo a pantalla → translate(cam) neutraliza el scroll de la cámara.
+  ctx.save(); ctx.translate(camX, camY);
+  drawMinimap();
   if (showFPS) createText(S_font, 'FPS: ' + Math.round(1 / Math.max(1e-3, dtSmoothed)), [255,255,0], null, xper(0.93), yper(0.03));
 
   // Confirmación de salida al menú (ESC en carrera) — encima de todo. Tocá Sí / No.
@@ -1838,15 +2430,33 @@ function loop(now) {
     createText(M_font, 'SÍ', [255,150,140], modifyColorPerc([255,90,60], overSi ? 0.5 : 0.25), xper(0.38), yper(0.56), overSi ? 26 : 14);
     createText(M_font, 'NO', [150,210,255], modifyColorPerc([120,200,255], overNo ? 0.45 : 0.22), xper(0.62), yper(0.56), overNo ? 26 : 14);
   }
+  ctx.restore();
 
   // Los joysticks solo en táctil (en desktop se juega con teclado). En carrera se muestran; en el menú no.
-  // Controles solo en táctil + en carrera. Se ocultan también durante el cartel de confirmación para que
-  // la zona de movimiento (lado izquierdo) no tape el botón SÍ.
-  const showPads = IS_TOUCH && !!sprites[0] && !sprites[0].menu && !sprites[0].confirmQuit;
-  if (showPads !== padsShown) {
-    padsShown = showPads;
-    jMoveZone.style.display = showPads ? 'block' : 'none';
-    if (showPads) setupJoysticks();   // no-op (la palanca hand-rolled ya existe); se mantiene por compatibilidad
+  const inRace = !!sprites[0] && !sprites[0].menu && !sprites[0].confirmQuit;
+  // La PALANCA de movimiento sólo en táctil (en desktop se maneja con teclado).
+  const showJoy = IS_TOUCH && inRace;
+  if (showJoy !== padsShown) {
+    padsShown = showJoy;
+    jMoveZone.style.display = showJoy ? 'block' : 'none';
+    if (showJoy) setupJoysticks();   // no-op (la palanca hand-rolled ya existe); se mantiene por compatibilidad
+  }
+  // Los BOTONES de disparo/nitro se muestran SIEMPRE en carrera (también en desktop) como indicadores de
+  // cooldown/carga; en desktop se usan con teclado pero se ven igual.
+  if (inRace !== btnsShown) { btnsShown = inRace; actBtns.style.display = inRace ? 'flex' : 'none'; }
+  // Medidores del jugador en los botones: cooldown del disparo (rojo) y carga de nitro (celeste).
+  const p = tanks[0], pl = (p && !p.ai) ? p : null;
+  if (fireRing) {
+    const cd = pl ? pl.shoot_cooling / 2 : 0;                          // 1..0 restante (cooldown = 2s)
+    fireRing.style.background = cd > 0.001
+      ? `conic-gradient(rgba(0,0,0,0.55) ${cd*360}deg, rgba(255,90,60,0.55) 0deg)`
+      : 'transparent';
+  }
+  if (nitroRing) {
+    const n = pl ? pl.nitro : 0;
+    nitroRing.style.background = n > 0.001
+      ? `conic-gradient(rgba(90,220,255,0.95) ${n*360}deg, rgba(255,255,255,0.10) 0deg)`
+      : 'transparent';
   }
 
   requestAnimationFrame(loop);
@@ -1854,7 +2464,7 @@ function loop(now) {
 
 // ── INIT ──
 resize();
-jMoveZone.style.display = 'none';   // arranca oculto; el loop lo muestra solo en táctil + carrera
+jMoveZone.style.display = 'none'; actBtns.style.display = 'none';   // arrancan ocultos; el loop los muestra solo en táctil + carrera
 addSprite(new MainHandler());
 loop();
 
@@ -1867,7 +2477,14 @@ window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true 
   </button>
   <script>
     document.getElementById('btnExit').addEventListener('click', () => {
-      if (confirm('¿Salir al menú?')) location.href = '../../';
+      // Embebido en la shell del Arcade: postMessage para volver al menú sin recargar el iframe.
+      // Suelto: navegamos directo (sin confirm — mismo patrón que el resto de los juegos).
+      if (window.self !== window.top) {
+        try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {}
+        return;
+      }
+      try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch {}
+      location.href = '../../Arcade/';
     });
   </script>
   <button id="btnInfo" aria-label="info" title="Info / FPS">
@@ -1890,8 +2507,12 @@ window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true 
       }
       loop();
       const btn = document.getElementById('btnInfo');
-      btn.addEventListener('click', () => {
-        const showing = overlay.style.display !== 'none';
+      btn.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        // El overlay arranca con display:none POR CSS — el style inline está vacío "", así que
+        // comparamos con === 'block' (estado visible explícito) en vez de !== 'none' (que daba true
+        // al inicio y se comía el primer tap).
+        const showing = overlay.style.display === 'block';
         overlay.style.display = showing ? 'none' : 'block';
         btn.classList.toggle('on', !showing);
       });

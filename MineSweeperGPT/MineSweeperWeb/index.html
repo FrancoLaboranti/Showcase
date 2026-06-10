@@ -24,10 +24,14 @@
   }
 
   #hint {
-    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
-    text-align: center; color: rgba(255,255,255,0.5);
-    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
-    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    max-width: min(88vw, 480px);
+    background: rgba(10,12,18,0.78); border: 1px solid rgba(255,255,255,0.10);
+    padding: 12px 20px; border-radius: 14px;
+    text-align: center; color: rgba(255,255,255,0.92);
+    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
+    pointer-events: none; transition: opacity 0.8s; z-index: 2;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
   /* Cronómetro de la partida — arriba-izquierda, discreto. Arranca con la 1ª jugada, frena al terminar. */
@@ -66,9 +70,27 @@
   }
   #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
   #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
-  #ui #btnDiff { font-weight: 700; font-size: 17px; letter-spacing: 0.02em; }
+  #ui #btnDiff { position: relative; font-weight: 700; font-size: 13px; letter-spacing: -1px; overflow: visible; }
+  #ui #btnDiff #diffKey { color: #ffd23f; }                                       /* estrellas doradas */
+  /* multiplicador: medallón dorado "estampado" sobresaliendo de la esquina sup-der */
+  #ui #btnDiff #diffMult {
+    position: absolute; top: -5px; right: -5px;
+    min-width: 19px; height: 19px; padding: 0 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: 900; line-height: 1; letter-spacing: -0.02em;
+    color: #5a3d00;
+    background: radial-gradient(circle at 34% 28%, #ffe98a 0%, #ffce2e 55%, #e0a200 100%);
+    border: 1.5px solid #8a5e00;
+    border-radius: 10px;
+    transform: rotate(-12deg);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.5);
+    text-shadow: 0 1px 0 rgba(255,255,255,0.35);
+    pointer-events: none;
+  }
+  #ui #btnDiff #diffMult:empty { display: none; }                                /* en clásico (sin multiplicador) no se muestra */
   /* toggled-on states */
   #ui #btnSound.on { background: rgba(120,200,255,0.26); border-color: rgba(120,200,255,0.55); }
+  #ui #btnMode.on  { background: rgba(255,200,50,0.28); border-color: rgba(255,200,50,0.6); color: #ffd23f; }
 
   /* Mine counter — overlay anclado al marco del tablero (posición la fija placeHud() en JS). */
   #status {
@@ -80,16 +102,17 @@
   }
   #status svg { width: 14px; height: 14px; }
   /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
+  /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
   #fpsOverlay {
     position: absolute;
-    right: 40px;
-    bottom: calc(env(safe-area-inset-bottom) + 8px);
-    font-family: monospace;
+    left: calc(8px + env(safe-area-inset-left));
+    top: calc(8px + env(safe-area-inset-top));
+    font-family: ui-monospace, Menlo, Consolas, monospace;
     font-size: 13px;
+    line-height: 18px;
     color: rgba(255,255,255,0.9);
-    background: rgba(0,0,0,0.6);
-    padding: 3px 8px;
-    border-radius: 4px;
+    background: rgba(0,0,0,0.55);
+    padding: 4px 6px;
     pointer-events: none;
     display: none;
     z-index: 9;
@@ -106,16 +129,17 @@
     <span id="timerText">0:00</span>
   </div>
   <div id="status">
-    <svg viewBox="0 0 24 24" fill="rgb(232,65,58)"><circle cx="11" cy="14" r="7"/><rect x="10" y="3" width="2" height="5"/><path d="M12 5l4-2" stroke="rgb(232,65,58)" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
-    <span id="mineCount">25</span>
+    <span id="statusIcon"></span>
+    <span id="statusCount">25</span>
   </div>
-  <div id="hint">tocá para descubrir · mantené apretado para poner bandera</div>
+  <div id="hint">tocá una casilla para descubrirla · mantené apretado para poner una bandera 🚩</div>
   <div id="bar">
   <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
 <div id="ui">
-      <button id="btnDiff"  aria-label="dificultad" title="Dificultad: Fácil / Medio / Difícil">M</button>
+      <button id="btnMode"  aria-label="modo"       title="Modo: Clásico / Fiebre del Oro"></button>
+      <button id="btnDiff"  aria-label="dificultad" title="Dificultad: Fácil / Medio / Difícil"><span id="diffKey">M</span><span id="diffMult"></span></button>
       <button id="btnSound" aria-label="sonido"     title="Sonido on/off"></button>
       <button id="btnReset" aria-label="reiniciar"  title="Reiniciar (R)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
@@ -145,9 +169,9 @@
 
   // === DIFICULTADES (menos minas que el .py original de 40) ===
   const DIFFS = [
-    { name: 'Fácil',   key: 'F', cols: 9,  rows: 9,  mines: 10 },
-    { name: 'Medio',   key: 'M', cols: 13, rows: 13, mines: 25 },
-    { name: 'Difícil', key: 'D', cols: 16, rows: 16, mines: 50 },
+    { name: 'Fácil',   key: 'F', cols: 9,  rows: 9,  mines: 10, secs: 40,  gold: 10, mult: 1 },  // secs = límite oro · gold = pepitas · mult = puntos por pepita
+    { name: 'Medio',   key: 'M', cols: 13, rows: 13, mines: 25, secs: 70,  gold: 20, mult: 2 },
+    { name: 'Difícil', key: 'D', cols: 16, rows: 16, mines: 50, secs: 110, gold: 30, mult: 3 },
   ];
   let diffIndex = 1;                                                              // arranca en Medio
   let GRID_WIDTH = DIFFS[diffIndex].cols, GRID_HEIGHT = DIFFS[diffIndex].rows, MINES_COUNT = DIFFS[diffIndex].mines;
@@ -171,6 +195,9 @@
   const barEl = document.getElementById('bar');
   const timerEl = document.getElementById('timer');
   const statusEl = document.getElementById('status');
+  const hint = document.getElementById('hint');
+  let hintTimer = null;
+  function showHint(txt) { hint.textContent = txt; hint.style.opacity = '1'; clearTimeout(hintTimer); hintTimer = setTimeout(() => hint.style.opacity = '0', 5000); }
 
   // Ancla el HUD (cronómetro / contador) a las esquinas superiores del MARCO del tablero, no a las
   // esquinas de la ventana. Si hay lugar arriba del marco los pone ahí; si la pantalla es ancha y el
@@ -221,14 +248,24 @@
   let explodedTile = null;
   let endAt = 0;                 // timestamp del fin (para animar el banner)
   let timerStart = 0, timerRunning = false, timerEnd = 0;   // cronómetro: arranca en la 1ª jugada, frena al terminar
+  let mode = 'classic';          // 'classic' | 'gold' (modo bonus: pocas minas + oro para juntar)
+  let GOLD_COUNT = 0;            // pepitas a esparcir en modo oro
+  let goldCollected = 0;         // oro juntado en la partida actual
+  let goldTimeMs = 0;            // límite de tiempo (cuenta regresiva) del modo oro
+  let goldMult = 1;             // puntos por pepita según dificultad (×1/×2/×3)
+  let endReason = '';            // 'mine' | 'time' | 'win' — para elegir el cartel de fin
+  let bonusPts = 0;             // bonus de puntos al juntar todo (mitad de los segundos restantes)
+  let lastRecord = 0, isNewRecord = false;   // high-score (localStorage) de la dificultad actual en modo oro
+  let coinFx = [], coinFxStart = 0, coinTickN = 0;   // animación: el tiempo restante vuela como monedas al centro
 
   function makeTile(x, y) {
-    return { gx: x, gy: y, isMine: false, isRevealed: false, isFlagged: false, adjacent: 0, revealAt: 0, flagAt: 0 };
+    return { gx: x, gy: y, isMine: false, isGold: false, isRevealed: false, isFlagged: false, adjacent: 0, adjacentGold: 0, revealAt: 0, flagAt: 0, goldAt: 0 };
   }
   function reset() {
     gridReady = false; gameOver = false; victory = false; revealedCount = 0;
     explodedTile = null; endAt = 0;
     timerStart = 0; timerRunning = false; timerEnd = 0;
+    goldCollected = 0; endReason = ''; bonusPts = 0; isNewRecord = false; coinFx = [];
     grid = [];
     for (let y = 0; y < GRID_HEIGHT; y++) {
       const row = [];
@@ -283,17 +320,37 @@
       }
       if (pick && !pick.isMine) { pick.isMine = true; placed++; }
     }
-    calculateAdjacency();
+    if (mode === 'gold') placeGold();
+    calculateAdjacency();                                                        // tras el oro: cuenta minas Y oro adyacentes
     gridReady = true;
+  }
+
+  // Esparce GOLD_COUNT pepitas en celdas sin mina (Fisher-Yates parcial). El oro puede caer en celdas
+  // numeradas: al renderizar mostramos la moneda y el número chiquito en la esquina, así no se pierde
+  // la info de minas.
+  function placeGold() {
+    const cells = [];
+    for (const row of grid) for (const t of row) if (!t.isMine) cells.push(t);
+    for (let i = cells.length - 1; i > 0; i--) { const j = ri(0, i); const tmp = cells[i]; cells[i] = cells[j]; cells[j] = tmp; }
+    const n = Math.min(GOLD_COUNT, cells.length);
+    for (let i = 0; i < n; i++) cells[i].isGold = true;
   }
 
   function calculateAdjacency() {
     for (const row of grid)
       for (const t of row) {
-        let count = 0;
-        for (const nb of neighbors(t)) if (nb.isMine) count++;
-        t.adjacent = count;
+        let m = 0, g = 0;
+        for (const nb of neighbors(t)) { if (nb === t) continue; if (nb.isMine) m++; if (nb.isGold) g++; }
+        t.adjacent = m;
+        t.adjacentGold = g;
       }
+  }
+
+  // ¿hay oro SIN recoger en una celda vecina? (una pepita se recoge al revelar su celda). El "!" usa esto,
+  // así se va desvaneciendo del mapa a medida que juntás las monedas.
+  function goldPendingNear(t) {
+    for (const nb of neighbors(t)) if (nb !== t && nb.isGold && !nb.isRevealed) return true;
+    return false;
   }
 
   // destape con cascada (BFS): los 0 expanden a sus vecinos y el revealAt escalonado da el efecto de onda
@@ -306,22 +363,45 @@
       if (t.isFlagged || t.isRevealed) continue;
       t.isRevealed = true; t.revealAt = now + Math.min(revealSeq, 60) * CASCADE_MS; revealSeq++;
       revealedCount++;
+      if (t.isGold) { goldCollected++; t.goldAt = t.revealAt; }                  // juntar pepita al destaparla
       if (t.adjacent === 0 && !t.isMine)
         for (const nb of neighbors(t))
-          if (!nb.isRevealed && !nb.isFlagged && !queued.has(nb)) { queued.add(nb); queue.push(nb); }
+          if (!nb.isRevealed && !nb.isFlagged && !nb.isGold && !queued.has(nb)) { queued.add(nb); queue.push(nb); }  // el oro NO se auto-destapa: hay que cavarlo
     }
   }
   function mineTotal() { let n = 0; for (const row of grid) for (const t of row) if (t.isMine) n++; return n; }
   function flagCount() { let n = 0; for (const row of grid) for (const t of row) if (t.isFlagged && !t.isRevealed) n++; return n; }
 
   function checkVictory() {
-    if (revealedCount === GRID_WIDTH * GRID_HEIGHT - mineTotal()) {              // contra la cantidad REAL de minas
-      victory = true; endAt = nowMs();
+    const won = mode === 'gold'
+      ? (GOLD_COUNT > 0 && goldCollected >= GOLD_COUNT)                          // bonus: ganás al juntar todas las pepitas
+      : (revealedCount === GRID_WIDTH * GRID_HEIGHT - mineTotal());              // clásico: destapar todo lo que no es mina
+    if (won) {
+      victory = true; endReason = 'win'; endAt = nowMs();
       timerRunning = false; timerEnd = endAt;
+      if (mode === 'gold') {                                                      // la mitad de los segundos que sobran se suman al puntaje
+        const remainSec = Math.max(0, Math.ceil((goldTimeMs - (timerEnd - timerStart)) / 1000));
+        bonusPts = Math.floor(remainSec / 2);
+        if (bonusPts > 0) startCoinFx();                                          // el tiempo restante vuela como monedas al centro
+      }
       for (const row of grid) for (const t of row) if (t.isMine) t.isFlagged = true;  // planta banderas en todas las minas
+      if (mode === 'gold') commitScore();
       sndWin();
     }
   }
+
+  // Puntaje final del modo oro = pepitas×mult (+ bonus si juntaste todo). Guarda récord por dificultad.
+  // El multiplicador SÓLO cuenta si completás el nivel; si no, te llevás las pepitas crudas (×1).
+  function goldScore() { return endReason === 'win' ? (goldCollected * goldMult + bonusPts) : goldCollected; }
+  function commitScore() {
+    const score = goldScore();
+    const key = 'msw.gold.rec.' + DIFFS[diffIndex].key;
+    let prev = 0;
+    try { prev = parseInt(localStorage.getItem(key) || '0', 10) || 0; } catch (_) {}
+    if (score > prev) { isNewRecord = true; lastRecord = score; try { localStorage.setItem(key, String(score)); } catch (_) {} }
+    else { isNewRecord = false; lastRecord = prev; }
+  }
+  function recordLine() { return isNewRecord ? ('¡Nuevo récord! ' + lastRecord) : ('Récord ' + DIFFS[diffIndex].key + ': ' + lastRecord); }
 
   function processClick(gx, gy, rightClick) {
     if (gameOver || victory) return;
@@ -336,13 +416,17 @@
       if (!timerStart) { timerStart = now; timerEnd = now; timerRunning = true; }  // arranca con la 1ª celda destapada
       if (t.isMine) {
         t.isRevealed = true; t.revealAt = now; explodedTile = t;
-        gameOver = true; endAt = now;
+        gameOver = true; endReason = 'mine'; endAt = now;
         timerRunning = false; timerEnd = now;
         let k = 0;
         for (const row of grid) for (const mt of row) if (mt.isMine && !mt.isRevealed) { mt.isRevealed = true; mt.revealAt = now + (k++ % 12) * 35; }
+        if (mode === 'gold') commitScore();
         sndBoom();
       } else {
-        revealSeq = 0; digFlood(t, now); sndReveal();
+        const before = goldCollected;
+        revealSeq = 0; digFlood(t, now);
+        const gained = goldCollected - before;
+        if (gained > 0) sndCoin(gained); else sndReveal();                        // moneda si junté oro, click si no
         checkVictory();
       }
     }
@@ -389,8 +473,61 @@
     ctx.moveTo(cx + r * 0.55, cy - r * 0.55); ctx.lineTo(cx - r * 0.55, cy + r * 0.55);
     ctx.stroke();
   }
+  const GOLD_POP = 380, GOLD_FX = 650;
+  // La MONEDA se dibuja con su celda (puede taparla una vecina, no importa). El EFECTO (halo/anillo/
+  // chispas) se dibuja aparte en una pasada final, por encima de todo, así no lo tapan las celdas vecinas.
+  function drawGoldCoin(cx, cy, r, t, now) {
+    const age = t.goldAt ? (now - t.goldAt) : 1e9;
+    const sc = age < GOLD_POP ? (0.2 + 0.8 * easeOutBack(age / GOLD_POP)) : 1;   // "pop" con rebote al aparecer
+    const rr = r * sc;
+    const grad = ctx.createRadialGradient(cx - rr * 0.32, cy - rr * 0.34, rr * 0.1, cx, cy, rr);
+    grad.addColorStop(0, '#fff6c4'); grad.addColorStop(0.5, '#ffd23f'); grad.addColorStop(1, '#e09b00');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#a9760a'; ctx.lineWidth = Math.max(1, rr * 0.14); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = Math.max(1, rr * 0.1);
+    ctx.beginPath(); ctx.arc(cx, cy, rr * 0.6, Math.PI * 1.05, Math.PI * 1.65); ctx.stroke();   // arito interno
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.arc(cx - rr * 0.32, cy - rr * 0.34, rr * 0.2, 0, TAU); ctx.fill();      // hotspot
+  }
+  function drawGoldFx(cx, cy, r, t, now) {
+    const age = now - t.goldAt;
+    if (age < 0 || age >= GOLD_FX) return;
+    const fp = age / GOLD_FX, a = 1 - fp;
+    // halo dorado
+    const gr = r * (1.4 + 1.3 * fp);
+    const halo = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, gr);
+    halo.addColorStop(0, 'rgba(255,221,90,' + (0.5 * a).toFixed(3) + ')');
+    halo.addColorStop(1, 'rgba(255,221,90,0)');
+    ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(cx, cy, gr, 0, TAU); ctx.fill();
+    // anillo expansivo + chispas
+    ctx.save();
+    ctx.globalAlpha = a;
+    ctx.strokeStyle = '#fff7cc'; ctx.lineWidth = Math.max(1.5, r * 0.16 * a);
+    ctx.beginPath(); ctx.arc(cx, cy, r * (1.0 + fp * 1.9), 0, TAU); ctx.stroke();
+    for (let i = 0; i < 8; i++) {
+      const ang = i * TAU / 8 + 0.35, dist = r * (0.7 + fp * 2.8);
+      const sx = cx + Math.cos(ang) * dist, sy = cy + Math.sin(ang) * dist, sr = r * 0.18 * a;
+      ctx.fillStyle = (i & 1) ? '#fff3b0' : '#ffd23f';
+      ctx.beginPath(); ctx.arc(sx, sy, Math.max(0.5, sr), 0, TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // En modo oro: si se agota la cuenta regresiva, termina la partida con lo que se haya juntado.
+  function checkTime() {
+    if (mode !== 'gold' || !timerRunning) return;
+    if (nowMs() - timerStart >= goldTimeMs) {
+      timerRunning = false; timerEnd = timerStart + goldTimeMs;
+      gameOver = true; endReason = 'time'; endAt = nowMs(); explodedTile = null;
+      for (const row of grid) for (const mt of row) if (mt.isMine && !mt.isRevealed) { mt.isRevealed = true; mt.revealAt = nowMs(); }
+      commitScore();
+      sndTime();
+    }
+  }
 
   function render(now) {
+    checkTime();
     updateTimer();
     // fondo
     const g = ctx.createLinearGradient(0, 0, 0, H);
@@ -428,15 +565,26 @@
         if (t.isMine) {
           if (t.isFlagged && (gameOver || victory)) drawFlag(cx, cy, tile * 0.3);  // mina bien marcada
           else drawMine(cx, cy, r, t === explodedTile);
-        } else if (gameOver && t.isFlagged) {
-          drawWrongX(cx, cy, tile * 0.3);                                          // bandera equivocada
-        } else if (t.adjacent > 0) {
-          ctx.save();
-          ctx.shadowColor = 'rgba(0,0,0,0.28)'; ctx.shadowBlur = tile * 0.05; ctx.shadowOffsetY = tile * 0.03;
-          ctx.fillStyle = NUMBER_COLORS[t.adjacent];
-          ctx.font = '800 ' + Math.round(tile * 0.64) + "px 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif";
-          ctx.fillText(String(t.adjacent), cx, cy + tile * 0.05);
-          ctx.restore();
+        } else {
+          // la moneda NO se dibuja acá: al revelarla se "agarra" (pop + onda + sube y se desvanece) en la pasada de efectos
+          if (t.adjacent > 0) {                                                    // número de MINAS, centrado (default)
+            ctx.save();
+            ctx.shadowColor = 'rgba(0,0,0,0.28)'; ctx.shadowBlur = tile * 0.05; ctx.shadowOffsetY = tile * 0.03;
+            ctx.fillStyle = NUMBER_COLORS[t.adjacent];
+            ctx.font = '800 ' + Math.round(tile * 0.64) + "px 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif";
+            ctx.fillText(String(t.adjacent), cx, cy + tile * 0.05);
+            ctx.restore();
+          }
+          // indicador de ORO sin recoger cerca: "!" dorado en la esquina sup-der. Dinámico: desaparece al juntar las pepitas vecinas.
+          if (goldPendingNear(t)) {
+            ctx.save();
+            ctx.font = '900 ' + Math.round(tile * 0.24) + "px 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif";
+            ctx.lineWidth = Math.max(1.5, tile * 0.03); ctx.strokeStyle = '#7a5300'; ctx.lineJoin = 'round';
+            ctx.strokeText('!', px + tile * 0.86, py + tile * 0.18);
+            ctx.fillStyle = '#ffce2e';
+            ctx.fillText('!', px + tile * 0.86, py + tile * 0.18);
+            ctx.restore();
+          }
         }
       }
 
@@ -466,40 +614,189 @@
       }
     }
 
-    if (gameOver) drawBanner('¡Perdiste!', '#e8413a', now);
-    else if (victory) drawBanner('¡Ganaste!', '#43a047', now);
+    // "agarre" de la pepita POR ENCIMA de todas las celdas: onda expansiva + moneda que sube y se desvanece.
+    for (const row of grid) for (const t of row) {
+      if (!(t.isGold && t.isRevealed && t.goldAt)) continue;
+      const age = now - t.goldAt;
+      if (age < 0 || age >= GOLD_FX) continue;                                    // tras el efecto, la moneda queda recogida (no se dibuja)
+      const cx = offX + t.gx * tile + tile / 2, cy = offY + t.gy * tile + tile / 2;
+      const p = age / GOLD_FX;
+      drawGoldFx(cx, cy, r * 1.08, t, now);                                       // halo + onda expansiva + chispas
+      const rise = tile * 0.5 * easeOut(p);                                       // sube "como si la agarrara"
+      const alpha = p < 0.55 ? 1 : Math.max(0, 1 - (p - 0.55) / 0.45);            // se desvanece en el último tramo
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      drawGoldCoin(cx, cy - rise, r * 1.08, t, now);                              // pop (lo aplica drawGoldCoin por goldAt) + offset hacia arriba
+      ctx.restore();
+    }
+
+    if (gameOver) {
+      const goldTitle = endReason === 'time' ? '¡Tiempo!' : '¡Boom!';
+      drawBanner(mode === 'gold' ? goldTitle : '¡Perdiste!', endReason === 'time' ? '#ffb300' : '#e8413a', now,
+                 mode === 'gold' ? ('Oro juntado: ' + goldCollected + '/' + GOLD_COUNT) : null,
+                 mode === 'gold' ? recordLine() : null);
+    } else if (victory) {
+      drawBanner(mode === 'gold' ? '¡Oro!' : '¡Ganaste!', mode === 'gold' ? '#ffcf33' : '#43a047', now,
+                 null,
+                 mode === 'gold' ? recordLine() : null,
+                 mode === 'gold',                                                 // gold-win: línea "Oro {base} ^×mult + bonus" con medallón
+                 true);                                                           // 😎 carita con lentes coronando el cartel
+    }
+
+    drawCoinFx(now);                                                             // monedas del tiempo restante volando al centro (por encima del cartel)
 
     requestAnimationFrame(render);
   }
 
-  function drawBanner(text, color, now) {
+  // El bonus de tiempo "se materializa": al completar, salen monedas del cronómetro y vuelan al centro.
+  function startCoinFx() {
+    coinFx = []; coinFxStart = nowMs(); coinTickN = 0;
+    const tr = timerEl.getBoundingClientRect(), cr = canvas.getBoundingClientRect();
+    const sx = tr.left + tr.width / 2 - cr.left, sy = tr.top + tr.height / 2 - cr.top;
+    const N = Math.min(bonusPts, 14);                                            // tope visual de monedas (el bonus puede ser mayor)
+    for (let i = 0; i < N; i++)
+      coinFx.push({ sx: sx + (Math.random() * 16 - 8), sy: sy + (Math.random() * 10 - 5), delay: i * 85, landed: false });
+  }
+  function coinTick() { tone(720 + Math.min(coinTickN, 18) * 45, 0.07, 'triangle', 0.10); coinTickN++; }
+  function drawCoinFx(now) {
+    if (!coinFx.length) return;
+    const tx = W / 2, ty = H / 2 - tile * 0.1, DUR = 780;
+    for (const c of coinFx) {
+      const t = now - coinFxStart - c.delay;
+      if (t < 0) continue;
+      const p = Math.min(1, t / DUR), e = easeOut(p);
+      const x = c.sx + (tx - c.sx) * e;
+      const y = c.sy + (ty - c.sy) * e - Math.sin(p * Math.PI) * tile * 0.7;      // arco hacia arriba
+      drawGoldCoin(x, y, tile * 0.17, { goldAt: 0 }, now);
+      if (p >= 1 && !c.landed) { c.landed = true; coinTick(); }
+    }
+    if (now - coinFxStart > DUR + (coinFx.length - 1) * 85 + 220) coinFx = [];    // limpiar cuando todas aterrizaron
+  }
+
+  // Medallón dorado del multiplicador (mismo look que el del botón), para usar como "potencia" del oro base.
+  function drawMultMedallion(cx, cy, r, txt) {
+    ctx.save();
+    ctx.translate(cx, cy); ctx.rotate(-0.21);
+    const w = r * 2.7, h = r * 1.8;
+    const g = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+    g.addColorStop(0, '#ffe98a'); g.addColorStop(0.55, '#ffce2e'); g.addColorStop(1, '#e0a200');
+    ctx.fillStyle = g;
+    pathRound(-w / 2, -h / 2, w, h, h * 0.5); ctx.fill();
+    ctx.lineWidth = Math.max(1, r * 0.2); ctx.strokeStyle = '#8a5e00'; ctx.stroke();
+    ctx.fillStyle = '#5a3d00';
+    ctx.font = '900 ' + Math.round(r * 1.5) + "px 'Segoe UI', system-ui, sans-serif";
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(txt, 0, r * 0.05);
+    ctx.restore();
+  }
+  // Línea "{base} ^(×mult) + {bonus} = {total} 🪙": oro base, multiplicador como potencia (oculto en ×1), total y moneda.
+  function goldWinSegs() {
+    const showMult = goldMult > 1;
+    return { base: String(GOLD_COUNT), b: ' + ' + bonusPts + ' = ' + (GOLD_COUNT * goldMult + bonusPts),
+             mult: goldMult, showMult, medW: showMult ? tile * 0.66 : 0, coinW: tile * 0.46 };
+  }
+  function goldWinWidth(fSmall) { const s = goldWinSegs(); ctx.font = fSmall; return ctx.measureText(s.base).width + s.medW + ctx.measureText(s.b).width + s.coinW; }
+  function drawGoldWinLine(y, fSmall) {
+    const s = goldWinSegs(), f = Math.round(tile * 0.34);
+    ctx.font = fSmall; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    const wbase = ctx.measureText(s.base).width, wb = ctx.measureText(s.b).width;
+    let x = -(wbase + s.medW + wb + s.coinW) / 2;
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillText(s.base, x, y); x += wbase;
+    if (s.showMult) { drawMultMedallion(x + s.medW * 0.5, y - f * 0.5, tile * 0.2, '×' + s.mult); x += s.medW; }  // medallón potencia (no en Fácil)
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.font = fSmall;
+    ctx.fillText(s.b, x, y); x += wb;
+    drawGoldCoin(x + s.coinW * 0.5, y, tile * 0.16, { goldAt: 0 }, 0);            // monedita junto al total
+    ctx.textAlign = 'center';
+  }
+
+  // Carita con lentes de sol (vector, cross-platform) para coronar el cartel de victoria.
+  function drawCoolFace(cx, cy, r) {
+    const g = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.32, r * 0.2, cx, cy, r);
+    g.addColorStop(0, '#ffe45c'); g.addColorStop(1, '#f5b400');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+    ctx.lineWidth = Math.max(1, r * 0.06); ctx.strokeStyle = 'rgba(120,80,0,0.4)'; ctx.stroke();
+    // lentes
+    const lw = r * 0.55, lh = r * 0.4, gap = r * 0.14, ly = cy - r * 0.06;
+    ctx.fillStyle = '#1a1a1a';
+    pathRound(cx - gap / 2 - lw, ly - lh / 2, lw, lh, r * 0.12); ctx.fill();
+    pathRound(cx + gap / 2, ly - lh / 2, lw, lh, r * 0.12); ctx.fill();
+    ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = Math.max(2, r * 0.1); ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.moveTo(cx - gap / 2, ly - lh * 0.18); ctx.lineTo(cx + gap / 2, ly - lh * 0.18);              // puente
+    ctx.moveTo(cx - gap / 2 - lw, ly - lh * 0.18); ctx.lineTo(cx - r * 0.95, cy - r * 0.32);          // patilla izq
+    ctx.moveTo(cx + gap / 2 + lw, ly - lh * 0.18); ctx.lineTo(cx + r * 0.95, cy - r * 0.32);          // patilla der
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';                                                          // brillito en AMBOS lentes
+    ctx.beginPath(); ctx.arc(cx - gap / 2 - lw * 0.7, ly - lh * 0.12, r * 0.07, 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(cx + gap / 2 + lw * 0.3, ly - lh * 0.12, r * 0.07, 0, TAU); ctx.fill();
+    ctx.strokeStyle = '#7a4e00'; ctx.lineWidth = Math.max(2, r * 0.1); ctx.lineCap = 'round';         // sonrisa
+    ctx.beginPath(); ctx.arc(cx, cy + r * 0.2, r * 0.5, 0.12 * Math.PI, 0.88 * Math.PI); ctx.stroke();
+  }
+
+  function drawBanner(text, color, now, subtitle, extra, goldWin, face) {
     const p = Math.min(1, (now - endAt) / 350);
     const scale = 0.7 + 0.3 * easeOutBack(p);
+    const sub = subtitle || 'tocá ↻ para jugar de nuevo';
+    const fTitle = '800 ' + Math.round(tile * 1.0) + "px 'Segoe UI', system-ui, sans-serif";
+    const fSmall = '600 ' + Math.round(tile * 0.34) + "px 'Segoe UI', system-ui, sans-serif";
     ctx.save();
     ctx.globalAlpha = p;
     ctx.translate(W / 2, H / 2);
     ctx.scale(scale, scale);
-    ctx.font = '800 ' + Math.round(tile * 1.0) + "px 'Segoe UI', system-ui, sans-serif";
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const tw = ctx.measureText(text).width, bw = tw + tile * 1.2, bh = tile * 2.0;
-    ctx.fillStyle = 'rgba(0,0,0,0.78)';
+    // ancho del cartel = la línea más larga
+    ctx.font = fTitle; let bw = ctx.measureText(text).width;
+    const subW = goldWin ? goldWinWidth(fSmall) : (ctx.font = fSmall, ctx.measureText(sub).width);
+    ctx.font = fSmall; bw = Math.max(bw, subW, extra ? ctx.measureText(extra).width : 0);
+    bw += tile * 1.1;
+    const bh = extra ? tile * 2.7 : tile * 2.0;
+    ctx.fillStyle = 'rgba(0,0,0,0.8)';
     pathRound(-bw / 2, -bh / 2, bw, bh, tile * 0.35); ctx.fill();
-    ctx.fillStyle = color; ctx.fillText(text, 0, -tile * 0.28);
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.font = '600 ' + Math.round(tile * 0.34) + "px 'Segoe UI', system-ui, sans-serif";
-    ctx.fillText('tocá ↻ para jugar de nuevo', 0, tile * 0.55);
+    ctx.fillStyle = color; ctx.font = fTitle;
+    ctx.fillText(text, 0, extra ? -tile * 0.6 : -tile * 0.28);
+    const subY = extra ? tile * 0.2 : tile * 0.55;
+    if (goldWin) {
+      drawGoldWinLine(subY, fSmall);
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = fSmall;
+      ctx.fillText(sub, 0, subY);
+    }
+    if (extra) {                                                                  // línea de récord (dorada si es nuevo)
+      ctx.fillStyle = isNewRecord ? '#ffd23f' : 'rgba(255,255,255,0.55)';
+      ctx.font = (isNewRecord ? '800 ' : '600 ') + Math.round(tile * 0.32) + "px 'Segoe UI', system-ui, sans-serif";
+      ctx.fillText(extra, 0, tile * 0.78);
+    }
+    if (face) drawCoolFace(0, -bh / 2 - tile * 0.32, tile * 0.46);                // 😎 coronando el cartel (cara más chica)
     ctx.restore();
   }
 
-  // === STATUS ===
-  const mineCountEl = document.getElementById('mineCount');
-  function updateStatus() { mineCountEl.textContent = String(MINES_COUNT - flagCount()); }
+  // === STATUS === (minas restantes en clásico · oro juntado en modo oro)
+  const statusIconEl = document.getElementById('statusIcon');
+  const statusCountEl = document.getElementById('statusCount');
+  const ICON_MINE = '<svg viewBox="0 0 24 24" fill="rgb(232,65,58)"><circle cx="11" cy="14" r="7"/><rect x="10" y="3" width="2" height="5"/><path d="M12 5l4-2" stroke="rgb(232,65,58)" stroke-width="2" fill="none" stroke-linecap="round"/></svg>';
+  const ICON_COIN = '<svg viewBox="0 0 24 24" fill="#ffd23f"><circle cx="12" cy="12" r="8" stroke="#caa000" stroke-width="1.5"/><circle cx="12" cy="12" r="4" fill="none" stroke="#caa000" stroke-width="1.3"/></svg>';
+  function updateStatus() {
+    if (mode === 'gold') { statusIconEl.innerHTML = ICON_COIN; statusCountEl.textContent = goldCollected + '/' + GOLD_COUNT; }
+    else                 { statusIconEl.innerHTML = ICON_MINE; statusCountEl.textContent = String(MINES_COUNT - flagCount()); }
+  }
 
-  // === CRONÓMETRO ===
+  // === CRONÓMETRO === (sube en clásico · cuenta regresiva en modo oro)
   const timerTextEl = document.getElementById('timerText');
+  const TIMER_COLOR = 'rgba(255,255,255,0.5)';
   function updateTimer() {
-    const ms = timerStart ? (timerRunning ? nowMs() : timerEnd) - timerStart : 0;
-    const s = Math.floor(ms / 1000);
+    let ms, s;
+    if (mode === 'gold') {
+      const elapsed = timerStart ? ((timerRunning ? nowMs() : timerEnd) - timerStart) : 0;
+      ms = Math.max(0, goldTimeMs - elapsed);                                     // tiempo restante
+      s = Math.ceil(ms / 1000);
+      timerEl.style.color = (timerStart && timerRunning && ms <= 10000) ? '#ff5a5a' : TIMER_COLOR;  // últimos 10 s en rojo
+    } else {
+      ms = timerStart ? ((timerRunning ? nowMs() : timerEnd) - timerStart) : 0;
+      s = Math.floor(ms / 1000);
+      timerEl.style.color = TIMER_COLOR;
+    }
     timerTextEl.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
 
@@ -539,9 +836,11 @@
   const sndUnflag = () => { tone(420, 0.05, 'square', 0.07); };
   const sndBoom   = () => { noiseBurst(0.5, 0.5, 1400, 60); tone(150, 0.5, 'sine', 0.45, 38); };
   const sndWin    = () => { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.28, 'triangle', 0.16, null, i * 0.1)); };
+  const sndTime   = () => { tone(440, 0.2, 'sawtooth', 0.18, 240); tone(240, 0.34, 'sawtooth', 0.18, 120, 0.14); };  // "se acabó el tiempo"
+  const sndCoin   = (n) => { tone(880, 0.10, 'triangle', 0.14); tone(1320, 0.12, 'triangle', 0.12, null, 0.05); if (n > 2) tone(1760, 0.14, 'triangle', 0.10, null, 0.10); };  // moneda (arpegio si junté varias)
 
   // === INPUT (canvas) ===
-  const LONG_MS = 420;
+  const LONG_MS = 230;
   const MOVE_TOL = () => tile * 0.6;
   let pressId = null, pressTile = null, pressX = 0, pressY = 0, longFired = false, pressTimer = null;
 
@@ -592,11 +891,39 @@
   const btnDiff = document.getElementById('btnDiff');
   function applyDiff() {
     const d = DIFFS[diffIndex];
-    GRID_WIDTH = d.cols; GRID_HEIGHT = d.rows; MINES_COUNT = d.mines;
-    btnDiff.textContent = d.key; btnDiff.title = 'Dificultad: ' + d.name;
+    GRID_WIDTH = d.cols; GRID_HEIGHT = d.rows;
+    if (mode === 'gold') {                                                        // bonus: pocas minas + pepitas de oro, contrarreloj
+      MINES_COUNT = Math.max(4, Math.round(d.mines * 0.4));
+      GOLD_COUNT  = d.gold;
+      goldTimeMs  = d.secs * 1000;
+      goldMult    = d.mult;
+    } else {
+      MINES_COUNT = d.mines;
+      GOLD_COUNT  = 0;
+      goldTimeMs  = 0;
+      goldMult    = 1;
+    }
+    document.getElementById('diffKey').textContent = '★'.repeat(diffIndex + 1);   // dificultad como estrellas (1/2/3)
+    document.getElementById('diffMult').textContent = mode === 'gold' ? ('×' + d.mult) : '';   // badge esquina sup-der (sólo en oro)
+    btnDiff.title = 'Dificultad: ' + d.name + (mode === 'gold' ? ' · oro ×' + d.mult : '');
     reset(); resize();
   }
   btnDiff.addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); diffIndex = (diffIndex + 1) % DIFFS.length; applyDiff(); });
+
+  // === MODO (Clásico / Fiebre del Oro) ===
+  const MODE_ICON = {
+    classic: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="13.5" r="7.5"/><path d="M17.5 8.5l1.7-1.7a2.2 2.2 0 0 0 0-3.1l-1.4-1.4a2.2 2.2 0 0 0-3.1 0L13 4"/><path d="M21.5 2.5l-1.3 1.3"/></svg>',
+    gold:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7.3v9.4M14.4 9.2c0-1-1.1-1.7-2.4-1.7s-2.4.7-2.4 1.7 1.1 1.5 2.4 1.5 2.4.6 2.4 1.6-1.1 1.7-2.4 1.7-2.4-.7-2.4-1.7"/></svg>',
+  };
+  const btnMode = document.getElementById('btnMode');
+  function refreshMode() {
+    btnMode.innerHTML = MODE_ICON[mode];
+    btnMode.classList.toggle('on', mode === 'gold');
+    btnMode.title = mode === 'gold' ? 'Modo: Fiebre del Oro' : 'Modo: Clásico';
+    showHint(mode === 'gold' ? 'Fiebre del oro contrarreloj · cavá donde haya "!" · esquivá las minas'
+                             : 'tocá para descubrir · mantené apretado para poner bandera');
+  }
+  btnMode.addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); mode = (mode === 'classic') ? 'gold' : 'classic'; refreshMode(); applyDiff(); });
 
   const SOUND_ICON = {
     on:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a3 3 0 0 1 0 6"/><path d="M18.5 6.5a7 7 0 0 1 0 11"/></svg>',
@@ -607,15 +934,30 @@
   btnSound.addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); muted = !muted; refreshSound(); });
 
   document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); reset(); });
-  window.addEventListener('keydown', e => { if (e.key === 'r' || e.key === 'R') reset(); });
+  window.addEventListener('keydown', e => {
+    if (e.key === 'r' || e.key === 'R') reset();
+    // if (e.key === 'w' || e.key === 'W') autoWin();                            // DEBUG desactivado — descomentar para autowin
+  });
+
+  // DEBUG — autowin: arma el tablero, marca todo como completado y dispara la victoria (con bonus de tiempo).
+  function autoWin() {
+    audioOn();
+    reset();
+    placeMines(grid[0][0]);                                                      // coloca minas + oro (1ª celda como semilla)
+    for (const row of grid) for (const t of row) if (!t.isMine) { t.isRevealed = true; t.revealAt = nowMs(); if (t.isGold) t.goldAt = nowMs(); }
+    if (mode === 'gold') goldCollected = GOLD_COUNT;
+    else revealedCount = GRID_WIDTH * GRID_HEIGHT - mineTotal();
+    timerStart = nowMs() - (goldTimeMs || 90000) * 0.6; timerEnd = nowMs(); timerRunning = true;  // ~40% de tiempo restante → bonus
+    updateStatus();
+    checkVictory();
+  }
 
   // === INIT ===
   refreshSound();
+  refreshMode();                                                                 // icono de modo + hint inicial
   applyDiff();                                                                   // setea grid + label + reset + resize
   requestAnimationFrame(render);
 
-  const hint = document.getElementById('hint');
-  setTimeout(() => hint.style.opacity = '0', 6000);
   canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
   </script>
 
@@ -639,8 +981,12 @@
       }
       loop();
       const btn = document.getElementById('btnInfo');
-      btn.addEventListener('click', () => {
-        const showing = overlay.style.display !== 'none';
+      btn.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        // El overlay arranca con display:none POR CSS — el style inline está vacío "", así que
+        // comparamos con === 'block' (estado visible explícito) en vez de !== 'none' (que daba true
+        // al inicio y se comía el primer tap).
+        const showing = overlay.style.display === 'block';
         overlay.style.display = showing ? 'none' : 'block';
         btn.classList.toggle('on', !showing);
       });

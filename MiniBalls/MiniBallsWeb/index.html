@@ -24,10 +24,14 @@
   }
 
   #hint {
-    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
-    text-align: center; color: rgba(255,255,255,0.5);
-    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
-    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    max-width: min(88vw, 480px);
+    background: rgba(10,12,18,0.78); border: 1px solid rgba(255,255,255,0.10);
+    padding: 12px 20px; border-radius: 14px;
+    text-align: center; color: rgba(255,255,255,0.92);
+    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
+    pointer-events: none; transition: opacity 0.8s; z-index: 2;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
   /* Bottom bar: contains the action buttons. Opaque-ish background so it reads as a bezel. */
@@ -39,9 +43,10 @@
     background: rgba(0,0,0,0.85);
     border-top: 1px solid rgba(255,255,255,0.08);
     z-index: 3;
+    gap: 3px;
   }
   #ui {
-    display: flex; gap: 8px;
+    display: flex; gap: 3px;
   }
   #ui button {
     width: 48px; height: 48px; border-radius: 50%;
@@ -66,7 +71,7 @@
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">arrastrá para tirar · varios dedos = varias bolas · +/− para las bolas</div>
+  <div id="hint">arrastrá una bola para tirarla · varios dedos lanzan varias a la vez · +/− agrega o quita</div>
   <div id="bar">
   <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -131,7 +136,7 @@
   const BURST_INTERVAL_MS = 35;      // cada cuánto corre un tick mientras mantenés apretado
   const BURST_PER_TICK    = MAX_BALLS * BURST_INTERVAL_MS / 7000; // = 3 bolas/tick → 300 en 3 s
 
-  const GRAB_GAIN        = 0.5;
+  const GRAB_GAIN        = 0.85;   // bumped from 0.5 → la bola sigue al cursor sin lag visible en desktop
   const GRAB_MAX_SPEED_FRAC = 0.11;  // tope de chase como fracción de (W+H)/2 por step → escala con la resolución (en monitores grandes el mouse recorre más px y la bola tiene que seguirle el ritmo)
   let   grabMaxSpeed     = 55;       // recalculado en resize(); piso ~55 para no romper el feel mobile
   const MOUSE_SMOOTH_TC  = 0.04;     // time constant (sec) del low-pass de velocidad del puntero
@@ -166,7 +171,11 @@
   let W = 0, H = 0, dpr = 1;
   let ballR = 12;                                                                  // radio común, recalculado en resize()
   let walls = [];
-  let wallMode = 1;                                                                // 1 = 4 paredes, 2 = laterales (techo/piso abiertos), 3 = sin paredes (wrap)
+  // physicsScale: las constantes de velocidad (gravedad, jump, umbrales de sonido y roll) están en
+  // unidades de matter (px/step). Sin escalar, a más resolución todo se ve "más lento" porque la misma
+  // cantidad de píxeles ocupa menos fracción de pantalla. Recomputamos en resize() = min(W,H)/720.
+  let physicsScale = 1;
+  let wallMode = 1;                                                                // 1 = todas las paredes, 2 = sin laterales (techo+piso, wrap horizontal), 3 = sin techo/piso (laterales, wrap vertical), 4 = sin ninguna pared (wrap ambos ejes)
   const pinnedBodies = new Map();                                                  // body → {x, y} para cada bola fijada (se mantienen clavadas; agarrarlas las desclava)
   let showDebug = false;
 
@@ -175,11 +184,11 @@
     walls = [];
     const t = 600;                                                                 // grueso fuera de pantalla: una bola empujada al borde queda dentro y se reinyecta
     const opt = { isStatic: true, restitution: BALL_WALL_RESTITUTION, friction: 0.4 };
-    if (wallMode === 1) {                                                          // techo + piso solo en modo 1
+    if (wallMode === 1 || wallMode === 2) {                                        // techo + piso en modos 1 y 2
       walls.push(Bodies.rectangle(W/2, -t/2,    W + 2*t, t, opt));
       walls.push(Bodies.rectangle(W/2, H + t/2, W + 2*t, t, opt));
     }
-    if (wallMode === 1 || wallMode === 2) {                                        // laterales en modo 1 y 2
+    if (wallMode === 1 || wallMode === 3) {                                        // laterales en modos 1 y 3
       walls.push(Bodies.rectangle(-t/2, H/2,    t, H + 2*t, opt));
       walls.push(Bodies.rectangle(W + t/2, H/2, t, H + 2*t, opt));
     }
@@ -198,6 +207,8 @@
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    physicsScale = Math.min(W, H) / 720;                                           // baseline = 720px; a 1440 todo se mueve 2× en matter units (= mismo screen-fraction/seg)
+    engine.gravity.y = GRAVITY_Y * physicsScale;
     buildWalls();
   }
   window.addEventListener('resize', resize);
@@ -495,17 +506,17 @@
   }
 
   function wrapBalls() {
-    // teletransporta las bolas que salieron del área en los ejes con wrap activo (modos 2/3)
+    // teletransporta las bolas en los ejes con wrap activo
     if (wallMode === 1) return;
     for (const e of balls) {
       if (e.state !== 'live' || pinnedBodies.has(e.body)) continue;
       const r = e.body.circleRadius, p = e.body.position;
       let nx = p.x, ny = p.y;
-      if (wallMode === 2 || wallMode === 3) {
-        if (ny < -r) ny = H + r; else if (ny > H + r) ny = -r;
-      }
-      if (wallMode === 3) {
+      if (wallMode === 2 || wallMode === 4) {                                      // wrap horizontal cuando no hay laterales
         if (nx < -r) nx = W + r; else if (nx > W + r) nx = -r;
+      }
+      if (wallMode === 3 || wallMode === 4) {                                      // wrap vertical cuando no hay techo/piso
+        if (ny < -r) ny = H + r; else if (ny > H + r) ny = -r;
       }
       if (nx !== p.x || ny !== p.y) Body.setPosition(e.body, { x: nx, y: ny });
     }
@@ -538,7 +549,7 @@
   function jumpAll() {
     for (const e of balls) {
       if (e.state !== 'live' || isGrabbedBody(e.body) || pinnedBodies.has(e.body)) continue;
-      Body.setVelocity(e.body, { x: e.body.velocity.x, y: -JUMP_VELOCITY });
+      Body.setVelocity(e.body, { x: e.body.velocity.x, y: -JUMP_VELOCITY * physicsScale });
     }
   }
 
@@ -634,19 +645,24 @@
   tappable(document.getElementById('btnReset'), reset);
   tappable(document.getElementById('btnJump'), jumpAll);
 
-  // Modo de pared: 1 → 2 → 3 → 1, con SVG por modo. Reconstruye las paredes en cada tap.
+  // Modo de pared: 1 → 2 → 3 → 4 → 1, con SVG por modo. Reconstruye las paredes en cada tap.
   const WALL_ICONS = {
+    // 1 = caja completa
     1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg>',
-    2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M7 4v16M17 4v16"/></svg>',
-    3: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10 4 4M4 9V4h5M14 10l6-6M15 4h5v5M10 14l-6 6M4 15v5h5M14 14l6 6M20 15v5h-5"/></svg>',
+    // 2 = techo + piso (horizontales)
+    2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M4 7h16M4 17h16"/></svg>',
+    // 3 = laterales (verticales)
+    3: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M7 4v16M17 4v16"/></svg>',
+    // 4 = sin paredes (4 flechas diagonales abriéndose)
+    4: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10 4 4M4 9V4h5M14 10l6-6M15 4h5v5M10 14l-6 6M4 15v5h5M14 14l6 6M20 15v5h-5"/></svg>',
   };
   const btnWall = document.getElementById('btnWall');
   btnWall.innerHTML = WALL_ICONS[wallMode];
   tappable(btnWall, () => {
-    wallMode = (wallMode % 3) + 1;
+    wallMode = (wallMode % 4) + 1;
     btnWall.innerHTML = WALL_ICONS[wallMode];
     buildWalls();
-    if (wallMode !== 1) stopAllRolls();                                            // sin piso, no hay rolls que seguir
+    if (wallMode !== 1 && wallMode !== 2) stopAllRolls();                          // sin piso (modos 3/4), no hay rolls que seguir
   });
 
   // Pin: fija/desfija las bolas agarradas. Fijar = body STATIC (otras rebotan sin moverla). Suelta el
@@ -671,13 +687,13 @@
   }
   tappable(btnPin, togglePin);
 
-  // Desktop (puntero fino, sin touch): el botón de pin se oculta y su trigger pasa a ser la tecla Q
-  // (como el Q-pin de Balls original). En mobile se mantiene el botón.
-  const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
-  if (!isTouch) {
-    btnPin.style.display = 'none';
-    addEventListener('keydown', e => { if (e.key === 'q' || e.key === 'Q') togglePin(); });
-  }
+  // Keyboard (desktop y mobile-con-teclado): Q pinea/despinea (paralelo al botón chinche), Espacio
+  // salta a todas. preventDefault en Space evita el scroll de la página.
+  addEventListener('keydown', e => {
+    if (e.repeat) return;
+    if (e.key === 'q' || e.key === 'Q') togglePin();
+    else if (e.code === 'Space') { e.preventDefault(); audioResume(); jumpAll(); }
+  });
 
   const btnInfo = document.getElementById('btnInfo');
   tappable(btnInfo, () => { showDebug = !showDebug; btnInfo.classList.toggle('on', showDebug); });
@@ -777,7 +793,7 @@
     for (const pair of ev.pairs) {
       const { bodyA, bodyB } = pair;
       const vrel = Vector.magnitude(Vector.sub(bodyA.velocity, bodyB.velocity));
-      if (vrel < VTHR_AUDIBLE) continue;
+      if (vrel < VTHR_AUDIBLE * physicsScale) continue;
 
       const grabbed = isGrabbedBody(bodyA) || isGrabbedBody(bodyB);
       const wallHit = bodyA.isStatic || bodyB.isStatic;
@@ -787,8 +803,11 @@
       const pitch = pitchForBall(pitchBody);
 
       // Los InHand viven en updateBagSounds(); acá van clicks fuerte/medio/suave.
-      const intensity = (vrel - VTHR_AUDIBLE) / (VTHR_HARD - VTHR_AUDIBLE);
-      if (vrel >= VTHR_MED) {
+      const vthrAud = VTHR_AUDIBLE * physicsScale;
+      const vthrMed = VTHR_MED * physicsScale;
+      const vthrHard = VTHR_HARD * physicsScale;
+      const intensity = (vrel - vthrAud) / (vthrHard - vthrAud);
+      if (vrel >= vthrMed) {
         tryPlay('MarbleLowClick', intensity, pitch);
       } else {
         tryPlay('MarbleLowClick', intensity * 0.7, pitch);                         // baja velocidad: mismo sample más suave
@@ -814,9 +833,9 @@
       if (e.state !== 'live' || b.isStatic) { stopRollNode(e); continue; }
       const r = b.circleRadius;
       const distToFloor = H - b.position.y - r;
-      const onFloor = wallMode === 1 && distToFloor < r * ROLL_NEAR_FLOOR_FRAC && distToFloor > -r * 1.5;
+      const onFloor = (wallMode === 1 || wallMode === 2) && distToFloor < r * ROLL_NEAR_FLOOR_FRAC && distToFloor > -r * 1.5;
       const hSpeed = Math.abs(b.velocity.x);
-      const rolling = onFloor && hSpeed > ROLL_MIN_HSPEED;
+      const rolling = onFloor && hSpeed > ROLL_MIN_HSPEED * physicsScale;
       if (rolling) {
         if (!e.rollNode) {
           const src = actx.createBufferSource();
@@ -827,7 +846,7 @@
           try { src.start(); } catch {}
           e.rollNode = { src, gain };
         }
-        const t = Math.min(1, (hSpeed - ROLL_MIN_HSPEED) / (ROLL_FULL_HSPEED - ROLL_MIN_HSPEED));
+        const t = Math.min(1, (hSpeed - ROLL_MIN_HSPEED * physicsScale) / ((ROLL_FULL_HSPEED - ROLL_MIN_HSPEED) * physicsScale));
         const target = t * 0.35;
         const k = 1 - Math.exp(-dt / ROLL_ATTACK_TC);
         e.rollNode.gain.gain.value += (target - e.rollNode.gain.gain.value) * k;

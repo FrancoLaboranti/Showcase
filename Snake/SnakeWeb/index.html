@@ -24,10 +24,14 @@
   }
 
   #hint {
-    position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));
-    text-align: center; color: rgba(120,255,120,0.5);
-    font-size: 13px; letter-spacing: 0.04em; pointer-events: none;
-    transition: opacity 0.8s; z-index: 2; padding: 0 16px;
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    max-width: min(88vw, 480px);
+    background: rgba(8,16,8,0.78); border: 1px solid rgba(120,255,120,0.22);
+    padding: 12px 20px; border-radius: 14px;
+    text-align: center; color: rgba(180,255,180,0.95);
+    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
+    pointer-events: none; transition: opacity 0.8s; z-index: 2;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
   /* ── Controles FLOTANTES sobre el canvas, sin barra (estilo TankWARS/CrazyTanks) ── */
@@ -54,27 +58,15 @@
   body.fs-on #btnFs .ic-enter { display: none; }
   body.fs-on #btnFs .ic-exit  { display: block; }
 
-  /* Exit — esquina arriba-izquierda, vuelta al menú raíz */
-  #btnExit {
-    position: absolute;
-    left: calc(env(safe-area-inset-left) + 8px);
-    top: calc(env(safe-area-inset-top) + 8px);
-    width: 34px; height: 34px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.4);
-    background: rgba(0,0,0,0.5);
-    color: rgba(255,255,255,0.85);
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0;
-    transition: background 0.1s, transform 0.08s;
-    z-index: 10;
-  }
-  #btnExit svg { display: block; width: 16px; height: 16px; pointer-events: none; }
-  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
+  /* Exit — ahora DENTRO de #padMenu (último = pegado a la esquina derecha). Hereda el tamaño/forma de
+     #padMenu button; sólo le damos un dejo rojo para diferenciarlo y el rojo fuerte al presionar. */
+  #btnExit { border-color: rgba(255,120,120,0.45) !important; color: rgba(255,190,190,0.9) !important; }
+  #btnExit:active { background: rgba(240,90,95,0.32) !important; border-color: rgba(240,90,95,0.6) !important; color: #fff !important; }
 
-  /* Palanca de dirección (hand-rolled). Zona invisible = mitad izquierda × 1/3 inferior (área natural del
-     pulgar): tocás ahí y la palanca se dibuja en el canvas centrada en el dedo. Al soltar vuelve el
-     placeholder de descanso. Sólo touch — en desktop se oculta. touch-action:none evita scroll/gestos. */
-  #jMove { position: fixed; left: 0; bottom: 0; width: 50%; height: 33%; z-index: 3; touch-action: none; }
+  /* Palanca de dirección (hand-rolled). Zona invisible = TODO el ancho × 1/3 inferior: tocás en cualquier
+     punto de abajo y la palanca se dibuja centrada en el dedo. El orbe de boost queda EXCLUIDO solo porque
+     tiene mayor z-index (4 > 3) → intercepta sus propios toques. Sólo touch; en desktop se oculta. */
+  #jMove { position: fixed; left: 0; bottom: 0; width: 100%; height: 33%; z-index: 3; touch-action: none; }
   .nipple .back {
     background: radial-gradient(circle at 50% 38%, rgba(0,255,140,0.12), rgba(0,255,140,0.03) 70%) !important;
     border: 1px solid rgba(0,255,140,0.35);
@@ -134,26 +126,10 @@
   }
 
 </style>
-<script>/* arcade-embed-shim: corre embebido en la shell del Arcade (iframe) */
-(function () {
-  if (window.self === window.top) return;            // sólo embebido
-  var noop = function () { return Promise.resolve(); };
-  try { Element.prototype.requestFullscreen = noop; } catch (e) {}
-  try { Element.prototype.webkitRequestFullscreen = noop; } catch (e) {}
-  // El "salir al menú" del juego: en vez de navegar (recargaría el menú dentro del iframe),
-  // avisamos a la shell por postMessage. Capturamos el click antes que el handler del juego.
-  window.addEventListener('click', function (e) {
-    var ex = e.target && e.target.closest && e.target.closest('#btnExit, #btnHome');
-    if (!ex) return;
-    e.preventDefault(); e.stopImmediatePropagation();
-    try { parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (x) {}
-  }, true);
-})();
-</script>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">dirigí con la palanca (mantiene el rumbo) · acelerá con ⚡ · comé las estrellas · las minas te achican · no choques tu cuerpo</div>
+  <div id="hint">dirigí con la palanca · ⚡ para acelerar · comé estrellas, esquivá minas y no te muerdas la cola</div>
   <div id="padMenu">
     <button id="btnPause" aria-label="pausa" title="Pausa">
       <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
@@ -167,10 +143,10 @@
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
+    <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
   </div>
-  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-  </button>
 
   <!-- Palanca de dirección (touch): zona invisible full-screen; la palanca aparece donde tocás (semi).
        Su dirección fija el rumbo de la cabeza. Mismo esquema dinámico que TankWARS. -->
@@ -196,34 +172,91 @@
   //   · cada segmento cachea su string rgb() — no se reconstruye por círculo.
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
-  const MAX_HAZARDS = 10;                                                         // tope de minas (obstáculos no comestibles)
-  const WIG_AMP = 0.35, WIG_SPEED = 9, WIG_DENSITY = 0.55;                        // wiggle visual del cuerpo: amplitud (× radio), velocidad (rad/s), fase por segmento
-  const HAZARD_PENALTY = 6;                                                       // segmentos que te saca una mina al chocarla
+  const MAX_HAZARDS = 16;                                                         // tope de minas (obstáculos no comestibles)
+  // Serpiente MARINA en un lago: todo se mueve lento, como arrastrado por una corriente suave.
+  const SNAKE_SPEED = 0.155;                                                      // velocidad base de la cabeza (× sper). Antes 0.3 → la mitad: deriva calma de lago
+  const WIG_AMP = 0.5, WIG_SPEED = 3.4, WIG_DENSITY = 0.5;                        // ondulación del cuerpo: más amplia y MUCHO más lenta (reptar marino, no vibrar)
+  const HAZARD_PENALTY = 10;                                                      // segmentos que te saca una mina al chocarla
   const HAZARD_FLASH_TIME = 0.4;                                                  // segundos de destello rojo al chocar una mina
-  const FOOD_SPAWN_DELAY = 0.7, HAZARD_SPAWN_DELAY = 1.1;                         // delay entre apariciones (escalonado, no todas de golpe)
-  const SPAWN_ANIM_TIME = 0.45;                                                   // duración de la animación de aparición
+  const FOOD_SPAWN_DELAY = 0.7, HAZARD_SPAWN_DELAY = 0.6, JELLY_SPAWN_DELAY = 6;  // delay entre apariciones (escalonado, no todas de golpe)
+  const SPAWN_ANIM_TIME = 0.7;                                                    // duración de la animación de aparición (más lenta, acuática)
+  const JELLY_IMMUNITY = 4.5;                                                     // segundos de escudo que da la medusa
+  const SEAHORSE_SPAWN_DELAY = 8;                                                 // delay entre caballitos de mar (boost de velocidad)
+  const SPEED_BOOST_TIME = 3, SPEED_BOOST_MULT = 3;                               // caballito: 3× la velocidad base por ~3 s (corto, sin indicador)
+  const MAGNET_RANGE = 0.075;                                                     // distancia (× sper) a la que el comestible empieza a atraerse a la cabeza (radio chico)
+  const MAGNET_SPEED = 0.16;                                                      // velocidad de atracción (× sper); muy suave, acelera al acercarse
+  const MAGNET_RESID_TC = 0.5;                                                    // constante de freno de la velocidad residual: al salir del rango sigue un toque y desacelera
   const easeOutBack = t => { const c1 = 1.70158, c3 = c1 + 1, u = t - 1; return 1 + c3*u*u*u + c1*u*u; }; // pop con leve rebote
-  const DEATH_FADE = 1.3, DEATH_DRAG_TC = 0.7, DEATH_TEXT_DELAY = 0.55;           // game over: fade de los pedazos, freno al volar, y delay del texto
+  // Tipos de estrella DEFINIDOS: color fijo + puntos. Las de más puntos son más raras (menor weight).
+  const STAR_TYPES = [
+    { hue: 45,  points: 100, weight: 48 },                                        // ámbar (la original) — la más común
+    { hue: 135, points: 200, weight: 27 },                                        // verde
+    { hue: 280, points: 300, weight: 17 },                                        // violeta
+    { hue: 210, points: 400, weight: 8  },                                        // azul — la más rara
+  ];
+  const STAR_WEIGHT = STAR_TYPES.reduce((s, t) => s + t.weight, 0);
+  function pickStarType() {
+    let r = Math.random() * STAR_WEIGHT;
+    for (const t of STAR_TYPES) { if ((r -= t.weight) < 0) return t; }
+    return STAR_TYPES[0];
+  }
+  const DEATH_FADE = 1.6, DEATH_TEXT_DELAY = 0.7;                                 // game over: vida media de las partículas y delay del texto
+  const WORLD_FACTOR = 1.7;                                                       // radio del lago = sper(WORLD_FACTOR) (mundo circular grande; cámara fija en la cabeza)
+  // Crecimiento: los segmentos a sumar NO se materializan todos de golpe (se apilaban sin moverse al comer en
+  // ráfaga); van saliendo de a pocos por frame desde un CONTADOR (manager.pendingGrow) y se despliegan solos.
+  // Además la víbora ENGORDA con el largo (girth): se ve más grande y gorda a medida que crece.
+  const GROW_DRIP = 2;                                                            // segmentos que se materializan por frame desde el contador
+  const GIRTH_MAX = 0.7, GIRTH_LEN = 320;                                         // engorde: radio ×(1+GIRTH_MAX) al llegar a ~GIRTH_LEN segmentos
+  const AGILITY_DROP = 0.4;                                                       // pérdida de agilidad de giro proporcional al engorde (gorda = gira más lento)
+  const ENEMY_TARGET = 6;                                                         // cuántas serpientes enemigas mantener en juego
+  const ENEMY_HUES = [5, 22, 60, 225, 255, 275];                                  // paleta más amplia (rojo/naranja/amarillo/azul/índigo/violeta) → menos coincidencias de color casuales
+  const ENEMY_MAX_LEN = 130;                                                      // tope de largo de un enemigo (perf)
+  const WAVE_TOTAL = 0.2;                                                          // duración de la onda de "respiración" (igual que el wave_time_total del jugador)
+  // ── COMBATE: nadie muere por chocar; el daño es por ATAQUE. Si una serpiente ACELERA con la cabeza de otra
+  //    en su cono frontal, la ataca: hace daño + un envión (lunge) hacia el rival. Tiene cooldown. Vida 0 = muere. ──
+  const PLAYER_MAX_HP = 100, PLAYER_DMG = 22;                                      // vida y daño del jugador
+  const ENEMY_DMG = 14;                                                           // daño base de las enemigas (la vida escala con su tamaño)
+  const ATTACK_CD = 1.0;                                                           // cooldown entre ataques (s)
+  const ATTACK_RANGE_F = 0.13, ATTACK_COS = Math.cos(1.15);                        // alcance del cono (× sper) y coseno del semiángulo (~66°, más permisivo)
+  const LUNGE_WIND = 0.6, WIND_SPEED_F = 0.4;                                     // RETRACCIÓN: la serpiente se recoge antes de embestir (más visible)
+  const LUNGE_TIME = 0.2, LUNGE_SPEED_F = 1.0;                                     // EMBESTIDA: duración y velocidad pico (× sper); con ease-out para fluidez
+  const HAZARD_DMG = 5;                                                            // vida que saca una mina
+  const HP_REGEN = 1;                                                              // regeneración de vida por segundo
+  const HEAL_RATE = 12;                                                            // velocidad de curación de la estrella (HP/s): la cura entra POR TIEMPO, no de golpe
+  const SIZE_DMG_MAX = 0.5;                                                         // bonus de daño máximo por ser MÁS GRANDE que la víctima (+50%); 0 a igual tamaño
+  const TURBO_DRAIN = 0.55, TURBO_RECHARGE = 0.4;                                  // carga del turbo (0..1/s): aguanta ~1.8 s, recarga ~2.5 s al SOLTAR
+  const PAIR_CHANCE = 0.4;                                                         // probabilidad de que un spawn de enemiga sea una PAREJA (mismo color, 1 grande + 1 chica)
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
 
   // ── ESTADO GLOBAL (al estilo del esqueleto del repo: los sprites lo leen directo) ──
   let W = 0, H = 0, dpr = 1;
-  let bgGrad = null;                                                              // gradiente de fondo (se rearma en resize)
   let screenX = 0, screenY = 0;                                                   // = W, H (alias para que las fórmulas de Snake.py calcen)
   let deltaT = 0, lastT = performance.now(), dtSmoothed = 1/60;
   let waveClock = 0;                                                              // reloj acumulado para la fase del wiggle visual
   let curR = 0;                                                                   // radio base por frame (= sper(0.01)); idéntico para toda pieza
+  let girth = 1;                                                                  // factor de engorde por frame (crece con el largo); multiplica el radio del cuerpo
   let mouseX = 0, mouseY = 0;                                                     // punto de dirección (último puntero conocido)
   let sprint = false;                                                             // ×1.5 a la velocidad de TODA la serpiente (port de "mouseLeft")
   let showDebug = false;
 
   let snake = [];                                                                 // index === id; cola = último, cabeza = [0]
   let food = [];
-  let hazards = [];                                                               // minas no comestibles: tocarlas = game over
+  let hazards = [];                                                               // minas no comestibles: tocarlas te achican
+  let treasures = [];                                                             // medusas bioluminiscentes (comestible nuevo: dan escudo + bonus)
+  let seahorses = [];                                                             // caballitos de mar (boost de velocidad temporal)
+  let enemies = [];                                                               // serpientes enemigas (IA: buscan comida, esquivan minas, evitan chocar)
   let spritesToRemove = [];
   let manager = null;
+  let WORLD_R = 0;                                                                // radio del lago (mundo circular), se fija en resize
+  let camX = 0, camY = 0;                                                         // cámara (= posición de la cabeza); el mundo se dibuja trasladado
+  let enemyGroupSeq = 0;                                                          // id incremental para parejas de enemigas
+  let pairAlert = 0;                                                              // timer del aviso "apareció una pareja"
+  let vL = 0, vR = 0, vT = 0, vB = 0;                                             // límites de la vista en coords de mundo (culling), se fijan por frame en el loop
+  const inView = (x, y) => x >= vL && x <= vR && y >= vT && y <= vB;
+  const ambient = [];                                                            // motas a la deriva (sensación de corriente)
+  let currentAng = 0.7;                                                          // dirección de la corriente del lago (rota lentísimo)
 
   // ── HELPERS DE RESOLUCIÓN (idénticos a Snake.py) ──
   const xper = p => p * screenX;
@@ -245,6 +278,66 @@
   }
   const rndRange = (a, b) => a + Math.random()*(b-a);
 
+  // punto de aparición en coords de MUNDO: en un anillo alrededor de la cabeza (a tiro de cámara, pero no
+  // encima) y siempre dentro del lago circular. Reemplaza el viejo rect en coords de pantalla.
+  function randSpawnPoint(center) {
+    const c = center || snake[0], hx = c ? c.x : 0, hy = c ? c.y : 0;
+    const near = Math.min(W, H) * 0.18, far = Math.min(W, H) * 0.46;
+    const a = Math.random()*TAU, d = rndRange(near, far);
+    let x = hx + Math.cos(a)*d, y = hy + Math.sin(a)*d;
+    const rr = Math.hypot(x, y), lim = WORLD_R - curR*5;                          // mantener adentro del lago
+    if (rr > lim) { x = x/rr*lim; y = y/rr*lim; }
+    return { x, y };
+  }
+
+  // velocidad del ataque a lo largo de la dirección del dash, según el tiempo restante del lunge:
+  //  · RETRACCIÓN (wind-up): negativa, se recoge y frena suave (sin → 0→1→0) — como una serpiente real.
+  //  · EMBESTIDA (dash): positiva con EASE-OUT (arranca fuerte y desacelera) → golpe fluido.
+  function lungeVel(lungeT) {
+    if (lungeT > LUNGE_TIME) { const wu = (LUNGE_WIND + LUNGE_TIME - lungeT) / LUNGE_WIND; return -sper(WIND_SPEED_F) * Math.sin(wu*Math.PI); }
+    const d = 1 - lungeT / LUNGE_TIME; return sper(LUNGE_SPEED_F) * (1 - d) * 2;
+  }
+
+  // modificador de daño por DIFERENCIA DE TAMAÑO: +0% a igual tamaño, sube hasta +SIZE_DMG_MAX si el que
+  // ataca es más grande que la víctima (muy grande vs chiquita). Si es más chico, no penaliza (queda en 1).
+  function sizeMod(aSize, vSize) { return 1 + Math.min(SIZE_DMG_MAX, Math.max(0, (aSize/vSize - 1) * SIZE_DMG_MAX)); }
+
+  // ¿el punto (tx,ty) está dentro del CONO de ataque de una cabeza en (hx,hy) mirando hacia hang?
+  function inAttackCone(hx, hy, hang, tx, ty, range) {
+    const dx = tx-hx, dy = ty-hy, d = Math.hypot(dx, dy);
+    if (d > range || d < 1e-3) return false;
+    return (dx/d)*Math.cos(hang) + (dy/d)*Math.sin(hang) >= ATTACK_COS;
+  }
+
+  // IMÁN: si el comestible está a tiro de la cabeza, se atrae hacia ella (más fuerte cuanto más cerca). Deja
+  // una VELOCIDAD RESIDUAL: al salir del rango sigue moviéndose un toque y se frena suave (no se clava).
+  function magnetPull(o) {
+    if (o.mvx === undefined) { o.mvx = 0; o.mvy = 0; }
+    const head = snake[0];
+    if (head && !manager.gameOver) {
+      const range = sper(MAGNET_RANGE);
+      const dx = head.x - o.x, dy = head.y - o.y, d = Math.hypot(dx, dy);
+      if (d < range && d > 1e-3) {
+        const k = 1 - d/range;                                                    // 0 en el borde del rango, 1 pegado a la cabeza
+        const pull = sper(MAGNET_SPEED) * (0.25 + k*k);                           // arranca suave y acelera al acercarse
+        o.mvx = dx/d * pull; o.mvy = dy/d * pull;                                 // refresca la velocidad mientras está en rango
+      }
+    }
+    o.x += o.mvx * deltaT; o.y += o.mvy * deltaT;                                 // aplicar (residual al salir del rango)
+    const fric = Math.exp(-deltaT / MAGNET_RESID_TC);
+    o.mvx *= fric; o.mvy *= fric;
+  }
+
+  // Limita un comestible al borde del lago: si choca la orilla lo clava ahí y mata la velocidad radial saliente.
+  function clampToLake(o) {
+    const lim = WORLD_R - curR*2, rr = Math.hypot(o.x, o.y);
+    if (rr > lim && rr > 1e-3) {
+      const nx = o.x/rr, ny = o.y/rr;
+      o.x = nx*lim; o.y = ny*lim;
+      if (o.mvx !== undefined) { const vr = o.mvx*nx + o.mvy*ny; if (vr > 0) { o.mvx -= vr*nx; o.mvy -= vr*ny; } }
+    }
+  }
+
   // texto centrado / alineado (port de createText). alignment: 'center' | 'topleft' | 'topright'
   function createText(size, content, alignment, color, posX, posY) {
     const px = Math.round(size * tscale());
@@ -260,6 +353,8 @@
     const dead = new Set(spritesToRemove);
     food = food.filter(s => !dead.has(s));
     hazards = hazards.filter(s => !dead.has(s));
+    treasures = treasures.filter(s => !dead.has(s));
+    seahorses = seahorses.filter(s => !dead.has(s));
     spritesToRemove = [];
   }
 
@@ -276,14 +371,21 @@
 
   // ════════════════ SNAKE PIECE ════════════════
   class SnakePiece {
-    constructor(n) {
+    constructor(n, deployed) {
       this.id = this.z = n;
-      this.vel = sper(0.3);
+      this.vel = sper(SNAKE_SPEED);
       this.angVel = sper(0.01);
       this.ang = (this.id === 0) ? Math.random()*TAU : snake[this.id-1].ang;
       this.targetAng = this.ang;                                                 // dirección objetivo de la cabeza (control por rumbo)
-      this.x = (this.id === 0) ? xper(0.5) : snake[this.id-1].x;
-      this.y = (this.id === 0) ? yper(0.5) : snake[this.id-1].y;
+      // COMBINACIÓN: el largo INICIAL nace ya DESPLEGADO (deployed=true → cada segmento a `link` detrás del
+      // anterior, en línea), pero los que se agregan al COMER nacen APILADOS en la cola (deployed falsy) y se
+      // van estirando al moverse, como antes. Desde un apilado total el seguidor sólo colapsa si TODA la
+      // cadena arranca en el mismo punto; al comer sólo la cola nueva está apilada, así que se despliega bien.
+      const ahead = this.id === 0 ? null : snake[this.id-1];
+      const link0 = (curR || sper(0.01)) * 0.8;
+      if (!ahead)         { this.x = 0; this.y = 0; }                             // cabeza: centro del MUNDO (la cámara la centra)
+      else if (deployed)  { this.x = ahead.x - Math.cos(ahead.ang)*link0; this.y = ahead.y - Math.sin(ahead.ang)*link0; }
+      else                { this.x = ahead.x; this.y = ahead.y; }                // "como antes": apilado en el de adelante
       this.wave_time = 0;
       this.wave_time_total = 0.2;
       // color FIJO por id (no depende del largo → comer NO recalcula color de toda la víbora). Gradiente
@@ -302,16 +404,33 @@
         // CABEZA: control por DIRECCIÓN persistente. targetAng se fija SÓLO en cada input (ver aimAt en
         // los handlers de puntero); entre inputs la cabeza conserva el rumbo y va derecho — no orbita ni
         // recalcula hacia el punto, que queda sólo como guía visual. Para girar, das un nuevo input.
-        this.vel = sper(0.3); this.angVel = sper(0.01);
+        this.vel = sper(SNAKE_SPEED);
+        this.angVel = sper(0.01) * (1 - (girth - 1) * AGILITY_DROP);             // pierde agilidad de giro a proporción del engorde (gorda = más torpe)
         // girar hacia targetAng por el camino corto, clavando cuando ya está alineada
         let diff = this.targetAng - this.ang;
         diff = ((diff + Math.PI) % TAU + TAU) % TAU - Math.PI;
         const step = this.angVel * deltaT;
         this.ang += Math.abs(diff) <= step ? diff : Math.sign(diff) * step;
         this.ang = ((this.ang % TAU) + TAU) % TAU;
-        const boost = sprint ? 1.5 : 1;
+        // caballito: ×SPEED_BOOST_MULT la base, pero el multiplicador entra (y sale) en RAMPA rápida, no de golpe
+        let sb = 1;
+        if (manager.speedBoost > 0) {
+          const RAMP = 0.4, up = Math.min(1, (SPEED_BOOST_TIME - manager.speedBoost) / RAMP), down = Math.min(1, manager.speedBoost / RAMP);
+          sb = 1 + (SPEED_BOOST_MULT - 1) * Math.min(up, down);                   // sube en RAMP s, se mantiene, baja en los últimos RAMP s
+        }
+        const boost = (manager.boosting ? 1.5 : 1) * sb;                          // turbo (con carga) — ya no es el sprint directo
         this.x += Math.cos(this.ang) * this.vel * deltaT * boost;
         this.y += Math.sin(this.ang) * this.vel * deltaT * boost;
+        if (manager.lungeT > 0) {                                                 // ataque: anticipación (retroceso) y luego embestida
+          if (manager.lungeT <= LUNGE_TIME && !manager.atkHit) {                 // TICK de daño al iniciar la embestida (modificado por tamaño)
+            const e = manager.atkTarget;
+            if (e && !e.dead) { e.hp -= PLAYER_DMG * sizeMod(girth, e.sizeMul*e.g); e.hurt = HAZARD_FLASH_TIME; if (e.hp <= 0) e.die(); }
+            manager.atkHit = true;
+          }
+          const v = lungeVel(manager.lungeT);                                    // perfil con easing (retracción → embestida)
+          this.x += manager.lungeX*v*deltaT; this.y += manager.lungeY*v*deltaT;
+          manager.lungeT -= deltaT;
+        }
         this.checkHeadCol();
       } else {
         // CUERPO: seguidor de distancia FIJA. Se ubica a `link` detrás del segmento de adelante, en la
@@ -343,7 +462,7 @@
       const dAlpha = manager.dying ? this.deathAlpha : 1;                        // fade al romperse en game over
       if (dAlpha <= 0) return;                                                    // pedazo ya desvanecido
       ctx.globalAlpha = dAlpha;
-      const baseR = curR;
+      const baseR = curR * girth;                                                // engorda con el largo (más grande y gorda)
       let radius;
       if (this.id === 0 && snake.length > 80)      radius = baseR * 1.45;
       else if (this.id === 0 && snake.length > 40) radius = baseR * 1.25;
@@ -387,12 +506,51 @@
         sheenStr = `hsla(${hue},100%,90%,0.5)`;
       }
 
+      // ── APÉNDICES MARINOS (aletas / cresta / cola), translúcidos: dan la silueta de serpiente de mar.
+      // Baratos: triángulos/curvas con 'lighter' y sólo en algunos segmentos. this.ang apunta hacia ADELANTE
+      // (hacia el segmento de adelante en el cuerpo / el rumbo en la cabeza); -(ca,sa) = hacia la cola.
+      const ca2 = Math.cos(this.ang), sa2 = Math.sin(this.ang), nx = -sa2, ny = ca2;
+      if (!manager.dying) {
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = sheenStr;
+        if (this.id === 0) {                                                      // cresta/frills barriendo atrás a los lados de la cabeza
+          for (const sgn of [1, -1]) {
+            ctx.beginPath();
+            ctx.moveTo(drawX + nx*sgn*radius*0.2, drawY + ny*sgn*radius*0.2);
+            ctx.quadraticCurveTo(drawX - ca2*radius*0.5 + nx*sgn*radius*1.7, drawY - sa2*radius*0.5 + ny*sgn*radius*1.7,
+                                 drawX - ca2*radius*1.7 + nx*sgn*radius*1.1, drawY - sa2*radius*1.7 + ny*sgn*radius*1.1);
+            ctx.quadraticCurveTo(drawX - ca2*radius*1.5 + nx*sgn*radius*0.3, drawY - sa2*radius*1.5 + ny*sgn*radius*0.3,
+                                 drawX - ca2*radius*0.7, drawY - sa2*radius*0.7);
+            ctx.closePath(); ctx.fill();
+          }
+        } else if (this.id === snake.length - 1 && snake.length > 6) {            // aleta caudal (abanico en la punta)
+          for (const sgn of [1, -1]) {
+            ctx.beginPath();
+            ctx.moveTo(drawX, drawY);
+            ctx.lineTo(drawX - ca2*radius*2.6 + nx*sgn*radius*2.2, drawY - sa2*radius*2.6 + ny*sgn*radius*2.2);
+            ctx.lineTo(drawX - ca2*radius*3.0 + nx*sgn*radius*0.4, drawY - sa2*radius*3.0 + ny*sgn*radius*0.4);
+            ctx.closePath(); ctx.fill();
+          }
+        } else if (this.id > 0 && this.id % (snake.length > 160 ? 14 : 6) === 3) { // aletas laterales (más espaciadas en víboras largas)
+          for (const sgn of [1, -1]) {
+            ctx.beginPath();
+            ctx.moveTo(drawX + ca2*radius*0.4 + nx*sgn*radius*0.2, drawY + sa2*radius*0.4 + ny*sgn*radius*0.2);
+            ctx.lineTo(drawX - ca2*radius*0.6 + nx*sgn*radius*1.8, drawY - sa2*radius*0.6 + ny*sgn*radius*1.8);
+            ctx.lineTo(drawX - ca2*radius*1.1 + nx*sgn*radius*0.3, drawY - sa2*radius*1.1 + ny*sgn*radius*0.3);
+            ctx.closePath(); ctx.fill();
+          }
+        }
+        ctx.globalCompositeOperation = 'source-over';
+      }
+
       // cuerpo + brillo glossy. El glow ya NO es por segmento (era el mayor costo en mobile): ahora es
       // un solo stroke a lo largo de toda la víbora, dibujado en el loop antes de los cuerpos.
       ctx.fillStyle = bodyStr;
       ctx.beginPath(); ctx.arc(drawX, drawY, radius, 0, TAU); ctx.fill();
-      ctx.fillStyle = sheenStr;
-      ctx.beginPath(); ctx.arc(drawX - radius*0.3, drawY - radius*0.3, radius*0.34, 0, TAU); ctx.fill();
+      if (this.id === 0 || snake.length < 160) {                                 // sheen: en víboras largas sólo la cabeza (mitad de fills, imperceptible)
+        ctx.fillStyle = sheenStr;
+        ctx.beginPath(); ctx.arc(drawX - radius*0.3, drawY - radius*0.3, radius*0.34, 0, TAU); ctx.fill();
+      }
 
       if (this.id === 0) {
         // ojos con reflejo + pupila mirando hacia adelante
@@ -411,26 +569,21 @@
     }
 
     checkHeadCol() {
-      const hx = this.x, hy = this.y, thr = curR*2, thr2 = thr*thr;
-      // sin paredes ni wrap: si la cabeza se fue muy lejos del campo, muerte. Margen uniforme = 2× el
-      // lado corto de la ventana activa (no depende del aspecto, así es testeable en monitor ancho).
-      const m = 1 * Math.min(W, H);
-      if (hx < -m || hx > W + m || hy < -m || hy > H + m) { manager.die(); return; }
-      if (manager.immunity <= 0) {                                               // inmunidad inicial: no muere por su propio cuerpo
-        for (const piece of snake) {
-          if (piece.id > 5 && piece.id % 4 === 0) {
-            const dx = piece.x-hx, dy = piece.y-hy;
-            if (dx*dx + dy*dy < thr2) manager.die();
-          }
-        }
-      }
-      for (const f of food) {                                                    // sólo comestible una vez materializada (appear===1)
-        if (f.appear < 1) continue;
+      const hx = this.x, hy = this.y, thr = curR*girth*2, thr2 = thr*thr;        // colisión escala con el engorde
+      // mundo circular (lago): si la cabeza llega a la orilla, muerte. (Las serpientes NO mueren por chocarse
+      // entre sí — el combate es por ataque/vida, ver manager.playerCombat / EnemySnake.combat.)
+      if (hx*hx + hy*hy > (WORLD_R - curR)*(WORLD_R - curR)) { manager.die(); return; }
+      // radio de agarre GENEROSO para comestibles: acorde al tamaño visual (estrella ~curR*1.55, medusa
+      // ~curR*1.75) y SIN esperar a que termine de aparecer (si spawnea pegada, se come igual).
+      const eatThr = curR*3.2, eatThr2 = eatThr*eatThr;
+      for (const f of food) {
+        if (f.grabbed) continue;
         const dx = f.x-hx, dy = f.y-hy;
-        if (dx*dx + dy*dy < thr2 && !f.grabbed) {
+        if (dx*dx + dy*dy < eatThr2) {
           f.grabbed = true;
-          manager.score += 100;
-          for (let i = 0; i < 10; i++) new SnakePiece(snake.length);             // el constructor se autoagrega a snake[]
+          manager.score += f.points;                                             // puntos según el tipo (100/200/300/400)
+          manager.pendingGrow += f.points / 20;                                  // contador: 5/10/15/20 segs según rareza; se materializan de a pocos (no apilados)
+          manager.healQueue += f.points / 20;                                    // y CURA 5/10/15/20 (gradual)
           this.wave_time = this.wave_time_total;
         }
       }
@@ -442,29 +595,48 @@
           manager.onHazardHit();
         }
       }
+      for (const j of treasures) {                                               // medusa: escudo temporal + bonus + crecés un poco
+        if (j.grabbed) continue;
+        const dx = j.x-hx, dy = j.y-hy;
+        if (dx*dx + dy*dy < eatThr2) { j.grabbed = true; manager.onJellyEat(j); }
+      }
+      for (const s of seahorses) {                                               // caballito: boost de velocidad + bonus
+        if (s.grabbed) continue;
+        const dx = s.x-hx, dy = s.y-hy;
+        if (dx*dx + dy*dy < eatThr2) { s.grabbed = true; manager.onSeahorseEat(s); }
+      }
     }
   }
 
   // ════════════════ FOOD (estrella giratoria con glow parpadeante) ════════════════
   class Food {
-    constructor() {
+    constructor(atX, atY) {                                                       // (atX,atY) opcional: aparece ahí (drop al morir), salteando la búsqueda de posición
       this.z = -1;
       this.ang = Math.random()*TAU;
       this.glowCD = 1;
       this.grabbed = false;
       this.timer = 10;
-      this.angVel = 1.8;                                                          // giro suave y constante (la estrella es 4-simétrica: si gira rápido estroboscopía)
+      this.angVel = 0.9;                                                          // giro lento (acuático; la estrella es 4-simétrica: rápido estroboscopía)
       this.appear = 0;                                                           // animación de aparición (0→1)
-      // posición lejos del cuerpo
-      const minD = curR*10, minD2 = minD*minD;
-      let reroll = true, guard = 0;
-      while (reroll && guard++ < 40) {
-        this.x = rndRange(xper(0.1), screenX - xper(0.1));
-        this.y = rndRange(yper(0.1), screenY - yper(0.1));
-        reroll = false;
-        for (let i = 0; i < snake.length; i += 3) {                              // 1 de cada 3 (se solapan): evita O(N) caro al spawnear con cuerpo largo
-          const dx = snake[i].x-this.x, dy = snake[i].y-this.y;
-          if (dx*dx + dy*dy < minD2) { reroll = true; break; }
+      this.bob = Math.random()*TAU;                                              // fase de cabeceo (flota en el agua)
+      this.driftAng = Math.random()*TAU;                                         // cada comestible deriva lento en SU dirección al azar
+      const t = pickStarType();                                                  // tipo definido: ámbar 100 / verde 200 / violeta 300 / azul 400
+      this.hue = t.hue; this.points = t.points;
+      if (atX !== undefined) {                                                    // drop en una posición dada (al morir): sin búsqueda
+        this.x = atX; this.y = atY;
+      } else {
+        // posición lejos del cuerpo, dentro del lago y a tiro de cámara. Reparte: a veces alrededor de un
+        // enemigo (así también tienen qué comer), si no del jugador.
+        const center = (enemies.length && Math.random() < 0.45) ? enemies[ri(0, enemies.length-1)].pieces[0] : snake[0];
+        const minD = curR*10, minD2 = minD*minD;
+        let reroll = true, guard = 0;
+        while (reroll && guard++ < 40) {
+          const p = randSpawnPoint(center); this.x = p.x; this.y = p.y;
+          reroll = false;
+          for (let i = 0; i < snake.length; i += 3) {                            // 1 de cada 3 (se solapan): evita O(N) caro al spawnear con cuerpo largo
+            const dx = snake[i].x-this.x, dy = snake[i].y-this.y;
+            if (dx*dx + dy*dy < minD2) { reroll = true; break; }
+          }
         }
       }
       food.push(this);
@@ -472,7 +644,15 @@
 
     process() {
       this.appear = Math.min(1, this.appear + deltaT / SPAWN_ANIM_TIME);
-      if (!manager.gameOver && !manager.pause) this.timer = Math.max(this.timer - deltaT, 0);
+      if (!manager.gameOver && !manager.pause) {
+        this.timer = Math.max(this.timer - deltaT, 0);
+        this.bob += deltaT;
+        const drift = sper(0.022);                                              // deriva lenta en su dirección random + leve cabeceo
+        this.x += (Math.cos(this.driftAng) + Math.cos(this.bob)*0.25) * drift * deltaT;
+        this.y += (Math.sin(this.driftAng) + Math.sin(this.bob*1.3)*0.25) * drift * deltaT;
+        if (this.appear >= 1) magnetPull(this);                                  // a tiro de la cabeza se atrae sola (con velocidad residual)
+        clampToLake(this);                                                       // no salir del lago: se limita al borde
+      }
       this.glowCD = Math.max(this.glowCD - deltaT, 0);
       if (this.glowCD === 0) this.glowCD = this.timer <= 2 ? 0.2 : this.timer <= 5 ? 0.5 : 1;
       if (this.timer === 0 || this.grabbed) spritesToRemove.push(this);
@@ -482,7 +662,7 @@
     draw() {
       const cx = this.x, cy = this.y, a = this.ang;
       const breath = 1 + Math.sin(waveClock*5 + this.ang)*0.12;
-      const r = curR * 1.2 * breath * easeOutBack(this.appear);                  // escala de aparición (pop)
+      const r = curR * 1.55 * breath * easeOutBack(this.appear);                 // escala de aparición (pop) — un poco más grande
 
       // urgencia: cuando está por expirar PARPADEA OSCURECIÉNDOSE (más rápido y más oscuro cuanto
       // menos tiempo queda) — contra el fondo negro se nota mucho más que aclarándose.
@@ -491,7 +671,7 @@
         const urg = 1 - this.timer/5;                                            // 0 (5s) .. 1 (0s)
         dim = (0.5 + 0.5*Math.sin(waveClock*(7 + urg*18))) * (0.4 + urg*0.55);    // amplitud y frecuencia crecen con la urgencia
       }
-      const hue = 45;                                                            // gema ámbar
+      const hue = this.hue;                                                      // gema de color random
       const light = 64 - dim*54;                                                 // baja hacia oscuro al parpadear
       const fade  = (1 - dim*0.85) * Math.min(1, this.appear*1.4);               // incluye el fade-in de aparición
 
@@ -502,21 +682,24 @@
       ctx.beginPath(); ctx.arc(cx, cy, r*1.5, 0, TAU); ctx.fill();
       ctx.fillStyle = `hsla(${hue},100%,62%,${0.30*fade})`;
       ctx.beginPath(); ctx.arc(cx, cy, r*0.9, 0, TAU); ctx.fill();
-      // destellos (4 puntas giratorias)
-      ctx.strokeStyle = `hsla(${hue},100%,${Math.max(28,light+18)}%,${0.95*fade})`;
-      ctx.lineCap = 'round';
-      ctx.lineWidth = Math.max(2, r*0.16);
-      for (let i = 0; i < 4; i++) {
-        const ang = a + i*Math.PI/2;
-        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(ang)*r*1.3, cy + Math.sin(ang)*r*1.3); ctx.stroke();
+      // ESTRELLA DE 5 PUNTAS giratoria: UN solo path relleno (más barato que las 4 líneas de antes, y como
+      // NO es 4-simétrica el giro se LEE bien sin estroboscopiar). a = this.ang la hace rotar.
+      const SP = 5, outerR = r*1.5, innerR = r*0.62;
+      ctx.beginPath();
+      for (let i = 0; i < SP*2; i++) {
+        const rr = (i % 2 === 0) ? outerR : innerR;
+        const ang = a + i*Math.PI/SP - Math.PI/2;
+        const x = cx + Math.cos(ang)*rr, y = cy + Math.sin(ang)*rr;
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
-      // orbe
-      ctx.fillStyle = `hsl(${hue},100%,${light}%)`;
-      ctx.beginPath(); ctx.arc(cx, cy, r*0.5, 0, TAU); ctx.fill();
+      ctx.closePath();
+      ctx.fillStyle = `hsl(${hue},100%,${light}%)`; ctx.fill();                   // cuerpo de la estrella
+      ctx.lineWidth = Math.max(1.5, r*0.12);                                      // rim brillante (con 'lighter' suma bloom)
+      ctx.strokeStyle = `hsla(${hue},100%,${Math.max(30,light+22)}%,${0.95*fade})`; ctx.stroke();
       // brillo central (se apaga al oscurecer)
       ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = `rgba(255,255,255,${0.95*fade})`;
-      ctx.beginPath(); ctx.arc(cx, cy, r*0.2, 0, TAU); ctx.fill();
+      ctx.fillStyle = `rgba(255,255,255,${0.9*fade})`;
+      ctx.beginPath(); ctx.arc(cx, cy, r*0.26, 0, TAU); ctx.fill();
     }
   }
 
@@ -525,17 +708,17 @@
     constructor() {
       this.z = -1;
       this.ang = Math.random()*TAU;
-      this.angVel = 2.0 * (Math.random() < 0.5 ? -1 : 1);                        // giro suave (8-simétrica: lento para no estroboscopiar)
+      this.angVel = 1.0 * (Math.random() < 0.5 ? -1 : 1);                        // giro lento (8-simétrica: lento para no estroboscopiar)
       this.pulse = Math.random()*TAU;
       this.appear = 0;                                                           // animación de aparición (0→1)
+      this.bob = Math.random()*TAU;
       // aparece lejos de la cabeza (para no matar de una) y separada del cuerpo y de otras minas
       const head = snake[0];
       const safe = curR*14, safe2 = safe*safe;
       const body = curR*4,  body2 = body*body;
       let ok = false, guard = 0;
       while (!ok && guard++ < 50) {
-        this.x = rndRange(xper(0.08), screenX - xper(0.08));
-        this.y = rndRange(yper(0.08), screenY - yper(0.08));
+        const p = randSpawnPoint(); this.x = p.x; this.y = p.y;
         ok = true;
         if (head) { const dx = head.x-this.x, dy = head.y-this.y; if (dx*dx+dy*dy < safe2) { ok = false; continue; } }
         for (let i = 0; i < snake.length; i += 3) { const p = snake[i], dx = p.x-this.x, dy = p.y-this.y; if (dx*dx+dy*dy < body2) { ok = false; break; } } // 1 de cada 3
@@ -548,7 +731,16 @@
       if (manager.pause) return;                                                 // sigue girando aun en game over (sólo se frena en pausa)
       this.appear = Math.min(1, this.appear + deltaT / SPAWN_ANIM_TIME);
       this.ang += this.angVel * deltaT;
-      this.pulse += deltaT * 4;
+      this.pulse += deltaT * 2.6;
+      if (!manager.gameOver) {                                                    // deriva lenta con la corriente
+        this.bob += deltaT;
+        const drift = sper(0.01);
+        this.x += (Math.cos(currentAng) + Math.cos(this.bob)*0.3) * drift * deltaT;
+        this.y += (Math.sin(currentAng) + Math.sin(this.bob*1.2)*0.3) * drift * deltaT;
+        clampToLake(this);                                                       // no salir del lago: se limita al borde (igual que las estrellas)
+        const hd = snake[0];                                                     // si te alejaste mucho, esta mina se RECICLA: el manager spawnea otra cerca tuyo
+        if (hd) { const dx = this.x-hd.x, dy = this.y-hd.y, far = Math.max(W,H)*1.15; if (dx*dx+dy*dy > far*far) spritesToRemove.push(this); }
+      }
     }
     draw() {
       const cx = this.x, cy = this.y, a = this.ang;
@@ -588,6 +780,419 @@
     }
   }
 
+  // ════════════════ JELLY (medusa bioluminiscente — comestible nuevo: da ESCUDO temporal + bonus) ════════════════
+  // Rosa luminosa, campana pulsante con flecos y tentáculos ondulantes que arrastra la corriente. Forma y
+  // color muy distintos de la estrella ámbar (comida) y de la mina oscura/violeta. Comerla = inmunidad
+  // (atravesás tu cuerpo) por unos segundos + bonus de score + crecés un poco.
+  class Jelly {
+    constructor() {
+      this.z = -1;
+      this.grabbed = false;
+      this.appear = 0;
+      this.timer = 14;                                                           // dura más que la comida (es premio raro)
+      this.bob = Math.random()*TAU; this.pulse = Math.random()*TAU; this.swim = Math.random()*TAU;
+      this.driftAng = Math.random()*TAU;                                         // deriva lento en su propia dirección random
+      const minD = curR*12, minD2 = minD*minD;
+      let reroll = true, guard = 0;
+      while (reroll && guard++ < 40) {
+        const p = randSpawnPoint(); this.x = p.x; this.y = p.y;
+        reroll = false;
+        for (let i = 0; i < snake.length; i += 3) { const dx = snake[i].x-this.x, dy = snake[i].y-this.y; if (dx*dx+dy*dy < minD2) { reroll = true; break; } }
+      }
+      treasures.push(this);
+    }
+    process() {
+      this.appear = Math.min(1, this.appear + deltaT / SPAWN_ANIM_TIME);
+      if (!manager.gameOver && !manager.pause) {
+        this.timer = Math.max(this.timer - deltaT, 0);
+        this.bob += deltaT; this.pulse += deltaT*1.8; this.swim += deltaT*2.2;
+        const drift = sper(0.026);                                              // nada un poco más que la comida, en su dirección random
+        this.x += (Math.cos(this.driftAng) + Math.cos(this.bob)*0.3) * drift * deltaT;
+        this.y += (Math.sin(this.driftAng) + Math.sin(this.bob*1.2)*0.3) * drift * deltaT;
+        if (this.appear >= 1) magnetPull(this);                                  // a tiro de la cabeza se atrae sola (con velocidad residual)
+        clampToLake(this);                                                       // no salir del lago: se limita al borde
+      }
+      if (this.timer === 0 || this.grabbed) spritesToRemove.push(this);
+    }
+    draw() {
+      const cx = this.x, cy = this.y, hue = 335;
+      const sp = easeOutBack(this.appear);
+      const fade = Math.min(1, this.appear*1.4) * (this.timer <= 4 ? (0.45 + 0.55*Math.abs(Math.sin(waveClock*6))) : 1); // parpadea al expirar
+      const R = curR*1.75*sp*(1 + Math.sin(this.pulse)*0.16);                    // campana pulsante — un poco más grande
+      const td = currentAng;                                                     // tentáculos barridos por la corriente
+      const pdx = -Math.sin(td), pdy = Math.cos(td);                             // perpendicular a la corriente
+      // tentáculos ondulantes (aditivos)
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = `hsla(${hue},100%,75%,${0.5*fade})`;
+      ctx.lineWidth = Math.max(1.5, R*0.12);
+      for (let i = 0; i < 5; i++) {
+        const off = (i-2)*R*0.32, sway = Math.sin(this.swim + i)*R*0.55;
+        const bx = cx + pdx*off, by = cy + pdy*off;
+        const mx = bx + Math.cos(td)*R*1.3 + pdx*sway,     my = by + Math.sin(td)*R*1.3 + pdy*sway;
+        const ex = bx + Math.cos(td)*R*2.5 + pdx*sway*0.4, ey = by + Math.sin(td)*R*2.5 + pdy*sway*0.4;
+        ctx.beginPath(); ctx.moveTo(bx, by); ctx.quadraticCurveTo(mx, my, ex, ey); ctx.stroke();
+      }
+      // halo de la campana
+      ctx.fillStyle = `hsla(${hue},100%,62%,${0.30*fade})`;
+      ctx.beginPath(); ctx.arc(cx, cy, R*1.8, 0, TAU); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      // flecos del borde inferior (hacia la corriente)
+      ctx.fillStyle = `hsla(${hue},100%,72%,${0.65*fade})`;
+      for (let i = -2; i <= 2; i++) {
+        const fx = cx + pdx*i*R*0.42 + Math.cos(td)*R*0.7, fy = cy + pdy*i*R*0.42 + Math.sin(td)*R*0.7;
+        ctx.beginPath(); ctx.arc(fx, fy, R*0.24, 0, TAU); ctx.fill();
+      }
+      // campana (domo) translúcido con gradiente arriba
+      const g = ctx.createRadialGradient(cx - Math.cos(td)*R*0.3, cy - Math.sin(td)*R*0.3, R*0.1, cx, cy, R);
+      g.addColorStop(0,   `hsla(${hue},100%,92%,${0.95*fade})`);
+      g.addColorStop(0.6, `hsla(${hue},100%,70%,${0.85*fade})`);
+      g.addColorStop(1,   `hsla(${hue},90%,56%,${0.30*fade})`);
+      ctx.fillStyle = g;
+      ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.fill();
+      // núcleo brillante (órganos bioluminiscentes)
+      ctx.fillStyle = `rgba(255,238,250,${0.95*fade})`;
+      ctx.beginPath(); ctx.arc(cx - Math.cos(td)*R*0.2, cy - Math.sin(td)*R*0.2, R*0.3, 0, TAU); ctx.fill();
+    }
+  }
+
+  // ════════════════ SEAHORSE (caballito de mar — boost de velocidad temporal) ════════════════
+  // Comerlo da un BOOST automático de 3× la velocidad base por unos segundos (corto, como el escudo) — sin
+  // ningún indicador (se nota solo porque vas más rápido). Mismos puntos que la medusa. Color naranja-dorado.
+  class Seahorse {
+    constructor() {
+      this.grabbed = false; this.appear = 0; this.timer = 12;
+      this.bob = Math.random()*TAU; this.driftAng = Math.random()*TAU; this.points = 250;
+      const minD = curR*12, minD2 = minD*minD;
+      let reroll = true, guard = 0;
+      while (reroll && guard++ < 40) {
+        const p = randSpawnPoint(); this.x = p.x; this.y = p.y;
+        reroll = false;
+        for (let i = 0; i < snake.length; i += 3) { const dx = snake[i].x-this.x, dy = snake[i].y-this.y; if (dx*dx+dy*dy < minD2) { reroll = true; break; } }
+      }
+      seahorses.push(this);
+    }
+    process() {
+      this.appear = Math.min(1, this.appear + deltaT / SPAWN_ANIM_TIME);
+      if (!manager.gameOver && !manager.pause) {
+        this.timer = Math.max(this.timer - deltaT, 0);
+        this.bob += deltaT;
+        const drift = sper(0.02);
+        this.x += (Math.cos(this.driftAng) + Math.cos(this.bob)*0.3) * drift * deltaT;
+        this.y += (Math.sin(this.driftAng) + Math.sin(this.bob*1.2)*0.3) * drift * deltaT;
+        if (this.appear >= 1) magnetPull(this);
+        clampToLake(this);
+      }
+      if (this.timer === 0 || this.grabbed) spritesToRemove.push(this);
+    }
+    draw() {
+      const sp = easeOutBack(this.appear);
+      const fade = Math.min(1, this.appear*1.4) * (this.timer <= 4 ? (0.45 + 0.55*Math.abs(Math.sin(waveClock*6))) : 1);
+      const R = curR*1.7*sp, hue = 32;                                            // naranja-dorado
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(Math.sin(this.bob)*0.18);                                        // leve balanceo
+      ctx.globalAlpha = fade;
+      ctx.globalCompositeOperation = 'lighter';                                   // halo
+      ctx.fillStyle = `hsla(${hue},100%,60%,0.28)`;
+      ctx.beginPath(); ctx.arc(0, 0, R*1.7, 0, TAU); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      // aleta dorsal
+      ctx.fillStyle = `hsla(${hue},100%,72%,0.7)`;
+      ctx.beginPath(); ctx.moveTo(-R*0.2, -R*0.1); ctx.quadraticCurveTo(-R*0.95, R*0.2, -R*0.18, R*0.55); ctx.closePath(); ctx.fill();
+      // cuerpo curvo (cuello → panza → cola enroscada)
+      ctx.strokeStyle = `hsl(${hue},88%,55%)`; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.lineWidth = R*0.72;
+      ctx.beginPath();
+      ctx.moveTo(0, -R*0.55);
+      ctx.quadraticCurveTo(R*0.55, R*0.05, R*0.05, R*0.75);
+      ctx.quadraticCurveTo(-R*0.5, R*1.15, R*0.25, R*1.4);                         // cola enroscando
+      ctx.stroke();
+      // cabeza + hocico hacia arriba
+      ctx.fillStyle = `hsl(${hue},90%,58%)`;
+      ctx.beginPath(); ctx.arc(0, -R*0.7, R*0.42, 0, TAU); ctx.fill();
+      ctx.lineWidth = R*0.3;
+      ctx.beginPath(); ctx.moveTo(0, -R*0.78); ctx.lineTo(R*0.66, -R*0.98); ctx.stroke();   // hocico
+      // coronet (3 púas)
+      ctx.fillStyle = `hsl(${hue},100%,66%)`;
+      for (const dx of [-0.18, 0, 0.18]) { ctx.beginPath(); ctx.moveTo(dx*R, -R*1.02); ctx.lineTo(dx*R + R*0.04, -R*1.32); ctx.lineTo(dx*R - R*0.12, -R*1.04); ctx.closePath(); ctx.fill(); }
+      // ojo + brillo
+      ctx.fillStyle = '#0c1014'; ctx.beginPath(); ctx.arc(R*0.12, -R*0.74, R*0.1, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(255,240,210,0.95)'; ctx.beginPath(); ctx.arc(-R*0.08, -R*0.8, R*0.1, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+  }
+
+  // ════════════════ ENEMY SNAKE (serpiente con IA) ════════════════
+  // Aparece DESDE FUERA del lago y nada hacia adentro; una vez integrada ya no sale (evita la orilla y, por
+  // las dudas, se clampea). IA por steering (suma de vectores): busca la comida cercana, esquiva minas, evita
+  // chocar al jugador / otras enemigas, y bordea la orilla. Tamaño (radio y largo) variado por instancia.
+  class EnemySnake {
+    constructor(opts) {
+      opts = opts || {};
+      this.hue = opts.hue !== undefined ? opts.hue : ENEMY_HUES[ri(0, ENEMY_HUES.length-1)];
+      this.sizeMul = opts.sizeMul !== undefined ? opts.sizeMul : rndRange(0.7, 1.45); // grosor (la grande de una pareja es mayor)
+      this.groupId = opts.groupId !== undefined ? opts.groupId : null;          // parejas comparten groupId (no se atacan ni se esquivan; van en grupo)
+      this.leader = opts.leader || null;                                        // la chica ESCOLTA a la grande
+      this.vel = sper(SNAKE_SPEED) * rndRange(0.8, 1.05);
+      this.turnR = rndRange(2.7, 3.6);                                           // radio de giro MÍNIMO = turnR×grosor (no se enrosca encima)
+      this.integrated = false;
+      this.dead = false;
+      this.hurt = 0;                                                             // destello al recibir daño
+      this.roamT = 0; this.roamX = 0; this.roamY = 0;
+      this.g = 1;
+      this.wavePhase = Math.random()*TAU;
+      this.aggro = rndRange(0.8, 1);                                             // MÁS agresivas: casi siempre comprometen al objetivo
+      this.targetT = rndRange(0, 2); this.foe = null; this.foePlayer = false;
+      this.chase = 1;
+      this.maxHp = 50 * this.sizeMul; this.hp = this.maxHp;
+      this.damage = ENEMY_DMG; this.attackCD = 0;
+      this.lungeT = 0; this.lungeX = 0; this.lungeY = 0;
+      this.atkFoe = null; this.atkPlayer = false; this.atkHit = false;           // objetivo del ataque en curso (daño al iniciar el dash)
+      this.turbo = 1; this.boosting = false;                                     // turbo propio, MISMA mecánica que el jugador
+      const len = Math.round(20 + (this.sizeMul - 0.7) * 55);                    // largo correlacionado con el tamaño
+      const a = opts.entryAng !== undefined ? opts.entryAng : Math.random()*TAU; // (la pareja entra por el mismo lado)
+      const R0 = WORLD_R * 1.12;
+      this.ang = Math.atan2(-Math.sin(a), -Math.cos(a)) + rndRange(-0.4, 0.4);
+      this.targetAng = this.ang;
+      const hx = Math.cos(a)*R0, hy = Math.sin(a)*R0, link = curR*this.sizeMul*0.8;
+      this.pieces = [];
+      for (let i = 0; i < len; i++)
+        this.pieces.push({ x: hx - Math.cos(this.ang)*link*i, y: hy - Math.sin(this.ang)*link*i, ang: this.ang, wt: 0 });
+      enemies.push(this);
+    }
+    grow(n) { const last = this.pieces[this.pieces.length-1]; for (let i = 0; i < n && this.pieces.length < ENEMY_MAX_LEN; i++) this.pieces.push({ x: last.x, y: last.y, ang: last.ang, wt: 0 }); }
+    startLunge(tx, ty) { const h = this.pieces[0], dx = tx-h.x, dy = ty-h.y, d = Math.hypot(dx, dy) || 1; this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; }
+    combat() {                                                                    // ataca ANTE LA OPORTUNIDAD: cualquier cabeza rival en su cono + CD listo (el turbo es para alcanzar)
+      if (this.attackCD > 0) this.attackCD -= deltaT;
+      this.hp = Math.min(this.maxHp, this.hp + HP_REGEN*deltaT);                  // regen de vida
+      if (this.attackCD > 0) return;
+      const head = this.pieces[0], range = sper(ATTACK_RANGE_F);
+      const ph = snake[0];
+      if (ph && manager.immunity <= 0 && inAttackCone(head.x, head.y, this.ang, ph.x, ph.y, range)) {
+        this.startLunge(ph.x, ph.y); this.attackCD = ATTACK_CD; head.wt = WAVE_TOTAL;
+        this.atkPlayer = true; this.atkFoe = null; this.atkHit = false;          // daño al iniciar el dash
+        return;
+      }
+      for (const e of enemies) {
+        if (e === this || e.dead || (this.groupId !== null && e.groupId === this.groupId)) continue; // no ataca a su grupo
+        const eh = e.pieces[0];
+        if (inAttackCone(head.x, head.y, this.ang, eh.x, eh.y, range)) {
+          this.startLunge(eh.x, eh.y); this.attackCD = ATTACK_CD; head.wt = WAVE_TOTAL;
+          this.atkFoe = e; this.atkPlayer = false; this.atkHit = false;
+          return;
+        }
+      }
+    }
+    shrink(n) { for (let i = 0; i < n && this.pieces.length > 6; i++) this.pieces.pop(); this.hurt = HAZARD_FLASH_TIME; }
+    die() {                                                                       // muere con el MISMO efecto que el jugador (se deshace en partículas) + suelta comida
+      if (this.dead) return;
+      this.dead = true;
+      const n = this.pieces.length, r = curR*this.sizeMul;
+      const step = Math.max(1, Math.ceil(n / 160));                              // partículas que se dispersan lento y se desvanecen, con su color
+      for (let i = 0; i < n; i += step) {
+        const p = this.pieces[i];
+        for (let k = 0; k < 6; k++) {
+          const a = Math.random()*TAU, sp = sper(0.06) + Math.random()*sper(0.22), life = rndRange(0.9, DEATH_FADE);
+          manager.deathParticles.push({ x: p.x + rndRange(-r,r), y: p.y + rndRange(-r,r), vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, r: r*rndRange(0.4,1.1), life, maxLife: life, hue: this.hue });
+        }
+      }
+      const drops = Math.min(6, 2 + (n/14|0));                                   // y suelta algo de comida donde estaba (slither-style)
+      for (let k = 0; k < drops; k++) {
+        const p = this.pieces[Math.min(n-1, (k*n/drops)|0)];
+        new Food(p.x + rndRange(-r, r), p.y + rndRange(-r, r));
+      }
+    }
+    process() {
+      if (manager.gameOver || manager.pause) return;
+      if (this.hurt > 0) this.hurt = Math.max(this.hurt - deltaT, 0);
+      this.chase = 1;                                                            // se sube a >1 sólo mientras persigue una víctima
+      const head = this.pieces[0];
+      const rBase = curR*this.sizeMul;                                           // grosor base (espaciado/giro), sin engorde — igual que el jugador
+      this.g = 1 + GIRTH_MAX * Math.min(1, this.pieces.length / GIRTH_LEN);      // engorda con el largo
+      const r = rBase * this.g, hd = Math.hypot(head.x, head.y);                 // grosor real (colisión / dibujo)
+      // ── STEERING (suma de vectores en coords de mundo) ──
+      let sx = Math.cos(this.ang), sy = Math.sin(this.ang);                      // inercia: tiende a seguir derecho
+      let wantsTurbo = false;                                                    // ¿quiere usar el turbo este frame? (al perseguir)
+      if (!this.integrated) {                                                    // todavía entrando: tirar fuerte al centro
+        const inv = hd || 1; sx += (-head.x/inv)*2.4; sy += (-head.y/inv)*2.4;
+        if (hd < WORLD_R - r*5) this.integrated = true;                          // ya adentro → no vuelve a salir
+      } else {
+        if (this.leader && !this.leader.dead) {                                  // GRUPO: la chica ESCOLTA a la grande (van juntas)
+          const lh = this.leader.pieces[0], dx = lh.x-head.x, dy = lh.y-head.y, d = Math.hypot(dx, dy) || 1;
+          if (d > curR*7) { sx += dx/d*1.7; sy += dy/d*1.7; }                    // ir hacia el líder si se aleja
+        } else {
+          // PATRULLA: punto objetivo dentro del lago, re-elegido al llegar o cada tanto → recorren el interior
+          this.roamT -= deltaT;
+          const rdx = this.roamX-head.x, rdy = this.roamY-head.y, rd = Math.hypot(rdx, rdy);
+          if (this.roamT <= 0 || rd < curR*8) {
+            const ra = Math.random()*TAU, rr = Math.sqrt(Math.random())*WORLD_R*0.72;
+            this.roamX = Math.cos(ra)*rr; this.roamY = Math.sin(ra)*rr; this.roamT = rndRange(3, 7);
+          }
+          if (rd > 1) { sx += rdx/rd*0.95; sy += rdy/rd*0.95; }
+        }
+        let best = null, bd = Infinity;                                          // comida cercana (prioridad sobre la patrulla)
+        for (const f of food) { if (f.appear < 0.3 || f.grabbed) continue; const dx = f.x-head.x, dy = f.y-head.y, d = dx*dx+dy*dy; if (d < bd) { bd = d; best = f; } }
+        const VIS = sper(0.55);
+        if (best && bd < VIS*VIS) { const d = Math.sqrt(bd) || 1; sx += (best.x-head.x)/d*1.9; sy += (best.y-head.y)/d*1.9; }
+        // ORILLA: girar hacia adentro bien ANTES del borde (así bordean y no quedan clavados contra la pared)
+        if (hd > WORLD_R*0.66) { const k = (hd - WORLD_R*0.66)/(WORLD_R*0.34), inv = hd || 1; sx += (-head.x/inv)*(2 + k*6); sy += (-head.y/inv)*(2 + k*6); }
+        // COMBATE (cut-off estilo slither): elegir una víctima cercana y meterle la cabeza ADELANTE para que
+        // cruce su camino contra mi cuerpo (la mata el chequeo de choque). Sólo si no es mucho más grande que yo.
+        this.targetT -= deltaT;
+        if (this.targetT <= 0) {
+          this.targetT = rndRange(1, 2.5); this.foe = null; this.foePlayer = false; // re-elige más seguido
+          const DET2 = sper(0.7)*sper(0.7);                                       // detecta de lejos; SIN gate de tamaño → pelean igual (chicas incluidas)
+          let bd = DET2, ph = snake[0];
+          if (ph) { const dx = ph.x-head.x, dy = ph.y-head.y, d = dx*dx+dy*dy; if (d < bd) { bd = d; this.foePlayer = true; } }
+          for (const e of enemies) {                                             // no caza a su propio grupo
+            if (e === this || !e.integrated || (this.groupId !== null && e.groupId === this.groupId)) continue;
+            const eh = e.pieces[0], dx = eh.x-head.x, dy = eh.y-head.y, d = dx*dx+dy*dy; if (d < bd) { bd = d; this.foe = e; this.foePlayer = false; }
+          }
+          if (Math.random() > this.aggro) { this.foe = null; this.foePlayer = false; } // no SIEMPRE ataca
+        }
+        let tg = null;                                                            // objetivo VIVO
+        if (this.foePlayer && snake[0]) tg = snake[0];
+        else if (this.foe && !this.foe.dead) tg = this.foe.pieces[0];
+        if (tg) {                                                                 // CARGAR directo a la cabeza del rival (para meterla en el cono y atacar)
+          const dx = tg.x-head.x, dy = tg.y-head.y, d = Math.hypot(dx, dy) || 1;
+          sx += dx/d*3.4; sy += dy/d*3.4;
+          wantsTurbo = true;                                                      // usa el turbo para cazar → habilita el ataque
+        }
+      }
+      const MA = sper(0.2);                                                      // esquivar minas (siempre)
+      for (const h of hazards) { const dx = head.x-h.x, dy = head.y-h.y, d = Math.hypot(dx, dy); if (d < MA && d > 1) { const w = 1 - d/MA; sx += dx/d*w*3.6; sy += dy/d*w*3.6; } }
+      // evitar choques — PERO no a la víctima que estoy atacando (me comprometo al corte)
+      const PA = sper(0.16), ph = snake[0];
+      if (ph && !this.foePlayer) { const dx = head.x-ph.x, dy = head.y-ph.y, d = Math.hypot(dx, dy); if (d < PA && d > 1) { const w = 1 - d/PA; sx += dx/d*w*3; sy += dy/d*w*3; } }
+      if (!this.foePlayer) for (let i = 6; i < snake.length; i += 8) { const p = snake[i], dx = head.x-p.x, dy = head.y-p.y, d2 = dx*dx+dy*dy; if (d2 < PA*PA && d2 > 1) { const d = Math.sqrt(d2), w = 1 - d/PA; sx += dx/d*w*2; sy += dy/d*w*2; } }
+      for (const e of enemies) { if (e === this || e === this.foe || (this.groupId !== null && e.groupId === this.groupId)) continue; const eh = e.pieces[0], dx = head.x-eh.x, dy = head.y-eh.y, d = Math.hypot(dx, dy); if (d < PA && d > 1) { const w = 1 - d/PA; sx += dx/d*w*2.5; sy += dy/d*w*2.5; } }
+      for (let i = 12; i < this.pieces.length; i += 6) {                         // EVITAR SU PROPIO cuerpo (saltea el cuello) → no se enrosca encima
+        const p = this.pieces[i], dx = head.x-p.x, dy = head.y-p.y, d2 = dx*dx+dy*dy;
+        if (d2 < PA*PA && d2 > 1) { const d = Math.sqrt(d2), w = 1 - d/PA; sx += dx/d*w*2.6; sy += dy/d*w*2.6; }
+      }
+      // TURBO propio (misma mecánica que el jugador): lo usa para cazar; se drena y, al soltar, recarga
+      if (wantsTurbo && this.turbo > 0) { this.turbo = Math.max(0, this.turbo - TURBO_DRAIN*deltaT); this.boosting = true; }
+      else if (wantsTurbo) { this.boosting = false; }
+      else { this.turbo = Math.min(1, this.turbo + TURBO_RECHARGE*deltaT); this.boosting = false; }
+      this.chase = this.boosting ? 1.5 : 1;
+      this.targetAng = Math.atan2(sy, sx);
+      // girar hacia targetAng por el camino corto. angVel limitado por el radio de giro mínimo (vel/(r·turnR))
+      let diff = this.targetAng - this.ang; diff = ((diff + Math.PI) % TAU + TAU) % TAU - Math.PI;
+      const stepMax = (this.vel / (r * this.turnR)) * deltaT;
+      this.ang += Math.abs(diff) <= stepMax ? diff : Math.sign(diff)*stepMax;
+      head.x += Math.cos(this.ang)*this.vel*this.chase*deltaT; head.y += Math.sin(this.ang)*this.vel*this.chase*deltaT; head.ang = this.ang;
+      if (this.lungeT > 0) {                                                      // ataque: RETRACCIÓN y luego EMBESTIDA (con easing)
+        if (this.lungeT <= LUNGE_TIME && !this.atkHit) {                          // TICK de daño al iniciar la embestida (modificado por tamaño)
+          const mySize = this.sizeMul * this.g;
+          if (this.atkPlayer && manager.immunity <= 0) { manager.hp -= this.damage * sizeMod(mySize, girth); manager.hitFlash = HAZARD_FLASH_TIME; if (manager.hp <= 0) manager.die(); }
+          else if (this.atkFoe && !this.atkFoe.dead) { this.atkFoe.hp -= this.damage * sizeMod(mySize, this.atkFoe.sizeMul*this.atkFoe.g); this.atkFoe.hurt = HAZARD_FLASH_TIME; if (this.atkFoe.hp <= 0) this.atkFoe.die(); }
+          this.atkHit = true;
+        }
+        const v = lungeVel(this.lungeT);
+        head.x += this.lungeX*v*deltaT; head.y += this.lungeY*v*deltaT;
+        this.lungeT -= deltaT;
+      }
+      if (this.integrated) { const d = Math.hypot(head.x, head.y), lim = WORLD_R - r; if (d > lim) { head.x = head.x/d*lim; head.y = head.y/d*lim; } } // no sale del lago
+      // cadena seguidora (distancia fija; espaciado BASE, no escala con el engorde, igual que el jugador)
+      const link = rBase*0.8;
+      for (let i = 1; i < this.pieces.length; i++) {
+        const p = this.pieces[i], a = this.pieces[i-1];
+        let dx = p.x-a.x, dy = p.y-a.y, d = Math.hypot(dx, dy);
+        if (d < 1e-4) { dx = Math.cos(p.ang); dy = Math.sin(p.ang); d = 1; }
+        p.x = a.x + dx/d*link; p.y = a.y + dy/d*link; p.ang = Math.atan2(-dy, -dx);
+      }
+      // onda de "respiración" que se propaga hacia la cola (idéntica al jugador)
+      for (let i = 0; i < this.pieces.length; i++) {
+        const p = this.pieces[i];
+        if (p.wt > 0) {
+          p.wt = Math.max(p.wt - deltaT, 0);
+          const next = this.pieces[i+1];
+          if (p.wt < WAVE_TOTAL*0.97 && p.wt > WAVE_TOTAL*0.5 && next && next.wt === 0) next.wt = WAVE_TOTAL;
+        }
+      }
+      this.combat();                                                            // ataque por embestida (vida/daño), reemplaza la muerte por choque
+      // comer (compite con el jugador) y chocar minas (se achica)
+      const er2 = (r*2.6)*(r*2.6);
+      for (const f of food) { if (f.grabbed || f.appear < 1) continue; const dx = f.x-head.x, dy = f.y-head.y; if (dx*dx+dy*dy < er2) { f.grabbed = true; this.grow(1 + (f.points/100)|0); head.wt = WAVE_TOTAL; } }
+      const mr2 = (r*1.8)*(r*1.8);                                                // mina: -5 de vida UNA vez por contacto (gate con hurt) — si no, restaría cada frame
+      for (const h of hazards) { if (h.appear < 1) continue; const dx = h.x-head.x, dy = h.y-head.y; if (dx*dx+dy*dy < mr2) { if (this.hurt <= 0) { this.hp -= HAZARD_DMG; this.hurt = HAZARD_FLASH_TIME; head.wt = WAVE_TOTAL; if (this.hp <= 0) this.die(); } break; } }
+    }
+    draw() {
+      const r0 = curR*this.sizeMul*this.g, n = this.pieces.length;               // engorda con el largo (como el jugador)
+      const flash = this.hurt > 0 ? this.hurt/HAZARD_FLASH_TIME : 0;
+      const hue = flash > 0 ? 0 : this.hue, light = 52 + flash*20;
+      const sheen = `hsla(${hue},100%,82%,0.5)`;
+      // cuerpo cola→cabeza, con APÉNDICES marinos (aletas / cresta / cola) + ondulación + pulso, igual que el jugador
+      for (let i = n - 1; i >= 0; i--) {
+        const p = this.pieces[i];
+        if (!inView(p.x, p.y)) continue;
+        const ca2 = Math.cos(p.ang), sa2 = Math.sin(p.ang), nx = -sa2, ny = ca2;  // p.ang apunta hacia adelante; -(ca,sa) = hacia la cola
+        const off = (i === 0) ? 0 : Math.sin(waveClock*WIG_SPEED - i*WIG_DENSITY + this.wavePhase) * (r0*WIG_AMP*Math.min(1, i/4)); // wiggle lateral
+        const wx = p.x + nx*off, wy = p.y + ny*off;
+        let rad = (i === 0) ? r0*1.15 : r0 * (1 - 0.4*(i/n));
+        let wavePulse = 0;                                                        // onda de ensanche que recorre el cuerpo (idéntica al jugador)
+        if (p.wt > 0) { const wf = (WAVE_TOTAL - p.wt)/WAVE_TOTAL; wavePulse = Math.sin(Math.PI*wf); rad += r0 * (wavePulse * (i === 0 ? 3 : 1)); }
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = sheen;
+        if (i === 0) {                                                            // cresta/frills en la cabeza
+          for (const sgn of [1, -1]) {
+            ctx.beginPath();
+            ctx.moveTo(wx + nx*sgn*rad*0.2, wy + ny*sgn*rad*0.2);
+            ctx.quadraticCurveTo(wx - ca2*rad*0.5 + nx*sgn*rad*1.7, wy - sa2*rad*0.5 + ny*sgn*rad*1.7,
+                                 wx - ca2*rad*1.7 + nx*sgn*rad*1.1, wy - sa2*rad*1.7 + ny*sgn*rad*1.1);
+            ctx.quadraticCurveTo(wx - ca2*rad*1.5 + nx*sgn*rad*0.3, wy - sa2*rad*1.5 + ny*sgn*rad*0.3,
+                                 wx - ca2*rad*0.7, wy - sa2*rad*0.7);
+            ctx.closePath(); ctx.fill();
+          }
+        } else if (i === n - 1 && n > 6) {                                        // aleta caudal
+          for (const sgn of [1, -1]) {
+            ctx.beginPath(); ctx.moveTo(wx, wy);
+            ctx.lineTo(wx - ca2*rad*2.6 + nx*sgn*rad*2.2, wy - sa2*rad*2.6 + ny*sgn*rad*2.2);
+            ctx.lineTo(wx - ca2*rad*3.0 + nx*sgn*rad*0.4, wy - sa2*rad*3.0 + ny*sgn*rad*0.4);
+            ctx.closePath(); ctx.fill();
+          }
+        } else if (i > 0 && i % 6 === 3) {                                        // aletas laterales
+          for (const sgn of [1, -1]) {
+            ctx.beginPath();
+            ctx.moveTo(wx + ca2*rad*0.4 + nx*sgn*rad*0.2, wy + sa2*rad*0.4 + ny*sgn*rad*0.2);
+            ctx.lineTo(wx - ca2*rad*0.6 + nx*sgn*rad*1.8, wy - sa2*rad*0.6 + ny*sgn*rad*1.8);
+            ctx.lineTo(wx - ca2*rad*1.1 + nx*sgn*rad*0.3, wy - sa2*rad*1.1 + ny*sgn*rad*0.3);
+            ctx.closePath(); ctx.fill();
+          }
+        }
+        ctx.globalCompositeOperation = 'source-over';
+        const lt = (i === 0 ? light+8 : light) + wavePulse*22;                    // la onda también aclara el segmento (como el jugador)
+        ctx.fillStyle = `hsl(${hue},${flash>0?95:80}%,${lt}%)`;
+        ctx.beginPath(); ctx.arc(wx, wy, rad, 0, TAU); ctx.fill();
+        ctx.fillStyle = `hsla(${hue},100%,90%,0.5)`;                              // brillo glossy (como el jugador)
+        ctx.beginPath(); ctx.arc(wx - rad*0.3, wy - rad*0.3, rad*0.34, 0, TAU); ctx.fill();
+      }
+      // cabeza: ojos con reflejo + pupila mirando hacia adelante (idéntico al jugador), con la cabeza inflada por la onda
+      const h0 = this.pieces[0];
+      if (inView(h0.x, h0.y)) {
+        let rad = r0*1.15;
+        if (h0.wt > 0) { const wf = (WAVE_TOTAL - h0.wt)/WAVE_TOTAL; rad += r0 * Math.sin(Math.PI*wf) * 3; }
+        const ca = Math.cos(this.ang), sa = Math.sin(this.ang), px = Math.cos(this.ang + Math.PI/2), py = Math.sin(this.ang + Math.PI/2);
+        const eyeR = rad*0.42, pupR = rad*0.2;
+        for (const sgn of [1, -1]) {
+          const ex = h0.x + ca*rad*0.36 + px*rad*0.5*sgn, ey = h0.y + sa*rad*0.36 + py*rad*0.5*sgn;
+          ctx.fillStyle = '#fff';            ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, TAU); ctx.fill();
+          const lx = ex + ca*pupR*0.9, ly = ey + sa*pupR*0.9;
+          ctx.fillStyle = '#0c1014';         ctx.beginPath(); ctx.arc(lx, ly, pupR, 0, TAU); ctx.fill();
+          ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.arc(lx - pupR*0.3, ly - pupR*0.3, pupR*0.36, 0, TAU); ctx.fill();
+        }
+        // barra de VIDA sobre la cabeza (sólo si está dañada)
+        if (this.hp < this.maxHp - 0.5) {
+          const frac = Math.max(0, this.hp/this.maxHp), bw = r0*3.2, bh = Math.max(2.5, r0*0.32), bx = h0.x - bw/2, by = h0.y - rad - bh*2.6;
+          ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(bx, by, bw, bh);
+          ctx.fillStyle = `hsl(${110*frac},85%,52%)`; ctx.fillRect(bx, by, bw*frac, bh);
+        }
+      }
+    }
+  }
+
   // ════════════════ MANAGER ════════════════
   class Manager {
     constructor() {
@@ -599,56 +1204,197 @@
       this.initCD = 4;
       this.hitFlash = 0;                                                          // timer del destello rojo al chocar una mina
       this.pendingShrink = 0;                                                     // segmentos a sacar (se aplican fuera del for de proceso)
+      this.pendingGrow = 0;                                                       // segmentos a sumar (se materializan de a pocos por frame, no apilados)
       this.foodCD = 0;                                                            // delay hasta el próximo spawn de comida
       this.hazCD = HAZARD_SPAWN_DELAY;                                            // delay hasta el próximo spawn de mina
+      this.jellyCD = JELLY_SPAWN_DELAY;                                           // delay hasta la próxima medusa
+      this.seahorseCD = SEAHORSE_SPAWN_DELAY;                                     // delay hasta el próximo caballito de mar
+      this.speedBoost = 0;                                                        // boost de velocidad activo (caballito), en segundos
+      this.maxHp = PLAYER_MAX_HP; this.hp = PLAYER_MAX_HP;                        // vida del jugador
+      this.attackCD = 0; this.lungeT = 0; this.lungeX = 0; this.lungeY = 0;       // ataque por embestida
+      this.atkTarget = null; this.atkHit = false;                                 // víctima del ataque en curso + si ya pegó (el daño es al iniciar el dash)
+      this.healQueue = 0;                                                         // cura pendiente de la estrella (entra por tiempo, no de golpe)
+      this.turbo = 1; this.boosting = false;                                      // turbo con carga (se drena al usar, se recarga al soltar)
+      this.enemyCD = 2;                                                           // delay hasta la próxima serpiente enemiga
       this.dying = false;                                                         // animación de "rotura" en curso
       this.deathT = 0;                                                            // tiempo desde la muerte
-      this.deathGroups = [];                                                      // pedazos voladores (grupos de segmentos)
+      this.deathParticles = [];                                                   // partículas en que se deshace la víbora (estilo Fireworks)
       this.immunity = 0;                                                          // inmunidad (no muere por su cuerpo) al arrancar
     }
     die() {
       if (this.gameOver) return;                                                  // una sola vez
       this.gameOver = true; this.dying = true; this.deathT = 0;
-      this.deathGroups = [];
-      // romper la víbora en grupos de segmentos consecutivos; cada grupo vuela en una dirección al azar
-      // y GIRA sobre su propio centro mientras se desvanece.
-      let i = 0;
-      while (i < snake.length) {
-        const groupSize = ri(3, 6), members = [];
-        let cx = 0, cy = 0;
-        for (let k = 0; k < groupSize && i < snake.length; k++, i++) { members.push(snake[i]); cx += snake[i].x; cy += snake[i].y; }
-        cx /= members.length; cy /= members.length;
-        const ang = Math.random()*TAU, speed = sper(0.3) + Math.random()*sper(0.6);
-        for (const e of members) { e.ox = e.x - cx; e.oy = e.y - cy; e.deathAlpha = 1; } // offset respecto del centro del grupo
-        this.deathGroups.push({ cx, cy, vx: Math.cos(ang)*speed, vy: Math.sin(ang)*speed, rot: 0, vrot: (Math.random()*2-1)*8, alpha: 1, members });
+      // La víbora se DESHACE en partículas que se dispersan lento como en el agua y se desvanecen (en vez de
+      // volar en pedazos). Cada segmento aporta unas pocas; en cuerpos largos se muestrea para acotar el total.
+      this.deathParticles = [];
+      const step = Math.max(1, Math.ceil(snake.length / 220));                    // más muestras
+      const hx = snake[0] ? snake[0].x : 0, hy = snake[0] ? snake[0].y : 0;
+      for (let i = 0; i < snake.length; i += step) {
+        const e = snake[i];
+        const hue = 145 + Math.min(1, e.id/60)*55;                                // hereda el color del segmento
+        const per = (i === 0) ? 10 : 6;                                           // más partículas por segmento
+        for (let k = 0; k < per; k++) {
+          const a = Math.random()*TAU, sp = sper(0.06) + Math.random()*sper(0.22);// dispersión lenta (agua)
+          const ox = (e.x - hx), oy = (e.y - hy);
+          const out = Math.atan2(oy, ox) + (Math.random()-0.5);                   // empujón hacia afuera del centro
+          const vx = Math.cos(a)*sp*0.6 + Math.cos(out)*sp*0.5;
+          const vy = Math.sin(a)*sp*0.6 + Math.sin(out)*sp*0.5;
+          const life = rndRange(0.9, DEATH_FADE);
+          this.deathParticles.push({ x: e.x + rndRange(-curR,curR), y: e.y + rndRange(-curR,curR),
+            vx, vy, r: curR*rndRange(0.4,1.1), life, maxLife: life, hue });
+        }
+      }
+      // suelta ESTRELLAS a lo largo del cuerpo (más cuanto más larga la víbora), como las enemigas al morir
+      const drops = Math.min(24, 4 + (snake.length/12|0));
+      for (let k = 0; k < drops; k++) {
+        const e = snake[Math.min(snake.length-1, (k*snake.length/drops)|0)];
+        new Food(e.x + rndRange(-curR*2, curR*2), e.y + rndRange(-curR*2, curR*2));
+      }
+    }
+    burst(x, y, hue, count) {                                                     // burst de partículas efímeras en (x,y) — usado al comer medusa/caballito
+      for (let k = 0; k < count; k++) {
+        const a = Math.random()*TAU, sp = sper(0.05) + Math.random()*sper(0.18), life = rndRange(0.4, 0.9);
+        this.deathParticles.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, r: curR*rndRange(0.3,0.8), life, maxLife: life, hue });
+      }
+    }
+    onJellyEat(j) {
+      spritesToRemove.push(j);
+      this.immunity = JELLY_IMMUNITY;                                             // escudo: atravesás tu cuerpo un rato
+      this.score += 250;                                                          // bonus mayor que una estrella (100); NO da segmentos (sólo escudo + score)
+      if (snake[0]) snake[0].wave_time = snake[0].wave_time_total;
+      this.burst(j.x, j.y, 335, 22);                                              // burst rosado
+    }
+    onSeahorseEat(s) {                                                            // caballito: BOOST de velocidad (3×) por unos segundos, sin indicador
+      spritesToRemove.push(s);
+      this.speedBoost = SPEED_BOOST_TIME;
+      this.score += s.points;
+      if (snake[0]) snake[0].wave_time = snake[0].wave_time_total;
+      this.burst(s.x, s.y, 32, 20);                                              // burst naranja
+    }
+    updateTurbo() {                                                              // carga del turbo: se drena al acelerar, se RECARGA al soltar
+      const wants = sprint;
+      if (wants && this.turbo > 0) { this.turbo = Math.max(0, this.turbo - TURBO_DRAIN*deltaT); this.boosting = true; }
+      else if (wants) { this.boosting = false; }                                 // sin carga: no acelera (soltar para recargar)
+      else { this.turbo = Math.min(1, this.turbo + TURBO_RECHARGE*deltaT); this.boosting = false; }
+      // el PROPIO orbe es el indicador: se llena/vacía como un vaso (de abajo hacia arriba) con la carga.
+      const b = document.getElementById('btnSprint');
+      if (b) {
+        const p = (Math.max(0, Math.min(1, this.turbo))*100).toFixed(1);
+        const on = this.boosting ? 'rgba(120,255,190,0.95)' : 'rgba(0,230,140,0.85)', off = 'rgba(0,40,26,0.55)';
+        b.style.background = `linear-gradient(to top, ${on} 0%, ${on} ${p}%, ${off} ${p}%, ${off} 100%)`;
+        b.classList.toggle('on', this.boosting);
       }
     }
     onHazardHit() {
       this.hitFlash = HAZARD_FLASH_TIME;
-      this.pendingShrink += HAZARD_PENALTY;
-      this.score = Math.max(0, this.score - ri(20, 30));                          // mina: -20..30 al score (al azar)
+      if (this.immunity <= 0) this.hp -= HAZARD_DMG;                              // mina: -5 de vida (el escudo también la bloquea)
       if (snake[0]) snake[0].wave_time = snake[0].wave_time_total;               // misma animación que al comer
+      if (this.hp <= 0) this.die();
     }
     process() {
       if (this.hitFlash > 0) this.hitFlash = Math.max(this.hitFlash - deltaT, 0);
       if (this.immunity > 0) this.immunity = Math.max(this.immunity - deltaT, 0);
+      if (this.speedBoost > 0) this.speedBoost = Math.max(this.speedBoost - deltaT, 0);
+      if (this.healQueue > 0) {                                                  // cura de la estrella, gradual (no de golpe)
+        const amt = Math.min(this.healQueue, HEAL_RATE*deltaT);
+        this.hp = Math.min(this.maxHp, this.hp + amt); this.healQueue -= amt;
+      }
       if (this.gameOver) { this.deathT += deltaT; return; }                      // durante la muerte: avanzar timer, no spawnear nada
       if (this.initCD > 0) this.initCD = Math.max(this.initCD - deltaT, 0);
-      if (!snake.length) { for (let i = 0; i < 10; i++) new SnakePiece(i); this.immunity = 1; } // largo inicial + 1s de inmunidad
+      if (!snake.length) { for (let i = 0; i < 10; i++) new SnakePiece(i, true); this.immunity = 1; } // largo inicial DESPLEGADO + 1s de inmunidad
       if (this.initCD > 0) return;                                               // nada aparece hasta pasar el initCD inicial
 
-      // comida: aparece de a una con un delay entre spawns (no todas de golpe)
-      if (food.length < 3) {
+      // COMBATE del jugador: si ACELERA (boost/sprint) con la cabeza de una enemiga en su cono, la ataca.
+      if (this.attackCD > 0) this.attackCD -= deltaT;
+      this.hp = Math.min(this.maxHp, this.hp + HP_REGEN*deltaT);                  // regen
+      const accel = this.boosting || this.speedBoost > 0;
+      if (accel && this.attackCD <= 0 && snake[0]) {
+        const h = snake[0], range = sper(ATTACK_RANGE_F);
+        for (const e of enemies) {
+          const eh = e.pieces[0];
+          if (inAttackCone(h.x, h.y, h.ang, eh.x, eh.y, range)) {
+            const dx = eh.x-h.x, dy = eh.y-h.y, d = Math.hypot(dx, dy) || 1;     // arranca la embestida; el daño se aplica al iniciar el dash
+            this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; this.attackCD = ATTACK_CD;
+            this.atkTarget = e; this.atkHit = false;
+            h.wave_time = h.wave_time_total;
+            break;
+          }
+        }
+      }
+
+      // crecimiento: materializar segmentos del contador de a pocos por frame → se despliegan solos en vez
+      // de apilarse quietos al comer en ráfaga. (El engorde -girth- ya es continuo según el largo.)
+      if (this.pendingGrow > 0) {
+        const add = Math.min(this.pendingGrow, GROW_DRIP);
+        for (let i = 0; i < add; i++) new SnakePiece(snake.length);
+        this.pendingGrow -= add;
+      }
+
+      // comida: aparece de a una con un delay entre spawns. MÁS comida cuando hay enemigos (compensa el
+      // consumo) → siempre hay suficiente en juego para el jugador y las enemigas.
+      const targetFood = 4 + enemies.length*2;
+      if (food.length < targetFood) {
         this.foodCD -= deltaT;
         if (this.foodCD <= 0) { new Food(); this.foodCD = FOOD_SPAWN_DELAY; }
       } else this.foodCD = FOOD_SPAWN_DELAY;
 
-      // minas: ídem, con dificultad creciente (arranca en 2, +1 cada 4 estrellas)
-      const targetHaz = Math.min(MAX_HAZARDS, 2 + Math.floor(this.score / 440));
+      // serpientes enemigas: mantener una población; aparecen desde fuera del lago (escalonadas)
+      if (enemies.length < ENEMY_TARGET) {
+        this.enemyCD -= deltaT;
+        if (this.enemyCD <= 0) {
+          if (Math.random() < PAIR_CHANCE && enemies.length <= ENEMY_TARGET - 2) {
+            // PAREJA: mismo color, una grande + una chica (la escolta), mismo lado de entrada; no se atacan
+            const hue = ENEMY_HUES[ri(0, ENEMY_HUES.length-1)], gid = ++enemyGroupSeq, ea = Math.random()*TAU;
+            const big = new EnemySnake({ hue, sizeMul: rndRange(1.25, 1.5), groupId: gid, entryAng: ea });
+            new EnemySnake({ hue, sizeMul: rndRange(0.7, 0.95), groupId: gid, leader: big, entryAng: ea + rndRange(-0.15, 0.15) });
+            pairAlert = 4;                                                       // aviso en el minimapa
+          } else new EnemySnake();
+          this.enemyCD = rndRange(3, 7);
+        }
+      } else this.enemyCD = rndRange(3, 7);
+
+      // minas: ídem, con dificultad creciente (arranca en 5, sube con el score). Se reciclan al alejarte
+      // (ver Hazard.process) → siempre hay densidad cerca tuyo, no podés irte a una zona vacía.
+      const targetHaz = Math.min(MAX_HAZARDS, 5 + Math.floor(this.score / 320));
       if (hazards.length < targetHaz) {
         this.hazCD -= deltaT;
         if (this.hazCD <= 0) { new Hazard(); this.hazCD = HAZARD_SPAWN_DELAY; }
       } else this.hazCD = HAZARD_SPAWN_DELAY;
+
+      // medusa: premio raro, de a una, con delay largo y aleatorio
+      if (treasures.length < 1) {
+        this.jellyCD -= deltaT;
+        if (this.jellyCD <= 0) { new Jelly(); this.jellyCD = JELLY_SPAWN_DELAY + rndRange(0, 6); }
+      } else this.jellyCD = JELLY_SPAWN_DELAY;
+
+      // caballito de mar: ídem, de a uno
+      if (seahorses.length < 1) {
+        this.seahorseCD -= deltaT;
+        if (this.seahorseCD <= 0) { new Seahorse(); this.seahorseCD = SEAHORSE_SPAWN_DELAY + rndRange(0, 6); }
+      } else this.seahorseCD = SEAHORSE_SPAWN_DELAY;
+    }
+    updateParticles() {
+      if (!this.deathParticles.length) return;
+      const drag = Math.exp(-deltaT / 0.8);                                       // freno suave (resistencia del agua)
+      const out = [];
+      for (const p of this.deathParticles) {
+        p.life -= deltaT;
+        if (p.life <= 0) continue;
+        p.x += p.vx * deltaT; p.y += p.vy * deltaT;
+        p.vx *= drag; p.vy *= drag;
+        out.push(p);
+      }
+      this.deathParticles = out;
+    }
+    drawParticles() {                                                            // dibujadas en coords de mundo (dentro de la cámara)
+      if (!this.deathParticles.length) return;
+      ctx.globalCompositeOperation = 'lighter';
+      for (const p of this.deathParticles) {
+        const a = p.life / p.maxLife;                                            // se desvanece y achica
+        ctx.fillStyle = `hsla(${p.hue},100%,65%,${0.7*a})`;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r*(0.4 + a*0.8), 0, TAU); ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
     }
     draw() {
       if (this.gameOver) {
@@ -656,28 +1402,40 @@
         if (t > 0) {
           ctx.globalAlpha = t;
           createText(100, 'GAME OVER',          'center', [255,255,255], xper(0.5), yper(0.47));
-          createText(50,  'SCORE: '+this.score, 'center', [255,255,255], xper(0.5), yper(0.6));
-          createText(24,  'TOCÁ PARA REINICIAR','center', [255,0,0],     xper(0.5), yper(0.67));
+          createText(50,  'SCORE: '+this.score, 'center', [120,255,220], xper(0.5), yper(0.6));
+          createText(24,  'TOCÁ PARA REINICIAR','center', [255,90,120],  xper(0.5), yper(0.67));
           ctx.globalAlpha = 1;
         }
-      } else {
-        createText(24, String(this.score), 'topleft', [0,255,0], xper(0.02), yper(0.02));
       }
       if (this.pause) {
         this.pauseBlinkCD += deltaT;
         createText(100, this.pauseBlinkCD > 0.25 ? 'PAUSA' : '', 'center', [255,255,255], xper(0.5), yper(0.5));
         if (this.pauseBlinkCD > 0.5) this.pauseBlinkCD = 0;
       }
-      if (showDebug) {
-        createText(14, 'FPS: '+Math.round(1/Math.max(1e-3,dtSmoothed)), 'topright', [255,255,255], xper(0.98), yper(0.02));
-        createText(14, 'len: '+snake.length, 'topright', [255,255,255], xper(0.98), yper(0.05));
-        createText(14, 'minas: '+hazards.length, 'topright', [255,255,255], xper(0.98), yper(0.08));
+      if (showDebug) {                                                            // HUD estilo Pong: panel monoespaciado arriba a la izquierda.
+        const lines = [
+          'FPS: '   + Math.round(1/Math.max(1e-3,dtSmoothed)),
+          'len: '   + snake.length,
+          'minas: ' + hazards.length,
+        ];
+        const lh = 18, padX = 8, padY = 8, boxW = 132;
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(padX, padY, boxW, lh * lines.length + 8);
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.font = '13px ui-monospace, Menlo, Consolas, monospace';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        lines.forEach((s, i) => ctx.fillText(s, padX + 6, padY + 4 + i * lh));
       }
     }
     reset() {
-      snake = []; food = []; hazards = []; spritesToRemove = [];
-      this.gameOver = false; this.dying = false; this.deathT = 0; this.deathGroups = [];
+      snake = []; food = []; hazards = []; treasures = []; seahorses = []; enemies = []; spritesToRemove = [];
+      this.speedBoost = 0;
+      this.gameOver = false; this.dying = false; this.deathT = 0; this.deathParticles = [];
       this.score = 0; this.initCD = 4; this.pause = false;
+      this.pendingGrow = 0; this.pendingShrink = 0;
+      this.hp = this.maxHp; this.attackCD = 0; this.lungeT = 0; this.atkTarget = null; this.atkHit = false; this.healQueue = 0;
+      this.turbo = 1; this.boosting = false;
+      camX = 0; camY = 0; initAmbient();
     }
   }
 
@@ -691,12 +1449,123 @@
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    bgGrad = ctx.createRadialGradient(W*0.5, H*0.42, 0, W*0.5, H*0.5, Math.max(W,H)*0.78);
-    bgGrad.addColorStop(0,   'rgb(11,28,30)');                                   // centro: teal muy oscuro
-    bgGrad.addColorStop(0.6, 'rgb(4,11,13)');
-    bgGrad.addColorStop(1,   'rgb(0,0,0)');                                      // borde: negro (viñeta)
+    WORLD_R = sper(WORLD_FACTOR);                                                 // radio del lago (mundo circular)
+    if (!ambient.length) initAmbient();
   }
   window.addEventListener('resize', resize);
+
+  // ── AMBIENTE: motas a la deriva (sensación de corriente). Se mantienen alrededor de la cámara (envuelven
+  // al salir de un box centrado en la cabeza) para densidad constante en pantalla, sin importar el zoom. ──
+  function makeMote(x, y) {
+    return { x, y, r: rndRange(0.4, 1.8), a: rndRange(0.05, 0.22), ph: Math.random()*TAU, sp: rndRange(0.4, 1.2) };
+  }
+  function initAmbient() {
+    ambient.length = 0;
+    const hx = snake[0] ? snake[0].x : 0, hy = snake[0] ? snake[0].y : 0;
+    for (let i = 0; i < 46; i++) ambient.push(makeMote(hx + rndRange(-W*0.6, W*0.6), hy + rndRange(-H*0.6, H*0.6)));
+  }
+  function updateAmbient() {
+    const hx = camX, hy = camY, bx = W*0.6, by = H*0.6;
+    const cur = sper(0.02);                                                       // velocidad de la corriente (lenta)
+    for (const m of ambient) {
+      m.ph += deltaT;
+      m.x += (Math.cos(currentAng)*m.sp + Math.cos(m.ph)*0.3) * cur * deltaT;
+      m.y += (Math.sin(currentAng)*m.sp + Math.sin(m.ph*1.3)*0.3) * cur * deltaT;
+      if (m.x < hx - bx) m.x += bx*2; else if (m.x > hx + bx) m.x -= bx*2;        // envolver para densidad constante
+      if (m.y < hy - by) m.y += by*2; else if (m.y > hy + by) m.y -= by*2;
+    }
+  }
+  function drawAmbient() {
+    ctx.globalCompositeOperation = 'lighter';
+    for (const m of ambient) {
+      ctx.fillStyle = `rgba(120,220,225,${m.a})`;
+      ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, TAU); ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // ── LAGO: disco grande con gradiente teal y orilla. La cámara mantiene la cabeza en el centro, así que
+  // cerca del borde se ve la orilla y afuera el agua profunda. ──
+  function drawLake() {
+    const g = ctx.createRadialGradient(0, 0, WORLD_R*0.05, 0, 0, WORLD_R);
+    g.addColorStop(0,    'rgb(13,46,52)');                                        // centro: teal iluminado
+    g.addColorStop(0.65, 'rgb(7,27,33)');
+    g.addColorStop(1,    'rgb(4,15,19)');                                         // hacia la orilla: más oscuro
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, 0, WORLD_R, 0, TAU); ctx.fill();
+    ctx.lineWidth = Math.max(8, curR*2.2);                                        // halo de orilla (interior, tenue)
+    ctx.strokeStyle = 'rgba(70,190,200,0.10)';
+    ctx.beginPath(); ctx.arc(0, 0, WORLD_R - curR*1.4, 0, TAU); ctx.stroke();
+    ctx.lineWidth = Math.max(3, curR*0.5);                                        // línea de orilla
+    ctx.strokeStyle = 'rgba(40,130,140,0.55)';
+    ctx.beginPath(); ctx.arc(0, 0, WORLD_R, 0, TAU); ctx.stroke();
+  }
+
+  // ── HUD: score lindo y destacado en la esquina superior izquierda (la der la ocupan los botones) ──
+  function drawHUD() {
+    if (manager.gameOver) return;
+    const big = Math.round(36 * tscale()), small = Math.round(12 * tscale());
+    const x = 16, y = 14;
+    ctx.save();
+    ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+    ctx.font = `700 ${small}px 'Segoe UI', system-ui, sans-serif`;               // etiqueta
+    ctx.fillStyle = 'rgba(120,230,220,0.7)';
+    ctx.fillText('SCORE', x + 2, y);
+    ctx.font = `800 ${big}px 'Segoe UI', system-ui, sans-serif`;                 // número con glow (1 solo texto → shadowBlur barato)
+    ctx.shadowColor = 'rgba(0,255,190,0.95)'; ctx.shadowBlur = 18;
+    ctx.fillStyle = '#eafff6';
+    ctx.fillText(String(manager.score), x, y + small + 3);
+    ctx.shadowBlur = 0;
+    ctx.restore();                                                                // (la vida va sobre la cabeza como las otras; el turbo en el propio orbe)
+  }
+
+  // ── MINIMAPA: disco en la esquina sup-derecha (debajo de los botones) que muestra el lago entero y la
+  // posición de la cabeza, las estrellas (con su color), las minas y la medusa. El mundo (radio WORLD_R) se
+  // escala al radio del minimapa; el origen del mundo cae en el centro del minimapa. ──
+  function drawMinimap() {
+    if (manager.gameOver) return;
+    const mmR = Math.max(36, Math.min(W, H) * 0.085);
+    const mmx = W - 14 - mmR, mmy = 58 + mmR;                                     // sup-derecha, despejado de la fila de botones
+    const scale = mmR / WORLD_R;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(mmx, mmy, mmR, 0, TAU); ctx.clip();                  // recorte circular
+    ctx.fillStyle = 'rgba(6,24,30,0.66)'; ctx.fillRect(mmx-mmR, mmy-mmR, mmR*2, mmR*2);
+    const dot = (wx, wy, color, r) => {
+      ctx.fillStyle = color;
+      ctx.beginPath(); ctx.arc(mmx + wx*scale, mmy + wy*scale, r, 0, TAU); ctx.fill();
+    };
+    const stepB = Math.max(1, Math.ceil(snake.length / 80));                     // cuerpo (muestreado: ~80 puntos máx), debajo del resto
+    for (let i = snake.length - 1; i >= 0; i -= stepB) dot(snake[i].x, snake[i].y, snake[i]._bodyStr, 1.5);
+    for (const e of enemies) {                                                   // serpientes enemigas (su color)
+      const es = Math.max(1, Math.ceil(e.pieces.length / 30));
+      for (let i = e.pieces.length - 1; i >= 0; i -= es) dot(e.pieces[i].x, e.pieces[i].y, `hsl(${e.hue},80%,55%)`, 1.6);
+      if (e.groupId !== null) {                                                  // PAREJA: anillo blanco palpitante para resaltarlas
+        const pr = 4 + 1.6*Math.abs(Math.sin(waveClock*5));
+        ctx.lineWidth = 1.6; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
+        ctx.beginPath(); ctx.arc(mmx + e.pieces[0].x*scale, mmy + e.pieces[0].y*scale, pr, 0, TAU); ctx.stroke();
+      }
+    }
+    for (const f of food)      dot(f.x, f.y, `hsl(${f.hue},90%,62%)`, 2);
+    for (const h of hazards)   dot(h.x, h.y, 'rgba(255,90,200,0.9)', 2);
+    for (const j of treasures) dot(j.x, j.y, 'hsl(335,100%,72%)', 2.6);
+    for (const s of seahorses) dot(s.x, s.y, 'hsl(32,100%,60%)', 2.6);
+    const head = snake[0];
+    if (head) {                                                                  // cabeza: punto brillante con halo
+      ctx.fillStyle = 'rgba(0,255,190,0.35)'; ctx.beginPath(); ctx.arc(mmx + head.x*scale, mmy + head.y*scale, 5, 0, TAU); ctx.fill();
+      dot(head.x, head.y, '#eafff6', 2.6);
+    }
+    ctx.restore();
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(70,190,200,0.18)';                // glow de orilla
+    ctx.beginPath(); ctx.arc(mmx, mmy, mmR-1, 0, TAU); ctx.stroke();
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(50,150,160,0.75)';                // borde
+    ctx.beginPath(); ctx.arc(mmx, mmy, mmR, 0, TAU); ctx.stroke();
+    if (pairAlert > 0) {                                                         // aviso al aparecer una pareja
+      ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.5*Math.abs(Math.sin(waveClock*7))})`;
+      ctx.font = `700 ${Math.round(12*tscale())}px 'Segoe UI', system-ui, sans-serif`;
+      ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+      ctx.fillText('⚠ dúo', mmx + mmR, mmy + mmR + 4);
+    }
+  }
 
   // ════════════════ INPUT ════════════════
   // En TOUCH la dirección la da la PALANCA hand-rolled (más abajo); tocar el campo NO dirige — sólo sirve para
@@ -708,20 +1577,18 @@
   // el boost/dirección se trabaran tras varios toques). 2+ dedos = acelerar.
   const activeTouches = new Set();
   let mousePressed = false;                                                      // desktop: botón del mouse = acelerar
-  function updateSprint() {
-    sprint = sprintBtnHeld || mousePressed || activeTouches.size >= 2;           // 2+ dedos (o botón, o mouse en desktop) = acelerar
-    const b = document.getElementById('btnSprint');                              // el orbe se enciende cuando estás acelerando (incl. clic del mouse en desktop)
-    if (b) b.classList.toggle('on', sprint);
+  function updateSprint() {                                                      // sprint = INTENCIÓN de acelerar; el turbo real (con carga) lo maneja manager.updateTurbo
+    sprint = sprintBtnHeld || mousePressed || activeTouches.size >= 2;           // 2+ dedos (o botón, o mouse en desktop)
   }
   addEventListener('pointerdown', e => { if (e.pointerType !== 'mouse') { activeTouches.add(e.pointerId); updateSprint(); } });
   function dropTouch(e) { if (activeTouches.delete(e.pointerId)) updateSprint(); }
   addEventListener('pointerup', dropTouch);
   addEventListener('pointercancel', dropTouch);
-  function aimAt(px, py) {                                                       // fija el RUMBO de la cabeza hacia (px,py) — sólo mouse (desktop)
+  function aimAt(px, py) {                                                       // fija el RUMBO de la cabeza hacia el puntero — sólo mouse (desktop)
     const head = snake[0];
     if (!head || manager.gameOver) return;
-    const dx = px - head.x, dy = py - head.y, dz = curR * 1.5;
-    if (dx*dx + dy*dy > dz*dz) head.targetAng = Math.atan2(dy, dx);              // ignora inputs pegados a la cabeza (dirección ambigua)
+    const dx = px - W/2, dy = py - H/2, dz = curR * 1.5;                          // cámara: la cabeza está SIEMPRE en el centro de pantalla → rumbo = centro→puntero
+    if (dx*dx + dy*dy > dz*dz) head.targetAng = Math.atan2(dy, dx);              // ignora inputs pegados al centro (dirección ambigua)
   }
 
   canvas.addEventListener('pointerdown', e => {
@@ -837,78 +1704,115 @@
     deltaT = Math.min(0.05, (now - lastT) / 1000);                               // dt real, clamp 50ms (igual que Snake.py)
     lastT = now;
     dtSmoothed = dtSmoothed*0.9 + deltaT*0.1;
-    if (!manager.gameOver && !manager.pause) waveClock += deltaT;                // avanza la fase del wiggle solo en juego activo
+    if (!manager.gameOver && !manager.pause) { waveClock += deltaT; currentAng += deltaT*0.02; } // wiggle + giro lentísimo de la corriente
     curR = sper(0.01);                                                           // radio base, 1 sola vez por frame
+    girth = 1 + GIRTH_MAX * Math.min(1, snake.length / GIRTH_LEN);               // engorde según el largo (1 sola vez por frame)
+    manager.updateTurbo();                                                       // carga/descarga del turbo del jugador (antes de mover)
+    if (pairAlert > 0) pairAlert = Math.max(pairAlert - deltaT, 0);              // aviso de pareja en el minimapa
 
-    ctx.fillStyle = bgGrad || '#000'; ctx.fillRect(0, 0, W, H);
-
-    // PROCESO cabeza→cola: cada segmento lee la posición YA actualizada del de adelante, así el
-    // movimiento de la cabeza se propaga por TODA la cadena en un solo frame (independiente del fps).
-    // Procesar cola→cabeza como el original propaga 1 segmento por frame → a 60/75 fps la cola queda
-    // ~medio segundo atrás y el cuerpo se "separa"; esa era la dependencia del framerate. Cacheo n para
-    // no procesar este mismo frame las piezas que crea la cabeza al comer.
+    // ── PROCESO (lógica; no dibuja) ──
     if (!manager.gameOver) {
+      // cabeza→cola: cada segmento lee la posición YA actualizada del de adelante → el movimiento se
+      // propaga por TODA la cadena en un frame (independiente del fps). Cacheo n para no procesar las
+      // piezas que la cabeza crea al comer este mismo frame.
       const n = snake.length;
       for (let i = 0; i < n; i++) snake[i].process();
-    } else {
-      // cada grupo vuela, frena y GIRA alrededor de su propio centro, desvaneciéndose
-      const drag = Math.exp(-deltaT / DEATH_DRAG_TC);
-      for (const g of manager.deathGroups) {
-        g.cx += g.vx * deltaT; g.cy += g.vy * deltaT;
-        g.vx *= drag; g.vy *= drag;
-        g.rot += g.vrot * deltaT;
-        g.alpha = Math.max(0, g.alpha - deltaT / DEATH_FADE);
-        const cos = Math.cos(g.rot), sin = Math.sin(g.rot);
-        for (const e of g.members) {
-          e.x = g.cx + e.ox*cos - e.oy*sin;
-          e.y = g.cy + e.ox*sin + e.oy*cos;
-          e.deathAlpha = g.alpha;
-        }
-      }
     }
     for (const f of food) f.process();
     for (const h of hazards) h.process();
+    for (const j of treasures) j.process();
+    for (const s of seahorses) s.process();
+    for (const e of enemies) e.process();
+    if (enemies.some(e => e.dead)) enemies = enemies.filter(e => !e.dead);       // quitar las que murieron por choque (el manager respawnea desde afuera)
+    manager.updateParticles();
     manager.process();
+    updateAmbient();
 
-    // mina: sacar segmentos de la cola DESPUÉS de procesar (el for de arriba cacheó snake.length;
-    // popear durante ese loop dejaría índices undefined). Nunca por debajo de los 5 iniciales.
+    // mina: sacar segmentos de la cola DESPUÉS de procesar (popear durante el for dejaría índices undefined).
     if (manager.pendingShrink > 0) {
       const rem = Math.min(manager.pendingShrink, snake.length - 5);
       for (let i = 0; i < rem; i++) snake.pop();
       manager.pendingShrink = 0;
     }
 
-    // GLOW del cuerpo: UN solo stroke aditivo a lo largo de toda la víbora (reemplaza N círculos de halo
-    // por segmento → enorme ahorro de fillrate en mobile). Se saltea en game over (los pedazos vuelan
-    // separados y un stroke los uniría con líneas).
-    if (!manager.gameOver && snake.length > 1) {
+    // ── CÁMARA: la cabeza queda SIEMPRE en el centro de la pantalla; el mundo se dibuja trasladado. En
+    // muerte la cabeza no se mueve, así que la cámara queda congelada en el lugar donde se deshizo. ──
+    const head = snake[0];
+    if (head) { camX = head.x; camY = head.y; }
+    // CULLING: límites de la vista en coords de mundo (+ margen), en los GLOBALES vL/vR/vT/vB (los usa también
+    // el dibujo de los enemigos). Con la cámara pegada a la cabeza, en cuerpos largos la mayor parte cae fuera.
+    const vm = curR*4; vL = camX - W/2 - vm; vR = camX + W/2 + vm; vT = camY - H/2 - vm; vB = camY + H/2 + vm;
+
+    ctx.fillStyle = '#03080b'; ctx.fillRect(0, 0, W, H);                         // agua profunda fuera del lago
+    ctx.save();
+    ctx.translate(W/2 - camX, H/2 - camY);
+
+    drawLake();
+    drawAmbient();
+    for (const e of enemies) e.draw();                                          // serpientes enemigas (debajo del jugador y los objetos)
+
+    // GLOW del cuerpo: UN solo stroke aditivo a lo largo de toda la víbora (mucho más barato que N halos).
+    // Si hay ESCUDO (medusa) se agrega un 2º stroke rosado, más ancho y tenue, sobre el mismo trazo → un
+    // brillo de escudo que envuelve TODA la víbora (no sólo la cabeza). Pulsa suave.
+    if (!manager.dying && snake.length > 1) {
       ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = 'hsla(168,100%,55%,0.16)';
-      ctx.lineWidth = curR * 2.7; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       ctx.beginPath();
+      let pen = false;                                                           // culling: sólo trazo el tramo visible (corto el path en los huecos fuera de cámara)
       for (let i = 0; i < snake.length; i++) {
         const e = snake[i];
         let x = e.x, y = e.y;
-        if (e.id > 0) {                                                          // MISMO wiggle que el cuerpo: si no, el glow va recto y se pierde la forma ondulada
-          const off = Math.sin(waveClock*WIG_SPEED - e.id*WIG_DENSITY) * (curR*WIG_AMP*Math.min(1, e.id/4));
+        if (e.id > 0) {                                                          // MISMO wiggle que el cuerpo, si no el glow va recto
+          const off = Math.sin(waveClock*WIG_SPEED - e.id*WIG_DENSITY) * (curR*girth*WIG_AMP*Math.min(1, e.id/4));
           x += Math.cos(e.ang + Math.PI/2)*off;
           y += Math.sin(e.ang + Math.PI/2)*off;
         }
-        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        if (inView(x, y)) { if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y); }
+        else if (pen) { ctx.lineTo(x, y); pen = false; }                         // 1 punto extra al salir → el trazo llega al borde
       }
+      if (manager.immunity > 0) {                                                // escudo: brillo rosado que TITILA alrededor de toda la víbora
+        const ending = manager.immunity < 1.2;                                   // último tramo → titileo rápido y fuerte (aviso de que se termina)
+        const t = Math.abs(Math.sin(waveClock*(ending ? 13 : 5)));               // 0..1
+        const alpha = ending ? 0.05 + 0.95*t : 0.18 + 0.7*t;                     // baja casi a 0 → el parpadeo se VE (antes oscilaba 0.6..0.95, casi imperceptible)
+        ctx.strokeStyle = `hsla(335,100%,80%,${alpha})`;
+        ctx.lineWidth = curR * girth * (2.6 + 0.7*t);                            // también late el grosor
+        ctx.stroke();
+        ctx.stroke();                                                            // 2ª pasada (aditiva) para más punch sin agrandar el halo
+      }
+      ctx.strokeStyle = 'hsla(168,100%,55%,0.16)';                               // glow cian normal del cuerpo
+      ctx.lineWidth = curR * girth * 2.7;
       ctx.stroke();
       ctx.globalCompositeOperation = 'source-over';
     }
 
-    // DIBUJO cola→cabeza (z-orden del original): la cabeza queda encima, la comida/minas sobre el cuerpo.
-    for (let i = snake.length - 1; i >= 0; i--) snake[i].draw();
+    // DIBUJO (en coords de mundo). En muerte NO se dibuja la víbora (se deshizo en partículas). Culling: se
+    // saltean los segmentos fuera de cámara (la cabeza siempre se dibuja).
+    if (!manager.dying) for (let i = snake.length - 1; i >= 0; i--) {
+      const s = snake[i];
+      if (s.id !== 0 && !inView(s.x, s.y)) continue;
+      s.draw();
+    }
+    if (!manager.dying && snake[0]) {                                            // barra de vida del jugador sobre la cabeza (igual que las enemigas)
+      const h = snake[0], rad = curR*girth*1.15, frac = Math.max(0, manager.hp/manager.maxHp);
+      const bw = rad*3.4, bh = Math.max(3, rad*0.34), bx = h.x - bw/2, by = h.y - rad - bh*2.8;
+      ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(bx, by, bw, bh);
+      ctx.fillStyle = `hsl(${110*frac},85%,54%)`; ctx.fillRect(bx, by, bw*frac, bh);
+    }
     for (const h of hazards) h.draw();
     for (const f of food) f.draw();
-    manager.draw();
+    for (const j of treasures) j.draw();
+    for (const s of seahorses) s.draw();
+    manager.drawParticles();                                                    // bursts de medusa + dispersión de muerte
     removeSprites();
 
-    // punto-guía: en DESKTOP se dibuja en la posición del mouse (sólo visual; la dirección la sigue
-     // fijando aimAt igual que antes). En touch no se dibuja (alcanza con la palanca).
+    ctx.restore();
+
+    // ── HUD / overlays (coords de PANTALLA, fuera de la cámara) ──
+    drawHUD();
+    drawMinimap();
+    manager.draw();                                                             // game over / pausa / debug
+
+    // punto-guía: en DESKTOP, en la posición del mouse (sólo visual). En touch alcanza con la palanca.
     if (!IS_TOUCH && !manager.gameOver) {
       const cr = Math.max(3, sper(0.006));
       ctx.globalCompositeOperation = 'lighter';
@@ -934,19 +1838,48 @@
   </script>
   <script>
     document.getElementById('btnExit').addEventListener('click', () => {
-      if (confirm('¿Salir al menú?')) location.href = '../../';
+      // Embebido en la shell del Arcade: postMessage para volver al menú sin recargar el iframe.
+      // Suelto: navegamos directo (sin confirm — mismo patrón que el resto de los juegos).
+      if (window.self !== window.top) {
+        try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {}
+        return;
+      }
+      try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch {}
+      location.href = '../../Arcade/';
     });
   </script>
   <script>
     (function() {
+      const EMBEDDED = (window.self !== window.top);
       const btn = document.getElementById('btnFs');
       btn.addEventListener('click', () => {
+        // Embebido: same-origin → llamamos requestFullscreen DIRECTO sobre el doc padre para
+        // preservar el user-activation del tap. postMessage perdía la activación.
+        if (EMBEDDED) {
+          try {
+            const topDoc = window.top.document;
+            if (topDoc.fullscreenElement || topDoc.webkitFullscreenElement) {
+              (topDoc.exitFullscreen || topDoc.webkitExitFullscreen).call(topDoc);
+            } else {
+              const el = topDoc.documentElement;
+              const req = el.requestFullscreen || el.webkitRequestFullscreen;
+              const p = req.call(el);
+              if (p && p.catch) p.catch(() => {});
+            }
+          } catch (e) {
+            try { window.parent.postMessage({ type: 'arcade:fullscreen' }, '*'); } catch (e2) {}
+          }
+          return;
+        }
         if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
         else document.exitFullscreen?.();
       });
       document.addEventListener('fullscreenchange', () => {
-        document.body.classList.toggle('fs-on', !!document.fullscreenElement);
+        document.body.classList.toggle('fs-on', !!document.fullscreenElement || EMBEDDED);
       });
+      // Embebido: la shell nos avisa su estado de FS para sincronizar el ícono.
+      window.addEventListener('message', e => { if (e.data && e.data.type === 'arcade:fs-state') document.body.classList.toggle('fs-on', !!e.data.on); });
+      if (EMBEDDED) document.body.classList.add('fs-on');
     })();
   </script>
 
