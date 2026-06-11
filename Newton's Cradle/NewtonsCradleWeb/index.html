@@ -167,6 +167,7 @@
   let frameLeft = 0, frameRight = 0, frameTop = 0, baseY = 0, k = 1;
   let tableTop = 0;             // y de la superficie del mueble donde se apoya la base del péndulo
   let sceneDay = null, sceneNight = null;   // habitación pre-renderizada en sus dos estados (se rearman sólo en resize)
+  let vignette = null;          // gradiente de viñeteado (oscurece bordes; da profundidad de "plano de cerca")
   let nightFactor = 0;          // 0 = día, 1 = noche (transiciona en bucle, independiente del péndulo)
   let sceneClock = 0;           // ms acumulados para el ciclo día/noche
   const NIGHT_PERIOD = 54;      // s — duración del ciclo día↔noche completo
@@ -228,6 +229,9 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     layout();
     buildScenes();
+    vignette = ctx.createRadialGradient(W * 0.5, H * 0.48, Math.min(W, H) * 0.28, W * 0.5, H * 0.55, Math.max(W, H) * 0.72);
+    vignette.addColorStop(0, 'rgba(0,0,0,0)');
+    vignette.addColorStop(1, 'rgba(0,0,0,0.4)');
   }
   window.addEventListener('resize', resize);
 
@@ -241,12 +245,16 @@
   }
 
   // ════════════════ FÍSICA ════════════════
+  const W2 = () => OMEGA * OMEGA;
   function integrate(b, dt) {
-    // péndulo real: α = -ω²·sin(φ), con φ = angulo - π/2  ⇒  α = ω²·cos(angulo)
-    const alpha = OMEGA * OMEGA * Math.cos(b.angulo);
-    b.velocidad += alpha * dt;
+    // péndulo real: α = -ω²·sin(φ), con φ = angulo - π/2  ⇒  α = ω²·cos(angulo).
+    // Integración velocity-Verlet: conserva mejor la energía que Euler ⇒ el swing se ve más natural
+    // y parejo (Euler semi-implícito metía amortiguación numérica que lo apagaba de más).
+    const a0 = W2() * Math.cos(b.angulo);
+    b.angulo += b.velocidad * dt + 0.5 * a0 * dt * dt;
+    const a1 = W2() * Math.cos(b.angulo);
+    b.velocidad += 0.5 * (a0 + a1) * dt;
     b.velocidad *= Math.exp(-DAMP * dt);
-    b.angulo += b.velocidad * dt;
     // snap a reposo para que no quede temblando infinitamente
     const phi = b.angulo - Math.PI / 2;
     if (Math.abs(phi) < REST_SNAP_ANG && Math.abs(b.velocidad) < REST_SNAP_VEL) {
@@ -294,6 +302,7 @@
           // de movimiento (sway suave) en vez de quedar perfectamente muerta.
           if (allowSwap && (b.velocidad - a.velocidad) > VEL_EPS) {
             const va = a.velocidad, vb = b.velocidad;
+            frameImpactV = Math.max(frameImpactV, vb - va);                         // energía del choque más fuerte de este frame → sonido
             a.velocidad = (vb * (1 - RESIDUAL) + va * RESIDUAL) * COLLISION_LOSS;
             b.velocidad = (va * (1 - RESIDUAL) + vb * RESIDUAL) * COLLISION_LOSS;
           }
@@ -677,6 +686,8 @@
     ctx.globalAlpha = ghosted ? 0.4 : 1;
     for (const ball of balls) drawMetalBall(ball.x, ball.y, radio);
     ctx.globalAlpha = 1;
+    // viñeteado (profundidad / plano de cerca)
+    if (vignette) { ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H); }
     // veil frío de noche sobre TODO (incluye el péndulo) para que la luz cuaje con la escena
     if (nightFactor > 0.001) {
       ctx.fillStyle = `rgba(18,26,54,${nightFactor * 0.2})`;
@@ -691,6 +702,7 @@
     canvas.setPointerCapture(e.pointerId);
     const p = evtPos(e); mx = p.x; my = p.y; mDown = true;
     hint.style.opacity = '0';
+    audioResume();
   });
   canvas.addEventListener('pointermove', e => { const p = evtPos(e); mx = p.x; my = p.y; });
   function endPointer() { mDown = false; }
@@ -719,6 +731,7 @@
     };
     const start = e => {
       e.preventDefault();
+      audioResume();
       pid = e.pointerId;
       try { el.releasePointerCapture(e.pointerId); } catch {}
       fn();
@@ -729,7 +742,7 @@
     };
     el.addEventListener('pointerdown', start);
   }
-  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
+  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); audioResume(); fn(); }); }
 
   holdable(document.getElementById('btnPlus'), addBall);
   holdable(document.getElementById('btnMinus'), removeBall);
@@ -739,6 +752,58 @@
   tappable(btnHold, () => { holding = !holding; btnHold.classList.toggle('on', holding); });
   tappable(document.getElementById('btnReset'), reset);
 
+  // ════════════════ SONIDO (clic metálico sintetizado en Web Audio) ════════════════
+  // No hay samples en esta carpeta, así que el "clac" se genera: un par de parciales inarmónicos con
+  // decaída rápida (la campanita metálica) + un transitorio de ruido filtrado (el ataque). Se dispara
+  // a lo sumo una vez por frame, con cooldown, escalando volumen/pitch con la fuerza del choque.
+  let actx = null, noiseBuf = null, lastClickT = 0, frameImpactV = 0;
+  const SND_COOLDOWN = 32;     // ms mínimos entre clics (evita ametralladora)
+  const SND_VTHR     = 0.4;    // rad/s — por debajo no suena (roces numéricos)
+  function audioResume() {
+    try {
+      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      if (actx.state === 'suspended') actx.resume();
+    } catch (e) {}
+  }
+  function getNoise() {
+    if (noiseBuf || !actx) return noiseBuf;
+    const n = Math.floor(actx.sampleRate * 0.03);
+    noiseBuf = actx.createBuffer(1, n, actx.sampleRate);
+    const d = noiseBuf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    return noiseBuf;
+  }
+  function playClick(intensity) {
+    if (!actx) return;
+    const t = actx.currentTime;
+    const vol = Math.max(0.03, Math.min(1, intensity)) * 0.07;                     // MUY suave (antes 0.55 — rompía los oídos)
+    const pitch = 1 + (Math.random() * 2 - 1) * 0.07;                              // jitter para que no suene clonado
+    // tic discreto: un solo parcial medio + un toque de octava, decaída cortita, con ataque de 2ms
+    // (el setValueAtTime directo metía un click digital duro en el borde)
+    const g = actx.createGain();
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.002);
+    g.gain.exponentialRampToValueAtTime(0.0004, t + 0.07);
+    g.connect(actx.destination);
+    const base = 1500 * pitch;                                                     // más grave (antes 2300 + parcial a 11kHz: hiriente)
+    for (const [m, gg] of [[1, 1], [2.4, 0.18]]) {
+      const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = base * m;
+      const og = actx.createGain(); og.gain.value = gg;
+      o.connect(og).connect(g); o.start(t); o.stop(t + 0.08);
+    }
+    // ataque: soplido de ruido por banda media (sin agudos hirientes), apenas audible
+    const nb = getNoise();
+    if (nb) {
+      const ns = actx.createBufferSource(); ns.buffer = nb;
+      const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1200; bp.Q.value = 1.2;
+      const ng = actx.createGain();
+      ng.gain.setValueAtTime(0, t);
+      ng.gain.linearRampToValueAtTime(vol * 0.5, t + 0.002);
+      ng.gain.exponentialRampToValueAtTime(0.0004, t + 0.02);
+      ns.connect(bp).connect(ng).connect(actx.destination); ns.start(t); ns.stop(t + 0.03);
+    }
+  }
+
   // ════════════════ LOOP (paso fijo) ════════════════
   let lastT = performance.now(), acc = 0;
   function frame(now) {
@@ -746,7 +811,12 @@
     let elapsed = now - lastT; lastT = now;
     if (elapsed > 100) elapsed = 100;                                            // anti spiral-of-death tras un blur de ventana
     acc += elapsed;
+    frameImpactV = 0;
     while (acc >= FIXED_DT) { step(FIXED_DT); acc -= FIXED_DT; }
+    // sonido del choque más fuerte de este frame (con cooldown)
+    if (frameImpactV > SND_VTHR && now - lastClickT > SND_COOLDOWN) {
+      lastClickT = now; playClick(Math.min(1, frameImpactV / 6));
+    }
     // ciclo día↔noche (independiente del péndulo): mesetas largas + transiciones suaves con smoothstep
     sceneClock += elapsed;
     const ph = (sceneClock / 1000 % NIGHT_PERIOD) / NIGHT_PERIOD;

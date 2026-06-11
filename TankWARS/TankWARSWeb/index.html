@@ -169,6 +169,25 @@
   #shopPanel .shopItem.maxed { border-color: rgba(120,200,255,0.5); opacity: 0.85; }
   #shopPanel .shopItem.maxed .si-cost, #shopPanel .shopItem.maxed .si-lvl { color: #78c8ff; }
   #shopPanel .shopFoot { margin-top: 12px; text-align: center; color: rgba(255,255,255,0.45); font-size: 12px; letter-spacing: 0.04em; }
+
+  /* MENÚ PRINCIPAL: semitransparente para ver las explosiones de fondo. */
+  #menuPanel { position: absolute; inset: 0; z-index: 17; display: none; align-items: center; justify-content: center; background: rgba(5,6,10,0.72); padding: 16px; }
+  #menuPanel.show { display: flex; }
+  #menuPanel .menuCard { width: 100%; max-width: 560px; background: rgba(16,20,30,0.94); border: 1px solid rgba(120,200,255,0.35); border-radius: 16px; padding: 22px 20px; box-shadow: 0 0 36px rgba(120,200,255,0.28); text-align: center; }
+  #menuPanel .menuTitle { color: #fff; font-size: 38px; font-weight: 800; letter-spacing: 0.06em; text-shadow: 0 0 18px rgba(120,200,255,0.55); }
+  #menuPanel .menuSub { color: rgba(255,255,255,0.6); font-size: 13px; letter-spacing: 0.05em; margin: 16px 0 8px; text-transform: uppercase; }
+  #menuPanel .menuColors { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; margin-bottom: 6px; }
+  #menuPanel .swatch { width: 42px; height: 42px; border-radius: 50%; cursor: pointer; touch-action: none; border: 2px solid rgba(255,255,255,0.25); box-shadow: inset 0 2px 6px rgba(0,0,0,0.4); transition: transform 0.08s, border-color 0.12s, box-shadow 0.12s; }
+  #menuPanel .swatch:active { transform: scale(0.92); }
+  #menuPanel .swatch.sel { border-color: #fff; box-shadow: 0 0 0 3px rgba(255,255,255,0.35), 0 0 14px rgba(120,200,255,0.6); transform: scale(1.08); }
+  #menuPanel .menuDiff { display: block; width: 100%; max-width: 280px; margin: 18px auto 0; padding: 11px 16px; border-radius: 11px; cursor: pointer; touch-action: none; font-size: 15px; font-weight: 700; letter-spacing: 0.03em; color: #fff; border: 1px solid rgba(120,200,255,0.5); background: rgba(120,200,255,0.12); transition: background 0.1s, transform 0.06s, border-color 0.12s, color 0.12s; }
+  #menuPanel .menuDiff:active { transform: scale(0.97); }
+  #menuPanel .menuDiff.hard { color: #ff9b3c; border-color: rgba(255,140,40,0.7); background: rgba(255,140,40,0.16); }
+  #menuPanel .menuPlay { display: block; width: 100%; max-width: 280px; margin: 14px auto 0; padding: 15px 16px; border-radius: 12px; cursor: pointer; touch-action: none; font-size: 21px; font-weight: 800; letter-spacing: 0.05em; color: #06210f; border: none; background: linear-gradient(180deg,#7dffb0,#34c46a); box-shadow: 0 4px 18px rgba(52,196,106,0.4); transition: transform 0.06s, box-shadow 0.12s; }
+  #menuPanel .menuPlay:active { transform: scale(0.97); box-shadow: 0 2px 10px rgba(52,196,106,0.4); }
+  #menuPanel .menuHint { margin-top: 16px; color: rgba(255,255,255,0.45); font-size: 12px; line-height: 1.5; letter-spacing: 0.02em; }
+  /* En el menú: ocultar palancas, botones de acción y el hint del juego. */
+  body.inMenu #actBtns, body.inMenu #jMove, body.inMenu #jAim, body.inMenu #jMoveRest, body.inMenu #jAimRest, body.inMenu #aimSafe, body.inMenu #hint { display: none !important; }
 </style>
 </head>
 <body>
@@ -209,6 +228,9 @@
 
   <!-- TIENDA: overlay de mejoras (lo arma/cablea el script principal; pausa el juego mientras está abierta). -->
   <div id="shopPanel"></div>
+
+  <!-- MENÚ PRINCIPAL: overlay de inicio (color + dificultad + JUGAR). Lo arma/cablea el script principal. -->
+  <div id="menuPanel"></div>
 
   <div id="padMenu">
     <button class="btn" id="btnFs" aria-label="pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
@@ -261,7 +283,13 @@
   const SHOT_SPEED      = 0.8;
   const PLAYER_SPREAD   = Math.PI/60; // cono chico de dispersión del cañón del PLAYER (ángulo total, ~3°) — apenas cubre un poco más
   const MISSILE_SPEED   = 0.48;
-  const MAX_ENEMIES     = 14;
+  const MAX_ENEMIES     = 18;
+
+  // ── MUNDO ABIERTO ──
+  const WORLD_W = 3200, WORLD_H = 1800;  // mundo 2.5× el viewport por lado (~6.3× de área); el viewport sigue 1280×720
+  const CAM_LERP      = 0.10;            // seguimiento de la cámara al player (fracción/frame@60)
+  const CAM_LOOKAHEAD = 0.25;            // cuánto se corre la cámara hacia la mira (anticipa lo que apuntás)
+  const WALL_COUNT_LO = 30, WALL_COUNT_HI = 40;  // muros por arena (5-7 del original × ~6 de área)
 
   // ── CANVAS ──
   // Resolución lógica fija 1280×720 (W/H constantes): toda la geometría porcentual (xper/yper/sper) y la
@@ -344,6 +372,12 @@
     ctx.fillStyle = rgb(color); ctx.font = `${Math.round(px)}px 'Segoe UI', system-ui, sans-serif`;
     ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillText(str, x, y);
   }
+  // Viñetas screen-space (W×H lógicos constantes → los gradientes se construyen UNA vez, patrón CrazyTanks):
+  // vigDark oscurece los bordes siempre (profundidad); vigRed pulsa con vida baja.
+  const vigDark = ctx.createRadialGradient(W/2, H/2, H*0.42, W/2, H/2, Math.hypot(W,H)*0.55);
+  vigDark.addColorStop(0, 'rgba(0,0,0,0)'); vigDark.addColorStop(1, 'rgba(0,0,0,0.34)');
+  const vigRed = ctx.createRadialGradient(W/2, H/2, H*0.3, W/2, H/2, Math.hypot(W,H)*0.5);
+  vigRed.addColorStop(0, 'rgba(255,0,0,0)'); vigRed.addColorStop(1, 'rgba(255,30,20,0.5)');
 
   // ── ESTADO GLOBAL (mimica los globals del original) ──
   let dt = 0, fr = 1;            // fr = dt*60 → escala la acumulación "por frame" del original
@@ -352,6 +386,108 @@
   let player = null;
   const toRemove = new Set();
   const decay = (val, perFrame) => val * Math.pow(perFrame, fr);
+
+  // ── CÁMARA (mundo abierto) ──
+  let camX = 0, camY = 0;        // esquina sup-izq de la vista, en coords de MUNDO
+  let camShake = 0;              // magnitud del shake (px lógicos); decae solo en el loop
+  let T = 0;                     // reloj visual global (pulsos de minimapa/banner; nunca se resetea)
+  const inView = (x, y, m) => x > camX - m && x < camX + W + m && y > camY - m && y < camY + H + m;
+  function addShake(m) { camShake = Math.min(camShake + m, sper(0.016)); }
+
+  // ── PARTÍCULAS + POPUPS (juice) ──
+  // Pool simple con cap: chispas de impacto, fogonazos, estela de boost, humo de misil, muerte de tanques.
+  // Discos planos (sin shadowBlur, carísimo en mobile — lección de SnakeWeb); se desvanecen Y achican.
+  const parts = [];
+  function spawnPart(x, y, vx, vy, life, r, color, drag = 0.88) {
+    if (parts.length >= 350) return;
+    parts.push({ x, y, vx, vy, life, maxLife: life, r, color, drag });
+  }
+  function burst(x, y, color, n, spd, life = 0.6, r = sper(0.004)) {
+    for (let i = 0; i < n; i++) {
+      const a = rnd(0, TAU), s = rnd(spd*0.3, spd);
+      spawnPart(x, y, Math.cos(a)*s, Math.sin(a)*s, rnd(life*0.5, life), rnd(r*0.5, r*1.4), color);
+    }
+  }
+  function updateParts() {
+    for (let i = parts.length - 1; i >= 0; i--) {
+      const p = parts[i];
+      p.life -= dt;
+      if (p.life <= 0) { parts.splice(i, 1); continue; }
+      const dr = Math.pow(p.drag, fr);
+      p.vx *= dr; p.vy *= dr;
+      p.x += p.vx * dt; p.y += p.vy * dt;
+    }
+  }
+  function drawParts() {
+    for (const p of parts) {
+      if (!inView(p.x, p.y, 50)) continue;
+      const a = p.life / p.maxLife;
+      ctx.globalAlpha = a * 0.9;
+      circle(p.x, p.y, p.r * (0.4 + a*0.8), p.color);
+    }
+    ctx.globalAlpha = 1;
+  }
+  // popups de texto flotante (+score al matar, premio de lootbox) — suben y se desvanecen
+  const popups = [];
+  function popup(x, y, str, color, px) {
+    popups.push({ x, y, str, color, px: px || sper(0.018), t: 0 });
+    if (popups.length > 24) popups.shift();
+  }
+  function updatePopups() {
+    for (let i = popups.length - 1; i >= 0; i--) { popups[i].t += dt; if (popups[i].t > 0.9) popups.splice(i, 1); }
+  }
+  function drawPopups() {
+    for (const p of popups) {
+      if (!inView(p.x, p.y, 80)) continue;
+      const a = 1 - p.t/0.9;
+      ctx.globalAlpha = a;
+      const yy = p.y - sper(0.02) - p.t * sper(0.05);
+      text(p.str, [0,0,0], p.x + 1.5, yy + 1.5, p.px, 'center');
+      text(p.str, p.color, p.x, yy, p.px, 'center');
+    }
+    ctx.globalAlpha = 1;
+  }
+  // deco scatter del piso (patrón CrazyTanks): puntitos/manchas estáticos por arena, regenerados con los
+  // muros — con cámara, el piso necesita textura para que el movimiento se LEA. Se dibujan culleados.
+  let deco = [];
+  function genDeco() {
+    deco = [];
+    for (let i = 0; i < 200; i++) {
+      deco.push({
+        x: rnd(0, WORLD_W), y: rnd(0, WORLD_H),
+        r: rnd(sper(0.0015), sper(0.007)),
+        a: rnd(0.08, 0.25),
+        ring: Math.random() < 0.25,                                  // algunos son anillos, no discos
+        c: modifyColorPerc(manager.wallColor, rnd(0.45, 0.9)),
+      });
+    }
+  }
+  // grilla + deco + borde del mundo (se dibuja en coords de MUNDO, después del fill de fondo)
+  function drawBackdrop() {
+    const step = sper(0.13);
+    const x0 = Math.max(0, Math.floor(camX/step)*step), x1 = Math.min(WORLD_W, camX + W);
+    const y0 = Math.max(0, Math.floor(camY/step)*step), y1 = Math.min(WORLD_H, camY + H);
+    ctx.globalAlpha = 0.10;
+    ctx.strokeStyle = rgb(modifyColorPerc(background, 2.6)); ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let gx = x0; gx <= x1; gx += step) { ctx.moveTo(gx, Math.max(0,camY)); ctx.lineTo(gx, Math.min(WORLD_H, camY+H)); }
+    for (let gy = y0; gy <= y1; gy += step) { ctx.moveTo(Math.max(0,camX), gy); ctx.lineTo(Math.min(WORLD_W, camX+W), gy); }
+    ctx.stroke();
+    for (const d of deco) {
+      if (!inView(d.x, d.y, 30)) continue;
+      ctx.globalAlpha = d.a;
+      circle(d.x, d.y, d.r, d.c, d.ring ? Math.max(1, d.r*0.35) : 0);
+    }
+    ctx.globalAlpha = 1;
+    // borde del mundo: glow ancho translúcido + línea fina encima (glow barato sin shadowBlur)
+    const bc = modifyColorPerc(manager.wallColor, 1.5);
+    ctx.globalAlpha = 0.30;
+    ctx.strokeStyle = rgb(bc); ctx.lineWidth = sper(0.012);
+    ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = rgb(modifyColorPerc(manager.wallColor, 2.2)); ctx.lineWidth = sper(0.003);
+    ctx.strokeRect(0, 0, WORLD_W, WORLD_H);
+  }
 
   // ── MATTER.JS (cuerpos rígidos) ──
   // Top-down → sin gravedad. matter resuelve SOLO las colisiones de cuerpos: tanque↔muro (estático) y
@@ -465,12 +601,19 @@
           this.health = Math.max(this.health - 0.05*atk*this.defense*(shot.missile?10:1)*pscale, 0);
           this.hitCD = 0.03;
           if (shot.isPlayerShot && player) player.score += shot.missile ? 250 : 6;
+          // chispas de impacto + shake: misiles pegan FUERTE (más chispas y sacudón); que te peguen también sacude
+          if (inView(shot.x, shot.y, 60)) burst(shot.x, shot.y, modifyColorPerc(shot.color, 1.3), shot.missile ? 14 : 5, sper(0.22), 0.45);
+          if (shot.missile) addShake(sper(0.005));
+          if (this.isPlayer) addShake(sper(0.006));
           toRemove.add(shot);
         }
       }
 
       if (this.health <= 0 && !this.isPlayer) {
-        if (player) player.score += this.scoreValue || 0;
+        if (player) {
+          player.score += this.scoreValue || 0;
+          if (this.scoreValue) popup(this.x, this.y - this.radius*2, '+' + this.scoreValue, [255,255,255]);
+        }
         const amount = this.dropCoins || 0;
         for (let i = 0; i < amount; i++) new Coin(this.x, this.y, ri(28,42) + (this.coinValue||0));
         toRemove.add(this);
@@ -502,6 +645,14 @@
     primaryShotAction() {
       if (this.primaryShotCD > 0) return;
       new PrimaryShot(this);
+      // fogonazo: 3 chispas en la boca del cañón (solo si se ve, para no gastar el pool fuera de cámara)
+      if (inView(this.x, this.y, this.radius*4)) {
+        const mx = this.x + Math.cos(this.turretAng)*this.radius*2, my = this.y + Math.sin(this.turretAng)*this.radius*2;
+        for (let i = 0; i < 3; i++) {
+          const a = this.turretAng + rnd(-0.4, 0.4), s = rnd(sper(0.1), sper(0.3));
+          spawnPart(mx, my, Math.cos(a)*s, Math.sin(a)*s, rnd(0.08, 0.18), sper(0.003), modifyColor(this.color, 150), 0.8);
+        }
+      }
       this.recoil(sper(0.0016));
       this.primaryShotCD = 1 * this.primaryShotAS;
     }
@@ -512,14 +663,21 @@
       this.secondaryShotCD = 10 * this.secondaryShotAS;
     }
     getBorderPush() {
-      this.borderPushX += this.x < this.radius ? sper(0.0032) : this.x > W - this.radius ? -sper(0.0032) : 0;
-      this.borderPushY += this.y < this.radius ? sper(0.0032) : this.y > H - this.radius ? -sper(0.0032) : 0;
+      // empuje contra los bordes del MUNDO (es lo único que contiene a los tanques; matter no tiene cerco)
+      this.borderPushX += this.x < this.radius ? sper(0.0032) : this.x > WORLD_W - this.radius ? -sper(0.0032) : 0;
+      this.borderPushY += this.y < this.radius ? sper(0.0032) : this.y > WORLD_H - this.radius ? -sper(0.0032) : 0;
     }
   }
 
   // dibujo base del cuerpo (treads + contorno), compartido por todos los tanques
   function drawTankBody(t) {
     const a = t.ang, dr = t.drawRadius, c = t.drawColor;
+    // sombra de apoyo elíptica (patrón CrazyTanks): el tanque se "apoya" en el piso en vez de flotar
+    ctx.globalAlpha = 0.25; ctx.fillStyle = '#000';
+    ctx.beginPath();
+    ctx.ellipse(t.x + Math.cos(a)*dr*0.1, t.y + Math.sin(a)*dr*0.1 + dr*0.18, dr*1.55, dr*1.1, a, 0, TAU);
+    ctx.fill();
+    ctx.globalAlpha = 1;
     for (let i = 0; i < 10; i++) {
       const o = 1 - i*0.2;
       line(
@@ -551,8 +709,8 @@
       this.isPlayer = true;
       this.radius = sper(PLAYER_R);
       this.drawRadius = this.radius;
-      this.x = xper(0.5); this.y = yper(0.5);
-      this.color = [0,0,120];
+      this.x = WORLD_W/2; this.y = WORLD_H/2;   // arranca en el centro del MUNDO
+      this.color = manager.playerColors[manager.colorSelected].slice();   // color elegido en el menú
       this.regAttack = PLAYER_ATTACK; this.regDefense = 1; this.regPrimaryShotAS = PRIMARY_AS;
       this.regSecondaryShotAS = 1; this.regMoveSpeed = 1; this.regHealthRegenSpeed = 1;
       this.attack = PLAYER_ATTACK; this.defense = 1; this.primaryShotAS = PRIMARY_AS;
@@ -560,6 +718,7 @@
       this.missileMax = MISSILE_MAX; this.missileStack = MISSILE_MAX; this.missileRegenCD = 0;
       this.boosting = false;
       this.iceSlowCD = 0;   // los disparos de Icy frenan al jugador un instante (no estando en power mode)
+      this.shieldUpCD = 0;  // sostener-escudo tras detectar un disparo cerca (mismo 0.5s que la IA)
       // Power mode (lootbox 'power'): 30s con stats potenciados (defensa 0 = invulnerable, fuego rápido, x2 vel).
       this.powerModeActiveTime = 0;
       this.powHealthRegenSpeed = 0.0025; this.powAttack = 4; this.powDefense = 0;
@@ -613,6 +772,13 @@
         x: (moveX + this.borderPushX) * MATTER_VEL,
         y: (moveY + this.borderPushY) * MATTER_VEL,
       });
+      // estela de boost: llamitas que quedan atrás mientras turbeás (se nota que vas rápido)
+      if (this.boosting && mag > 0.05) {
+        const bx = this.x - Math.cos(this.ang)*this.radius*1.6, by = this.y - Math.sin(this.ang)*this.radius*1.6;
+        spawnPart(bx + rnd(-3,3), by + rnd(-3,3),
+                  -Math.cos(this.ang)*sper(0.04), -Math.sin(this.ang)*sper(0.04),
+                  rnd(0.2, 0.4), sper(0.0045), [255, ri(120,200), 0], 0.9);
+      }
       if (inp.primary) this.primaryShotAction();
       if (inp.missile) this.secondaryShotAction();
 
@@ -641,6 +807,7 @@
           coin.grabbed = true;
           if (getDistSq([this.x,this.y],[coin.x,coin.y]) < (this.radius+coin.radius)**2 && !coin.accounted) {
             this.moneyToAdd += coin.value; this.coinGrabbedCD = 0.03;
+            burst(coin.x, coin.y, [255,255,80], 3, sper(0.12), 0.35, sper(0.0025));   // destello al juntar
             coin.accounted = true; toRemove.add(coin);
           }
         }
@@ -651,14 +818,18 @@
         this.moneyToAdd -= tr; this.money += tr; this.moneyToAddCD = 0.01;
       }
 
-      if (this.health <= 0) { manager.gameover = true; toRemove.add(this); player = null; }
+      if (this.health <= 0) { manager.gameover = true; addShake(sper(0.016)); toRemove.add(this); player = null; }
     }
     autoShield() {
+      // como el shieldEval de la IA: detectar un disparo enemigo cerca arma el escudo y lo SOSTIENE 0.5s
+      // (shieldUpCD), no solo ese frame — mientras el disparo siga cerca, el timer se va refrescando.
       for (const shot of shots) {
         if (!shot.isPlayerShot && getDistSq([this.x,this.y],[shot.x,shot.y]) < (this.radius*4)**2) {
-          this.shieldAction(); break;
+          this.shieldUpCD = 0.5; break;
         }
       }
+      this.shieldUpCD = Math.max(this.shieldUpCD - dt, 0);
+      if (this.shieldUpCD > 0) this.shieldAction();
     }
     secondaryShotAction() {
       const powered = this.powerModeActiveTime > 0;
@@ -702,24 +873,28 @@
   class Enemy extends Tank {
     constructor() {
       super();
-      const side = ri(0,3);
-      const areas = [
-        [xper(-0.3),xper(1.3),yper(-0.1),yper(-0.3)],
-        [xper(1.1),xper(1.3),yper(-0.3),yper(1.3)],
-        [xper(-0.3),xper(1.3),yper(1.1),yper(1.3)],
-        [xper(-0.1),xper(-0.3),yper(-0.3),yper(1.3)],
-      ][side];
-      this.x = rnd(areas[0],areas[1]); this.y = rnd(areas[2],areas[3]);
+      // Spawn en ANILLO alrededor del player (patrón SnakeWeb): siempre cerca de la acción pero fuera de
+      // cámara. Si el clamp al mundo lo acerca demasiado (player en una esquina), se reintenta.
+      const cx0 = player ? player.x : WORLD_W/2, cy0 = player ? player.y : WORLD_H/2;
+      let stries = 0;
+      do {
+        const sa = rnd(0, TAU), sd = rnd(xper(0.75), xper(1.15));
+        this.x = clampN(cx0 + Math.cos(sa)*sd, this.radius*2, WORLD_W - this.radius*2);
+        this.y = clampN(cy0 + Math.sin(sa)*sd, this.radius*2, WORLD_H - this.radius*2);
+      } while (++stries < 20 && getDistSq([this.x,this.y],[cx0,cy0]) < xper(0.55)**2);
       this.maxDistToPlayer = rnd(sper(0.128), sper(0.512));
       this.inScreen = false; this.playerLocked = true; this.scoutModeTimer = 0;
-      this.targetX = W/2; this.targetY = H/2; this.targetRadius = 0;
+      this.targetX = cx0; this.targetY = cy0; this.targetRadius = 0;
       this.aimAngle = this.ang; this.aimPointX = 0; this.aimPointY = 0;
       this.dropCoins = 0; this.coinValue = 0; this.scoreValue = 0;
       this.shieldUpCD = 0; this.useShield = false;   // useShield: el enemigo evalúa solo si levantar escudo ante disparos
-      // punto scout (deambular) fuera de muros
+      this.avoidSide = 1; this.avoidCD = 0;          // histéresis de la esquiva de muros (sostener el lado elegido)
+      // punto scout (deambular): cerca de DONDE ESTÁ (en mundo abierto, elegirlo en cualquier lado lo
+      // mandaba a deambular a la otra punta del mapa), fuera de muros
       let tries = 0;
       do {
-        this.scoutX = rnd(xper(0.1), W-xper(0.1)); this.scoutY = rnd(yper(0.1), H-yper(0.1));
+        this.scoutX = clampN(this.x + rnd(-xper(0.7), xper(0.7)), xper(0.04), WORLD_W - xper(0.04));
+        this.scoutY = clampN(this.y + rnd(-yper(0.7), yper(0.7)), yper(0.04), WORLD_H - yper(0.04));
       } while (++tries < 30 && walls.some(w => rectCollision([this.scoutX-this.radius*2,this.scoutY-this.radius*2,this.radius*4,this.radius*4],[w.x,w.y,w.width,w.height])));
       enemies.push(this);
     }
@@ -748,28 +923,58 @@
       const goal = this.playerLocked ? [this.targetX,this.targetY] : [this.scoutX,this.scoutY];
       this.moveAngle = getAngle2(this.ang, [this.x,this.y], goal);
 
-      // esquiva de muros: si el frente está bloqueado, doblá hacia el lado MÁS LIBRE (izq o der), no siempre
-      // a la derecha. Medimos cuántos pasos hay libres en cada dirección (cuanto más alto, más despejado).
-      const STEPS = 7;
-      const clearance = a => {
-        for (let i = 1; i <= STEPS; i++) {
-          const px = this.x+Math.cos(a)*this.radius*i, py = this.y+Math.sin(a)*this.radius*i;
-          if (walls.some(w => rectPointCollision([w.x,w.y,w.width,w.height],[px,py]))) return i;
-        }
-        return STEPS + 1;
-      };
-      let dir = 0;
-      if (clearance(this.moveAngle) <= STEPS) {            // frente bloqueado
-        const clrL = clearance(this.moveAngle - Math.PI/2);
-        const clrR = clearance(this.moveAngle + Math.PI/2);
-        dir = clrR >= clrL ? Math.PI/2 : -Math.PI/2;       // doblá hacia donde hay más espacio
+      // ── ESQUIVA DE MUROS por "bigotes" ──
+      // Si el frente está bloqueado, probamos desvíos crecientes a AMBOS lados (30°..150°) y elegimos el
+      // mejor puntaje = pasos libres − costo del desvío, con HISTÉRESIS: una vez elegido un lado se
+      // sostiene ~0.6s (sin esto, frente a un muro oscilaba izquierda/derecha sin decidirse).
+      const PROBE = this.radius * 1.3, STEPS = 9;
+      const reach = PROBE * STEPS + this.radius * 2;
+      const nearWalls = [];
+      for (const w of walls) {
+        if (this.x > w.x - reach && this.x < w.x + w.width + reach && this.y > w.y - reach && this.y < w.y + w.height + reach) nearWalls.push(w);
       }
-      this.moveAngle += dir;
-      this.angVel += (this.moveAngle > this.ang ? sper(TURN_RATE) : -sper(TURN_RATE)) * fr;
+      const clearance = a => {
+        const ca = Math.cos(a), sa = Math.sin(a);
+        for (let i = 1; i <= STEPS; i++) {
+          const px = this.x + ca*PROBE*i, py = this.y + sa*PROBE*i;
+          if (px < 0 || px > WORLD_W || py < 0 || py > WORLD_H) return i - 1;   // el borde del mundo también es muro
+          for (const w of nearWalls) if (px >= w.x && px <= w.x+w.width && py >= w.y && py <= w.y+w.height) return i - 1;
+        }
+        return STEPS;
+      };
+      this.avoidCD = Math.max(this.avoidCD - dt, 0);
+      if (nearWalls.length && clearance(this.moveAngle) < STEPS) {
+        const CAND = [Math.PI/6, Math.PI/3, Math.PI/2, Math.PI*2/3, Math.PI*5/6];
+        let bestOff = 0, bestScore = -Infinity;
+        for (const off of CAND) for (const s of [1,-1]) {
+          let score = clearance(this.moveAngle + off*s)*2 - off*3;            // más libre y menos desvío = mejor
+          if (this.avoidCD > 0 && s === this.avoidSide) score += 4;           // histéresis: sostener el lado
+          if (score > bestScore) { bestScore = score; bestOff = off*s; }
+        }
+        this.avoidSide = bestOff >= 0 ? 1 : -1;
+        this.avoidCD = 0.6;
+        this.moveAngle += bestOff;
+      }
+      // despegue: si está RASPANDO un muro, empujón perpendicular hacia afuera (antes quedaba trabado
+      // deslizando contra la pared sin poder rodearla)
+      for (const w of nearWalls) {
+        const nx = clampN(this.x, w.x, w.x+w.width), ny = clampN(this.y, w.y, w.y+w.height);
+        const ddx = this.x-nx, ddy = this.y-ny, d2 = ddx*ddx+ddy*ddy, lim = this.radius*1.9;
+        if (d2 < lim*lim && d2 > 1e-6) {
+          const dd = Math.sqrt(d2), push = sper(0.0035) * (1 - dd/lim) * fr;
+          this.borderPushX += ddx/dd*push; this.borderPushY += ddy/dd*push;
+        }
+      }
+      // steering proporcional al error (antes era bang-bang ±fijo → overshoot y serpenteo)
+      const turn = clampN((this.moveAngle - this.ang) / 0.6, -1, 1);
+      this.angVel += turn * sper(TURN_RATE) * 1.5 * fr;
       this.turretAngVel += (this.aimAngle > this.turretAng ? sper(TURRET_RATE) : -sper(TURRET_RATE)) * fr;
       if (!this.playerLocked) this.turretAng = this.ang;
 
-      if (!this.inScreen && this.x < W-this.radius*2 && this.x > this.radius*2 && this.y < H-this.radius*2 && this.y > this.radius*2) this.inScreen = true;
+      // activación ("entró a la pelea"): cuando entra a la VISTA de la cámara — habilita disparar y el
+      // borderPush (la semántica original de inScreen, adaptada a cámara móvil)
+      if (!this.inScreen && this.x > camX + this.radius*2 && this.x < camX + W - this.radius*2 &&
+          this.y > camY + this.radius*2 && this.y < camY + H - this.radius*2) this.inScreen = true;
       if (this.inScreen) this.getBorderPush();
 
       if (this.shotAllowed()) this.fire();
@@ -1077,11 +1282,17 @@
         this.color = randColorInRange(75,150,75,150,200,255);
         this.drawRadius = rnd(this.radius*0.9, this.radius*1.1);
         if (this.teleportCD === 0) {
+          // reaparece en un anillo alrededor del player (teleportar a cualquier punto del mundo lo sacaba de la pelea)
           let tries = 0;
-          do { this.x = ri(0,W); this.y = ri(0,H); }
+          do {
+            const a = rnd(0, TAU), d = rnd(xper(0.22), xper(0.5));
+            this.x = clampN(player.x + Math.cos(a)*d, this.radius*2, WORLD_W - this.radius*2);
+            this.y = clampN(player.y + Math.sin(a)*d, this.radius*2, WORLD_H - this.radius*2);
+          }
           while (++tries < 40 && walls.some(w => rectCollision([this.x-this.radius,this.y-this.radius,this.radius*2,this.radius*2],[w.x,w.y,w.width,w.height])));
           this.ang = getAngle([this.x,this.y],[player.x,player.y]); this.turretAng = this.ang;
           if (this.body) Body.setPosition(this.body, { x:this.x, y:this.y });
+          burst(this.x, this.y, [120,160,255], 18, sper(0.3), 0.6);   // destello de rematerialización
           this.teleportCD = this.rageMode ? 5 : 20;
         }
       }
@@ -1143,7 +1354,8 @@
       this.preX = this.x; this.preY = this.y;
       this.x += Math.cos(this.ang)*this.vel*dt;
       this.y += Math.sin(this.ang)*this.vel*dt;
-      if (this.x > W+this.radius*4 || this.x < -this.radius*4 || this.y > H+this.radius*4 || this.y < -this.radius*4) toRemove.add(this);
+      // muere al alejarse mucho de la VISTA (margen ~3/4 de pantalla): no acumula balas por todo el mundo
+      if (!inView(this.x, this.y, W*0.75)) toRemove.add(this);
     }
     draw() {
       line(this.x-Math.cos(this.ang)*this.radius*2, this.y-Math.sin(this.ang)*this.radius*2, this.x, this.y, this.color, this.radius/2);
@@ -1168,8 +1380,9 @@
       this.lifeSpan -= dt; if (this.lifeSpan <= 0) toRemove.add(this);
 
       // Auto-apuntado por CONO: el misil sale en la dirección que lo lanzaron (turretAng) y busca, dentro de
-      // un cono MISSILE_CONE hacia adelante, el blanco de MAYOR importancia (scoreValue); a igual importancia,
-      // el más cercano. Si no hay nada en el cono, vuela derecho (no le pega a nada).
+      // un cono MISSILE_CONE hacia adelante, el blanco de MAYOR importancia (scoreValue × vida actual → prefiere
+      // blancos valiosos Y sanos; los moribundos los remata el cañón); a igual importancia, el más cercano.
+      // Si no hay nada en el cono, vuela derecho (no le pega a nada).
       const targets = this.isPlayerShot ? enemies : (player ? [player] : []);
       let best = null, bestImp = -Infinity, bestDist = Infinity;
       for (const t of targets) {
@@ -1177,7 +1390,7 @@
         da = mod(da + Math.PI, TAU) - Math.PI;                 // diferencia angular en [-PI, PI]
         if (Math.abs(da) > MISSILE_CONE) continue;             // fuera del cono → ignorar
         const d = Math.hypot(t.x-this.x, t.y-this.y);
-        const imp = t.scoreValue || 1;                         // "importancia" del blanco
+        const imp = (t.scoreValue || 1) * Math.max(t.health, 0);   // "importancia" del blanco: valor en score × vida
         if (imp > bestImp || (imp === bestImp && d < bestDist)) { best = t; bestImp = imp; bestDist = d; }
       }
       if (best) {                                              // hay blanco en el cono → girar hacia él
@@ -1192,6 +1405,14 @@
         this.color = (this.color === this.baseColor) ? this.glowColor : this.baseColor;
         this.colorTimer = 0;
       }
+      // estela de humo (1 partícula cada ~30ms, solo si se ve)
+      this.smokeCD = (this.smokeCD || 0) - dt;
+      if (this.smokeCD <= 0 && inView(this.x, this.y, 60)) {
+        spawnPart(this.x - Math.cos(this.ang)*this.radius*3, this.y - Math.sin(this.ang)*this.radius*3,
+                  rnd(-sper(0.01), sper(0.01)), rnd(-sper(0.01), sper(0.01)),
+                  rnd(0.3, 0.55), this.radius*0.8, [130,130,130], 0.94);
+        this.smokeCD = 0.03;
+      }
     }
     draw() {
       line(this.x-Math.cos(this.ang)*this.radius*4, this.y-Math.sin(this.ang)*this.radius*4, this.x, this.y, this.color, this.radius*2);
@@ -1203,16 +1424,19 @@
   class Wall {
     constructor(color) {
       this.color = color;
+      // tiers de tamaño para ~30-40 muros en el mundo grande: unos pocos BLOQUES enormes (landmarks),
+      // varios medianos, y el resto chicos (mismo espíritu que el 2/5 del original en la arena chica)
       const sz = walls.length;
-      this.width = rnd(sz<2?xper(0.15):sz<5?xper(0.1):xper(0.05), sz<2?xper(0.175):sz<5?xper(0.125):xper(0.075));
-      this.height = rnd(sz<2?yper(0.275):sz<5?yper(0.175):yper(0.1), sz<2?yper(0.3):sz<5?yper(0.225):yper(0.15));
+      this.width = rnd(sz<4?xper(0.2):sz<14?xper(0.1):xper(0.05), sz<4?xper(0.3):sz<14?xper(0.125):xper(0.075));
+      this.height = rnd(sz<4?yper(0.35):sz<14?yper(0.175):yper(0.1), sz<4?yper(0.5):sz<14?yper(0.225):yper(0.15));
       let tries = 0, ok = false;
       while (!ok && tries++ < 60) {
-        this.x = rnd(xper(0.025), W); this.y = rnd(yper(0.042), H);
+        this.x = rnd(xper(0.025), WORLD_W); this.y = rnd(yper(0.042), WORLD_H);
         ok = true;
-        if (this.x+this.width > W-xper(0.025) || this.y+this.height > H-yper(0.042)) { ok = false; continue; }
+        if (this.x+this.width > WORLD_W-xper(0.025) || this.y+this.height > WORLD_H-yper(0.042)) { ok = false; continue; }
         for (const w of walls) if (rectCollision([w.x,w.y,w.width,w.height],[this.x,this.y,this.width,this.height])) { ok = false; break; }
-        if (ok && player && rectCollision([player.x-player.radius,player.y-player.radius,player.radius*2,player.radius*2],[this.x,this.y,this.width,this.height])) ok = false;
+        // margen alrededor del player (que la arena nueva no le caiga encima ni lo encierre)
+        if (ok && player && rectCollision([player.x-player.radius*8,player.y-player.radius*8,player.radius*16,player.radius*16],[this.x,this.y,this.width,this.height])) ok = false;
       }
       // Cuerpo estático en matter (rect centrado). El bloqueo de tanques lo resuelve el solver.
       this.body = Bodies.rectangle(this.x+this.width/2, this.y+this.height/2, this.width, this.height, { isStatic: true });
@@ -1229,6 +1453,10 @@
       for (let i = 0; i < 2; i++) {
         rectFill(this.x+this.width/2*i/25, this.y+this.height/2*i/25, this.width-this.width*i/25, this.height-this.height*i/25, i%2===0?modifyColorPerc(this.color,0.8):this.color);
       }
+      // bevel (patrón CrazyTanks): highlight arriba/izquierda + contorno oscuro → bloques con volumen
+      line(this.x, this.y+1, this.x+this.width, this.y+1, modifyColorPerc(this.color,1.45), 2);
+      line(this.x+1, this.y, this.x+1, this.y+this.height, modifyColorPerc(this.color,1.25), 2);
+      rectFill(this.x+0.5, this.y+0.5, this.width-1, this.height-1, modifyColorPerc(this.color,0.45), 1.5);
     }
   }
 
@@ -1244,8 +1472,8 @@
       this.lifeSpan -= dt; if (this.lifeSpan <= 0) toRemove.add(this);
       this.x += Math.cos(this.ang)*this.vel*dt; this.y += Math.sin(this.ang)*this.vel*dt;
       this.vel = Math.max(this.vel - 50*dt, 0);
-      this.x = clampN(this.x, this.radius, W-this.radius);
-      this.y = clampN(this.y, this.radius, H-this.radius);
+      this.x = clampN(this.x, this.radius, WORLD_W-this.radius);
+      this.y = clampN(this.y, this.radius, WORLD_H-this.radius);
       if (this.lifeSpan < 5) this.blinkCD += dt;
       if (this.blinkCD > 0.2) this.blinkCD = 0;
     }
@@ -1276,10 +1504,13 @@
       this.lifeSpan = 30; this.health = 10; this.hitCD = 0; this.destroyed = false;
       const chance = Math.random();
       this.boxType = chance <= 0.1 ? 'power' : chance <= 0.3 ? 'firstAid' : 'coin';
-      // posición libre de muros y tanques
+      // posición CERCA del player (anillo 0.2-0.55×W: encontrable antes de que expire), libre de muros y tanques
+      const cx0 = player ? player.x : WORLD_W/2, cy0 = player ? player.y : WORLD_H/2;
       let tries = 0;
       do {
-        this.x = rnd(xper(0.1), W - xper(0.1)); this.y = rnd(yper(0.1), H - yper(0.1));
+        const a = rnd(0, TAU), d = rnd(xper(0.2), xper(0.55));
+        this.x = clampN(cx0 + Math.cos(a)*d, xper(0.05), WORLD_W - xper(0.05));
+        this.y = clampN(cy0 + Math.sin(a)*d, yper(0.05), WORLD_H - yper(0.05));
         var bad = walls.some(w => rectCollision([this.x-this.radius*1.5, this.y-this.radius*1.5, this.radius*3, this.radius*3], [w.x,w.y,w.width,w.height]))
                || tanks.some(t => rectCollision([this.x-this.radius*1.5, this.y-this.radius*1.5, this.radius*3, this.radius*3], [t.x-t.radius, t.y-t.radius, t.radius*2, t.radius*2]));
       } while (bad && ++tries < 30);
@@ -1298,9 +1529,11 @@
         }
       }
       if (this.health <= 0 && !this.destroyed) {
-        if (this.boxType === 'power' && player) { player.powerModeActiveTime = 30; player.secondaryShotCD = 0; }
-        else if (this.boxType === 'firstAid' && player) { player.health = Math.min(player.health + 0.33, 1); }
-        else if (this.boxType === 'coin') { for (let i = 0; i < ri(17,25); i++) new Coin(this.x, this.y, ri(20,40)); }
+        if (this.boxType === 'power' && player) { player.powerModeActiveTime = 30; player.secondaryShotCD = 0; popup(this.x, this.y, '¡POWER!', randColor(), sper(0.024)); }
+        else if (this.boxType === 'firstAid' && player) { player.health = Math.min(player.health + 0.33, 1); popup(this.x, this.y, '+VIDA', [100,255,0], sper(0.022)); }
+        else if (this.boxType === 'coin') { for (let i = 0; i < ri(17,25); i++) new Coin(this.x, this.y, ri(20,40)); popup(this.x, this.y, '$$$', [255,255,0], sper(0.022)); }
+        burst(this.x, this.y, this.boxType === 'power' ? randColor() : this.boxType === 'firstAid' ? [100,255,0] : [255,210,60], 16, sper(0.25), 0.7);
+        addShake(sper(0.004));
         this.destroyed = true; toRemove.add(this);
       }
       this.radius = this.lifeSpan * this.startRadius / 30 + (this.hitCD > 0 ? rnd(this.radius*0.25, this.radius*0.5) : 0);
@@ -1329,6 +1562,8 @@
   // ════════════════ MANAGER / OLEADAS ════════════════
   const manager = {
     waveTime: 0, waveNumber: 0, gameover: false, victory: false, scoreEffectCD: 0, shopOpen: false, lootBoxCD: 0, wallColor: [120,120,120],
+    menu: true, hardMode: false, colorSelected: 0, menuEffectCD: 0,   // estado del menú principal (elegir color + dificultad)
+    playerColors: [[0,0,80],[80,0,0],[0,80,0],[90,90,0],[0,70,90],[70,0,90],[80,80,80],[100,50,0]],   // paleta del original
     // Lista COMPLETA de 151 oleadas del original (TankWARS.py). Cada entrada: [tipo, cantidad, segundos].
     // Jefes a las 49/74/99/119/149 y FinalBoss a la 150. waveTime 3600 = "esperá a limpiar la oleada".
     waveList: [
@@ -1383,18 +1618,26 @@
       manager.lootBoxCD = Math.max(manager.lootBoxCD - dt, 0);
       if (manager.lootBoxCD === 0 && manager.waveTime < 100) {
         new LootBox();
-        manager.lootBoxCD = ri(30, 50);
+        manager.lootBoxCD = manager.hardMode ? ri(50, 70) : ri(30, 50);
       }
     },
     callWave(name, amount, waveTime) {
-      if (manager.waveNumber % 5 === 0) {     // cada 5 oleadas: arena nueva
+      if (manager.waveNumber % 5 === 0) {     // cada 5 oleadas: arena nueva (muros + deco del piso)
         clearWalls();
         manager.wallColor = randColorInRange(50,255,50,255,50,255);
-        for (let i = 0; i < ri(5,7); i++) new Wall(manager.wallColor);
+        for (let i = 0; i < ri(WALL_COUNT_LO, WALL_COUNT_HI); i++) new Wall(manager.wallColor);
+        genDeco();
       }
       manager.waveNumber = (manager.waveNumber + 1) % manager.waveList.length;
       manager.waveTime = waveTime;
-      const n = Math.max(Math.floor(amount*0.5), 1);   // modo NORMAL del original: mitad de enemigos (redondeo abajo, mín 1)
+      // banner de oleada (con aviso especial si es de jefe)
+      const isBoss = waveTime >= 3600;
+      manager.banner = {
+        text: 'OLEADA ' + (manager.waveNumber === 0 ? manager.waveList.length : manager.waveNumber),
+        sub: name === 'FinalBoss' ? '¡¡JEFE FINAL!!' : isBoss ? '¡JEFE!' : '',
+        t: 0,
+      };
+      const n = manager.hardMode ? amount : Math.max(Math.floor(amount*0.5), 1);   // Hardcore: cantidad full; Normal: la mitad (mín 1)
       for (let i = 0; i < n; i++) {
         if (enemies.length >= MAX_ENEMIES) break;
         new ENEMY_TYPES[name]();
@@ -1408,7 +1651,10 @@
   // Apuntado/disparo aparte: mouse en desktop, tocar la pantalla en mobile.
   // Boost/misil por botones. El joystick suma al teclado; el touch suma al mouse.
   const keys = new Set();
-  let aimX = W*0.7, aimY = H*0.5;                 // punto de mira (coords lógicas) — mouse o último toque
+  let aimX = W*0.7, aimY = H*0.5;                 // punto de mira en coords de MUNDO — mouse o último toque
+  let mouseSX = -1, mouseSY = -1;                 // último mouse en coords de PANTALLA: la mira se re-ancla a él
+                                                  // cada frame (si la cámara panea con el mouse quieto, el
+                                                  // crosshair queda bajo el cursor igual). -1 = modo touch.
   let mouseLeft = false, mouseRight = false;
   const canvasPointers = new Map();               // pointers táctiles sobre el canvas → disparan apuntando
   const btnState = { missile: false, boost: false };
@@ -1422,27 +1668,34 @@
     let my = (keys.has('s')||keys.has('arrowdown')?1:0)  - (keys.has('w')||keys.has('arrowup')?1:0)   + moveVec.y;
     const m = Math.hypot(mx, my);
     if (m > 1) { mx /= m; my /= m; }
+    // Mira en coords de MUNDO. Desktop: re-anclada al cursor cada frame (pantalla→mundo con la cámara
+    // actual). Touch: anclada al mundo y movida por la palanca, pero siempre clampeada a la VISTA para que
+    // el crosshair nunca se vaya de pantalla cuando la cámara panea.
+    if (mouseSX >= 0) { aimX = camX + mouseSX; aimY = camY + mouseSY; }
+    else { aimX = clampN(aimX, camX, camX + W); aimY = clampN(aimY, camY, camY + H); }
     // Palanca de puntería (mobile): mueve la MIRA SOBRE EL MAPA (no fija al tanque). Con ZONA MUERTA: cerca
-    // del centro no mueve; recién al pasar AIM_DEAD empieza, ramping de 0 a AIM_SPEED en los extremos. El
-    // crosshair y el seguimiento de torreta ya usan aimX/aimY.
+    // del centro no mueve; recién al pasar AIM_DEAD empieza, ramping de 0 a AIM_SPEED en los extremos.
     if (aimVec.active) {
       const am = Math.hypot(aimVec.x, aimVec.y);
       if (am > AIM_DEAD) {
         const k = (am - AIM_DEAD) / (1 - AIM_DEAD);          // 0..1 más allá de la zona muerta
         const sp = sper(AIM_SPEED) * k * dt;
-        aimX = clampN(aimX + (aimVec.x / am) * sp, 0, W);
-        aimY = clampN(aimY + (aimVec.y / am) * sp, 0, H);
+        aimX = clampN(aimX + (aimVec.x / am) * sp, camX, camX + W);
+        aimY = clampN(aimY + (aimVec.y / am) * sp, camY, camY + H);
       }
     }
     // IMÁN de puntería (mobile): vos acercás la mira al blanco que querés; cuando YA está cerca (dentro del
-    // radio de captura) el imán la engancha suave hacia él (no clavada). Enganchan ENEMIGOS y LOOTBOXES.
+    // radio de captura) el imán la engancha suave hacia él (no clavada). Enganchan ENEMIGOS y LOOTBOXES,
+    // pero solo los que están EN CÁMARA (no tiene sentido engancharse a blancos invisibles).
     if (IS_TOUCH && (enemies.length || lootBoxes.length)) {
       let bx = 0, by = 0, bd = Infinity;
       for (const e of enemies) {
+        if (!inView(e.x, e.y, 0)) continue;
         const d = getDistSq([aimX, aimY], [e.x, e.y]);
         if (d < bd) { bd = d; bx = e.x; by = e.y; }
       }
       for (const b of lootBoxes) {
+        if (!inView(b.x, b.y, 0)) continue;
         const d = getDistSq([aimX, aimY], [b.x, b.y]);
         if (d < bd) { bd = d; bx = b.x; by = b.y; }
       }
@@ -1478,24 +1731,34 @@
   }
   canvas.addEventListener('contextmenu', e => e.preventDefault());
   canvas.addEventListener('pointerdown', e => {
+    if (manager.gameover || manager.victory) { showMenu(); return; }   // tras derrota/victoria, un toque vuelve al menú
     tryAutoFs(e);
     const [px,py] = logicalPos(e);
     if (e.pointerType === 'mouse') {
-      aimX = px; aimY = py;
-      if (e.button === 0) mouseLeft = true;
-      if (e.button === 2) mouseRight = true;
+      mouseSX = px; mouseSY = py; aimX = camX + px; aimY = camY + py;
+      // Estado de botones desde el bitmask e.buttons (bit 0 = izq, bit 1 = der). Apretar un botón con OTRO ya
+      // sostenido NO dispara pointerdown (llega como pointermove con buttons actualizado), así que el bitmask
+      // se relee también en move/up → podés tirar el misil (click der) sin soltar el cañón (click izq).
+      mouseLeft = (e.buttons & 1) !== 0;
+      mouseRight = (e.buttons & 2) !== 0;
     } else {
       canvas.setPointerCapture(e.pointerId);
-      canvasPointers.set(e.pointerId, [px,py]); aimX = px; aimY = py;
+      canvasPointers.set(e.pointerId, [px,py]);
+      mouseSX = -1;                                   // tocar = modo touch (la mira deja de seguir al mouse)
+      aimX = camX + px; aimY = camY + py;
     }
   });
   canvas.addEventListener('pointermove', e => {
     const [px,py] = logicalPos(e);
-    if (e.pointerType === 'mouse') { aimX = px; aimY = py; }
-    else if (canvasPointers.has(e.pointerId)) { canvasPointers.set(e.pointerId, [px,py]); aimX = px; aimY = py; }
+    if (e.pointerType === 'mouse') {
+      mouseSX = px; mouseSY = py; aimX = camX + px; aimY = camY + py;
+      mouseLeft = (e.buttons & 1) !== 0;   // los cambios de botón con otro botón sostenido llegan acá (chord)
+      mouseRight = (e.buttons & 2) !== 0;
+    }
+    else if (canvasPointers.has(e.pointerId)) { canvasPointers.set(e.pointerId, [px,py]); aimX = camX + px; aimY = camY + py; }
   });
   function endPointer(e) {
-    if (e.pointerType === 'mouse') { if (e.button === 0) mouseLeft = false; if (e.button === 2) mouseRight = false; }
+    if (e.pointerType === 'mouse') { mouseLeft = (e.buttons & 1) !== 0; mouseRight = (e.buttons & 2) !== 0; }
     else canvasPointers.delete(e.pointerId);
   }
   canvas.addEventListener('pointerup', endPointer);
@@ -1513,7 +1776,7 @@
   }
   holdBtn('btnMissile', 'missile');
   holdBtn('btnBoost', 'boost');
-  document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); startGame(); });
+  document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); showMenu(); });   // ↻ = volver al menú
 
   // ════════════════ TIENDA / MEJORAS (port del shop del Pygame) ════════════════
   // 8 upgrades. Cada compra: si alcanza la plata y el nivel ≤ 10, descuenta, aplica el stat, y la próxima
@@ -1591,11 +1854,61 @@
     btnShop.classList.toggle('on', open);
     if (open) updateShop();
   }
-  btnShop.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); toggleShop(!manager.shopOpen); });
+  btnShop.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (!manager.menu) toggleShop(!manager.shopOpen); });
   // Desktop: TAB abre/cierra la tienda (como el original).
-  addEventListener('keydown', e => { if (e.key === 'Tab') { e.preventDefault(); toggleShop(!manager.shopOpen); } });
+  addEventListener('keydown', e => { if (e.key === 'Tab') { e.preventDefault(); if (!manager.menu) toggleShop(!manager.shopOpen); } });
   // El cableado del overlay de info (#infoPanel) se hace en el <script> del final, porque ese div se declara
   // después de este bloque y acá document.getElementById('infoPanel') daría null.
+
+  // ════════════════ MENÚ PRINCIPAL (port del menú del Pygame) ════════════════
+  // Overlay con: elegir color de tanque (8 colores), alternar dificultad (Normal/Hardcore) y JUGAR.
+  // El juego arranca en este estado (manager.menu=true); JUGAR llama startGame(); ↻/derrota/victoria vuelven acá.
+  const menuPanel = document.getElementById('menuPanel');
+  let menuBuilt = false; const swatchEls = [];
+  function buildMenu() {
+    const card = document.createElement('div'); card.className = 'menuCard';
+    const title = document.createElement('div'); title.className = 'menuTitle'; title.textContent = 'TANKWARS'; card.appendChild(title);
+    const sub = document.createElement('div'); sub.className = 'menuSub'; sub.textContent = 'Color del tanque'; card.appendChild(sub);
+    const colors = document.createElement('div'); colors.className = 'menuColors';
+    manager.playerColors.forEach((col, i) => {
+      const b = document.createElement('button'); b.className = 'swatch';
+      b.style.background = rgb(modifyColorPerc(col, 2.5));   // base oscuro → lo aclaramos para que se vea el color
+      b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); manager.colorSelected = i; updateMenu(); });
+      swatchEls.push(b); colors.appendChild(b);
+    });
+    card.appendChild(colors);
+    const diff = document.createElement('button'); diff.className = 'menuDiff'; diff.id = 'menuDiff';
+    diff.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); manager.hardMode = !manager.hardMode; updateMenu(); });
+    card.appendChild(diff);
+    const play = document.createElement('button'); play.className = 'menuPlay'; play.textContent = 'JUGAR ▶';
+    play.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); startGame(); });
+    card.appendChild(play);
+    const hint = document.createElement('div'); hint.className = 'menuHint'; hint.id = 'menuHint'; card.appendChild(hint);
+    menuPanel.appendChild(card);
+    menuBuilt = true;
+  }
+  function updateMenu() {
+    if (!menuBuilt) buildMenu();
+    swatchEls.forEach((el, i) => el.classList.toggle('sel', i === manager.colorSelected));
+    const diff = document.getElementById('menuDiff');
+    diff.textContent = 'Dificultad: ' + (manager.hardMode ? 'Hardcore' : 'Normal');
+    diff.classList.toggle('hard', manager.hardMode);
+    document.getElementById('menuHint').textContent = IS_TOUCH
+      ? 'Palanca izq mueve · palanca der apunta y dispara · 🚀 misil · ⚡ boost · 🛒 tienda'
+      : 'WASD mover · Mouse apuntar/disparar · Click der misil · Shift boost · TAB tienda';
+  }
+  function showMenu() {
+    manager.menu = true; manager.gameover = false; manager.victory = false; manager.menuEffectCD = 0;
+    Composite.clear(world, false); physAcc = 0;
+    tanks = []; enemies = []; shots = []; coins = []; walls = []; explosions = []; lootBoxes = [];
+    toRemove.clear(); player = null;
+    camX = (WORLD_W - W)/2; camY = (WORLD_H - H)/2; camShake = 0;   // cámara quieta al centro del mundo
+    parts.length = 0; popups.length = 0; manager.banner = null;
+    if (typeof toggleShop === 'function') toggleShop(false);
+    updateMenu();
+    menuPanel.classList.add('show');
+    document.body.classList.add('inMenu');
+  }
 
   // Debug HUD: tecla ` (backtick) — herramienta de dev, ya no ocupa un botón.
   let showDebug = false;
@@ -1663,7 +1976,7 @@
     });
     createJoystick(document.getElementById('jAim'), {
       target: aimVec, activeDead: 0, rgb: '255,90,60', knobRgb: '255,170,150', knobBorderRgb: '255,180,160',
-      onStart: () => { aimDown = true;  if (restAim) restAim.style.display = 'none'; },
+      onStart: () => { aimDown = true; mouseSX = -1; if (restAim) restAim.style.display = 'none'; },   // la palanca suelta el anclaje al mouse
       onEnd:   () => { aimDown = false; if (restAim) restAim.style.display = '';     },
     });
   }
@@ -1725,8 +2038,40 @@
   //  #infoControls vive dentro de #infoPanel, declarado después de este bloque.)
 
   // ════════════════ HUD ════════════════
-  function drawHUD() {
+  // ── MINIMAPA (esquina sup-der, debajo de los botones): muros, enemigos, lootboxes, player y el RECT de
+  // lo que ve la cámara — en mundo abierto es el radar que te dice de dónde vienen (patrón CrazyTanks/Snake).
+  function drawMinimap() {
+    const mmW = xper(0.135), mmH = mmW * WORLD_H / WORLD_W;
+    const mmX = W - mmW - xper(0.012), mmY = yper(0.17);
+    const sc = mmW / WORLD_W;
+    ctx.globalAlpha = 0.55; rectFill(mmX, mmY, mmW, mmH, [8,10,14]); ctx.globalAlpha = 1;
+    ctx.globalAlpha = 0.6;
+    for (const w of walls) rectFill(mmX + w.x*sc, mmY + w.y*sc, Math.max(1, w.width*sc), Math.max(1, w.height*sc), modifyColorPerc(manager.wallColor, 1.2));
+    ctx.globalAlpha = 0.5;
+    rectFill(mmX + camX*sc, mmY + camY*sc, W*sc, H*sc, [255,255,255], 1);      // lo que ve la cámara
+    ctx.globalAlpha = 1;
+    for (const b of lootBoxes) if (Math.sin(T*6) > -0.3) circle(mmX + b.x*sc, mmY + b.y*sc, 2.2, [255,210,60]);   // titilan
+    for (const e of enemies) circle(mmX + e.x*sc, mmY + e.y*sc, e.scoreValue >= 1000 ? 3.2 : 2, [255,70,60]);     // jefes más grandes
     if (player) {
+      circle(mmX + player.x*sc, mmY + player.y*sc, 2.6, [255,255,255]);
+      circle(mmX + player.x*sc, mmY + player.y*sc, 4 + 1.5*Math.abs(Math.sin(T*4)), [255,255,255], 1.2);  // anillo pulsante
+    }
+    // marco doble: glow ancho translúcido + línea fina (glow barato, sin shadowBlur)
+    ctx.globalAlpha = 0.3; rectFill(mmX, mmY, mmW, mmH, modifyColorPerc(manager.wallColor, 1.6), 4); ctx.globalAlpha = 1;
+    rectFill(mmX, mmY, mmW, mmH, modifyColorPerc(manager.wallColor, 2.2), 1.5);
+  }
+
+  function drawHUD() {
+    // viñeta (oscurece bordes, profundidad) — debajo de todo el HUD
+    ctx.fillStyle = vigDark; ctx.fillRect(0, 0, W, H);
+    if (player) {
+      // viñeta ROJA pulsante con vida baja (se lee de reojo sin mirar la barra)
+      if (player.health < 0.35) {
+        const u = (0.35 - player.health) / 0.35;
+        ctx.globalAlpha = u * (0.3 + 0.18*Math.sin(T*6));
+        ctx.fillStyle = vigRed; ctx.fillRect(0, 0, W, H);
+        ctx.globalAlpha = 1;
+      }
       const maxCharge = player.shieldCapacity + player.shieldAugment;
       const charge = (player.shieldCharge/maxCharge) * (Math.abs(player.shieldCD-10)/10);
       const hc = player.hitCD > 0 ? [255,255,255] : player.health < 0.25 ? [ri(175,225),0,0]
@@ -1772,22 +2117,45 @@
         }
       }
 
-      // crosshair en el punto de mira (mouse en desktop, último toque en mobile)
+      // crosshair en el punto de mira (la mira vive en coords de MUNDO → restar la cámara)
+      const ax = aimX - camX, ay = aimY - camY;
       const recoil = Math.max(player.primaryShotCD*150/player.primaryShotAS*0.01, 1);
       const cc = (player.powerModeActiveTime <= 0 && (player.secondaryShotCD > 0 || player.missileStack <= 0)) ? [75,75,75] : modifyColorPerc(player.color,3);
-      circle(aimX, aimY, sper(0.0075)*recoil, cc, sper(0.01)/5);
-      line(aimX-sper(0.0095)*recoil, aimY, aimX+sper(0.009)*recoil, aimY, cc, sper(0.01)/5);
-      line(aimX, aimY-sper(0.0095)*recoil, aimX, aimY+sper(0.009)*recoil, cc, sper(0.01)/5);
+      circle(ax, ay, sper(0.0075)*recoil, cc, sper(0.01)/5);
+      line(ax-sper(0.0095)*recoil, ay, ax+sper(0.009)*recoil, ay, cc, sper(0.01)/5);
+      line(ax, ay-sper(0.0095)*recoil, ax, ay+sper(0.009)*recoil, cc, sper(0.01)/5);
+
+      drawMinimap();
+    }
+
+    // banner de oleada: entra deslizándose, se sostiene y se va (con aviso pulsante si es de jefe)
+    if (manager.banner) {
+      const b = manager.banner;
+      if (!manager.shopOpen && !manager.menu) b.t += dt;
+      if (b.t > 2.6) manager.banner = null;
+      else {
+        const inT = Math.min(1, b.t/0.25), outT = clampN((2.6 - b.t)/0.35, 0, 1);
+        ctx.globalAlpha = Math.min(inT, outT);
+        const yy = H*0.15 - (1-inT)*H*0.05;
+        text(b.text, [0,0,0], W/2 + 2, yy + 2, sper(0.05), 'center');
+        text(b.text, [255,255,255], W/2, yy, sper(0.05), 'center');
+        if (b.sub) {
+          const pc = 150 + 105*Math.abs(Math.sin(T*6));
+          text(b.sub, [0,0,0], W/2 + 2, yy + sper(0.05) + 2, sper(0.034), 'center');
+          text(b.sub, [pc, 30, 20], W/2, yy + sper(0.05), sper(0.034), 'center');
+        }
+        ctx.globalAlpha = 1;
+      }
     }
 
     if (manager.victory) {
       text('¡VICTORIA!', [255,255,255], W/2, H*0.45, sper(0.09), 'center');
       text('Score: ' + lastScore, [255,255,0], W/2, H*0.55, sper(0.045), 'center');
-      text('Reiniciar ↻', [200,200,200], W/2, H*0.62, sper(0.025), 'center');
+      text('Tocá para volver al menú', [200,200,200], W/2, H*0.62, sper(0.025), 'center');
     } else if (manager.gameover) {
       text('GAME OVER', [255,255,255], W/2, H*0.45, sper(0.09), 'center');
       text('Score: ' + lastScore, [255,255,0], W/2, H*0.55, sper(0.045), 'center');
-      text('Reiniciar ↻', [200,200,200], W/2, H*0.62, sper(0.025), 'center');
+      text('Tocá para volver al menú', [200,200,200], W/2, H*0.62, sper(0.025), 'center');
     }
   }
 
@@ -1797,6 +2165,8 @@
       'Tanks: ' + tanks.length,
       'Enemies: ' + enemies.length,
       'Shots: ' + shots.length,
+      'Parts: ' + parts.length,
+      'Cam: ' + Math.round(camX) + ',' + Math.round(camY),
       'Wave: ' + manager.waveNumber,
       'WaveT: ' + Math.round(manager.waveTime),
     ];
@@ -1812,18 +2182,35 @@
     tanks = []; enemies = []; shots = []; coins = []; walls = []; explosions = []; lootBoxes = [];
     toRemove.clear();
     manager.waveTime = 0; manager.waveNumber = 0; manager.gameover = false; manager.victory = false; manager.scoreEffectCD = 0; manager.lootBoxCD = 0;
+    manager.menu = false;                                      // salir del menú
+    if (typeof menuPanel !== 'undefined') menuPanel.classList.remove('show');
+    document.body.classList.remove('inMenu');
     if (typeof toggleShop === 'function') toggleShop(false);   // cerrar tienda si estaba abierta
     resetShop();                                               // costos/niveles de mejoras a base
     player = null;
     new Player();
     manager.wallColor = randColorInRange(50,255,50,255,50,255);
-    for (let i = 0; i < ri(5,7); i++) new Wall(manager.wallColor);
+    for (let i = 0; i < ri(WALL_COUNT_LO, WALL_COUNT_HI); i++) new Wall(manager.wallColor);
+    genDeco();
+    // cámara: snap directo al player (sin lerp de entrada) + mira delante del tanque
+    camX = clampN(player.x - W/2, 0, WORLD_W - W);
+    camY = clampN(player.y - H/2, 0, WORLD_H - H);
+    camShake = 0;
+    aimX = player.x + xper(0.15); aimY = player.y;
+    parts.length = 0; popups.length = 0; manager.banner = null;
   }
 
   function purge() {
     if (toRemove.size === 0) return;
     for (const s of toRemove) {
-      if (tanks.includes(s)) { tanks.splice(tanks.indexOf(s),1); if (s.body) World.remove(world, s.body); new Explosion(s.x,s.y,s.radius); }
+      if (tanks.includes(s)) {
+        tanks.splice(tanks.indexOf(s),1); if (s.body) World.remove(world, s.body);
+        new Explosion(s.x,s.y,s.radius);
+        if (inView(s.x, s.y, 100)) {   // restos del tanque volando + sacudón (más grande = más fuerte)
+          burst(s.x, s.y, modifyColorPerc(s.color, 2), 22, sper(0.3), 0.8, sper(0.005));
+          addShake(Math.min(sper(0.01), s.radius * 0.35));
+        }
+      }
       if (enemies.includes(s)) enemies.splice(enemies.indexOf(s),1);
       if (shots.includes(s)) { shots.splice(shots.indexOf(s),1); new Explosion(s.x,s.y,s.missile?s.radius*2:s.radius/2); }
       if (coins.includes(s)) coins.splice(coins.indexOf(s),1);
@@ -1853,14 +2240,37 @@
 
     background = walls.length ? modifyColorPerc(manager.wallColor,0.2) : randColorGray(0,5);
     if (player) lastScore = player.score;
+    T += dt;   // reloj visual (pulsos de minimapa/banner)
 
-    // Transform a coords lógicas 1280×720, estirado para llenar la pantalla (landscape). Se setea ANTES
-    // del update porque el escudo se dibuja durante process() (igual que el original) y si no lo borraría.
+    // ── CÁMARA: sigue al player con lerp + LOOKAHEAD hacia la mira (anticipa lo que apuntás) ──
+    if (player) {
+      const lax = clampN(aimX - player.x, -xper(0.35), xper(0.35)) * CAM_LOOKAHEAD;
+      const lay = clampN(aimY - player.y, -yper(0.35), yper(0.35)) * CAM_LOOKAHEAD;
+      const tx = clampN(player.x + lax - W/2, 0, WORLD_W - W);
+      const ty = clampN(player.y + lay - H/2, 0, WORLD_H - H);
+      const k = 1 - Math.pow(1 - CAM_LERP, fr);
+      camX += (tx - camX) * k; camY += (ty - camY) * k;
+    }
+    camShake *= Math.pow(0.82, fr); if (camShake < 0.05) camShake = 0;
+    const shX = camShake ? rnd(-camShake, camShake) : 0, shY = camShake ? rnd(-camShake, camShake) : 0;
+
+    // Transform: pantalla → fondo "afuera del mundo" más oscuro; después translate de cámara (+shake) →
+    // coords de MUNDO. Queda puesto ANTES del update porque el escudo se dibuja durante process() (igual
+    // que el original) y si no lo borraría.
     ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, 0, 0);
-    ctx.fillStyle = rgb(background); ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = rgb(modifyColorPerc(background, 0.45)); ctx.fillRect(0,0,W,H);
+    ctx.translate(-camX + shX, -camY + shY);
+    rectFill(0, 0, WORLD_W, WORLD_H, background);   // piso del mundo
+    drawBackdrop();                                  // grilla + deco + borde del mundo
 
-    // update — se PAUSA mientras la tienda está abierta (como el original con TAB).
-    if (!manager.shopOpen) {
+    // update. En el MENÚ sólo corren explosiones de fondo (flair); el juego no procesa. Con la tienda abierta
+    // se pausa todo (como el original con TAB).
+    if (manager.menu) {
+      manager.menuEffectCD -= dt;
+      if (manager.menuEffectCD <= 0) { new Explosion(camX + rnd(0,W), camY + rnd(0,H), rnd(sper(0.0064), sper(0.0128))); manager.menuEffectCD = 0.05; }
+      for (const e of explosions) e.process();
+      purge();
+    } else if (!manager.shopOpen) {
       manager.process();
       for (const w of walls) w.process();
       // Control hand-rolled de cada tanque (setea la velocidad de su cuerpo de matter)…
@@ -1873,17 +2283,24 @@
       for (const c of coins) c.process();
       for (const b of lootBoxes) b.process();
       for (const e of explosions) e.process();
+      updateParts(); updatePopups();
       if (!player && !manager.gameover) new Player();
       purge();
     }
 
-    // draw
-    for (const c of coins) c.draw();
-    for (const w of walls) w.draw();
-    for (const b of lootBoxes) b.draw();
-    for (const t of tanks) t.draw();
-    for (const s of shots) s.draw();
-    for (const e of explosions) e.draw();
+    // draw (coords de mundo, culleado a la vista — con mundo 6× hay mucho fuera de cámara)
+    const camRect = [camX - 60, camY - 60, W + 120, H + 120];
+    for (const w of walls) if (rectCollision(camRect, [w.x, w.y, w.width, w.height])) w.draw();
+    for (const b of lootBoxes) if (inView(b.x, b.y, b.radius*4)) b.draw();
+    for (const t of tanks) if (t.isPlayer || inView(t.x, t.y, t.radius*5)) t.draw();
+    for (const s of shots) if (inView(s.x, s.y, s.radius*12)) s.draw();
+    for (const e of explosions) if (inView(e.x, e.y, e.radius + 80)) e.draw();
+    drawParts();
+    for (const c of coins) if (inView(c.x, c.y, c.radius*4)) c.draw();   // monedas ENCIMA de todo (solo HUD las tapa)
+    drawPopups();
+
+    // HUD en coords de PANTALLA (sin cámara ni shake)
+    ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, 0, 0);
     drawHUD();
     if (showDebug) drawDebugHUD();
 
@@ -1893,7 +2310,7 @@
   // ── INIT ──
   resize();
   setupJoysticks();
-  startGame();
+  showMenu();        // arranca en el menú principal (elegir color + dificultad, luego JUGAR)
   loop();
 
   const hint = document.getElementById('hint');
