@@ -251,7 +251,8 @@
   const PLAYER_MAX_HP = 100, PLAYER_DMG = 22;                                      // vida y daño del jugador
   const ENEMY_DMG = 14;                                                           // daño base de las enemigas (la vida escala con su tamaño)
   const ATTACK_CD = 1.0;                                                           // cooldown entre ataques (s)
-  const ATTACK_RANGE_F = 0.13, ATTACK_COS = Math.cos(1.15);                        // alcance del cono (× sper) y coseno del semiángulo (~66°, más permisivo)
+  const ATTACK_ANG = 0.55;                                                         // SEMIÁNGULO del cono de ataque (rad ~31°): hay que apuntar BASTANTE de frente al rival para dashear (antes ~66°, disparaba de costado)
+  const ATTACK_RANGE_F = 0.13, ATTACK_COS = Math.cos(ATTACK_ANG);                  // alcance del cono (× sper) y coseno del semiángulo
   const LUNGE_WIND = 0.25, WIND_SPEED_F = 0.88;                                    // RETRACCIÓN: la serpiente se recoge antes de embestir (joroba twin-smoothstep, se ve sin tirón)
   const LUNGE_TIME = 0.28, LUNGE_SPEED_F = 1.9;                                    // EMBESTIDA: duración y velocidad pico (× sper); curva C1 → avance NETO ~+85px hacia el rival (con la retracción de ~-153px)
   const STRIKE_PEAK = 0.76;                                                        // dónde (0..1) cae el PICO de la embestida: 0.30 = arranque rápido/snap; 0.5 = simétrico. NO cambia el alcance neto (sólo el carácter del golpe)
@@ -277,6 +278,8 @@
   //    mejoras (stats base + alguna pasiva). El umbral crece por nivel. ──
   const XP_KILL = 10, XP_EAT = 1;                                                  // XP por matar una enemiga / por comer una estrella
   const XP_BASE = 16, XP_GROWTH = 1.4;                                             // XP del nivel 1 y factor de crecimiento por nivel
+  const HIT_SCORE = 1;                                                             // puntos por punto de daño que hacés (pegar suma score)
+  const KILL_SCORE = 150;                                                          // bonus de score al matar una enemiga (+ su vida máxima → las grandes valen más)
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
@@ -545,9 +548,14 @@
         // girar hacia targetAng por el camino corto, clavando cuando ya está alineada
         let diff = this.targetAng - this.ang;
         diff = ((diff + Math.PI) % TAU + TAU) % TAU - Math.PI;
-        const step = this.angVel * deltaT;
-        const lungeActive = manager.lungeT > 0 && manager.lungeT <= LUNGE_TIME;   // en pleno golpe: NO gira (se compromete al vector del dash → sin curl)
-        if (!lungeActive) this.ang += Math.abs(diff) <= step ? diff : Math.sign(diff) * step;
+        let step = this.angVel * deltaT;
+        const lungeActive = manager.lungeT > 0 && manager.lungeT <= LUNGE_TIME;
+        if (lungeActive) {                                                        // en pleno golpe: ENCARAR el dash (la cabeza mira hacia donde embiste → head-on, no de costado)
+          diff = Math.atan2(manager.lungeY, manager.lungeX) - this.ang;
+          diff = ((diff + Math.PI) % TAU + TAU) % TAU - Math.PI;
+          step = this.angVel * 4 * deltaT;                                        // gira rápido para encarar el golpe
+        }
+        this.ang += Math.abs(diff) <= step ? diff : Math.sign(diff) * step;
         this.ang = ((this.ang % TAU) + TAU) % TAU;
         // caballito: ×SPEED_BOOST_MULT la base, pero el multiplicador entra (y sale) en RAMPA rápida, no de golpe
         let sb = 1;
@@ -1317,8 +1325,9 @@
       // girar hacia targetAng por el camino corto. angVel limitado por el radio de giro mínimo (vel/(r·turnR))
       let diff = this.targetAng - this.ang; diff = ((diff + Math.PI) % TAU + TAU) % TAU - Math.PI;
       const stepMax = (this.vel / (r * this.turnR)) * deltaT;
-      const lungeActive = this.lungeT > 0 && this.lungeT <= LUNGE_TIME, lf = lungeLoco(this.lungeT); // en pleno golpe: commit (no gira, locomoción amortiguada)
-      if (!lungeActive) this.ang += Math.abs(diff) <= stepMax ? diff : Math.sign(diff)*stepMax;
+      const lungeActive = this.lungeT > 0 && this.lungeT <= LUNGE_TIME, lf = lungeLoco(this.lungeT); // en pleno golpe: ENCARAR el dash (mira hacia donde embiste) + locomoción amortiguada
+      if (lungeActive) { let la = Math.atan2(this.lungeY, this.lungeX) - this.ang; la = ((la + Math.PI) % TAU + TAU) % TAU - Math.PI; const ls = stepMax * 4; this.ang += Math.abs(la) <= ls ? la : Math.sign(la)*ls; }
+      else this.ang += Math.abs(diff) <= stepMax ? diff : Math.sign(diff)*stepMax;
       head.x += Math.cos(this.ang)*this.vel*this.chase*deltaT*lf; head.y += Math.sin(this.ang)*this.vel*this.chase*deltaT*lf; head.ang = this.ang;
       if (this.lungeT > 0) {                                                      // ataque: RETRACCIÓN → EMBESTIDA; el daño SÓLO si CONECTA (hit-test)
         const v = lungeVel(this.lungeT);
@@ -1367,6 +1376,26 @@
       const flash = this.hurt > 0 ? this.hurt/HAZARD_FLASH_TIME : 0;
       const hue = flash > 0 ? 0 : this.hue, light = 52 + flash*20;
       const sheen = `hsla(${hue},100%,82%,0.5)`;
+      // GLOW acuático (mismo look translúcido/luminoso que el jugador, en SU color): un solo trazo aditivo a lo
+      // largo del cuerpo, DEBAJO de los segmentos. Decimado en cuerpos largos + culling por vista (barato).
+      if (n > 1) {
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        const stepG = n > 120 ? 2 : 1;
+        ctx.beginPath();
+        let pen = false;
+        for (let i = 0; i < n; i += stepG) {
+          const p = this.pieces[i];
+          let x = p.x, y = p.y;
+          if (i > 0) { const off = Math.sin(waveClock*WIG_SPEED - i*WIG_DENSITY + this.wavePhase) * (r0*WIG_AMP*Math.min(1, i/4)); x += -Math.sin(p.ang)*off; y += Math.cos(p.ang)*off; }
+          if (inView(x, y)) { if (!pen) { ctx.moveTo(x, y); pen = true; } else ctx.lineTo(x, y); }
+          else if (pen) { ctx.lineTo(x, y); pen = false; }
+        }
+        ctx.strokeStyle = `hsla(${hue},100%,60%,0.16)`;
+        ctx.lineWidth = r0 * 2.7;
+        ctx.stroke();
+        ctx.globalCompositeOperation = 'source-over';
+      }
       // cuerpo cola→cabeza, con APÉNDICES marinos (aletas / cresta / cola) + ondulación + pulso, igual que el jugador
       for (let i = n - 1; i >= 0; i--) {
         const p = this.pieces[i];
@@ -1501,12 +1530,13 @@
       this.choosing = false; this.pause = false;
       if (this.xp >= this.xpNeed) this.startLevelUp();                            // encadena si juntaste varios niveles de un saque
     }
-    hitEnemy(e, dmg, fromAng) {                                                   // el JUGADOR le pega a una enemiga (único camino → otorga XP al matar)
+    hitEnemy(e, dmg, fromAng) {                                                   // el JUGADOR le pega a una enemiga (único camino → otorga XP y SCORE)
       if (!e || e.dead) return;
       e.hp -= dmg; e.hurt = HAZARD_FLASH_TIME; if (e.pieces[0]) e.pieces[0].wt = WAVE_TOTAL;
       e.shedChunk(fromAng, Math.max(1, Math.min(CHUNK_MAX, Math.round(dmg/CHUNK_DMG_PER))));
+      this.score += Math.round(dmg * HIT_SCORE);                                 // PEGAR da puntos
       if (this.lifesteal > 0) this.healQueue += dmg * this.lifesteal;            // "Sanguijuela"
-      if (e.hp <= 0) { e.die(); this.addXP(XP_KILL); }
+      if (e.hp <= 0) { this.score += KILL_SCORE + Math.round(e.maxHp); e.die(); this.addXP(XP_KILL); } // MATAR da bonus
     }
     hurtPlayer(dmg, fromAng, attacker) {                                          // una enemiga (o mina) le pega al jugador
       if (this.immunity > 0 || this.gameOver) return;                            // escudo bloquea
@@ -1610,7 +1640,7 @@
       this.hp = Math.min(this.maxHp, this.hp + HP_REGEN*this.regenMul*deltaT);    // regen (mejora "Regeneración")
       const accel = this.boosting || this.speedBoost > 0;
       if (accel && this.attackCD <= 0 && snake[0]) {
-        const h = snake[0], range = sper(ATTACK_RANGE_F)*this.atkRangeMul, cos = Math.cos(1.15 + this.atkConeBonus);
+        const h = snake[0], range = sper(ATTACK_RANGE_F)*this.atkRangeMul, cos = Math.cos(ATTACK_ANG + this.atkConeBonus);
         let best = null, bd = Infinity;
         for (const e of enemies) {
           const eh = e.pieces[0], dx = eh.x-h.x, dy = eh.y-h.y, d2 = dx*dx+dy*dy;

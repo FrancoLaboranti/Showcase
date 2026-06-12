@@ -165,8 +165,17 @@
   // layout (recalculado en resize y al cambiar la cantidad de bolas)
   let radio = 30, L = 450, origY = 150, centerX = 0;
   let frameLeft = 0, frameRight = 0, frameTop = 0, baseY = 0, k = 1;
+  // Escala de la ESCENA (ventana, luna, horizonte, planta): depende SÓLO de W/H, NO de la cantidad de
+  // bolas. Así, al agregar/quitar bolas, sólo cambian la cuna y el tamaño de la mesa — el fondo queda fijo.
+  let sceneR = 30, sceneK = 1;
   let tableTop = 0;             // y de la superficie del mueble donde se apoya la base del péndulo
-  let sceneDay = null, sceneNight = null;   // habitación pre-renderizada en sus dos estados (se rearman sólo en resize)
+  let tableLeft = 0;            // x donde EMPIEZA la mesa (sale por la derecha; la cuna queda cerca de este borde)
+  let sceneDay = null, sceneNight = null;   // FONDO (pared+ventana+biblioteca+penumbra) — detrás de la planta
+  let plantDay = null, plantNight = null;   // PLANTA sola (capa propia para poder animarla con un vaivén)
+  let frontDay = null, frontNight = null;   // MESA (canto + sombra de contacto) — delante de la planta
+  let godRaysDay = null, godRaysNight = null; // rayos de luz del ventanal (bakeados, blit con alpha animado)
+  let frameLayer = null;        // marco del péndulo (arco + base + collares) bakeado — estático entre layouts
+  let ballSprite = null, ballSpriteHalf = 0; // esfera metálica bakeada una vez por layout (mismo radio todas)
   let vignette = null;          // gradiente de viñeteado (oscurece bordes; da profundidad de "plano de cerca")
   let nightFactor = 0;          // 0 = día, 1 = noche (transiciona en bucle, independiente del péndulo)
   let sceneClock = 0;           // ms acumulados para el ciclo día/noche
@@ -195,15 +204,18 @@
   const STRING_K   = 9.0;         // largo del hilo, en radios (hilos largos ⇒ bolas más chicas, como la foto)
   function layout() {
     centerX = W / 2;
-    // Plano de cerca: la base del péndulo se apoya sobre el borde de la mesa, bien abajo (a ~82% del
-    // alto), así abajo sólo se ve el CANTO de la mesa y arriba entra una ventana grande. Crece hacia arriba.
-    tableTop = H * 0.82;
-    const topMargin = H * 0.06;                                                    // aire arriba para el hint
+    // Plano de cerca: la base del péndulo se apoya sobre el CANTO de la mesa (a ~74% del alto). Arriba
+    // entra una ventana grande; debajo del canto fino, todo a oscuras. Crece hacia arriba.
+    tableTop = H * 0.74;
+    const topMargin = H * 0.05;                                                    // aire arriba para el hint
     const divH = STRING_K + 0.15 + 1.1 + BASE_THK_K;                               // alto del aparato / radio
     const rW = (0.50 * W) / (2 * (nroBalls - 1) + 2 * INSET_K);
     const rH = (tableTop - topMargin) / divH;
     radio = Math.max(6, Math.min(rW, rH));
     k = radio / 30;
+    // escala de escena estable (independiente de nroBalls) — fija ventana/luna/horizonte/planta
+    sceneR = Math.min(W, H) * 0.06;
+    sceneK = sceneR / 30;
     L = radio * STRING_K;
     const baseThk = radio * BASE_THK_K;
     baseY = tableTop - baseThk;                                                    // cara superior de la base (su fondo descansa en la mesa)
@@ -213,6 +225,12 @@
     const inset = radio * INSET_K;
     frameLeft  = centerX - ballSpan / 2 - inset;
     frameRight = centerX + ballSpan / 2 + inset;
+    // la mesa empieza pasado el borde izquierdo de pantalla y sale por la derecha: la cuna queda
+    // cerca del borde IZQUIERDO de la mesa. Pero SIEMPRE con separación visible respecto de la maceta:
+    // nunca arranca a la izquierda del borde derecho del pote + un gap.
+    const potRight = W * 0.078 + W * 0.060 * 1.04;                                  // borde der del labio de la maceta (ver drawPlant)
+    const gap = Math.min(W, H) * 0.045;
+    tableLeft = Math.max(potRight + gap, frameLeft - radio * 2.5);
     for (const b of balls) setPos(b);
   }
 
@@ -229,9 +247,11 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     layout();
     buildScenes();
-    vignette = ctx.createRadialGradient(W * 0.5, H * 0.48, Math.min(W, H) * 0.28, W * 0.5, H * 0.55, Math.max(W, H) * 0.72);
-    vignette.addColorStop(0, 'rgba(0,0,0,0)');
-    vignette.addColorStop(1, 'rgba(0,0,0,0.4)');
+    vignette = ctx.createRadialGradient(W * 0.5, H * 0.55, Math.min(W, H) * 0.16, W * 0.5, H * 0.55, Math.max(W, H) * 0.82);
+    vignette.addColorStop(0,    'rgba(0,0,0,0)');
+    vignette.addColorStop(0.35, 'rgba(0,0,0,0.07)');
+    vignette.addColorStop(0.65, 'rgba(0,0,0,0.28)');
+    vignette.addColorStop(1,    'rgba(0,0,0,0.56)');
   }
   window.addEventListener('resize', resize);
 
@@ -384,8 +404,85 @@
   // Se renderiza dos veces (día y noche) a canvas offscreen; el draw() crossfadea entre ambas.
   function buildScenes() {
     if (W <= 0 || H <= 0) return;
-    sceneDay = renderScene(false);
-    sceneNight = renderScene(true);
+    sceneDay   = renderScene(false); sceneNight = renderScene(true);   // FONDO (detrás de la planta)
+    godRaysDay = renderGodRays(false); godRaysNight = renderGodRays(true); // rayos del ventanal
+    plantDay   = renderPlant(false); plantNight = renderPlant(true);   // PLANTA (capa animable)
+    frontDay   = renderFront(false); frontNight = renderFront(true);   // MESA (delante de la planta)
+    buildFrameLayer();                                                             // marco del péndulo bakeado (estático)
+    bakeBallSprite();                                                              // esfera metálica bakeada (mismo radio todas)
+  }
+
+  // helper: canvas offscreen del tamaño del lienzo, escalado por dpr
+  function newLayer() {
+    const cv = document.createElement('canvas');
+    cv.width = Math.max(1, Math.floor(W * dpr));
+    cv.height = Math.max(1, Math.floor(H * dpr));
+    const c = cv.getContext('2d');
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { cv, c };
+  }
+  // PLANTA sola, fondo transparente (capa propia para el vaivén)
+  function renderPlant(night) { const { cv, c } = newLayer(); drawPlant(c, night); return cv; }
+  // MESA: canto + sombra de contacto del péndulo, fondo transparente (va delante de la planta)
+  function renderFront(night) {
+    const { cv, c } = newLayer();
+    drawTableEdge(c, night);
+    // reflejo suave del aparato sobre el canto pulido (bakeado; cálido de día / tenue-frío de noche)
+    {
+      const topY = tableTop + 1, band = Math.min(H * 0.07, sceneR * 3.2);
+      const base = night ? 'rgba(120,140,175,' : 'rgba(150,135,110,';
+      const rg = c.createLinearGradient(0, topY, 0, topY + band);
+      rg.addColorStop(0, base + (night ? 0.10 : 0.14) + ')');
+      rg.addColorStop(0.55, base + (night ? 0.04 : 0.06) + ')');
+      rg.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = rg; c.fillRect(tableLeft, topY, W - tableLeft, band);
+      for (const fx of [0.30, 0.5, 0.7]) {                                          // manchas difusas ~ bolas reflejadas
+        const sx = tableLeft + (W - tableLeft) * fx, sy = topY + band * 0.3;
+        const hg = c.createRadialGradient(sx, sy, 0, sx, sy, sceneR * 0.55);
+        hg.addColorStop(0, `rgba(${night ? '190,205,235' : '225,215,190'},${night ? 0.05 : 0.09})`);
+        hg.addColorStop(1, 'rgba(0,0,0,0)');
+        c.fillStyle = hg; c.beginPath(); c.arc(sx, sy, sceneR * 0.55, 0, TAU); c.fill();
+      }
+    }
+    const sw = (frameRight - frameLeft) + radio * 5;
+    const csh = c.createRadialGradient(centerX, tableTop, 0, centerX, tableTop, sw * 0.5);
+    csh.addColorStop(0, `rgba(0,0,0,${night ? 0.5 : 0.4})`); csh.addColorStop(1, 'rgba(0,0,0,0)');
+    c.fillStyle = csh; c.save(); c.translate(0, tableTop); c.scale(1, 0.16);
+    c.beginPath(); c.arc(centerX, 0, sw * 0.5, 0, TAU); c.fill(); c.restore();
+    return cv;
+  }
+
+  // geometría del ventanal (compartida por drawWindow, renderGodRays y el titileo de estrellas)
+  function windowGeom() {
+    const gx = W * 0.305, gy = -H * 0.30, gw = (W + sceneR) - gx, gh = (H + sceneR) - gy;
+    return { gx, gy, gw, gh, horizonY: gy + gh * 0.62 };
+  }
+
+  // RAYO de luz del ventanal: UN SOLO CONO suave y amplio (bakeado, clipeado al vidrio). En draw() se
+  // blitea con alpha "respirando". Cálido de día (sol naciente → apunta ARRIBA), frío de noche (luna
+  // alta → baja al cuarto). Relleno radial desde la fuente ⇒ cae con la distancia, bordes suaves.
+  function renderGodRays(night) {
+    const { cv, c } = newLayer();
+    const { gx, gy, gw, gh, horizonY } = windowGeom();
+    const srcX = night ? gx + gw * 0.55 : gx + gw * 0.42;
+    const srcY = night ? H * 0.18 : horizonY;
+    const reach = Math.max(W, H) * 1.5;
+    const dir = night ? Math.PI * 0.6 : -Math.PI * 0.5;                             // abajo (noche) / arriba (día)
+    const half = Math.PI * 0.36;                                                    // cono AMPLIO (~±65°)
+    c.save();
+    c.beginPath(); c.rect(gx, Math.max(0, gy), gw, (gy + gh) - Math.max(0, gy)); c.clip();
+    c.globalCompositeOperation = 'lighter';
+    const rg = c.createRadialGradient(srcX, srcY, 0, srcX, srcY, reach);
+    if (night) { rg.addColorStop(0, 'rgba(150,176,232,0.10)'); rg.addColorStop(0.5, 'rgba(140,168,228,0.035)'); rg.addColorStop(1, 'rgba(140,168,228,0)'); }
+    else       { rg.addColorStop(0, 'rgba(255,228,158,0.12)'); rg.addColorStop(0.5, 'rgba(255,212,140,0.045)'); rg.addColorStop(1, 'rgba(255,206,128,0)'); }
+    c.fillStyle = rg;
+    c.beginPath();
+    c.moveTo(srcX, srcY);
+    c.arc(srcX, srcY, reach, dir - half, dir + half);                              // base del cono como arco suave
+    c.closePath();
+    c.fill();
+    c.restore();
+    return cv;
   }
 
   function renderScene(night) {
@@ -395,45 +492,42 @@
     const s = cv.getContext('2d');
     s.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // ── PARED (de 0 hasta la mesa) ──
+    // ── PARED (sólo queda visible la franja izquierda, detrás de la biblioteca) ──
     let g = s.createLinearGradient(0, 0, 0, tableTop);
     if (night) { g.addColorStop(0, 'rgb(20,21,33)'); g.addColorStop(1, 'rgb(36,33,46)'); }
     else       { g.addColorStop(0, 'rgb(46,40,47)'); g.addColorStop(1, 'rgb(76,62,61)'); }
     s.fillStyle = g; s.fillRect(0, 0, W, tableTop);
 
-    // ── VENTANA GRANDE (~3/4 de la pantalla, centrada detrás del péndulo) ──
-    const winW = Math.min(W * 0.94, Math.max(W * 0.75, (frameRight - frameLeft) + radio * 8));
-    const winTop = H * 0.05, winBottom = tableTop - radio * 0.4;
-    drawWindow(s, centerX - winW / 2, winTop, winW, winBottom - winTop, night);
+    // ── VENTANAL GIGANTE, CORTADO: sin marco a la vista ──
+    // Arranca a 0.305W (queda franja de pared contra la biblioteca, con un montante al ras), sale por
+    // la derecha y por arriba (≈1/4 de su alto fuera de pantalla), y la mesa lo corta abajo.
+    drawWindow(s, night);
 
-    // pool de luz que entra por la ventana — cálida de día, fría (luna) de noche
-    const lg = s.createRadialGradient(centerX, H * 0.18, 0, centerX, H * 0.18, Math.max(W, H) * 0.7);
+    // ── BIBLIOTECA: llena la pared izquierda a lo alto completo (cortada arriba y abajo) ──
+    drawBookshelf(s, night);
+
+    // pool de luz que entra por el ventanal — cálida de día, fría (luna) de noche
+    const lx0 = W * 0.62;
+    const lg = s.createRadialGradient(lx0, H * 0.2, 0, lx0, H * 0.2, Math.max(W, H) * 0.7);
     if (night) { lg.addColorStop(0, 'rgba(150,172,230,0.10)'); lg.addColorStop(1, 'rgba(150,172,230,0)'); }
     else       { lg.addColorStop(0, 'rgba(255,226,170,0.16)'); lg.addColorStop(1, 'rgba(255,226,170,0)'); }
     s.fillStyle = lg; s.fillRect(0, 0, W, tableTop);
 
-    // ── MESA: sólo el CANTO (franja de madera de tableTop al fondo) ──
-    drawTableEdge(s, night);
-
-    // sombra de contacto del péndulo sobre la tapa de la mesa
-    const sw = (frameRight - frameLeft) + radio * 5;
-    const csh = s.createRadialGradient(centerX, tableTop, 0, centerX, tableTop, sw * 0.5);
-    csh.addColorStop(0, `rgba(0,0,0,${night ? 0.5 : 0.4})`); csh.addColorStop(1, 'rgba(0,0,0,0)');
-    s.fillStyle = csh; s.save(); s.translate(0, tableTop); s.scale(1, 0.16);
-    s.beginPath(); s.arc(centerX, 0, sw * 0.5, 0, TAU); s.fill(); s.restore();
+    // penumbra del rincón a la izquierda de la mesa (parte del FONDO, detrás de la planta).
+    // La planta y la mesa se rinden en capas aparte (renderPlant/renderFront) para poder mover las hojas.
+    drawTableShade(s);
     return cv;
   }
 
-  // ventana grande con marco de madera, grilla de parteluces y vista (atardecer de día / cielo estrellado de noche)
-  function drawWindow(s, x, y, w, h, night) {
-    const fr = Math.max(6, radio * 0.5);                                            // grosor del marco
-    // marco de madera (de noche, más oscuro)
-    const frG = s.createLinearGradient(x, y, x, y + h);
-    if (night) { frG.addColorStop(0, 'rgb(60,42,24)'); frG.addColorStop(1, 'rgb(34,24,14)'); }
-    else       { frG.addColorStop(0, 'rgb(96,64,36)'); frG.addColorStop(1, 'rgb(56,36,18)'); }
-    s.fillStyle = frG; rrp(s, x - fr * 0.4, y - fr * 0.4, w + fr * 0.8, h + fr * 0.8, fr * 0.6); s.fill();
-    const gx = x + fr, gy = y + fr, gw = w - 2 * fr, gh = h - 2 * fr;
-    // vidrio
+  // Ventanal gigante SIN bordes a la vista: sólo vidrio + parteluces. El rect real se extiende más
+  // allá de los 4 lados visibles (izq: detrás de la biblioteca; der/arriba: fuera de pantalla; abajo:
+  // sigue por detrás de la mesa) — estamos viendo ~3/4 de su altura, como un plano de cerca.
+  function drawWindow(s, night) {
+    const gx = W * 0.305;                                                           // arranca pasada la biblioteca (queda franja de pared)
+    const gy = -H * 0.30;                                                           // ~1/4 del alto queda arriba, fuera de pantalla
+    const gw = (W + sceneR) - gx;                                                   // sale por la derecha
+    const gh = (H + sceneR) - gy;                                                   // sigue hasta abajo (la mesa lo corta)
+    // vidrio (el gradiente se define sobre el alto TOTAL, así lo visible se lee como un recorte)
     const gg = s.createLinearGradient(0, gy, 0, gy + gh);
     if (night) {
       gg.addColorStop(0, 'rgb(10,14,34)'); gg.addColorStop(0.6, 'rgb(22,26,54)'); gg.addColorStop(1, 'rgb(40,40,66)');
@@ -443,19 +537,26 @@
     }
     s.fillStyle = gg; s.fillRect(gx, gy, gw, gh);
 
+    const horizonY = gy + gh * 0.62;                                                // línea de colinas, queda ~mitad visible
     if (night) {
       // estrellas (posiciones deterministas, sin Math.random para que no titilen al rearmar)
-      s.fillStyle = 'rgba(255,255,255,0.85)';
-      for (let i = 0; i < 36; i++) {
+      for (let i = 0; i < 48; i++) {
         const sx = gx + ((i * 73) % 100) / 100 * gw;
-        const sy = gy + ((i * 149) % 100) / 100 * gh * 0.7;
+        const sy = ((i * 149) % 100) / 100 * (horizonY - gy) + gy;
+        if (sy < 0) continue;                                                       // fuera de pantalla
         const r = 0.6 + ((i * 37) % 10) / 10 * 1.1;
-        s.globalAlpha = 0.3 + ((i * 53) % 10) / 10 * 0.6;
+        s.globalAlpha = (0.3 + ((i * 53) % 10) / 10 * 0.6) * 0.6;                   // atenuadas: el titileo en vivo (drawStarTwinkle) suma encima
+        s.fillStyle = 'rgba(255,255,255,0.85)';
         s.beginPath(); s.arc(sx, sy, r, 0, TAU); s.fill();
       }
       s.globalAlpha = 1;
+      // bloom de la luna (detrás del disco → se lee luminosa, y le da origen a los rayos)
+      const _moonX = gx + gw * 0.55, _moonY = H * 0.18, _moonR = sceneR * 1.1;
+      const nb = s.createRadialGradient(_moonX, _moonY, 0, _moonX, _moonY, _moonR * 5);
+      nb.addColorStop(0, 'rgba(200,216,255,0.22)'); nb.addColorStop(0.5, 'rgba(176,200,255,0.07)'); nb.addColorStop(1, 'rgba(190,210,255,0)');
+      s.fillStyle = nb; s.beginPath(); s.arc(_moonX, _moonY, _moonR * 5, 0, TAU); s.fill();
       // luna + halo
-      const mx = gx + gw * 0.7, my = gy + gh * 0.26, mr = gh * 0.13;
+      const mx = gx + gw * 0.55, my = H * 0.18, mr = sceneR * 1.1;
       const halo = s.createRadialGradient(mx, my, 0, mx, my, mr * 3);
       halo.addColorStop(0, 'rgba(220,230,255,0.4)'); halo.addColorStop(1, 'rgba(220,230,255,0)');
       s.fillStyle = halo; s.beginPath(); s.arc(mx, my, mr * 3, 0, TAU); s.fill();
@@ -463,62 +564,515 @@
       mg.addColorStop(0, 'rgb(245,248,255)'); mg.addColorStop(1, 'rgb(196,206,228)');
       s.fillStyle = mg; s.beginPath(); s.arc(mx, my, mr, 0, TAU); s.fill();
     } else {
+      // bloom del sol (amplio y cálido, detrás del disco → ancla los rayos)
+      const _sunX = gx + gw * 0.42, _sunY = horizonY;
+      const db = s.createRadialGradient(_sunX, _sunY, 0, _sunX, _sunY, H * 0.6);
+      db.addColorStop(0, 'rgba(255,238,180,0.34)'); db.addColorStop(0.45, 'rgba(255,212,150,0.13)'); db.addColorStop(1, 'rgba(255,200,140,0)');
+      s.fillStyle = db; s.fillRect(gx, Math.max(0, gy), gw, gh);
       // sol bajo + resplandor
-      const sun = s.createRadialGradient(gx + gw * 0.34, gy + gh * 0.62, 0, gx + gw * 0.34, gy + gh * 0.62, gh * 0.5);
+      const sun = s.createRadialGradient(gx + gw * 0.42, horizonY, 0, gx + gw * 0.42, horizonY, H * 0.45);
       sun.addColorStop(0, 'rgba(255,238,200,0.95)'); sun.addColorStop(0.5, 'rgba(255,210,150,0.4)'); sun.addColorStop(1, 'rgba(255,210,150,0)');
-      s.fillStyle = sun; s.fillRect(gx, gy, gw, gh);
+      s.fillStyle = sun; s.fillRect(gx, Math.max(0, gy), gw, gh);
     }
 
     // colinas lejanas
     s.fillStyle = night ? 'rgba(14,16,30,0.85)' : 'rgba(64,74,68,0.55)';
-    s.beginPath(); s.moveTo(gx, gy + gh * 0.74);
-    s.quadraticCurveTo(gx + gw * 0.3, gy + gh * 0.6, gx + gw * 0.55, gy + gh * 0.72);
-    s.quadraticCurveTo(gx + gw * 0.8, gy + gh * 0.82, gx + gw, gy + gh * 0.68);
+    s.beginPath(); s.moveTo(gx, horizonY + H * 0.04);
+    s.quadraticCurveTo(gx + gw * 0.3, horizonY - H * 0.05, gx + gw * 0.55, horizonY + H * 0.02);
+    s.quadraticCurveTo(gx + gw * 0.8, horizonY + H * 0.08, gx + gw, horizonY - H * 0.02);
     s.lineTo(gx + gw, gy + gh); s.lineTo(gx, gy + gh); s.closePath(); s.fill();
 
-    // parteluces (grilla, panes ~ cuadrados)
-    const cols = Math.max(2, Math.round(gw / (gh * 0.55)));
-    const rows = Math.max(2, Math.round(gh * cols / gw));
-    s.strokeStyle = night ? 'rgb(46,32,18)' : 'rgb(74,50,28)'; s.lineWidth = Math.max(2, fr * 0.45);
+    // parteluces: grilla regular sobre el rect TOTAL — las barras se van de pantalla por los 4 lados,
+    // ningún borde del marco a la vista
+    const bar = Math.max(4, sceneR * 0.42);
+    const cell = Math.max(sceneR * 6, H * 0.36);
+    s.strokeStyle = night ? 'rgb(46,32,18)' : 'rgb(74,50,28)'; s.lineWidth = bar;
     s.beginPath();
-    for (let c = 1; c < cols; c++) { const px = gx + gw * c / cols; s.moveTo(px, gy); s.lineTo(px, gy + gh); }
-    for (let r = 1; r < rows; r++) { const py = gy + gh * r / rows; s.moveTo(gx, py); s.lineTo(gx + gw, py); }
+    s.moveTo(gx + bar * 0.4, gy); s.lineTo(gx + bar * 0.4, gy + gh);               // montante al ras del borde izq (se lee como barra, no como fin de ventana)
+    for (let px = gx + cell; px < gx + gw; px += cell) { s.moveTo(px, gy); s.lineTo(px, gy + gh); }
+    for (let py = gy + cell; py < gy + gh; py += cell) { s.moveTo(gx, py); s.lineTo(gx + gw, py); }
     s.stroke();
     // reflejo diagonal sutil en el vidrio
-    s.strokeStyle = night ? 'rgba(180,200,255,0.06)' : 'rgba(255,255,255,0.10)'; s.lineWidth = Math.max(3, fr * 0.8);
-    s.beginPath(); s.moveTo(gx + gw * 0.05, gy + gh * 0.55); s.lineTo(gx + gw * 0.5, gy + gh * 0.05); s.stroke();
-    // alféizar
-    s.fillStyle = night ? 'rgb(52,36,20)' : 'rgb(78,52,28)'; s.fillRect(x - fr, y + h - fr * 0.2, w + 2 * fr, fr * 1.1);
+    s.strokeStyle = night ? 'rgba(180,200,255,0.06)' : 'rgba(255,255,255,0.10)'; s.lineWidth = Math.max(4, sceneR * 0.5);
+    s.beginPath(); s.moveTo(gx + gw * 0.08, H * 0.5); s.lineTo(gx + gw * 0.55, H * 0.02); s.stroke();
   }
 
-  // mesa de madera proporcional (tapa + faldón con dos cajones + cuatro patas + estante)
-  // Plano de cerca: sólo se ve el CANTO de la mesa (una franja de madera desde tableTop hasta el fondo).
+  // Penumbra a la IZQUIERDA del inicio de la mesa (el rincón/biblioteca sigue bajando oscuro). Va
+  // DETRÁS de la planta, así no oscurece la maceta.
+  function drawTableShade(s) {
+    const over = s.createLinearGradient(0, tableTop, 0, H);
+    over.addColorStop(0, 'rgba(0,0,0,0.25)');
+    over.addColorStop(0.45, 'rgba(0,0,0,0.7)');
+    over.addColorStop(1, 'rgba(0,0,0,0.92)');
+    s.fillStyle = over; s.fillRect(0, tableTop, tableLeft, H - tableTop);
+  }
+
+  // El CANTO FINO de la mesa (tableLeft → W) + su sombra debajo. Va DELANTE de la planta (la tapa,
+  // igual que la cuna). Grosor FIJO (sceneR, no cambia con la cantidad de bolas).
   function drawTableEdge(s, night) {
     const DK = night ? 0.62 : 1;
-    const g = s.createLinearGradient(0, tableTop, 0, H);
-    g.addColorStop(0,    `rgb(${126*DK|0},${82*DK|0},${48*DK|0})`);                // canto superior, más iluminado
-    g.addColorStop(0.10, `rgb(${100*DK|0},${64*DK|0},${36*DK|0})`);
-    g.addColorStop(0.5,  `rgb(${76*DK|0},${48*DK|0},${26*DK|0})`);
-    g.addColorStop(1,    `rgb(${44*DK|0},${27*DK|0},${14*DK|0})`);
-    s.fillStyle = g; s.fillRect(0, tableTop, W, H - tableTop);
+    const edgeH = sceneR * 2.6;
+    const bottom = tableTop + edgeH;
+    // ── canto de madera (tableLeft → W) ──
+    const g = s.createLinearGradient(0, tableTop, 0, bottom);
+    g.addColorStop(0,    `rgb(${132*DK|0},${86*DK|0},${50*DK|0})`);                // arista superior, iluminada
+    g.addColorStop(0.14, `rgb(${102*DK|0},${65*DK|0},${36*DK|0})`);
+    g.addColorStop(1,    `rgb(${54*DK|0},${33*DK|0},${17*DK|0})`);
+    s.fillStyle = g; s.fillRect(tableLeft, tableTop, W - tableLeft, edgeH);
     // realce del canto superior (la arista donde apoya el péndulo)
-    s.strokeStyle = night ? 'rgba(150,170,210,0.45)' : 'rgba(224,180,128,0.7)';
-    s.lineWidth = Math.max(1.5, 1.4 * k);
-    s.beginPath(); s.moveTo(0, tableTop + 1); s.lineTo(W, tableTop + 1); s.stroke();
-    // vetas horizontales sutiles a lo largo del canto
-    s.strokeStyle = 'rgba(18,8,4,0.28)'; s.lineWidth = Math.max(1, 0.6 * k);
+    s.strokeStyle = night ? 'rgba(150,170,210,0.45)' : 'rgba(230,186,134,0.75)';
+    s.lineWidth = Math.max(1.5, 1.4 * sceneK);
+    s.beginPath(); s.moveTo(tableLeft + 2, tableTop + 1); s.lineTo(W, tableTop + 1); s.stroke();
+    // arista izquierda de la mesa (el corte vertical del borde)
+    s.strokeStyle = night ? 'rgba(120,136,170,0.3)' : 'rgba(200,150,100,0.45)';
+    s.lineWidth = Math.max(1, sceneK);
+    s.beginPath(); s.moveTo(tableLeft + 1, tableTop + 1); s.lineTo(tableLeft + 1, bottom); s.stroke();
+    // una veta fina
+    s.strokeStyle = 'rgba(18,8,4,0.3)'; s.lineWidth = Math.max(1, 0.6 * sceneK);
+    s.beginPath(); const ly = tableTop + edgeH * 0.55; s.moveTo(tableLeft, ly); s.lineTo(W, ly); s.stroke();
+    // ── debajo del canto: oscuridad (sombra dura del borde → negro) ──
+    const dg = s.createLinearGradient(0, bottom, 0, H);
+    dg.addColorStop(0,   'rgba(0,0,0,0.9)');
+    dg.addColorStop(0.35, night ? 'rgb(5,5,8)' : 'rgb(9,6,5)');
+    dg.addColorStop(1,   night ? 'rgb(2,2,4)' : 'rgb(4,3,3)');
+    s.fillStyle = dg; s.fillRect(tableLeft, bottom, W - tableLeft, H - bottom);
+  }
+
+  // Maceta con planta en PRIMER PLANO, esquina inferior izquierda: la maceta queda cortada por el
+  // borde de abajo (el piso no se ve) y el follaje asoma hasta el nivel de la mesa. Más oscura que
+  // la escena (está cerca de cámara, a contraluz).
+  function drawPlant(s, night) {
+    const DK = (night ? 0.5 : 1) * 0.82;
+
+    // ---- color helper: cada canal por DK ----
+    const C = (r, g, b, a) =>
+      a === undefined
+        ? "rgb(" + ((r * DK) | 0) + "," + ((g * DK) | 0) + "," + ((b * DK) | 0) + ")"
+        : "rgba(" + ((r * DK) | 0) + "," + ((g * DK) | 0) + "," + ((b * DK) | 0) + "," + a + ")";
+
+    // ---- PRNG sembrado (mulberry32), 100% determinista ----
+    function mulberry32(a) {
+      return function () {
+        a |= 0; a = (a + 0x6d2b79f5) | 0;
+        let t = Math.imul(a ^ (a >>> 15), 1 | a);
+        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    // ---- composicion (toda la planta dentro del ~22% izquierdo) ----
+    const px = W * 0.078;          // centro del pote (un pelo mas a la izquierda)
+    const lipY = H * 0.875;        // borde superior del pote
+    const pot = W * 0.060;         // semiancho del pote
+
+    // Sin recorte duro: la cuna se dibuja ENCIMA de la planta (en draw()), así que las hojas que se
+    // estiran hacia la derecha quedan tapadas por la cuna de forma natural, sin el corte vertical feo.
+    // El save() queda como wrapper inofensivo (el restore() al final lo cierra).
+    s.save();
+
+    // ============================================================
+    // HOJA-ESPADA: forma curva afinada con arqueo + gravedad,
+    // franja central variegada (verde lima) y nervadura oscura.
+    // baseX/baseY = origen (corona). ang = direccion de salida (rad,
+    // 0 = derecha, -PI/2 = arriba). len, w, arch (curvatura/caida).
+    // backLayer => mas oscura. seed para micro-variacion de tono.
+    // ============================================================
+    function swordLeaf(baseX, baseY, ang, len, w, arch, backLayer, seed) {
+      s.save();
+      s.translate(baseX, baseY);
+      s.rotate(ang);
+
+      // Eje de la hoja: recto al nacer, luego se arquea hacia afuera y CAE por gravedad. En coords
+      // locales +x es "a lo largo". gs hace que el doblez vaya SIEMPRE hacia abajo en el mundo (sin
+      // importar la direccion de la hoja): asi las hojas de la izquierda tambien cuelgan, no se arquean
+      // para arriba. (local +y mapea a world-y * cos(ang); elegimos el signo que da world-down.)
+      const tipX = len;
+      const gs = Math.cos(ang) >= 0 ? 1 : -1;
+      const c1x = len * 0.42, c1y = gs * len * arch * 0.12;
+      const c2x = len * 0.78, c2y = gs * len * arch * 0.45;
+      const tipY = gs * len * arch * 0.95;
+
+      // muestreo de la espina (bezier cubica) para construir el contorno
+      const N = 14;
+      const spineX = [], spineY = [], nrmX = [], nrmY = [];
+      let pxp = 0, pyp = 0;
+      for (let i = 0; i <= N; i++) {
+        const t = i / N, mt = 1 - t;
+        const bx =
+          3 * mt * mt * t * c1x +
+          3 * mt * t * t * c2x +
+          t * t * t * tipX;
+        const by =
+          3 * mt * mt * t * c1y +
+          3 * mt * t * t * c2y +
+          t * t * t * tipY;
+        spineX[i] = bx; spineY[i] = by;
+        const dx = bx - pxp, dy = by - pyp;
+        pxp = bx; pyp = by;
+        const dl = Math.hypot(dx, dy) || 1;
+        nrmX[i] = -dy / dl; nrmY[i] = dx / dl;
+      }
+
+      // ancho a lo largo: hoja-espada -> ancha al ~1/4, afila a PUNTA FINA (→0 en la punta).
+      // (antes el término base 0.18 dejaba la punta con ~18% del ancho ⇒ borde romo/rectangular).
+      const halfW = (t) => {
+        const e = Math.sin(Math.pow(t, 0.5) * Math.PI);                            // 0 en base y punta, máx ~t=0.25
+        return w * (e + (1 - t) * 0.05);                                           // pizca de cuerpo en la base; punta a 0
+      };
+
+      // --- relleno: gradiente longitudinal (base->punta) ---
+      const baseLight = backLayer ? -16 : 0;
+      const tone = ((seed * 23) % 11) - 5; // -5..+5 micro-variacion
+      const g = s.createLinearGradient(0, 0, tipX, tipY);
+      g.addColorStop(0.00, C(28 + baseLight + tone, 64 + baseLight, 34 + baseLight));
+      g.addColorStop(0.45, C(40 + baseLight + tone, 96 + baseLight + tone, 46 + baseLight));
+      g.addColorStop(1.00, C(30 + baseLight, 78 + baseLight, 40 + baseLight));
+      s.fillStyle = g;
+
+      s.beginPath();
+      s.moveTo(spineX[0] + nrmX[0] * halfW(0), spineY[0] + nrmY[0] * halfW(0));
+      for (let i = 1; i <= N; i++) {
+        const hw = halfW(i / N);
+        s.lineTo(spineX[i] + nrmX[i] * hw, spineY[i] + nrmY[i] * hw);
+      }
+      for (let i = N; i >= 0; i--) {
+        const hw = halfW(i / N);
+        s.lineTo(spineX[i] - nrmX[i] * hw, spineY[i] - nrmY[i] * hw);
+      }
+      s.closePath();
+      s.fill();
+
+      // --- VARIEGADO: franja central verde lima en degrade ---
+      const stripeLight = backLayer ? -22 : 0;
+      const sg = s.createLinearGradient(0, 0, tipX, tipY);
+      sg.addColorStop(0.00, C(70 + stripeLight, 130 + stripeLight, 58 + stripeLight, 0.0));
+      sg.addColorStop(0.18, C(120 + stripeLight, 175 + stripeLight, 80 + stripeLight, 0.85));
+      sg.addColorStop(0.55, C(150 + stripeLight, 200 + stripeLight, 95 + stripeLight, 0.9));
+      sg.addColorStop(0.92, C(110 + stripeLight, 165 + stripeLight, 75 + stripeLight, 0.55));
+      sg.addColorStop(1.00, C(110 + stripeLight, 165 + stripeLight, 75 + stripeLight, 0.0));
+      s.fillStyle = sg;
+
+      s.beginPath();
+      s.moveTo(spineX[0], spineY[0]);
+      for (let i = 1; i <= N; i++) {
+        const hw = halfW(i / N) * 0.42;
+        s.lineTo(spineX[i] + nrmX[i] * hw, spineY[i] + nrmY[i] * hw);
+      }
+      for (let i = N; i >= 0; i--) {
+        const hw = halfW(i / N) * 0.42;
+        s.lineTo(spineX[i] - nrmX[i] * hw, spineY[i] - nrmY[i] * hw);
+      }
+      s.closePath();
+      s.fill();
+
+      // --- nervadura central oscura ---
+      s.strokeStyle = C(18, 48, 26, 0.5);
+      s.lineWidth = Math.max(0.6, w * 0.05);
+      s.lineCap = "round";
+      s.beginPath();
+      s.moveTo(spineX[0], spineY[0]);
+      for (let i = 1; i <= N; i++) s.lineTo(spineX[i], spineY[i]);
+      s.stroke();
+
+      // --- borde inferior mas oscuro (volumen) ---
+      s.strokeStyle = C(20, 52, 28, 0.4);
+      s.lineWidth = Math.max(0.6, w * 0.06);
+      s.lineJoin = "round";
+      s.beginPath();
+      s.moveTo(spineX[0] - nrmX[0] * halfW(0), spineY[0] - nrmY[0] * halfW(0));
+      for (let i = 1; i <= N; i++) {
+        const hw = halfW(i / N);
+        s.lineTo(spineX[i] - nrmX[i] * hw, spineY[i] - nrmY[i] * hw);
+      }
+      s.stroke();
+
+      s.restore();
+    }
+
+    // ============================================================
+    // CANA (tronco lenoso afinado con anillos de cicatriz)
+    // ============================================================
+    function drawCane(cx, baseY, topY, wBase) {
+      const h = baseY - topY;
+      const wTop = wBase * 0.62;
+      const lean = (cx - px) * 0.12;
+      const topX = cx + lean;
+
+      const tg = s.createLinearGradient(cx - wBase, 0, cx + wBase, 0);
+      tg.addColorStop(0.0, C(96, 74, 46));
+      tg.addColorStop(0.5, C(168, 134, 86));
+      tg.addColorStop(1.0, C(88, 66, 42));
+      s.fillStyle = tg;
+
+      s.beginPath();
+      s.moveTo(cx - wBase, baseY);
+      s.quadraticCurveTo(cx - wBase * 0.8, topY + h * 0.5, topX - wTop, topY);
+      s.lineTo(topX + wTop, topY);
+      s.quadraticCurveTo(cx + wBase * 0.8, topY + h * 0.5, cx + wBase, baseY);
+      s.closePath();
+      s.fill();
+
+      // sombra lado izquierdo del tronco
+      const sh = s.createLinearGradient(cx - wBase, 0, cx + wBase, 0);
+      sh.addColorStop(0.0, C(40, 28, 16, 0.45));
+      sh.addColorStop(0.35, C(40, 28, 16, 0.0));
+      sh.addColorStop(1.0, C(40, 28, 16, 0.0));
+      s.fillStyle = sh;
+      s.beginPath();
+      s.moveTo(cx - wBase, baseY);
+      s.quadraticCurveTo(cx - wBase * 0.8, topY + h * 0.5, topX - wTop, topY);
+      s.lineTo(topX + wTop, topY);
+      s.quadraticCurveTo(cx + wBase * 0.8, topY + h * 0.5, cx + wBase, baseY);
+      s.closePath();
+      s.fill();
+
+      // anillos de cicatriz (curvos, abrazando el tronco)
+      s.lineCap = "round";
+      const rings = Math.max(6, (h / (sceneR * 0.7)) | 0);
+      for (let i = 1; i < rings; i++) {
+        const t = i / rings;
+        const y = baseY - h * t;
+        const w = wBase * (1 - t) + wTop * t;
+        const xx = cx + lean * t;
+        s.strokeStyle = C(70, 50, 30, 0.4);
+        s.lineWidth = Math.max(1, sceneK * 0.6);
+        s.beginPath();
+        s.moveTo(xx - w * 0.85, y);
+        s.quadraticCurveTo(xx, y + w * 0.35, xx + w * 0.85, y);
+        s.stroke();
+        // realce claro debajo del anillo
+        s.strokeStyle = C(185, 150, 100, 0.22);
+        s.lineWidth = Math.max(0.8, sceneK * 0.35);
+        const dy = Math.max(1, sceneK * 0.5);
+        s.beginPath();
+        s.moveTo(xx - w * 0.8, y + dy);
+        s.quadraticCurveTo(xx, y + w * 0.35 + dy, xx + w * 0.8, y + dy);
+        s.stroke();
+      }
+
+      return { x: topX, y: topY, w: wTop };
+    }
+
+    // ============================================================
+    // ROSETA: fuente de hojas que se arquean hacia afuera y caen.
+    // Sesgada hacia la IZQUIERDA/arriba (la planta vive abajo-izq, asi
+    // se derrama hacia el rincon y no invade el pendulo a la derecha).
+    // Dos pasadas: traseras (oscuras) + delanteras (mas claras).
+    // ============================================================
+    function rosette(rng, crown, scale, sideBias) {
+      const { x: cxr, y: cyr } = crown;
+
+      // ---- CAPA TRASERA (mas hojas, mas oscuras, mas abiertas) ----
+      const backN = 16;
+      for (let i = 0; i < backN; i++) {
+        const t = i / (backN - 1);
+        // abanico bajo/medio: de casi-horizontal izq a casi-horizontal der,
+        // pero comprimido hacia la izquierda via sideBias.
+        let ang = -Math.PI * 1.02 + t * Math.PI * 0.86;
+        ang += sideBias * 0.18;
+        ang += (rng() - 0.5) * 0.16;
+        const horiz = Math.abs(Math.cos(ang));
+        const len = scale * (1.18 + horiz * 0.6) * (0.9 + rng() * 0.16);            // mas largas
+        const w = scale * (0.055 + rng() * 0.085);                                  // ancho variado (0.055–0.14): planta real
+        const arch = 0.95 + horiz * 1.25 + rng() * 0.3;                             // caen mas (con gs ⇒ hacia abajo)
+        swordLeaf(cxr, cyr, ang, len, w, arch, true, (i * 7 + 3) | 0);
+      }
+
+      // ---- CAPA DELANTERA (corona erguida + caida) ----
+      const frontN = 18;
+      for (let i = 0; i < frontN; i++) {
+        const t = i / (frontN - 1);
+        // abanico completo, levemente sesgado a la izquierda.
+        let ang = -Math.PI * 1.06 + t * Math.PI * 0.94;
+        ang += sideBias * 0.12;
+        ang += (rng() - 0.5) * 0.14;
+        const up = Math.max(0, -Math.sin(ang));
+        const horiz = Math.abs(Math.cos(ang));
+        const len = scale * (0.82 + horiz * 0.78 + (1 - up) * 0.16) * (0.92 + rng() * 0.14);  // mas largas
+        const w = scale * (0.048 + rng() * 0.08);                                   // ancho variado (0.048–0.128)
+        const arch = 0.6 + horiz * 1.5 + (rng() - 0.5) * 0.3;                       // caen mas
+        swordLeaf(cxr, cyr, ang, len, w, arch, false, (i * 13 + 5) | 0);
+      }
+
+      // ---- HOJAS COLGANTES (weeping): largas y muy caidas, sesgadas abajo/izquierda ----
+      const weepN = 6;
+      for (let i = 0; i < weepN; i++) {
+        const lr = (i % 3 === 0) ? 1 : -1;                                          // mayoria a la IZQ (rincon), pocas a la der para no chocar el clip
+        let ang = lr > 0 ? -0.05 - rng() * 0.45 : Math.PI + 0.05 + rng() * 0.45;    // casi horizontal a cada lado
+        ang += sideBias * 0.1;
+        const len = scale * (1.45 + rng() * 0.45);                                  // las mas largas del ramo
+        const w = scale * (0.05 + rng() * 0.06);                                    // ancho variado (0.05–0.11)
+        const arch = 1.5 + rng() * 0.7;                                             // cuelgan fuerte
+        swordLeaf(cxr, cyr, ang, len, w, arch, lr > 0, (i * 29 + 7) | 0);
+      }
+
+      // unos pocos brotes nuevos centrales, erguidos y cortos
+      for (let i = 0; i < 4; i++) {
+        const ang = -Math.PI / 2 + (i - 1.5) * 0.16 + (rng() - 0.5) * 0.08;
+        const len = scale * (0.46 + rng() * 0.2);
+        const w = scale * (0.04 + rng() * 0.035);
+        swordLeaf(cxr, cyr, ang, len, w, 0.28 + rng() * 0.3, false, (i * 17 + 9) | 0);
+      }
+    }
+
+    // ============================================================
+    // ENSAMBLE
+    // ============================================================
+    // 3 canas de DISTINTA altura. La alta corona ~ H*0.32.
+    // Escalas de hoja reducidas y biases hacia la izquierda para no
+    // invadir la derecha (ademas del clip duro de seguridad).
+    const canes = [
+      // cx,                  topY,        wBase,        leafScale, sideBias
+      [px - pot * 0.34, H * 0.52, pot * 0.21, H * 0.165, -0.7], // izq, media
+      [px + pot * 0.36, H * 0.62, pot * 0.18, H * 0.135, -0.2], // der, baja
+      [px - pot * 0.02, H * 0.32, pot * 0.26, H * 0.190, -0.35] // central, alta
+    ];
+
+    // dibujo de atras hacia adelante (la alta tapa abajo)
+    const crowns = [];
+    const order = [1, 0, 2];
+    for (const idx of order) {
+      const cx = canes[idx][0], topY = canes[idx][1], wBase = canes[idx][2];
+      crowns[idx] = drawCane(cx, lipY + pot * 0.05, topY, wBase);
+    }
+
+    for (const idx of order) {
+      const leafScale = canes[idx][3], sideBias = canes[idx][4];
+      const rng = mulberry32(1000 + idx * 137); // semilla CONSTANTE por cana
+      rosette(rng, crowns[idx], leafScale, sideBias);
+    }
+
+    // ============================================================
+    // TIERRA / CORTEZA en el borde del pote
+    // ============================================================
+    const soilY = lipY - pot * 0.04;
+    const soilG = s.createLinearGradient(0, soilY - pot * 0.18, 0, soilY + pot * 0.1);
+    soilG.addColorStop(0, C(58, 40, 26));
+    soilG.addColorStop(1, C(30, 20, 12));
+    s.fillStyle = soilG;
     s.beginPath();
-    for (const f of [0.32, 0.55, 0.78]) { const ly = tableTop + (H - tableTop) * f; s.moveTo(0, ly); s.lineTo(W, ly); }
-    s.stroke();
+    s.ellipse(px, soilY, pot * 0.92, pot * 0.26, 0, 0, TAU);
+    s.fill();
+    // montoncitos de corteza (deterministas por hash)
+    const rngSoil = mulberry32(777);
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * TAU;
+      const rr = pot * (0.2 + ((i * 53) % 60) / 100);
+      const bx = px + Math.cos(a) * rr * 0.95;
+      const by = soilY + Math.sin(a) * rr * 0.26;
+      const r = pot * (0.05 + rngSoil() * 0.06);
+      s.fillStyle = C(70 - (i % 3) * 12, 48, 30, 0.9);
+      s.beginPath();
+      s.ellipse(bx, by, r, r * 0.7, a, 0, TAU);
+      s.fill();
+    }
+
+    // ============================================================
+    // MACETA terracota (cuerpo cortado por el borde inferior > H)
+    // ============================================================
+    const bodyG = s.createLinearGradient(px - pot, 0, px + pot, 0);
+    bodyG.addColorStop(0.0, C(112, 56, 36));
+    bodyG.addColorStop(0.18, C(150, 80, 52));
+    bodyG.addColorStop(0.5, C(192, 116, 78));
+    bodyG.addColorStop(0.82, C(150, 80, 52));
+    bodyG.addColorStop(1.0, C(96, 48, 30));
+    s.fillStyle = bodyG;
+    s.beginPath();
+    s.moveTo(px - pot * 0.9, lipY);
+    s.lineTo(px - pot * 0.66, H + 4);
+    s.lineTo(px + pot * 0.66, H + 4);
+    s.lineTo(px + pot * 0.9, lipY);
+    s.closePath();
+    s.fill();
+
+    // sombreado interno del cuerpo (volumen)
+    const bodyShade = s.createLinearGradient(px - pot, 0, px + pot, 0);
+    bodyShade.addColorStop(0.0, C(40, 18, 10, 0.5));
+    bodyShade.addColorStop(0.32, C(40, 18, 10, 0.0));
+    bodyShade.addColorStop(0.8, C(40, 18, 10, 0.0));
+    bodyShade.addColorStop(1.0, C(40, 18, 10, 0.55));
+    s.fillStyle = bodyShade;
+    s.beginPath();
+    s.moveTo(px - pot * 0.9, lipY);
+    s.lineTo(px - pot * 0.66, H + 4);
+    s.lineTo(px + pot * 0.66, H + 4);
+    s.lineTo(px + pot * 0.9, lipY);
+    s.closePath();
+    s.fill();
+
+    // labio / reborde superior del pote
+    const lipG = s.createLinearGradient(px - pot, 0, px + pot, 0);
+    lipG.addColorStop(0.0, C(132, 68, 44));
+    lipG.addColorStop(0.5, C(206, 128, 86));
+    lipG.addColorStop(1.0, C(120, 60, 40));
+    s.fillStyle = lipG;
+    rrp(s, px - pot * 1.04, lipY - pot * 0.32, pot * 2.08, pot * 0.44, pot * 0.12);
+    s.fill();
+
+    // brillo especular del labio
+    s.fillStyle = C(225, 150, 105, 0.45);
+    rrp(s, px - pot * 0.96, lipY - pot * 0.28, pot * 1.92, pot * 0.12, pot * 0.06);
+    s.fill();
+    // sombra bajo el labio
+    s.fillStyle = C(40, 18, 10, 0.35);
+    rrp(s, px - pot * 0.92, lipY + pot * 0.08, pot * 1.84, pot * 0.07, pot * 0.04);
+    s.fill();
+
+    s.restore(); // fin del clip de seguridad
+  }
+
+  // ── BIBLIOTECA (llena toda la pared izquierda; se corta arriba y abajo de la pantalla ⇒ se lee
+  //    ENORME, plano de cerca; la mesa/penumbra la tapan de tableTop para abajo) ──
+  const BOOK_COLORS = [[122,52,46],[48,72,96],[150,120,52],[70,96,60],[96,60,96],[176,98,52],[60,70,88],[140,52,52],[44,86,82],[120,108,70]];
+  function drawBookshelf(s, night) {
+    const DK = night ? 0.5 : 1;
+    const bsL = W * 0.012, bsR = W * 0.27;
+    const bsTop = -H * 0.10, bsBottom = H * 1.04;                                  // nace y muere FUERA de pantalla
+    const fr = Math.max(6, W * 0.012);                                             // grosor de la carcasa
+    // sombra del mueble sobre la pared (sólo se ve la del lado derecho)
+    s.fillStyle = 'rgba(0,0,0,0.3)'; s.fillRect(bsR, bsTop, fr * 1.6, bsBottom - bsTop);
+    // carcasa de madera
+    const woodG = s.createLinearGradient(bsL, 0, bsR, 0);
+    woodG.addColorStop(0,   `rgb(${66*DK|0},${42*DK|0},${21*DK|0})`);
+    woodG.addColorStop(0.5, `rgb(${96*DK|0},${62*DK|0},${33*DK|0})`);
+    woodG.addColorStop(1,   `rgb(${52*DK|0},${33*DK|0},${17*DK|0})`);
+    s.fillStyle = woodG; s.fillRect(bsL, bsTop, bsR - bsL, bsBottom - bsTop);
+    // hueco interior oscuro
+    const inL = bsL + fr, inR = bsR - fr;
+    s.fillStyle = night ? 'rgb(12,9,7)' : 'rgb(26,17,11)'; s.fillRect(inL, bsTop, inR - inL, bsBottom - bsTop);
+    // estantes ALTOS (libros grandes): la primera y la última fila quedan cortadas por los bordes
+    const rows = 4, rowH = (bsBottom - bsTop) / rows;
+    for (let r = 0; r <= rows; r++) {
+      const shelfY = bsTop + (r + 1) * rowH;
+      let bx = inL + 3, idx = r * 97 + 11;
+      while (bx < inR - 6) {
+        const bw = rowH * 0.085 + ((idx * 37) % 100) / 100 * rowH * 0.13;          // lomos proporcionales al estante
+        if (bx + bw > inR - 3) break;
+        const bh = rowH * (0.62 + ((idx * 53) % 100) / 100 * 0.3);
+        const c = BOOK_COLORS[(idx * 7) % BOOK_COLORS.length];
+        const by = shelfY - bh - 3;
+        s.fillStyle = `rgb(${c[0]*DK|0},${c[1]*DK|0},${c[2]*DK|0})`;
+        s.fillRect(bx, by, bw, bh);
+        s.fillStyle = 'rgba(255,255,255,0.10)'; s.fillRect(bx, by, Math.max(1.5, bw * 0.2), bh);  // brillo del lomo
+        s.fillStyle = 'rgba(0,0,0,0.25)'; s.fillRect(bx, by + bh * 0.14, bw, Math.max(1.5, bh * 0.045)); // banda
+        bx += bw + 2; idx++;
+      }
+      // tabla del estante
+      if (shelfY < bsBottom) { s.fillStyle = woodG; s.fillRect(inL, shelfY, inR - inL, Math.max(3, fr * 0.55)); }
+    }
+    // canto claro del lado derecho de la carcasa
+    s.strokeStyle = night ? 'rgba(150,170,210,0.22)' : 'rgba(212,170,118,0.4)';
+    s.lineWidth = Math.max(1, sceneK);
+    s.beginPath(); s.moveTo(bsR - 1, Math.max(0, bsTop)); s.lineTo(bsR - 1, Math.min(H, bsBottom)); s.stroke();
   }
 
   // varilla de madera torneada (capsule): degradé perpendicular oscuro→lomo iluminado→oscuro = cilindro,
   // con vetas finas a lo largo y un brillo cálido suave sobre el lomo.
-  function woodDowel(x, y, w, h) {
+  function woodDowel(c, x, y, w, h) {
     const horizontal = w >= h;
     const rad = Math.min(w, h) / 2;
-    const g = horizontal ? ctx.createLinearGradient(0, y, 0, y + h)
-                         : ctx.createLinearGradient(x, 0, x + w, 0);
+    const g = horizontal ? c.createLinearGradient(0, y, 0, y + h)
+                         : c.createLinearGradient(x, 0, x + w, 0);
     g.addColorStop(0,    'rgb(28,11,7)');
     g.addColorStop(0.12, 'rgb(66,26,16)');
     g.addColorStop(0.40, 'rgb(112,50,32)');
@@ -526,110 +1080,160 @@
     g.addColorStop(0.62, 'rgb(100,44,28)');
     g.addColorStop(0.86, 'rgb(56,22,13)');
     g.addColorStop(1,    'rgb(24,9,5)');
-    rrPath(x, y, w, h, rad); ctx.fillStyle = g; ctx.fill();
-    ctx.save(); rrPath(x, y, w, h, rad); ctx.clip();
+    rrp(c, x, y, w, h, rad); c.fillStyle = g; c.fill();
+    c.save(); rrp(c, x, y, w, h, rad); c.clip();
     // vetas
-    ctx.strokeStyle = 'rgba(20,6,3,0.4)'; ctx.lineWidth = Math.max(1, 0.5 * k);
-    ctx.beginPath();
+    c.strokeStyle = 'rgba(20,6,3,0.4)'; c.lineWidth = Math.max(1, 0.5 * k);
+    c.beginPath();
     for (const f of [0.3, 0.5, 0.68, 0.82]) {
-      if (horizontal) { const ly = y + h * f; ctx.moveTo(x + rad, ly); ctx.lineTo(x + w - rad, ly); }
-      else            { const lx = x + w * f; ctx.moveTo(lx, y + rad); ctx.lineTo(lx, y + h - rad); }
+      if (horizontal) { const ly = y + h * f; c.moveTo(x + rad, ly); c.lineTo(x + w - rad, ly); }
+      else            { const lx = x + w * f; c.moveTo(lx, y + rad); c.lineTo(lx, y + h - rad); }
     }
-    ctx.stroke();
+    c.stroke();
     // brillo cálido sobre el lomo
-    ctx.strokeStyle = 'rgba(206,132,98,0.42)'; ctx.lineWidth = Math.max(1, Math.min(w, h) * 0.07);
-    ctx.beginPath();
-    if (horizontal) { const ly = y + h * 0.42; ctx.moveTo(x + rad, ly); ctx.lineTo(x + w - rad, ly); }
-    else            { const lx = x + w * 0.42; ctx.moveTo(lx, y + rad); ctx.lineTo(lx, y + h - rad); }
-    ctx.stroke();
-    ctx.restore();
+    c.strokeStyle = 'rgba(206,132,98,0.42)'; c.lineWidth = Math.max(1, Math.min(w, h) * 0.07);
+    c.beginPath();
+    if (horizontal) { const ly = y + h * 0.42; c.moveTo(x + rad, ly); c.lineTo(x + w - rad, ly); }
+    else            { const lx = x + w * 0.42; c.moveTo(lx, y + rad); c.lineTo(lx, y + h - rad); }
+    c.stroke();
+    c.restore();
   }
 
   // arco "∏" único y limpio: dos parantes + travesaño, todo en madera torneada. Parantes primero y el
   // travesaño encima, así la curva en las esquinas queda prolija.
-  function drawArch() {
+  function drawArch(c) {
     const thk = radio * 0.32;
-    woodDowel(frameLeft - thk / 2,  frameTop, thk, (baseY - frameTop) + thk);             // parante izq (entra en la base)
-    woodDowel(frameRight - thk / 2, frameTop, thk, (baseY - frameTop) + thk);             // parante der
-    woodDowel(frameLeft - thk / 2,  frameTop - thk / 2, (frameRight - frameLeft) + thk, thk); // travesaño
+    woodDowel(c, frameLeft - thk / 2,  frameTop, thk, (baseY - frameTop) + thk);             // parante izq (entra en la base)
+    woodDowel(c, frameRight - thk / 2, frameTop, thk, (baseY - frameTop) + thk);             // parante der
+    woodDowel(c, frameLeft - thk / 2,  frameTop - thk / 2, (frameRight - frameLeft) + thk, thk); // travesaño
   }
 
   // collar de bronce donde el parante entra en la base
-  function drawCollar(cx) {
+  function drawCollar(c, cx) {
     const w = radio * 0.74, h = radio * 0.42;
-    const g = ctx.createLinearGradient(cx - w / 2, 0, cx + w / 2, 0);
+    const g = c.createLinearGradient(cx - w / 2, 0, cx + w / 2, 0);
     g.addColorStop(0,   'rgb(74,52,20)');
     g.addColorStop(0.5, 'rgb(214,176,98)');
     g.addColorStop(1,   'rgb(74,52,20)');
-    rrPath(cx - w / 2, baseY - h * 0.55, w, h, h * 0.35); ctx.fillStyle = g; ctx.fill();
+    rrp(c, cx - w / 2, baseY - h * 0.55, w, h, h * 0.35); c.fillStyle = g; c.fill();
   }
 
   // base de madera maciza
-  function drawBase() {
+  function drawBase(c) {
     const xL = frameLeft - radio * 2.4, xR = frameRight + radio * 2.4;
     const top = baseY, thk = radio * BASE_THK_K, w = xR - xL, rad = radio * 0.26;
     // sombra en el piso
-    const sh = ctx.createLinearGradient(0, top + thk, 0, top + thk + radio * 1.2);
+    const sh = c.createLinearGradient(0, top + thk, 0, top + thk + radio * 1.2);
     sh.addColorStop(0, 'rgba(0,0,0,0.4)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = sh; ctx.fillRect(xL - radio, top + thk - 2, w + radio * 2, radio * 1.3);
+    c.fillStyle = sh; c.fillRect(xL - radio, top + thk - 2, w + radio * 2, radio * 1.3);
     // cuerpo madera (cara iluminada arriba → canto oscuro abajo)
-    const g = ctx.createLinearGradient(0, top, 0, top + thk);
+    const g = c.createLinearGradient(0, top, 0, top + thk);
     g.addColorStop(0,    'rgb(108,48,30)');
     g.addColorStop(0.16, 'rgb(78,32,20)');
     g.addColorStop(1,    'rgb(32,12,7)');
-    rrPath(xL, top, w, thk, rad); ctx.fillStyle = g; ctx.fill();
-    ctx.save(); rrPath(xL, top, w, thk, rad); ctx.clip();
+    rrp(c, xL, top, w, thk, rad); c.fillStyle = g; c.fill();
+    c.save(); rrp(c, xL, top, w, thk, rad); c.clip();
     // sheen cálido en la cara superior (bisel)
-    const gloss = ctx.createLinearGradient(0, top, 0, top + thk * 0.4);
+    const gloss = c.createLinearGradient(0, top, 0, top + thk * 0.4);
     gloss.addColorStop(0, 'rgba(190,116,82,0.5)');
     gloss.addColorStop(1, 'rgba(190,116,82,0)');
-    ctx.fillStyle = gloss; ctx.fillRect(xL, top, w, thk * 0.4);
+    c.fillStyle = gloss; c.fillRect(xL, top, w, thk * 0.4);
     // vetas horizontales
-    ctx.strokeStyle = 'rgba(20,6,3,0.32)'; ctx.lineWidth = Math.max(1, 0.6 * k);
-    ctx.beginPath();
-    for (const f of [0.42, 0.62, 0.8]) { const ly = top + thk * f; ctx.moveTo(xL + rad, ly); ctx.lineTo(xR - rad, ly); }
-    ctx.stroke();
+    c.strokeStyle = 'rgba(20,6,3,0.32)'; c.lineWidth = Math.max(1, 0.6 * k);
+    c.beginPath();
+    for (const f of [0.42, 0.62, 0.8]) { const ly = top + thk * f; c.moveTo(xL + rad, ly); c.lineTo(xR - rad, ly); }
+    c.stroke();
     // canto superior iluminado
-    ctx.strokeStyle = 'rgba(212,140,104,0.6)'; ctx.lineWidth = Math.max(1, 1.0 * k);
-    ctx.beginPath(); ctx.moveTo(xL + rad, top + 1); ctx.lineTo(xR - rad, top + 1); ctx.stroke();
-    ctx.restore();
+    c.strokeStyle = 'rgba(212,140,104,0.6)'; c.lineWidth = Math.max(1, 1.0 * k);
+    c.beginPath(); c.moveTo(xL + rad, top + 1); c.lineTo(xR - rad, top + 1); c.stroke();
+    // veta curva de madera torneada (determinista) → "mueble real" en vez de cilindro liso
+    c.strokeStyle = 'rgba(15,5,2,0.16)'; c.lineWidth = Math.max(0.5, 0.4 * k);
+    const nv = 7;
+    for (let i = 0; i < nv; i++) {
+      const sx0 = xL + (w / nv) * i + Math.sin(i * 0.7) * w * 0.03;
+      c.beginPath();
+      c.moveTo(sx0, top);
+      c.quadraticCurveTo(sx0 + w * 0.12, top + thk * 0.45, sx0 + w * 0.22, top + thk);
+      c.stroke();
+    }
+    // bisel: sombra fina justo debajo del canto iluminado
+    c.strokeStyle = 'rgba(0,0,0,0.30)'; c.lineWidth = Math.max(1.2, 0.7 * k);
+    c.beginPath(); c.moveTo(xL + rad, top + Math.max(2, 1.6 * k)); c.lineTo(xR - rad, top + Math.max(2, 1.6 * k)); c.stroke();
+    c.restore();
   }
 
-  function drawFrame() {
-    drawArch();                                                                    // arco cromado único
-    drawBase();                                                                    // base por delante (tapa el pie de los parantes)
-    drawCollar(frameLeft); drawCollar(frameRight);                                 // collares donde entran a la base
+  // El marco no cambia entre frames ⇒ se bakea a un layer y draw() lo blitea (ahorra ~10 gradientes/frame).
+  function buildFrameLayer() {
+    frameLayer = document.createElement('canvas');
+    frameLayer.width  = Math.max(1, Math.floor(W * dpr));
+    frameLayer.height = Math.max(1, Math.floor(H * dpr));
+    const c = frameLayer.getContext('2d');
+    c.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawArch(c);                                                                   // arco de madera único
+    drawBase(c);                                                                   // base por delante (tapa el pie de los parantes)
+    drawCollar(c, frameLeft); drawCollar(c, frameRight);                           // collares donde entran a la base
+  }
+
+  // La esfera es idéntica para todas las bolas ⇒ se bakea UNA vez por layout y se blitea por bola
+  // (antes: 4 gradientes radiales × bola × frame).
+  function bakeBallSprite() {
+    const r = Math.max(2, radio), pad = 3;
+    const S = Math.ceil((r + pad) * 2);
+    ballSprite = document.createElement('canvas');
+    ballSprite.width = ballSprite.height = Math.ceil(S * dpr);
+    const c = ballSprite.getContext('2d');
+    c.scale(dpr, dpr);
+    drawMetalBall(c, S / 2, S / 2, r);
+    ballSpriteHalf = S / 2;
   }
 
   // hilos: cada bola cuelga de dos hilos abiertos en V hacia el travesaño; con un splay > radio los de
   // bolas vecinas se cruzan y arman la clásica red en X. Finos y con un dejo de brillo metálico.
-  function drawStrings(ball) {
-    const splay = radio * 1.15;
-    const ax = origX(ball.nro), ay = frameTop;
+  // Hilos de TODAS las bolas en un solo path/stroke (mismo estilo) — antes era 1 stroke por bola.
+  function drawStrings() {
+    const splay = radio * 1.15, ay = frameTop;
     ctx.lineWidth = Math.max(1, 0.7 * k);
     ctx.strokeStyle = 'rgba(225,229,236,0.55)';
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(ax - splay, ay); ctx.lineTo(ball.x, ball.y);
-    ctx.moveTo(ax + splay, ay); ctx.lineTo(ball.x, ball.y);
+    for (const ball of balls) {
+      const ax = origX(ball.nro);
+      ctx.moveTo(ax - splay, ay); ctx.lineTo(ball.x, ball.y);
+      ctx.moveTo(ax + splay, ay); ctx.lineTo(ball.x, ball.y);
+    }
     ctx.stroke();
   }
 
-  // sombra de contacto de la bola sobre la base (más marcada cuanto más cerca del reposo está)
-  function drawBallShadow(ball) {
+  // Sombras de contacto de TODAS las bolas con UN solo save/clip/restore (el clip es el mismo rect de
+  // la base para todas) — antes clipeaba y save/restore por bola. CLIPEADA a la tapa: una bola levantada
+  // fuera de la cuna no proyecta sombra "en el aire".
+  function drawBallShadows() {
     const baseTop = baseY;
-    const t = Math.max(0, Math.min(1, (ball.y - origY) / L));                      // 0 = arriba, 1 = en reposo
-    const a = 0.4 * t * t;
-    if (a < 0.02) return;
+    const xL = frameLeft - radio * 2.4, xR = frameRight + radio * 2.4;
+    const fadeZone = radio * 4.5;
     ctx.save();
-    ctx.fillStyle = `rgba(0,0,0,${a})`;
-    ctx.beginPath();
-    ctx.ellipse(ball.x, baseTop, radio * (0.7 + 0.4 * t), radio * 0.26, 0, 0, TAU);
-    ctx.fill();
+    ctx.beginPath(); ctx.rect(xL, baseY - radio * 0.4, xR - xL, radio * 0.9); ctx.clip();
+    for (const ball of balls) {
+      const t = Math.max(0, Math.min(1, (ball.y - origY) / L));                    // 0 = arriba, 1 = reposo
+      let liftFade = (t - 0.66) / (0.94 - 0.66);
+      liftFade = Math.max(0, Math.min(1, liftFade));
+      liftFade = liftFade * liftFade * (3 - 2 * liftFade);                          // smoothstep: meseta + caída
+      let a = 0.46 * liftFade;
+      if (a < 0.02) continue;
+      const dOut = Math.max((xL + fadeZone) - ball.x, ball.x - (xR - fadeZone), 0);
+      const edgeFade = Math.max(0, 1 - dOut / fadeZone);
+      a *= edgeFade * edgeFade * edgeFade;                                          // se apaga antes del borde
+      if (a < 0.02) continue;
+      const sideScale = 0.6 + 0.4 * edgeFade;
+      ctx.fillStyle = `rgba(0,0,0,${a})`;
+      ctx.beginPath();
+      ctx.ellipse(ball.x, baseTop, radio * (0.7 + 0.4 * t) * sideScale, radio * 0.26 * sideScale, 0, 0, TAU);
+      ctx.fill();
+    }
     ctx.restore();
   }
 
-  function drawMetalBall(x, y, r) {
+  function drawMetalBall(ctx, x, y, r) {                                           // ctx local: se usa para el bake
     // cuerpo metálico oscuro: highlight arriba-izquierda → medio → borde oscuro (fresnel)
     const hx = x - r * 0.4, hy = y - r * 0.42;
     const g = ctx.createRadialGradient(hx, hy, r * 0.06, hx, hy, r * 1.75);
@@ -673,25 +1277,108 @@
     ctx.beginPath(); ctx.arc(x, y, r - 0.4, 0, TAU); ctx.stroke();
   }
 
+  // crossfade día→noche de un par de capas. En las MESETAS (día/noche plenos) blitea UNA sola capa
+  // (antes a noche plena dibujaba día+noche, con la de día 100% tapada → ~4 blits full-screen al pedo).
+  function blitDN(day, nite) {
+    if (nightFactor >= 0.999) { if (nite) ctx.drawImage(nite, 0, 0, W, H); return; } // noche plena: sólo noche
+    if (day) ctx.drawImage(day, 0, 0, W, H);
+    if (nite && nightFactor > 0.001) { ctx.globalAlpha = nightFactor; ctx.drawImage(nite, 0, 0, W, H); ctx.globalAlpha = 1; }
+  }
+
   function draw() {
-    // fondo: crossfade día → noche
-    if (sceneDay) ctx.drawImage(sceneDay, 0, 0, W, H);
-    else ctx.clearRect(0, 0, W, H);
-    if (sceneNight && nightFactor > 0.001) {
-      ctx.globalAlpha = nightFactor; ctx.drawImage(sceneNight, 0, 0, W, H); ctx.globalAlpha = 1;
+    const tt = performance.now() / 1000;
+    ctx.clearRect(0, 0, W, H);
+    // FONDO (pared + ventana + biblioteca + penumbra) — crossfade día/noche
+    blitDN(sceneDay, sceneNight);
+
+    // RAYOS de luz del ventanal (capa bakeada) con alpha "respirando"
+    const rayBreath = 0.78 + Math.sin(tt * 0.4) * 0.22;
+    if (godRaysDay && nightFactor < 0.999)   { ctx.globalAlpha = (1 - nightFactor) * rayBreath; ctx.drawImage(godRaysDay, 0, 0, W, H); ctx.globalAlpha = 1; }
+    if (godRaysNight && nightFactor > 0.001) { ctx.globalAlpha = nightFactor * rayBreath * 0.85; ctx.drawImage(godRaysNight, 0, 0, W, H); ctx.globalAlpha = 1; }
+    // MOTAS de polvo a la deriva dentro de la luz (live, deterministas, additivas)
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    const dustN = 14, zL = W * 0.45, zR = W, zT = H * 0.02, zB = H * 0.68;
+    for (let i = 0; i < dustN; i++) {
+      const sx = (i * 73) % 100, sy = (i * 149) % 100;
+      const phase = tt * (0.12 + (i % 4) * 0.03) + i * 0.5;
+      const x = zL + (sx / 100) * (zR - zL) + Math.sin(phase) * W * 0.03;
+      const y = zT + (sy / 100) * (zB - zT) + Math.cos(tt * 0.17 + i * 0.6) * H * 0.04;
+      if (x < zL || x > zR || y < zT || y > zB) continue;
+      const r = 1 + (i % 3) * 0.7;
+      const a = (0.22 + (i % 5) * 0.04) * (0.6 + 0.4 * Math.sin(phase * 0.5));
+      const af = a * (0.85 - nightFactor * 0.5);
+      if (af < 0.01) continue;
+      ctx.fillStyle = nightFactor < 0.5 ? `rgba(255,246,210,${af})` : `rgba(205,222,255,${af})`;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
     }
-    drawFrame();
-    if (!ghosted) for (const ball of balls) drawBallShadow(ball);
-    for (const ball of balls) drawStrings(ball);
+    ctx.restore();
+    // TITILEO de estrellas (sólo de noche; mismas posiciones deterministas que el bake, + seno)
+    if (nightFactor > 0.02) drawStarTwinkle(tt);
+
+    // PLANTA con vaivén tenue: shear horizontal anclado en la maceta (abajo fijo, hojas arriba se mecen).
+    // Dos senoides desfasadas → brisa orgánica. performance.now() para el tiempo (no afecta la física).
+    const anchorY = H * 0.86;
+    const sway = Math.sin(tt * 0.55) * 0.012 + Math.sin(tt * 1.27 + 0.7) * 0.006;
+    ctx.save();
+    ctx.transform(1, 0, sway, 1, -sway * anchorY, 0);
+    blitDN(plantDay, plantNight);
+    ctx.restore();
+    // MESA (canto + sombra de contacto) — delante de la planta
+    blitDN(frontDay, frontNight);
+    if (frameLayer) ctx.drawImage(frameLayer, 0, 0, W, H);                          // marco bakeado
+    if (!ghosted) drawBallShadows();
+    drawStrings();
     ctx.globalAlpha = ghosted ? 0.4 : 1;
-    for (const ball of balls) drawMetalBall(ball.x, ball.y, radio);
+    const bh = ballSpriteHalf;
+    for (const ball of balls) ctx.drawImage(ballSprite, ball.x - bh, ball.y - bh, bh * 2, bh * 2); // esfera bakeada
     ctx.globalAlpha = 1;
+    // oclusión de contacto entre bolas que se tocan (las lee como esferas sólidas, no translúcidas)
+    drawContactOcclusion();
     // viñeteado (profundidad / plano de cerca)
     if (vignette) { ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H); }
-    // veil frío de noche sobre TODO (incluye el péndulo) para que la luz cuaje con la escena
-    if (nightFactor > 0.001) {
-      ctx.fillStyle = `rgba(18,26,54,${nightFactor * 0.2})`;
+    // COLOR GRADE unificado (absorbe el veil de noche): lerp cálido-dorado (día) → frío-azul (noche)
+    {
+      const nf = nightFactor;
+      const r = Math.round(255 * (1 - nf) + 30 * nf);
+      const g = Math.round(232 * (1 - nf) + 42 * nf);
+      const b = Math.round(178 * (1 - nf) + 86 * nf);
+      const a = 0.028 * (1 - nf) + 0.20 * nf;
+      ctx.fillStyle = `rgba(${r},${g},${b},${a})`;
       ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  // titileo de estrellas en vivo (mismas posiciones que el bake nocturno + seno por estrella)
+  function drawStarTwinkle(tt) {
+    const { gx, gy, gw, horizonY } = windowGeom();
+    for (let i = 0; i < 48; i++) {
+      const sx = gx + ((i * 73) % 100) / 100 * gw;
+      const sy = ((i * 149) % 100) / 100 * (horizonY - gy) + gy;
+      if (sy < 0) continue;
+      const r = 0.6 + ((i * 37) % 10) / 10 * 1.1;
+      const baseA = 0.3 + ((i * 53) % 10) / 10 * 0.6;
+      const per = 0.8 + ((i * 23) % 100) / 100 * 0.7;
+      const a = Math.max(0, baseA + Math.sin(tt * TAU / per + i * 0.3) * 0.18) * nightFactor;
+      if (a < 0.01) continue;
+      ctx.globalAlpha = a; ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.beginPath(); ctx.arc(sx, sy, r, 0, TAU); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // oclusión de contacto: oscurece la costura entre bolas que se tocan
+  function drawContactOcclusion() {
+    if (ghosted) return;
+    for (let i = 0; i < balls.length - 1; i++) {
+      const a = balls[i], b = balls[i + 1];
+      const d = Math.hypot(b.x - a.x, b.y - a.y);
+      if (d > radio * 2.06) continue;
+      const k2 = 1 - d / (radio * 2.06);
+      if (k2 < 0.05) continue;                                                      // en reposo la costura es casi nula → no dibujar
+      const cxm = (a.x + b.x) / 2, cym = (a.y + b.y) / 2;
+      ctx.fillStyle = `rgba(0,0,0,${0.30 * k2})`;
+      ctx.beginPath(); ctx.ellipse(cxm, cym, radio * 0.28, radio * 0.14, 0, 0, TAU); ctx.fill();
     }
   }
 
@@ -756,7 +1443,7 @@
   // No hay samples en esta carpeta, así que el "clac" se genera: un par de parciales inarmónicos con
   // decaída rápida (la campanita metálica) + un transitorio de ruido filtrado (el ataque). Se dispara
   // a lo sumo una vez por frame, con cooldown, escalando volumen/pitch con la fuerza del choque.
-  let actx = null, noiseBuf = null, lastClickT = 0, frameImpactV = 0;
+  let actx = null, lastClickT = 0, frameImpactV = 0;
   const SND_COOLDOWN = 32;     // ms mínimos entre clics (evita ametralladora)
   const SND_VTHR     = 0.4;    // rad/s — por debajo no suena (roces numéricos)
   function audioResume() {
@@ -765,42 +1452,25 @@
       if (actx.state === 'suspended') actx.resume();
     } catch (e) {}
   }
-  function getNoise() {
-    if (noiseBuf || !actx) return noiseBuf;
-    const n = Math.floor(actx.sampleRate * 0.03);
-    noiseBuf = actx.createBuffer(1, n, actx.sampleRate);
-    const d = noiseBuf.getChannelData(0);
-    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-    return noiseBuf;
-  }
   function playClick(intensity) {
     if (!actx) return;
     const t = actx.currentTime;
-    const vol = Math.max(0.03, Math.min(1, intensity)) * 0.07;                     // MUY suave (antes 0.55 — rompía los oídos)
-    const pitch = 1 + (Math.random() * 2 - 1) * 0.07;                              // jitter para que no suene clonado
-    // tic discreto: un solo parcial medio + un toque de octava, decaída cortita, con ataque de 2ms
-    // (el setValueAtTime directo metía un click digital duro en el borde)
+    // tic MUY suave: blip tonal grave, redondeado con un lowpass (sin agudos hirientes ni ruido de
+    // ataque), volumen bajísimo. Mínimo audible para que siempre se escuche el tic.
+    const vol = (0.3 + 0.7 * Math.max(0, Math.min(1, intensity))) * 0.035;
+    const pitch = 1 + (Math.random() * 2 - 1) * 0.06;
     const g = actx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(vol, t + 0.002);
-    g.gain.exponentialRampToValueAtTime(0.0004, t + 0.07);
-    g.connect(actx.destination);
-    const base = 1500 * pitch;                                                     // más grave (antes 2300 + parcial a 11kHz: hiriente)
-    for (const [m, gg] of [[1, 1], [2.4, 0.18]]) {
+    g.gain.linearRampToValueAtTime(vol, t + 0.003);                                // ataque suave (3ms): tic sin click digital
+    g.gain.exponentialRampToValueAtTime(0.0003, t + 0.06);                         // decaída corta
+    const lp = actx.createBiquadFilter();                                          // redondea: corta lo hiriente
+    lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 0.6;
+    g.connect(lp).connect(actx.destination);
+    const base = 1050 * pitch;
+    for (const [m, gg] of [[1, 1], [2.0, 0.12]]) {                                 // fundamental + un dejo de octava
       const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = base * m;
       const og = actx.createGain(); og.gain.value = gg;
-      o.connect(og).connect(g); o.start(t); o.stop(t + 0.08);
-    }
-    // ataque: soplido de ruido por banda media (sin agudos hirientes), apenas audible
-    const nb = getNoise();
-    if (nb) {
-      const ns = actx.createBufferSource(); ns.buffer = nb;
-      const bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1200; bp.Q.value = 1.2;
-      const ng = actx.createGain();
-      ng.gain.setValueAtTime(0, t);
-      ng.gain.linearRampToValueAtTime(vol * 0.5, t + 0.002);
-      ng.gain.exponentialRampToValueAtTime(0.0004, t + 0.02);
-      ns.connect(bp).connect(ng).connect(actx.destination); ns.start(t); ns.stop(t + 0.03);
+      o.connect(og).connect(g); o.start(t); o.stop(t + 0.07);
     }
   }
 

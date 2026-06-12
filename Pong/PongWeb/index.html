@@ -274,20 +274,20 @@
   let j1pulse = 0, j2pulse = 0;    // 1→0: "golpe" visual del marcador al sumar (se nota el punto)
   let showDebug = false;
 
-  // paletas (cy = centro vertical en px, vel = velocidad px/s). freezeT/powerFireT: timers de powers (modo ladrillos)
-  const right = { cy: 0, vel: 0, onFire: false, freezeT: 0, powerFireT: 0 };  // jugador 1
-  const left  = { cy: 0, vel: 0, onFire: false, freezeT: 0, powerFireT: 0 };  // jugador 2 / CPU
+  // paletas (cy = centro vertical en px, vel = velocidad px/s). powerFireT/boostT: timers de powers (modo ladrillos)
+  const right = { cy: 0, vel: 0, onFire: false, powerFireT: 0, boostT: 0 };  // jugador 1
+  const left  = { cy: 0, vel: 0, onFire: false, powerFireT: 0, boostT: 0 };  // jugador 2 / CPU
 
   // ── MODO LADRILLOS (Pong + Breakout) ──
   let bricksMode = false;
   let balls = [];                  // varias bolas: {x,y,vx,vy,fire,last,trail,px,py,rx,ry,delay}
   let bricks = [];                 // ladrillos sobre la red: {x,y,w,h,power}
   let drops = [];                  // tokens de poder que caen al lado del que rompió: {x,y,vx,vy,type,side,windup,trail}
-  const BRICK_BALLS = 3;           // bolas simultáneas al arrancar
-  const BRICK_BALLS_MAX = 6;       // tope (con el power de bola extra)
+  // Bolas: 2 BASE (una hacia cada jugador, siempre respawnean) + EXTRA por power-up cian,
+  // sin tope: cada extra vive hasta que sale de cancha.
   const BRICK_SPEED = 0.72;        // las bolas van un poco más lentas en este modo
-  const BRICK_POWER_CHANCE = 0.3;  // proba de que un ladrillo sea "con poder" (marcado en dorado)
-  const BRICK_ROWS = 9;            // ladrillos apilados a lo largo de toda la red
+  const BRICK_POWER_CHANCE = 0.15; // proba de que un ladrillo suelte power (naranja/cian/verde)
+  const BRICK_ROWS = 7;            // filas por columna (la pared son 3 columnas escalonadas)
 
   // pelota
   let bx = 0, by = 0, bvx = 0, bvy = 0, serveCD = 0;
@@ -373,6 +373,7 @@
   // ── FÍSICA ──
   function updatePaddle(p, dt, isCPU, isRight) {
     let maxSpd = paddleSpeed() * (p.onFire ? FIRE_SPEED_MULT : 1);
+    if (p.boostT > 0) maxSpd *= 1.55;                  // power verde (modo ladrillos): paleta más rápida
     if (isCPU) maxSpd *= A.SPEED_MULT * aiSpeedScale;
     if (isCPU && aiSleeping) { p.vel = 0; return; }   // dormida: no hace NADA (sobreescribe el resto)
     if (isCPU) {
@@ -557,29 +558,45 @@
   // Varias bolas + un clúster de ladrillos en el centro. Romper un ladrillo suma 1 punto al ÚLTIMO que
   // tocó esa bola y le da un power al azar. Gana por puntos totales (a 10), no por goles: las bolas que
   // se van por un lado reaparecen sin sumar. 1 jugador (der) contra la CPU (izq).
-  function makeBall(dir) {
+  function makeBall(dir, x0) {
     const r = ballR();
-    return { x: W / 2, y: rnd(r, H - r), vx: dir * VX0_FRAC * W * rnd(0.8, 1.1) * BRICK_SPEED,
+    const x = x0 == null ? W / 2 : x0, y = rnd(r, H - r);
+    return { x, y, vx: dir * VX0_FRAC * W * rnd(0.8, 1.1) * BRICK_SPEED,
              vy: rnd(-1, 1) * VY0_FRAC * H * 0.6 * BRICK_SPEED, fire: false, last: 0,
-             trail: [], px: W / 2, py: H / 2, rx: W / 2, ry: H / 2, entry: 0 };
+             trail: [], px: x, py: y, rx: x, ry: y, entry: 0, hold: 0, extra: false, dead: false };
   }
   function respawnBall(b) {
     const r = ballR();
-    b.x = W / 2; b.y = rnd(r, H - r);
-    b.vx = (Math.random() < 0.5 ? -1 : 1) * VX0_FRAC * W * rnd(0.8, 1.1) * BRICK_SPEED;
+    const dir = Math.random() < 0.5 ? -1 : 1;
+    b.x = W / 2 + dir * W * 0.18;                  // nace FUERA de la pared de ladrillos, alejándose
+    b.y = rnd(r, H - r);
+    b.vx = dir * VX0_FRAC * W * rnd(0.8, 1.1) * BRICK_SPEED;
     b.vy = rnd(-1, 1) * VY0_FRAC * H * 0.6 * BRICK_SPEED;
     b.fire = false; b.last = 0; b.trail.length = 0; b.px = b.x; b.py = b.y; b.entry = 0;
+    b.hold = SERVE_DELAY;                          // pausa de saque antes de salir (como el modo normal)
   }
   function setupBricks() {
     bricks = [];
-    const bw = W * 0.026, gap = H * 0.012;            // compacto: poco espacio entre ladrillos
-    const top = H * 0.05, avail = H * 0.9;            // a lo largo de casi toda la red
-    const bh = (avail - (BRICK_ROWS - 1) * gap) / BRICK_ROWS;
-    const x = W / 2 - bw / 2;
-    for (let i = 0; i < BRICK_ROWS; i++) {
-      // power = null (normal) | 'fire' (naranja) | 'ball' (cian). El color del ladrillo ya anticipa el token.
-      const power = Math.random() < BRICK_POWER_CHANCE ? (Math.random() < 0.5 ? 'fire' : 'ball') : null;
-      bricks.push({ x, y: top + i * (bh + gap), w: bw, h: bh, power });
+    // pared de 3 columnas ESCALONADAS sobre la red (la central corrida media celda, como pared real)
+    const bw = W * 0.022, gapX = W * 0.005, gapY = H * 0.016;
+    const top = H * 0.07, avail = H * 0.86;
+    const bh = (avail - (BRICK_ROWS - 1) * gapY) / BRICK_ROWS;
+    const xs = [W / 2 - bw * 1.5 - gapX, W / 2 - bw / 2, W / 2 + bw * 0.5 + gapX];
+    for (let c = 0; c < 3; c++) {
+      const off = c === 1 ? (bh + gapY) / 2 : 0;       // columna central desfasada media celda
+      const n = c === 1 ? BRICK_ROWS - 1 : BRICK_ROWS; // (pierde media arriba y media abajo)
+      for (let i = 0; i < n; i++) {
+        const x = xs[c], y = top + off + i * (bh + gapY);
+        // power = null | 'fire' (naranja) | 'ball' (cian) | 'speed' (verde). El color anticipa el token.
+        const roll = Math.random();
+        let power = Math.random() < BRICK_POWER_CHANCE
+          ? (roll < 1 / 3 ? 'fire' : roll < 2 / 3 ? 'ball' : 'speed') : null;
+        // anti-cluster: si ya hay un power a menos de ~2 celdas (vecino directo o diagonal), sale normal
+        if (power) for (const o of bricks) {
+          if (o.power && Math.hypot(o.x - x, o.y - y) < bh * 2.2) { power = null; break; }
+        }
+        bricks.push({ x, y, w: bw, h: bh, power });
+      }
     }
   }
   function startBricks() {
@@ -588,10 +605,16 @@
     j1score = 0; j2score = 0;
     right.cy = left.cy = H / 2; right.vel = left.vel = 0;
     right.onFire = left.onFire = false;
-    right.freezeT = left.freezeT = 0; right.powerFireT = left.powerFireT = 0;
+    right.powerFireT = left.powerFireT = 0; right.boostT = left.boostT = 0;
     fireball = false; fireTop = fireBot = fireNet = false;
     setupBricks();
-    balls = []; for (let i = 0; i < BRICK_BALLS; i++) balls.push(makeBall(i % 2 ? -1 : 1));
+    balls = [];
+    for (const dir of [1, -1]) {                   // una bola LENTA hacia cada jugador, fuera de la pared
+      const b = makeBall(dir, W / 2 + dir * W * 0.18);
+      b.vx *= 0.7; b.vy *= 0.7;
+      b.hold = SERVE_DELAY * 1.5;                  // anticipación al arranque de la ronda (saque, como el modo normal)
+      balls.push(b);
+    }
     drops = [];
     winner = 0; confirmQuit = false; state = 'play';
     embers.length = 0; sparks.length = 0;
@@ -606,16 +629,21 @@
   }
   function stepBricks(dt) {
     for (const p of [right, left]) {
-      if (p.freezeT > 0) p.freezeT -= dt;
+      if (p.boostT > 0) p.boostT -= dt;
       if (p.powerFireT > 0) { p.powerFireT -= dt; p.onFire = p.powerFireT > 0; }
     }
     bricksAI();
     updatePaddle(right, dt, false, true);
     updatePaddle(left, dt, true, false);
-    for (const b of balls) { b.px = b.x; b.py = b.y; stepBall(b, dt); }
+    for (let i = balls.length - 1; i >= 0; i--) {    // al revés: las extra que salen se eliminan acá
+      const b = balls[i];
+      b.px = b.x; b.py = b.y; stepBall(b, dt);
+      if (b.dead) balls.splice(i, 1);
+    }
   }
   function stepBall(b, dt) {
     const r = ballR();
+    if (b.hold > 0) { b.hold -= dt; b.px = b.x; b.py = b.y; return; }   // congelada en el saque
     if (b.entry > 0) {                                   // dash diagonal de entrada (rápido); al terminar normaliza
       b.entry -= dt;
       if (b.entry <= 0) {
@@ -631,10 +659,10 @@
     paddleHitBall(b, left, false);
     if (b.entry <= 0) b.vy = clampN(b.vy, -vyMax() * BRICK_SPEED, vyMax() * BRICK_SPEED);   // no frenar el dash
     for (const k of bricks) if (b.x + r > k.x && b.x - r < k.x + k.w && b.y + r > k.y && b.y - r < k.y + k.h) { breakBrick(k, b); break; }
-    // gol: si la bola sale por un lado, punto para el RIVAL (sin power) y reaparece. NO corta la ronda:
-    // la ronda sólo termina cuando alguien llega al total de puntos.
-    if (b.x - r > W)      { addBrickPoint(2); respawnBall(b); }   // salió por la derecha → punto jug.2
-    else if (b.x + r < 0) { addBrickPoint(1); respawnBall(b); }   // salió por la izquierda → punto jug.1
+    // gol: si la bola sale por un lado, punto para el RIVAL. NO corta la ronda (sólo termina al llegar
+    // al total). Las bolas BASE reaparecen; las EXTRA (de power-up) desaparecen — viven una sola vida.
+    if (b.x - r > W)      { addBrickPoint(2); b.extra ? b.dead = true : respawnBall(b); }   // → punto jug.2
+    else if (b.x + r < 0) { addBrickPoint(1); b.extra ? b.dead = true : respawnBall(b); }   // → punto jug.1
   }
   function paddleHitBall(b, p, isRight) {
     const pw = paddleW(), ph = paddleH(), r = ballR();
@@ -660,7 +688,7 @@
     const penX = (k.w / 2 + r) - Math.abs(dx), penY = (k.h / 2 + r) - Math.abs(dy);
     if (penX < penY) { b.x += (dx < 0 ? -1 : 1) * penX; b.vx = (dx < 0 ? -1 : 1) * Math.abs(b.vx); }
     else             { b.y += (dy < 0 ? -1 : 1) * penY; b.vy = (dy < 0 ? -1 : 1) * Math.abs(b.vy); }
-    const bcol = k.power === 'fire' ? [255, 150, 40] : k.power === 'ball' ? [120, 220, 255] : [150, 210, 255];
+    const bcol = POWER_COLS[k.power || 'norm'];
     burst(cx, cy, bcol, 18, Math.min(W, H) * 0.7, r * 0.6, 0.5);
     bricks.splice(bricks.indexOf(k), 1);
     // los ladrillos NO suman puntos (eso es sólo por goles). El de color SUELTA un token (fuego/bola)
@@ -674,7 +702,7 @@
     if (cond != null && (j1score >= cond || j2score >= cond)) { winner = scorer; state = 'over'; }
   }
   // ── DROPS DE PODER (hay que atraparlos con la paleta) ──
-  const dropR = () => Math.max(9, Math.min(W, H) * 0.022);
+  const dropR = () => Math.max(14, Math.min(W, H) * 0.034);
   function spawnDrop(x, y, side, type) {                 // side = quién rompió (1 der / 2 izq); type del ladrillo
     const dir = side === 1 ? 1 : -1;                     // cae hacia el lado del que rompió
     drops.push({ x, y, vx: dir * W * 0.16, vy: rnd(-1, 1) * H * 0.04, type, side, windup: 0.45, trail: [] });
@@ -694,7 +722,7 @@
       if (reached) {
         if (d.y + r > p.cy - ph / 2 && d.y - r < p.cy + ph / 2) {          // ¡atrapado!
           applyDrop(d.side, d.type);
-          burst(d.x, d.y, d.type === 'fire' ? [255, 170, 40] : [120, 220, 255], 14, Math.min(W, H) * 0.6, r * 0.5, 0.4);
+          burst(d.x, d.y, POWER_COLS[d.type] || POWER_COLS.norm, 14, Math.min(W, H) * 0.6, r * 0.5, 0.4);
           drops.splice(i, 1); continue;
         }
       }
@@ -703,10 +731,10 @@
   }
   function applyDrop(side, type) {
     const self = side === 1 ? right : left;
-    if (type === 'fire') { self.powerFireT = 10; return; }   // paleta en llamas 10s
+    if (type === 'fire')  { self.powerFireT = 10; return; }  // paleta en llamas 10s
+    if (type === 'speed') { self.boostT = 8; return; }       // paleta más rápida 8s (verde)
     // bola extra: sale de TU lado hacia el rival con un DASH DIAGONAL rápido (animación de entrada),
-    // sin importar dónde esté la paleta. Tras el dash se normaliza a la velocidad del modo.
-    if (balls.length >= BRICK_BALLS_MAX) return;
+    // sin importar dónde esté la paleta. Sin tope: vive hasta que sale de cancha (no respawnea).
     const dir = side === 1 ? -1 : 1, r = ballR();
     const nb = makeBall(dir);
     nb.x = side === 1 ? rightX() - r * 2 : leftX() + paddleW() + r * 2;
@@ -715,6 +743,7 @@
     nb.vx = dir * fast;
     nb.vy = (Math.random() < 0.5 ? -1 : 1) * fast * 0.85;   // fuerte componente vertical → diagonal + rebote
     nb.last = side; nb.entry = 0.34;                        // dura el dash; al terminar se normaliza
+    nb.extra = true;                                        // bola de power-up: una sola vida
     nb.px = nb.x; nb.py = nb.y; nb.rx = nb.x; nb.ry = nb.y;
     balls.push(nb);
   }
@@ -733,33 +762,58 @@
         rnd(0.2, 0.5), rnd(r * 0.4, r * 0.8), 0);
     }
   }
+  // colores por tipo de power (los usan ladrillos, tokens y chispas): naranja=fuego · cian=bola · verde=velocidad
+  const POWER_COLS = { fire: [255, 150, 40], ball: [90, 210, 255], speed: [110, 235, 130], norm: [110, 170, 235] };
+
+  // Sprites de ladrillo HORNEADOS (cuerpo degradé + glow + sheen + borde, una vez por tamaño/dpr).
+  // Antes cada ladrillo creaba un gradiente y pintaba con shadowBlur POR FRAME (~20 ladrillos = el
+  // mayor costo de render del modo). Ahora es 1 drawImage por ladrillo; lo único animado por frame
+  // es el núcleo pulsante de los power (un arc sin blur, barato).
+  let brickSprites = null, brickKey = '';
+  function bakeBrickSprites(bw, bh) {
+    const s = Math.min(W, H);
+    brickSprites = {};
+    for (const type of ['norm', 'fire', 'ball', 'speed']) {
+      const power = type !== 'norm';
+      const col = POWER_COLS[type];
+      const dark = [col[0] * 0.38, col[1] * 0.38, col[2] * 0.45];
+      const pad = Math.ceil(s * (power ? 0.03 : 0.016));   // margen para el glow horneado
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.ceil((bw + pad * 2) * dpr));
+      cv.height = Math.max(1, Math.ceil((bh + pad * 2) * dpr));
+      const g = cv.getContext('2d');
+      g.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const rr = Math.min(bw, bh) * 0.3;
+      const grad = g.createLinearGradient(0, pad, 0, pad + bh);
+      grad.addColorStop(0, rgba(col, power ? 0.95 : 0.75));
+      grad.addColorStop(1, rgba(dark, power ? 0.95 : 0.8));
+      g.shadowColor = rgba(col, power ? 0.8 : 0.4);
+      g.shadowBlur = s * (power ? 0.022 : 0.01);
+      g.fillStyle = grad;
+      roundRectOn(g, pad, pad, bw, bh, rr); g.fill();
+      g.shadowBlur = 0;
+      g.fillStyle = `rgba(255,255,255,${power ? 0.30 : 0.18})`;            // sheen de vidrio
+      roundRectOn(g, pad + bw * 0.12, pad + bh * 0.06, bw * 0.76, bh * 0.30, rr * 0.6); g.fill();
+      g.strokeStyle = power ? 'rgba(255,255,255,0.7)' : 'rgba(200,230,255,0.55)';
+      g.lineWidth = Math.max(1.5, s * 0.003);
+      roundRectOn(g, pad, pad, bw, bh, rr); g.stroke();
+      brickSprites[type] = { cv, pad };
+    }
+  }
   function drawBricks() {
-    const s = Math.min(W, H), t = performance.now() / 1000;
+    if (!bricks.length) return;
+    const bw = bricks[0].w, bh = bricks[0].h;
+    const key = (bw | 0) + 'x' + (bh | 0) + '@' + dpr;     // re-hornea sólo si cambió el tamaño (resize)
+    if (key !== brickKey) { bakeBrickSprites(bw, bh); brickKey = key; }
+    const t = performance.now() / 1000;
     for (const k of bricks) {
-      const rr = Math.min(k.w, k.h) * 0.25;
-      ctx.save();
-      if (k.power) {
-        // ladrillo CON PODER: color según el token que suelta (naranja=fuego, cian=bola), con glow y
-        // un núcleo que pulsa → se ve qué da antes de romperlo.
-        const pul = 0.6 + 0.4 * Math.sin(t * 5);
-        const col = k.power === 'fire' ? [255, 150, 40] : [120, 220, 255];
-        ctx.shadowColor = rgba(col, 0.9); ctx.shadowBlur = s * 0.025 * pul;
-        ctx.fillStyle = rgba(col, 0.22 + 0.14 * pul);
-        roundRect(k.x, k.y, k.w, k.h, rr); ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = rgba(col, 0.95); ctx.lineWidth = Math.max(1.5, s * 0.0035);
-        roundRect(k.x, k.y, k.w, k.h, rr); ctx.stroke();
-        ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.45 * pul})`;       // núcleo pulsante (indicador)
-        ctx.beginPath(); ctx.arc(k.x + k.w / 2, k.y + k.h / 2, Math.min(k.w, k.h) * 0.26, 0, TAU); ctx.fill();
-      } else {
-        ctx.shadowColor = 'rgba(120,200,255,0.5)'; ctx.shadowBlur = s * 0.02;
-        ctx.fillStyle = 'rgba(150,210,255,0.16)';
-        roundRect(k.x, k.y, k.w, k.h, rr); ctx.fill();
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = 'rgba(185,225,255,0.85)'; ctx.lineWidth = Math.max(1.5, s * 0.003);
-        roundRect(k.x, k.y, k.w, k.h, rr); ctx.stroke();
+      const sp = brickSprites[k.power || 'norm'];
+      ctx.drawImage(sp.cv, k.x - sp.pad, k.y - sp.pad, k.w + sp.pad * 2, k.h + sp.pad * 2);
+      if (k.power) {                                       // único elemento vivo: núcleo pulsante
+        const pul = 0.6 + 0.4 * Math.sin(t * 5 + k.y * 0.03);
+        ctx.fillStyle = `rgba(255,255,255,${0.45 + 0.5 * pul})`;
+        ctx.beginPath(); ctx.arc(k.x + k.w / 2, k.y + k.h / 2, Math.min(k.w, k.h) * 0.22, 0, TAU); ctx.fill();
       }
-      ctx.restore();
     }
   }
   // tokens de poder cayendo hacia el lado del que rompió (hay que atraparlos)
@@ -769,40 +823,78 @@
       const r = dropR();
       const wob = d.windup > 0 ? (1 - d.windup / 0.45) : 1;
       const sc = 0.45 + 0.55 * Math.min(1, wob * 1.3);    // escala-in durante la anticipación
-      const pul = 0.6 + 0.4 * Math.sin(tt * 8);
-      const col = d.type === 'fire' ? [255, 150, 40] : [120, 220, 255];
+      const pul = 0.6 + 0.4 * Math.sin(tt * 6);
+      const rot = Math.sin(tt * 3 + d.y * 0.01) * 0.16;   // balanceo suave (vivo, no estático)
+      const col = POWER_COLS[d.type] || POWER_COLS.norm;
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.lineCap = 'round';
       for (let i = 1; i < d.trail.length; i++) {           // estela "llegando"
         const t = i / d.trail.length, a = d.trail[i - 1], c = d.trail[i];
-        ctx.strokeStyle = rgba(col, 0.18 * t); ctx.lineWidth = r * 1.2 * t;
+        ctx.strokeStyle = rgba(col, 0.2 * t); ctx.lineWidth = r * 1.3 * t;
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(c.x, c.y); ctx.stroke();
       }
-      const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, r * 2.6 * sc);
-      g.addColorStop(0, rgba(col, 0.7 * pul)); g.addColorStop(1, rgba(col, 0));
-      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.x, d.y, r * 2.6 * sc, 0, TAU); ctx.fill();
+      // halo doble (núcleo brillante + corona amplia)
+      const g = ctx.createRadialGradient(d.x, d.y, 0, d.x, d.y, r * 3 * sc);
+      g.addColorStop(0, rgba(col, 0.55 * pul));
+      g.addColorStop(0.45, rgba(col, 0.2 * pul));
+      g.addColorStop(1, rgba(col, 0));
+      ctx.fillStyle = g; ctx.beginPath(); ctx.arc(d.x, d.y, r * 3 * sc, 0, TAU); ctx.fill();
       if (d.windup > 0) {                                  // anillo de anticipación antes de salir
-        ctx.strokeStyle = rgba(col, 0.5 * pul); ctx.lineWidth = r * 0.3;
-        ctx.beginPath(); ctx.arc(d.x, d.y, r * (1.9 + 0.6 * pul), 0, TAU); ctx.stroke();
+        ctx.strokeStyle = rgba(col, 0.6 * pul); ctx.lineWidth = r * 0.22;
+        ctx.beginPath(); ctx.arc(d.x, d.y, r * (2.1 + 0.7 * pul), 0, TAU); ctx.stroke();
       }
       ctx.globalCompositeOperation = 'source-over';
-      // chip CUADRADO redondeado (forma distinta a las bolas, que son redondas) + ícono según el tipo
-      const sz = r * sc * 1.7;
-      ctx.fillStyle = rgba(col, 0.95);
-      roundRect(d.x - sz / 2, d.y - sz / 2, sz, sz, sz * 0.28); ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = Math.max(1, r * 0.12);
-      roundRect(d.x - sz / 2, d.y - sz / 2, sz, sz, sz * 0.28); ctx.stroke();
-      ctx.fillStyle = 'rgba(255,255,255,0.95)';
-      if (d.type === 'fire') {                            // ícono llama: triángulo apuntando arriba
-        ctx.beginPath();
-        ctx.moveTo(d.x, d.y - sz * 0.26);
-        ctx.lineTo(d.x + sz * 0.22, d.y + sz * 0.22);
-        ctx.lineTo(d.x - sz * 0.22, d.y + sz * 0.22);
-        ctx.closePath(); ctx.fill();
-      } else {                                            // ícono bola: aro
-        ctx.lineWidth = Math.max(1.5, r * 0.18); ctx.strokeStyle = 'rgba(255,255,255,0.95)';
-        ctx.beginPath(); ctx.arc(d.x, d.y, sz * 0.26, 0, TAU); ctx.stroke();
+
+      // chip glossy (cuadrado redondeado, forma distinta a las bolas) con balanceo
+      ctx.translate(d.x, d.y); ctx.rotate(rot);
+      const sz = r * sc * 2.1;
+      const lite = [Math.min(255, col[0] + 70), Math.min(255, col[1] + 70), Math.min(255, col[2] + 70)];
+      const dark = [col[0] * 0.45, col[1] * 0.45, col[2] * 0.5];
+      const cg = ctx.createLinearGradient(-sz / 2, -sz / 2, sz / 2, sz / 2);
+      cg.addColorStop(0, rgba(lite, 1)); cg.addColorStop(0.55, rgba(col, 1)); cg.addColorStop(1, rgba(dark, 1));
+      ctx.shadowColor = rgba(col, 0.9); ctx.shadowBlur = r * 0.9;
+      ctx.fillStyle = cg;
+      roundRect(-sz / 2, -sz / 2, sz, sz, sz * 0.3); ctx.fill();
+      ctx.shadowBlur = 0;
+      // doble borde: blanco al ras + aro exterior del color
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = Math.max(1.5, r * 0.12);
+      roundRect(-sz / 2, -sz / 2, sz, sz, sz * 0.3); ctx.stroke();
+      ctx.strokeStyle = rgba(col, 0.85); ctx.lineWidth = Math.max(1, r * 0.07);
+      roundRect(-sz / 2 - r * 0.14, -sz / 2 - r * 0.14, sz + r * 0.28, sz + r * 0.28, sz * 0.34); ctx.stroke();
+      // sheen superior (vidrio)
+      ctx.fillStyle = 'rgba(255,255,255,0.28)';
+      roundRect(-sz * 0.38, -sz * 0.43, sz * 0.76, sz * 0.30, sz * 0.16); ctx.fill();
+
+      if (d.type === 'fire') {
+        // llama curva blanca con núcleo dorado
+        const fh = sz * 0.32;
+        const flame = (k, color) => {
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.moveTo(0, -fh * k);
+          ctx.quadraticCurveTo(fh * 0.95 * k, -fh * 0.05 * k, fh * 0.5 * k, fh * 0.45 * k);
+          ctx.quadraticCurveTo(fh * 0.42 * k, fh * 0.8 * k, 0, fh * 0.8 * k);
+          ctx.quadraticCurveTo(-fh * 0.42 * k, fh * 0.8 * k, -fh * 0.5 * k, fh * 0.45 * k);
+          ctx.quadraticCurveTo(-fh * 0.95 * k, -fh * 0.05 * k, 0, -fh * k);
+          ctx.fill();
+        };
+        flame(1, 'rgba(255,255,255,0.95)');
+        flame(0.55, 'rgba(255,205,80,1)');
+      } else if (d.type === 'speed') {
+        // rayo ⚡ blanco (velocidad)
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        boltPath(0, 0, sz); ctx.fill();
+      } else {
+        // mini pelota glossy + un "+" (bola extra)
+        const br = sz * 0.26;
+        const bg = ctx.createRadialGradient(-br * 0.3, -br * 0.3, br * 0.1, 0, 0, br);
+        bg.addColorStop(0, '#ffffff'); bg.addColorStop(0.55, 'rgba(205,240,255,1)'); bg.addColorStop(1, 'rgba(60,140,205,1)');
+        ctx.fillStyle = bg; ctx.beginPath(); ctx.arc(0, 0, br, 0, TAU); ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = Math.max(1.5, r * 0.14);
+        const px = sz * 0.30, py = -sz * 0.30, pl = sz * 0.11;
+        ctx.beginPath(); ctx.moveTo(px - pl, py); ctx.lineTo(px + pl, py);
+        ctx.moveTo(px, py - pl); ctx.lineTo(px, py + pl); ctx.stroke();
       }
       ctx.restore();
     }
@@ -843,16 +935,47 @@
   addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
   addEventListener('blur', () => keys.clear());
 
-  // Botones de control (hold): izquierda = sube, derecha = baja. R = jugador 1, L = jugador 2.
+  // Botones de control (hold). El estado se DERIVA de dónde está cada dedo en cada momento
+  // (hit-test continuo contra la superficie del botón), no de pares down/up sueltos. En celu esto
+  // arregla: dedo que aterriza apenas corrido sobre el botón equivocado, dedo que se desliza de un
+  // botón al otro (cambia la dirección al instante), y pointerup perdido (nada queda pegado: si el
+  // dedo no está sobre el botón, el botón NO está apretado).
   const pad = { R: { up: false, dn: false }, L: { up: false, dn: false } };
-  function holdCtl(el) {
-    const side = el.dataset.side, dir = el.dataset.dir === 'up' ? 'up' : 'dn';
-    const set = v => { pad[side][dir] = v; el.classList.toggle('held', v); };
-    el.addEventListener('pointerdown', e => { e.preventDefault(); try { el.setPointerCapture(e.pointerId); } catch {} set(true); });
-    el.addEventListener('pointerup', () => set(false));
-    el.addEventListener('pointercancel', () => set(false));
+  const ctlEls = Array.from(document.querySelectorAll('.ctl'));
+  const ctlPointers = new Map();                       // pointerId → última posición {x,y}
+  const CTL_SLOP = 6;                                   // tolerancia (px) alrededor del botón antes de soltarlo
+
+  function refreshPad() {
+    pad.R.up = pad.R.dn = pad.L.up = pad.L.dn = false;
+    for (const pos of ctlPointers.values()) {
+      for (const el of ctlEls) {
+        const r = el.getBoundingClientRect();
+        if (pos.x >= r.left - CTL_SLOP && pos.x <= r.right + CTL_SLOP &&
+            pos.y >= r.top - CTL_SLOP && pos.y <= r.bottom + CTL_SLOP) {
+          pad[el.dataset.side][el.dataset.dir === 'up' ? 'up' : 'dn'] = true;
+          break;                                        // un dedo apreta un solo botón
+        }
+      }
+    }
+    for (const el of ctlEls)
+      el.classList.toggle('held', pad[el.dataset.side][el.dataset.dir === 'up' ? 'up' : 'dn']);
   }
-  document.querySelectorAll('.ctl').forEach(holdCtl);
+  for (const el of ctlEls)
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      ctlPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      refreshPad();
+    });
+  // move/up/cancel a nivel documento: el touch tiene captura implícita en el botón de origen,
+  // pero los eventos burbujean hasta acá, así seguimos al dedo aunque salga del botón.
+  document.addEventListener('pointermove', e => {
+    const p = ctlPointers.get(e.pointerId);
+    if (p) { p.x = e.clientX; p.y = e.clientY; refreshPad(); }
+  });
+  const ctlRelease = e => { if (ctlPointers.delete(e.pointerId)) refreshPad(); };
+  document.addEventListener('pointerup', ctlRelease);
+  document.addEventListener('pointercancel', ctlRelease);
+  addEventListener('blur', () => { ctlPointers.clear(); refreshPad(); });
 
   // Detección de PC (sin pantalla táctil): ahí se juega con teclado. Los pads se muestran/ocultan por
   // CSS según body.touch.playing — acá sólo seteamos la clase.
@@ -1177,7 +1300,8 @@
     // izquierda: en 2P es magenta, en 1P el color del contrincante elegido. `glow` puede diferir del
     // cuerpo (negro = cuerpo oscuro + resplandor gris claro, así se ve sobre el fondo).
     const col  = onF ? [255, 140, 30] : (isRight ? NEON_P1 : leftCol());
-    const glow = onF ? [255, 140, 30] : (isRight ? NEON_P1 : leftGlow());
+    let   glow = onF ? [255, 140, 30] : (isRight ? NEON_P1 : leftGlow());
+    if (!onF && p.boostT > 0) glow = [110, 245, 140];   // boost verde activo (modo ladrillos)
     // glow exterior: en fuego es naranja pero con blur contenido para no desdibujar el cuerpo
     ctx.save();
     ctx.shadowColor = rgba(glow, 0.95);
@@ -1194,6 +1318,15 @@
     cg.addColorStop(1,   onF ? 'rgba(255,160,60,0.82)'  : rgba(col, 0.7));
     ctx.fillStyle = cg;
     roundRect(x + inset * 0.5, y + ph * 0.05, pw - inset, ph * 0.9, r * 0.5); ctx.fill();
+    // boost verde activo: rayo ⚡ pulsante sobre el centro de la paleta (indicador del power de velocidad)
+    if (!onF && p.boostT > 0) {
+      const pul = 0.6 + 0.4 * Math.sin(performance.now() / 90);
+      ctx.save();
+      ctx.shadowColor = 'rgba(110,245,140,0.9)'; ctx.shadowBlur = s * 0.018;
+      ctx.fillStyle = `rgba(60,190,100,${0.6 + 0.4 * pul})`;
+      boltPath(x + pw / 2, p.cy, Math.min(pw * 3, ph * 0.45)); ctx.fill();
+      ctx.restore();
+    }
   }
 
   function drawBall() {
@@ -1550,14 +1683,25 @@
   }
 
   function rndi(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
-  function roundRect(x, y, w, h, r) {
+  function roundRectOn(g, x, y, w, h, r) {   // versión genérica: sirve para hornear en canvas offscreen
     r = Math.min(r, w / 2, h / 2);
+    g.beginPath();
+    g.moveTo(x + r, y);
+    g.arcTo(x + w, y, x + w, y + h, r);
+    g.arcTo(x + w, y + h, x, y + h, r);
+    g.arcTo(x, y + h, x, y, r);
+    g.arcTo(x, y, x + w, y, r);
+    g.closePath();
+  }
+  function roundRect(x, y, w, h, r) { roundRectOn(ctx, x, y, w, h, r); }
+  function boltPath(x, y, s) {                // path de rayo ⚡ centrado en (x,y), tamaño s
     ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
+    ctx.moveTo(x + s * 0.12, y - s * 0.32);
+    ctx.lineTo(x - s * 0.18, y + s * 0.06);
+    ctx.lineTo(x - s * 0.02, y + s * 0.06);
+    ctx.lineTo(x - s * 0.12, y + s * 0.32);
+    ctx.lineTo(x + s * 0.18, y - s * 0.04);
+    ctx.lineTo(x + s * 0.02, y - s * 0.04);
     ctx.closePath();
   }
 

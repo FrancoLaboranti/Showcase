@@ -1,97 +1,129 @@
 ---
 name: crazytanks-level
-description: Generate a new large, camera-scrolled race track for the CrazyTanks web port (CrazyTanks/CrazyTanksWeb/index.html). Use when the user asks to create/add/generate a level, track, map or "pista" for CrazyTanks, or wants a bigger track with the follow-camera. Designs the track by hand (walls + waypoints + finish line + start positions), wires it into all the data tables, and verifies counts.
+description: Tune or extend the PROCEDURAL circuit generator in the CrazyTanks web port (CrazyTanks/CrazyTanksWeb/index.html). Every free race auto-generates a fresh track (varied layouts, optional edge-crossing portals, randomized start direction). Use when the user asks to change how maps are generated, vary their shape/size/difficulty/portals, fix a bad auto-generated layout, or add a hand-authored circuit to the curated pool.
 ---
 
-# CrazyTanks — generador de niveles (pistas grandes con cámara)
+# CrazyTanks — generador de circuitos (autogenerado por carrera)
 
-Diseñás **a mano** una pista nueva, grande, que usa la cámara que sigue al jugador, y la cableás en
-`CrazyTanks/CrazyTanksWeb/index.html` (archivo único, sin build). Después el usuario la prueba.
+Cada carrera libre genera un circuito nuevo al arrancar (`regenAutoTrack()` en `startRace`/`_rebuildRace`).
+El torneo NO se autogenera (usa las pistas curadas 0–9). Tu trabajo acá es **ajustar el generador** o sumar
+una pista fija a la pool curada.
 
-## Modelo de mundo + cámara (ya está en el motor)
+Archivo único, sin build: `CrazyTanks/CrazyTanksWeb/index.html`.
 
-- Cada pista vive en un **mundo de `W×H` unidades lógicas**. Default = pantalla `1280×720` (sin cámara).
-- Una pista declara su mundo en **`WORLDS[track] = [W, H]`**. Si `W>1280` o `H>720` se activa la **cámara**:
-  la ventana visible siempre es de `1280×720` unidades del mundo (mismo zoom de siempre) y **scrollea
-  siguiendo al tanque del jugador**, clampeada a los bordes del mundo.
-- **Tamaño recomendado:** entre `2000×1200` y `2560×1440`. **Tope `~3200×1800`** (el fondo se hornea a
-  resolución de dispositivo; mundos enormes = mucha RAM). Mantené el **aspecto ~16:9**.
-- **Coordenadas:** origen arriba-izquierda, `x→derecha`, `y→abajo`, en **unidades del mundo**.
-  ⚠️ Los `xper(p)`/`yper(p)` valen `p*1280`/`p*720` (relativos a PANTALLA, no al mundo). Para pistas grandes
-  usá **números crudos del mundo** o `W*frac`/`H*frac`. No uses `xper/yper` salvo para tamaños chicos fijos.
+## Cómo funciona `buildAutoTrack(idx, W, H, theme)` — modelo CICLO HAMILTONIANO
 
-## Qué hay que agregar (todo indexado por `N = TRACK_NAMES.length` ANTES de agregar)
+**REGLA DE ORO: la línea de carrera es un loop HAMILTONIANO sobre una grilla (método del spanning-tree): el
+ciclo recorre TODAS las celdas y vuelve.** Es un único loop, **garantizado simple** (jamás se cruza, por
+construcción), que **serpentea por todo el mapa** con muchas curvas (S/U/V, horquillas). El corredor es una
+BANDA ANGOSTA (offset) → queda lugar para más rectas y curvas. Esto reemplaza a los intentos de óvalo/anillo
+que salían todos iguales y con calles anchísimas.
 
-Editá en `index.html`, en orden:
+1. **Sorteos**: grilla de *rooms* `a×b` (2–4 × 2–3 → ciclo de `4ab` celdas = 16..48), `margin` (inset, 150–300),
+   `wall` (pared mínima entre carriles, 120–170). Mundo (4300–5200 × 2600–3200) y tema sorteados.
+2. **Spanning tree** aleatorio (DFS) sobre la grilla `a×b` (`_spanningTree`) → **ciclo hamiltoniano** sobre la
+   grilla de nodos `2a×2b` (`_hamiltonian`): cada room arranca como un loop CW de 2×2, y cada arista del árbol
+   FUSIONA dos loops vecinos → queda un solo ciclo que pasa por las `4ab` celdas. (`ok` = es 1 ciclo de largo
+   `4ab`.) `_cornersOf` deja sólo las esquinas (las curvas).
+3. **Ancho — ESTILO sorteado, recortado a lo que entra, y a veces VARIABLE por recta**: `fit = (min(cellX,cellY) − wall)/2`
+   es el medio-ancho MÁXIMO que deja `wall` entre carriles contiguos. Si `fit < 80` → `return false` (reintenta).
+   Se sortea un estilo (`styles`: técnico 72–105 / normal 110–158 ×2 / ancho 165–235 ×2, sesgado a más ancho) →
+   `half = max(72, min(ri(estilo), fit, margin−45))`. Con **prob 0.5** el ancho es VARIABLE: cada arista de la base
+   (cada RECTA) sortea su propio medio-ancho `hw[i] ∈ [~0.42·fit, min(fit,235)]` → se combinan rectas anchas y
+   angostas en la misma pista. Como TODO ancho ≤ `fit` y los carriles contiguos están a ≥ `cellX/Y`, **nunca se
+   fusionan** (verificado). Resultado: calles anchas en grillas chicas, angostas en grandes, + variación intra-pista.
+4. **Offset ±hw** (`_offset` acepta escalar O **array por-arista** = ancho variable; miter-clamp por vértice) →
+   outer/inner; **`_isSimple(outer/inner)`** caza picos en curvas y carriles que se fusionarían → si falla, reintenta.
+   (Verificado en Python: 4000/4000, ~1.3 intentos, half med≈147 [≤235], span intra-pista med≈83, 8–22 curvas.)
+5. **PORTAL (wrap), prob 0.28, EJE sorteado**: se corta el loop con una línea LIMPIA en mitad de celda (lejos de
+   esquinas) y se envuelve. Eje 0 = corte **vertical** (`c=margin+(g+0.5)·cellX`) → cruce HORIZONTAL, wrap X; eje 1 =
+   corte **horizontal** (`c=margin+(g+0.5)·cellY`) → cruce VERTICAL, wrap Y. El corte sólo puede atravesar tramos
+   RECTOS perpendiculares al borde (`|p[1−ax]−q[1−ax]|≈0`), con aberturas separadas ≥ `2·wMax+wall`. El loop es el
+   MISMO (simple); se desplaza `−c` en el eje y se renderiza con copias `±W`/`±H` (`copies=[k=0,k=1]`, `tile`). Por
+   construcción el cruce es RECTO, alineado en ambos bordes, sin auto-cruce. `TRACK_WRAP[idx]=wrap`; waypoints se
+   envuelven (`mod W`/`mod H`) y la costura (salto > 1200) la saltan `pointBackAlong` y la IA. Verificado: 300/300
+   aberturas alineadas en CADA eje (top/bottom para Y, left/right para X).
+6. **Paredes**: `_ringWallsMulti(copies, …)` — el corredor se RECORTA a `[0,W]` antes del complemento (las copias
+   del wrap salen del mundo). **Dibujo**: `drawCorridorCarve` (pared completa + CALA el corredor de cada copia,
+   `destination-out`, + bevel). Colisión y dibujo salen de `smoothSample(outer/inner)` → coinciden.
+7. **Waypoints**: `smoothSample(sBase, 70)` (el centro = el corner-loop hamiltoniano, desplazado/envuelto si hay
+   portal); **largada** en un tramo recto (baja curvatura, NUNCA sobre la costura) → salida derecha. La META se
+   dibuja PERPENDICULAR a la tangente del sentido de carrera (diagonal en curva) — `TrackPoint.draw` rota el damero.
+   Su largo se **MIDE por RAYCAST** (`_raySeg`) perpendicular a CADA pared en la largada → `FINISH_ASYM[idx]=[dP,dM]`
+   (asimétrico, acotado al lado opuesto `+50` para descartar rayos rasantes) `+14` → cubre TODA la calle aún en
+   curva/ancho variable. Las pistas curadas no tienen `FINISH_ASYM` → usan `fl[0]` simétrico. También se dibuja en
+   el **minimapa** (blanco + guiones negros, perpendicular en `wp[0]`). `BIG_VERTICAL` ya no se lee.
 
-1. **`TRACK_NAMES`** — `push('Nombre De La Pista')`. (`TRACK_COUNT` se recalcula solo → aparece en el selector
-   de **carrera libre**; el torneo sigue usando sólo las pistas 0..9.)
+## Qué tocar según el pedido
 
-2. **`WORLDS`** (objeto, cerca de los globals de cámara) — `WORLDS[N] = [W, H];`.
+- **Más/menos curvas**: rango de la grilla `a×b` (más celdas = más curvas). Hoy 2–4 × 2–3.
+- **Banda más ancha/angosta**: la tabla `styles` (rangos por estilo) y/o `wall`. El `fit`-cap impide que se fusionen
+  carriles aunque pidas más ancho (sube solo donde entra).
+- **Más/menos ancho VARIABLE (rectas de distinto ancho)**: la prob `Math.random() < 0.5` y el rango `[~0.42·fit, min(fit,235)]`.
+- **Más/menos portales / proporción de ejes**: la prob `Math.random() < 0.28` y el `ri(0,1)` del eje en `buildAutoTrack`.
+- **Que llene más/menos**: `margin`.
+- **Mundo más grande/chico** (permite grillas más grandes = más curvas): `regenAutoTrack`.
+- **Mundo más grande/chico**: los `ri(43,52)*100 / ri(26,32)*100` de `regenAutoTrack`. El fondo horneado
+  tiene un tope de memoria (`BG_MAX_PIXELS`, ~38MB): mundos más grandes se hornean a menor resolución
+  (`bgK<1`) y se escalan al blitear — no rompe, sólo suaviza.
+- **Perf**: `bands = H/32` en `_ringWallsMulti` (menos bandas = menos cuerpos).
 
-3. **`WALL_MAPS`** — agregar un elemento (array de rects `[x, y, w, h]` en coords del mundo):
-   - **4 paredes de borde** que encierran TODO el mundo (grosor ≥ 16): izquierda `[0,0,16,H]`, arriba
-     `[0,0,W,16]`, derecha `[W-16,0,16,H]`, abajo `[0,H-16,W,16]`. El tanque NO debe poder salir.
-   - Paredes interiores que forman un **circuito cerrado** (un loop por el que se corre). **Grosor mínimo
-     ~20** en cualquier pared (el tanque avanza ~12px/frame; paredes más finas se pueden atravesar).
-   - El bioma/tema es `Math.floor(N/2)` → 0 verde, 1 desierto, 2 nieve, 3 tecno, 4 lava (se repite). El color
-     de piso/pared y los motivos salen solos del tema.
+## PORTALES (cruce de borde a borde) — ACTIVADOS (prob 0.28, eje X o Y), por CORTE LIMPIO del loop
 
-4. **`TRACKPOINT_MAPS`** (dentro de `buildTrackpointMaps()`): el array `m` arranca con 10 sub-arrays; agregá
-   `m.push([])` (o `m[N] = []`) y poblá los **waypoints `[x, y]` del centro de la pista, EN ORDEN de carrera**
-   alrededor del loop. Espaciado parejo (~cada 40–90 unidades). La IA apunta al waypoint **8 adelante**, así
-   que necesitás suficientes puntos y bien ordenados. **`waypoint[0]` = la línea de meta/largada.**
+La clave para que el portal sea siempre RECTO (perpendicular al borde, jamás en mitad de curva): NO se diseña
+un corredor abierto; se reusa el loop hamiltoniano CERRADO (ya validado) y se lo **corta con una línea limpia +
+se envuelve**. Como la base es rectilínea, una línea `c` en mitad de celda (perpendicular al eje sorteado) cruza
+SÓLO tramos rectos perpendiculares al borde → el cruce es perpendicular por construcción, y como el loop sigue
+siendo el mismo polígono simple, **no puede auto-cruzarse**. Eje sorteado: **X** (corte vertical → portal
+horizontal, desplaza `−c` en x, copias `±W`) o **Y** (corte horizontal → portal vertical, desplaza `−c` en y,
+copias `±H`). `_ringWallsMulti` recorta el corredor a `[0,W]`. Aberturas alineadas verificado 300/300 por eje.
 
-5. **`FINISHLINES[N]`** — geometría del damero de meta (se dibuja en `waypoint[0]`). Copiá la forma de una
-   pista existente del mismo tipo de orientación y adaptá:
-   - **Meta VERTICAL** (la raya corre en `y`): formato `[halfLen, bandW, ...]` → `fl[0]`=media-altura de la raya,
-     `fl[1]`=ancho de banda. Si la usás, **agregá `N` a la lista de orientación vertical** en `TrackPoint.draw`
-     (el array `[0,1,4,5,7,8,9]`).
-   - **Meta HORIZONTAL** (la raya corre en `x`): NO agregues `N` a esa lista. `fl[0]`=media-longitud, `fl[1]`=alto.
-   - En la duda, replicá el `FINISHLINES` y la orientación de la pista existente cuya largada se parece más a la tuya.
+El motor ya bancaba portales (wrap de tanques/bombas en X/Y a `[2795]`/`[1000]`, IA apunta "desenrollado" a `[848]`,
+`pointBackAlong` salta costuras > 1200 a `[598]`) — estaba dormido; ahora `buildAutoTrack` lo prende a veces.
+Para subir/bajar la frecuencia, tocá `Math.random() < 0.22`. El corte exige ≥2 cruces horizontales separados
+≥ `2·half+wall`; si no encuentra uno limpio, el mapa queda sin portal (no se fuerza).
 
-6. **`startposFor` → tabla `SP[N]`** — **4** posiciones de largada `[x, y, ang]` (una por tanque), justo
-   **detrás de `waypoint[0]`**, mirando hacia la dirección de carrera (hacia `waypoint[1]`). `ang`: `0`=derecha,
-   `Math.PI/2`=abajo, `Math.PI`=izquierda, `-Math.PI/2`=arriba (o un ángulo arbitrario). Separadas ~50 unidades,
-   sin pisar paredes ni encimarse.
+## Sumar una pista FIJA a la pool curada (opcional)
 
-7. **`MAP_COUNTS[N]` = `[nWalls, nTrackpoints]`** — DEBEN coincidir EXACTO con el largo de los arrays de los
-   pasos 3 y 4. (El juego instancia esa cantidad de `Wall`/`TrackPoint`.)
+Agregá un objeto a `BIG_TRACKS` (`{name, theme, w, h, half, bands, base:[[x,y],…]}`) — el loop de
+`BIG_TRACKS` la cablea (índices 10–14, aparecen en `TRACK_ORDER`). La `base` es el centro de la pista
+(polígono no convexo, coords del mundo). Temas: 0 verde, 1 desierto, 2 nieve, 3 tecno, 4 lava.
 
-## Reglas de diseño (para que sea jugable)
+## Verificación y checklist
 
-- **Loop cerrado y bien ordenado**: los waypoints van en el sentido de carrera; el tanque que da la vuelta
-  pasa cerca de cada uno. Sin esto, el conteo de vueltas y la IA se rompen.
-- **Conteo de vueltas**: `lap_progress = waypointId / nTrackpoints`. Cruzar de ~95%→0% suma una vuelta. Por eso
-  el loop debe ser continuo y `waypoint[0]` la meta.
-- **Ancho de pista** cómodo: dejá pasillos de al menos ~6× el radio del tanque (el tanque ≈ 23px de lado).
-- **Largada despejada**: las 4 posiciones de salida deben estar sobre la pista, detrás de la meta, sin paredes.
-- **Encerrá el mundo** con las 4 paredes de borde (la cámara clampea, pero las paredes evitan que el tanque
-  se vaya a zonas vacías).
+- Cambiaste el generador → simulalo en Python primero (espejo de `_spanningTree`/`_hamiltonian`/`_cornersOf` +
+  `_offset` + `_isSimple` + `smoothSample` + las primitivas de scanline `_cross/_pairs/_subtract/_union/_complement`):
+  correr ≥1000 veces y medir **% válidos** (sin fallback), **intentos/válido**, **distribución de `half`** (que
+  haya spread: angostas + anchas), **nº de curvas** (mín ≥ 3) y **tamaños de ciclo**. Para PORTALES: verificar que
+  las aberturas del corredor en `x≈0` y `x≈W` están ALINEADAS en `y` y con el mismo conteo (recortando el corredor
+  a `[0,W]` ANTES del complemento — `_complement` devuelve paredes fuera de `[0,W]`, no las confundas con bordes).
+- [ ] Balance de llaves/paréntesis:
+      `python -c "s=open('CrazyTanks/CrazyTanksWeb/index.html',encoding='utf-8').read(); print(s.count('{')-s.count('}'), s.count('(')-s.count(')'), s.count('[')-s.count(']'))"` → `0 0 0`.
+- [ ] Server 200 + hard-reload en el celu. Correr varias carreras: mapas DISTINTOS cada vez (loops lisos,
+      ondulados, zigzag, asimétricos), que llenen el mapa, vueltas que cuentan, largadas sobre tramo recto.
 
-## Checklist antes de terminar
+## Escenografía del infield (deco GRANDE por bioma, HORNEADA)
 
-- [ ] `MAP_COUNTS[N]` == `[WALL_MAPS[N].length, TRACKPOINT_MAPS[N].length]` (contá a mano).
-- [ ] `WORLDS[N]`, `TRACK_NAMES[N]`, `FINISHLINES[N]`, `SP[N]` agregados (todos índice `N`).
-- [ ] Si la meta es vertical, `N` está en la lista de orientación de `TrackPoint.draw`.
-- [ ] 4 paredes de borde encierran el mundo; paredes interiores con grosor ≥ 20.
-- [ ] Waypoints en orden de carrera, loop cerrado, `waypoint[0]` en la meta.
-- [ ] Balance de llaves/paréntesis OK:
-      `python -c "s=open('CrazyTanks/CrazyTanksWeb/index.html',encoding='utf-8').read(); print(s.count('{')-s.count('}'), s.count('(')-s.count(')'), s.count('[')-s.count(']'))"`
-      (debe imprimir `0 0 0`).
+`drawScenery(track, ww, hh)` dibuja deco grande y reconocible sobre el INFIELD (la zona fuera del corredor):
+parque (árboles/arbustos/flores), desierto (dunas/pirámides/cactus), nieve (muñecos/piedras), tecno
+(edificios/cables), lava (lagos/ríos/brasas). Se llama DENTRO de `drawCorridorCarve`, sobre la capa de pared
+`tc`, **ANTES** del `destination-out` → la escenografía que cae sobre la calle la borra el carve (calle limpia)
+y el bevel tapa la costura. Es 100% horneado (costo/frame = 0). `getScenery`/`sceneryBase` + helpers
+(`drawTree`, `drawPyramid`, `drawBuilding`, `drawLavaPool`, …) viven justo antes de la sección "MOTIVOS".
+- **Más/menos deco por tema**: `SCENERY_DENSITY=[13,9,9,4.5,6]` (items por pantalla-equivalente; se escala por área del mundo).
+- **Varía por mapa**: `TRACK_DECO_SEED[AUTO_TRACK]` se re-sortea en `regenAutoTrack`; `getDeco`/`getScenery`
+  cachean por `.seed` (deco + escenografía nuevas cada generación, estables entre re-horneados/resize).
+- **Contraste**: cada paleta está tuneada contra su infield (`THEME_WALL`). Si cambiás `THEME_WALL`/`THEME_FLOOR`,
+  revisá que la escenografía siga despegándose del fondo.
+- Sólo aplica al camino AUTOGENERADO (`drawCorridorCarve`); las pistas curadas (`drawSmoothCorridor`) no la usan.
 
-## Probar
+## Notas de perf (ya aplicadas; no deshacer)
 
-1. Asegurá el server (desde la raíz del repo): `python -m http.server 8080 --bind 0.0.0.0`.
-2. Decile al usuario: **hard-reload**, entrar a **New Race**, en la opción **Map** elegir la pista nueva
-   (es la última del listado), y correr.
-3. Verificá con el usuario: la cámara sigue al tanque y scrollea; el HUD (ranking/cuenta) queda fijo;
-   el conteo de vueltas avanza; no se atraviesan paredes; las largadas están bien orientadas.
-4. Ajustá según feedback (tamaño del mundo, ancho de pista, posición de la meta).
-
-## Notas
-
-- Es **carrera libre solamente** (no entra al torneo, que usa las 10 pistas originales 0–9).
-- El motor de cámara/mundo ya está implementado (`WORLDS`, `updateCamera`, blit de región, HUD con
-  `translate(camX,camY)`). Vos sólo agregás DATOS de la pista; no toques el pipeline de render salvo el
-  array de orientación vertical de la meta y, si hiciera falta, el tope de tamaño de mundo.
+- Tanques: sprite-cache offscreen por (skin, estado) + culling fuera de cámara.
+- **Paredes: `_mergeWallRects` fusiona tiras verticalmente contiguas (aristas dentro de TOL=6px) → ~16% menos
+  cuerpos estáticos en Matter** (la físca con 16 tanques escala con la cantidad de cuerpos). El rect unido sólo
+  CRECE (cubre cada tira) → la calle se angosta ≤6px, nunca abre hueco. Lo aplican `_ringWalls`/`_ringWallsMulti`.
+- Paredes/waypoints NO van a `sprites` (viven horneados); debug F2 via `tp.debugDraw()`.
+- Waypoint más cercano: búsqueda incremental (ventana ±7 alrededor del último, full-scan de fallback).
+- Minimapa: paredes horneadas una vez por pista (`minimapWallsImg`, clave `mmKey`).
+- Fondo: `BG_MAX_PIXELS` + `bgK` (cap de resolución del horneado para mundos grandes).

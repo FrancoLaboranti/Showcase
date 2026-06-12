@@ -157,7 +157,7 @@
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">palanca = mover · botón rojo (bomba) = disparar · botón celeste (llama) = nitro (juntá los orbes celestes) · teclado: flechas + espacio + shift</div>
+  <div id="hint">joystick = move · red button (bomb) = fire · cyan button (flame) = nitro (grab the cyan orbs) · keyboard: arrows + space + shift</div>
 
   <!-- Zona de movimiento: joystick ÚNICO y DINÁMICO. Tocá en cualquier punto del lado izquierdo y la
        palanca aparece ahí. El vector marca el rumbo del tanque. -->
@@ -231,7 +231,6 @@ function modifyColor(color, offset)     { return color.map(c => clamp255(c + off
 function modifyColorPerc(color, factor) { return color.map(c => clamp255(c * factor)); }
 const rgb = c => `rgb(${Math.round(clamp255(c[0]))},${Math.round(clamp255(c[1]))},${Math.round(clamp255(c[2]))})`;
 
-function getangle(p1, p2) { return Math.atan2(p2[1] - p1[1], p2[0] - p1[0]); }
 function getangle2(prevAng, p1, p2) {                                   // wrap continuo cruzando ±π
   let angle = Math.atan2(p2[1] - p1[1], p2[0] - p1[0]);
   if (angle - prevAng < -Math.PI) angle += Math.PI * 2;
@@ -239,10 +238,6 @@ function getangle2(prevAng, p1, p2) {                                   // wrap 
   return angle;
 }
 function getdist(p1, p2) { return Math.hypot(p1[0] - p2[0], p1[1] - p2[1]); }
-function rectColision(r1, r2) {
-  return (r1[0] + r1[2] > r2[0] && r1[0] < r2[0] + r2[2] &&
-          r1[1] + r1[3] > r2[1] && r1[1] < r2[1] + r2[3]);
-}
 
 // ── DISPOSITIVO TÁCTIL ──
 // En mobile (sin mouse) no tiene sentido el modo dos jugadores (comparten un solo teclado), así que se
@@ -261,6 +256,8 @@ let dpr = 1, scaleX = 1, scaleY = 1, cssW = 0, cssH = 0;
 // Fondo estático horneado por pista (piso + deco + meta + paredes + motivos). Se dibuja una vez y se
 // blitea cada frame en vez de re-dibujar cientos de figuras — clave para los FPS en mobile.
 let bgCanvas = null, bgReady = false, bgTrack = -1, bgW = 0, bgH = 0;
+let mmCanvas = null, mmKey = '';                                      // minimapa: paredes horneadas (no se redibujan cada frame)
+let mmStatic = null;                                                  // minimapa: invariantes por pista (geometría, gradiente, endpoints de meta) cacheados
 
 // ── MUNDO + CÁMARA ──
 // Cada pista vive en un mundo de W×H unidades lógicas. Default = pantalla (1280×720) → la pista entra
@@ -271,8 +268,14 @@ let bgCanvas = null, bgReady = false, bgTrack = -1, bgW = 0, bgH = 0;
 const WORLDS = {};                                                    // { [track]: [w, h] } — sólo pistas grandes (se llenan abajo)
 const THEMES = {};                                                    // override de tema por pista (las generadas fijan el suyo)
 const TRACK_POLY = {};                                                // { [track]: {outer, inner, theme} } → dibujo SUAVE del corredor
+const TRACK_DECO_SEED = {};                                           // semilla de deco/escenografía por pista (el slot AUTO la re-sortea cada gen)
 const BIG_START = {};                                                 // largadas por pista generada: { [track]: [[x,y,ang]×4] }
 const BIG_VERTICAL = {};                                              // meta vertical? por pista generada (default: horizontal)
+let dbgView = false;                                                  // overlay de DEBUG (botón info): cajas de colisión + waypoints
+window.__setDbg = v => { dbgView = v; };                              // puente desde el handler del botón info (script aparte, abajo del body)
+// Torneo: 10 carreras con mapas autogenerados, temática GARANTIZADA en este orden (verde,desierto,nieve,tecno,lava ×2).
+const TOURNEY_THEMES = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4];
+const TOURNEY_RACES = TOURNEY_THEMES.length;                          // 10
 function themeOf(track) { return THEMES[track] !== undefined ? THEMES[track] : Math.floor(track / 2) % 5; }
 function worldW(track) { return (WORLDS[track] && WORLDS[track][0]) || SCREEN_X; }
 function worldH(track) { return (WORLDS[track] && WORLDS[track][1]) || SCREEN_Y; }
@@ -594,6 +597,7 @@ function pointBackAlong(tp, dist) {
   while (i < n * 2) {
     const a = tp[((-i) % n + n) % n], b = tp[((-i - 1) % n + n) % n];
     const seg = Math.hypot(a[0] - b[0], a[1] - b[1]) || 1;
+    if (seg > 1200) { i++; continue; }                                // costura del wrap (portal): saltar sin consumir distancia
     if (rem <= seg) {
       const f = rem / seg;
       return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, Math.atan2(a[1] - b[1], a[0] - b[0])];
@@ -623,11 +627,9 @@ function startposFor(track, id) {
 
 const TANK_COUNT = 16;
 // ── SKINS: pool grande y diverso. Cada skin = color base + librea (patrón `p`, 2º color `a`, 3º color `a2`).
-// Los primeros SELECTABLE_COUNT son los elegibles por el jugador (los más distintos entre sí, grilla 4×3).
-// En cada carrera el jugador usa el suyo y las IA reciben skins AL AZAR (sin repetir) del pool entero.
-const SELECTABLE_COUNT = 12;
+// TODOS son elegibles por el jugador (grilla 5×4). En cada carrera el jugador usa el suyo y las IA reciben
+// skins AL AZAR (sin repetir) del pool entero.
 const SKINS = [
-  // ── 12 elegibles (bien diferentes) ──
   { name:'Scarlet',   color:[225,45,45],   p:'centerStripe', a:[245,245,250], a2:[24,24,28]   },
   { name:'Azure',     color:[40,110,255],  p:'twinStripe',   a:[245,205,40],  a2:[245,245,250] },
   { name:'Emerald',   color:[30,200,90],   p:'checker',      a:[245,245,250], a2:[24,24,28]    },
@@ -670,6 +672,7 @@ const tankName = t => (t.skin && t.skin.name) || 'Tank';             // nombre d
 let deltaT = 0;
 const keys = {};
 let sprites = [], trackpoints = [], walls = [], tanks = [], bombs = [], pickups = [];
+let raceFinishCount = 0;                                              // cuántos tanques ya cruzaron la meta (orden de llegada)
 
 function addSprite(s) { sprites.push(s); return s; }
 function removeFromList(arr, item) { const i = arr.indexOf(item); if (i >= 0) arr.splice(i, 1); }
@@ -679,6 +682,9 @@ function removeFromList(arr, item) { const i = arr.indexOf(item); if (i >= 0) ar
 // → las colisiones tanque-pared y tanque-tanque las resuelve el motor (deslizan/empujan, no se traban).
 // El manejo es "arcade sobre física": un motor de velocidad objetivo + dirección por velocidad angular.
 const { Engine, Composite, Bodies, Body } = Matter;
+// Scratch reutilizable para los setters de Matter (Body.setVelocity/setPosition leen .x/.y y NO retienen
+// el objeto → un único {x,y} compartido evita ~32 allocs/frame con 16 tanques sin cambiar el comportamiento).
+const _vScratch = { x: 0, y: 0 };
 const engine = Engine.create();
 engine.gravity.x = 0; engine.gravity.y = 0;
 const world = engine.world;
@@ -696,8 +702,8 @@ const AI_STUCK_SPD = 2.4;                     // por debajo de esta velocidad (y
 const AI_STUCK_T   = 0.55;                    // s trabada antes de volver al centro del waypoint para destrabarse
 const AI_REVERSE_T = 1.3;                     // s trabada antes de meter marcha atrás para zafar
 const MOVE_STEER_K = 2.8;                    // palanca única: qué tan fuerte gira hacia el rumbo apuntado
-const SPIN_TIME = 1.1;                        // duración del trompo al recibir un disparo (s)
-const SPIN_RATE = 0.13;                       // velocidad del trompo (rad/frame ≈ 1.4 vueltas en SPIN_TIME)
+const SPIN_TIME = 0.6;                        // duración del trompo al recibir un disparo (s) — penaliza menos tiempo
+const SPIN_RATE = 0.34;                       // velocidad del trompo (rad/frame) — gira MÁS rápido visualmente
 // — Nitro (boost) e ítems de nitro en la pista —
 const NITRO_MULT  = 1.8;                     // multiplicador de velocidad mientras se usa el nitro
 const NITRO_DRAIN = 0.4;                     // carga/seg que consume el boost (1/0.4 ≈ 2.5s de boost a tope)
@@ -708,16 +714,6 @@ const PICKUP_FADE  = 0.35;                   // duración (s) de la animación d
 const PICKUP_FLASH = 0.55;                   // duración (s) del destello celeste sobre el tanque al agarrar nitro
 const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
 
-// ¿Hay una pared entre dos puntos? (muestreo del segmento) → el auto-disparo no tira contra paredes.
-function lineBlocked(x1, y1, x2, y2) {
-  const steps = Math.max(2, Math.ceil(Math.hypot(x2 - x1, y2 - y1) / xper(0.012)));
-  for (let i = 1; i < steps; i++) {
-    const t = i / steps, px = x1 + (x2 - x1) * t, py = y1 + (y2 - y1) * t;
-    for (const w of walls) if (px > w.x && px < w.x + w.width && py > w.y && py < w.y + w.height) return true;
-  }
-  return false;
-}
-
 function clearPhysics() { Composite.clear(world, false); }   // saca todos los cuerpos (al rearmar/salir de carrera)
 
 // ════════════════ TANK ════════════════
@@ -727,20 +723,22 @@ class Tank {
     this.radius = xper(0.016);                                        // más grande
     this.vel = 0; this.ang_vel = 0; this.psteer = 0; this.spin_timer = 0; this.spin_dir = 1; this.pickup_flash = 0;
     this.shoot_cooling = 0;
-    this.nitro = 0;                                                   // carga de nitro 0..1 (se junta con ítems de la pista)
+    this.nitro = this.id === 0 ? NITRO_MAX * 0.5 : 0;                 // el jugador arranca con MEDIO boost; la IA en 0 (se junta con ítems de la pista)
     this.nitro_thresh = rnd(0.45, 0.85);                              // IA: cuánta carga junta antes de usarlo (personalidad)
     this.nitro_engaged = false;                                        // IA: ¿está soltando el nitro ahora? (histéresis)
     this.lap_progress = 0; this.pre_lap_progress = 0;
     this.lap_checkpoint = 0; this.laps = 0;
     this.track = track; this.rank = 0; this.racetime = 0;
-    this.racelength = racelength === 0 ? 10 : racelength === 1 ? 20 : 40;
+    this.racelength = racelength === 0 ? 3 : racelength === 1 ? 5 : 10;   // Corto = 3, Normal = 5, Largo = 10
     this.start = false; this.pause = false; this.finished = false;
+    this.finishPos = 0;                                               // posición de llegada (se congela al cruzar la meta)
     this.wrongway = false;
     this.wrongwayalert_timer = 1; this.wrongwayalert_cooling = 0; this.wrongwayalert_showing = 0;
     this.ai = this.id !== 0;                                          // sólo el tanque 0 es el jugador
     this.ai_difficulty = difficulty;
     this.ai_timer = 1; this.ai_cooling = 1; this.ai_acel = 0; this.ai_turn = 0; this.ai_shoot = 0;
     this.ai_lat = 0; this.ai_lat_target = 0; this.stuck_timer = 0;     // desvío lateral (línea de carrera) + detección de trabado
+    this.tp_idx = -1;                                                  // último waypoint más cercano (búsqueda incremental)
     this.showhitbox = false;
 
     [this.start_x, this.start_y, this.start_ang] = startposFor(this.track, this.id);
@@ -802,22 +800,35 @@ class Tank {
       }
     }
 
-    let closest_point = null, closest_dist = xper(0.3);
+    let closest_point = null, closest_d2 = xper(0.3) * xper(0.3);     // compara distancia AL CUADRADO (evita Math.hypot en hot loop)
 
     if (trackpoints.length) {
-      for (const point of trackpoints) {
-        const point_dist = getdist([this.x, this.y], [point.x, point.y]);
-        if (point_dist < closest_dist) { closest_dist = point_dist; closest_point = point; }
+      // Búsqueda INCREMENTAL: el waypoint más cercano casi siempre está a ±7 del último conocido →
+      // 15 chequeos en vez de recorrer los ~250 de la pista, por tanque y por frame (clave con 16 tanques).
+      const nTP = trackpoints.length;
+      if (this.tp_idx >= 0 && this.tp_idx < nTP) {
+        for (let k = -7; k <= 7; k++) {
+          const p = trackpoints[((this.tp_idx + k) % nTP + nTP) % nTP];
+          const ddx = p.x - this.x, ddy = p.y - this.y, d2 = ddx * ddx + ddy * ddy;
+          if (d2 < closest_d2) { closest_d2 = d2; closest_point = p; }
+        }
+      }
+      if (!closest_point) {                                            // spawn / trompo / empujón largo: escaneo completo
+        for (const p of trackpoints) {
+          const ddx = p.x - this.x, ddy = p.y - this.y, d2 = ddx * ddx + ddy * ddy;
+          if (d2 < closest_d2) { closest_d2 = d2; closest_point = p; }
+        }
       }
 
       if (closest_point) {
-        closest_point.color = modifyColorPerc(this.color, 1.5);
+        this.tp_idx = closest_point.id;
+        if (closest_point.show) closest_point.color = modifyColorPerc(this.color, 1.5);
         this.lap_progress = closest_point.id * 100 / trackpoints.length;
 
         if (this.ai) {
           const n = trackpoints.length;
           const target_point = trackpoints[(closest_point.id + AI_LOOKAHEAD) % n];
-          target_point.color = [0, 150, 0];
+          if (target_point.show) target_point.color = [0, 150, 0];
 
           // Línea de carrera variable: apunta a un punto DESVIADO del centro (perpendicular al tramo), suavizado.
           this.ai_lat += (this.ai_lat_target - this.ai_lat) * Math.min(1, deltaT * 1.5);
@@ -837,7 +848,19 @@ class Tank {
             if (this.stuck_timer > AI_REVERSE_T + 0.7) this.stuck_timer = 0;
           }
 
-          const point_ang = getangle2(this.ang, [this.x, this.y], [aimx, aimy]);
+          // Pistas con PORTAL (wrap): si el objetivo quedó del otro lado de la costura, apuntarlo
+          // "desenrollado" (±tamaño del mundo, en X y/o Y) para que siga derecho hacia el borde y cruce.
+          if (TRACK_WRAP[this.track]) {
+            const ww2 = worldW(this.track), hh2 = worldH(this.track);
+            if (aimx - this.x >  ww2 / 2) aimx -= ww2;
+            else if (aimx - this.x < -ww2 / 2) aimx += ww2;
+            if (aimy - this.y >  hh2 / 2) aimy -= hh2;
+            else if (aimy - this.y < -hh2 / 2) aimy += hh2;
+          }
+
+          let point_ang = Math.atan2(aimy - this.y, aimx - this.x);     // = getangle2(this.ang,[x,y],[aim]) inline (sin allocs de arrays por tanque/frame)
+          if (point_ang - this.ang < -Math.PI) point_ang += Math.PI * 2;
+          if (point_ang - this.ang >  Math.PI) point_ang -= Math.PI * 2;
           let diff = point_ang - this.ang;
           while (diff >  Math.PI) diff -= Math.PI * 2;
           while (diff < -Math.PI) diff += Math.PI * 2;
@@ -858,7 +881,18 @@ class Tank {
       // TROMPO por impacto de bomba: gira sin control y frena, ignorando el input por un rato.
       this.spin_timer -= deltaT;
       Body.setAngularVelocity(b, this.spin_dir * SPIN_RATE);
-      Body.setVelocity(b, { x: b.velocity.x * 0.9, y: b.velocity.y * 0.9 });
+      _vScratch.x = b.velocity.x * 0.9; _vScratch.y = b.velocity.y * 0.9; Body.setVelocity(b, _vScratch);
+      if (this.spin_timer <= 0 && closest_point) {                    // al terminar: encarar la DIRECCIÓN DE CARRERA (no quedar mirando para cualquier lado)
+        const nTP = trackpoints.length, aim = trackpoints[(closest_point.id + 4) % nTP];
+        let ax = aim.x - this.x, ay = aim.y - this.y;
+        if (TRACK_WRAP[this.track]) {                                  // desenrollar a través de la costura del portal
+          const ww2 = worldW(this.track), hh2 = worldH(this.track);
+          if (ax >  ww2/2) ax -= ww2; else if (ax < -ww2/2) ax += ww2;
+          if (ay >  hh2/2) ay -= hh2; else if (ay < -hh2/2) ay += hh2;
+        }
+        Body.setAngle(b, Math.atan2(ay, ax));
+        Body.setAngularVelocity(b, 0);
+      }
     } else {
       // Dirección: velocidad angular directa cuando hay input (feel responsivo, sin inercia); si no, amortiguar.
       if (Math.abs(steer) > 0.001) Body.setAngularVelocity(b, steer * TANK_TURN);
@@ -880,8 +914,9 @@ class Tank {
       // Motor: velocidad objetivo a lo largo del heading; suavizado hacia ella.
       const target = (throttle > 0 ? TANK_SPEED * throttle : throttle < 0 ? -TANK_REVERSE * (-throttle) : 0) * boostMult;
       const fx = Math.cos(b.angle), fy = Math.sin(b.angle);
-      Body.setVelocity(b, { x: b.velocity.x + (fx * target - b.velocity.x) * TANK_ACCEL,
-                            y: b.velocity.y + (fy * target - b.velocity.y) * TANK_ACCEL });
+      _vScratch.x = b.velocity.x + (fx * target - b.velocity.x) * TANK_ACCEL;
+      _vScratch.y = b.velocity.y + (fy * target - b.velocity.y) * TANK_ACCEL;
+      Body.setVelocity(b, _vScratch);
     }
 
     if (this.lap_progress > 0 && this.lap_progress < 5) this.lap_checkpoint = 1;
@@ -896,25 +931,7 @@ class Tank {
       if (this.lap_progress > this.pre_lap_progress) this.wrongway = false;
     }
 
-    if (this.laps === this.racelength) { this.finished = true; this.ai = true; }
-  }
-
-  // ¿Hay un enemigo para el tiro frontal? Debe estar ADELANTE (dentro del cono del cañón), en rango y con
-  // la línea de tiro despejada. Devuelve el más cercano que cumpla (el disparo siempre sale hacia this.ang).
-  findTarget() {
-    let best = null, bestDist = AUTOFIRE_RANGE;
-    for (const t of tanks) {
-      if (t === this || t.color === this.color || t.finished) continue;
-      const d = getdist([this.x, this.y], [t.x, t.y]);
-      if (d > bestDist) continue;
-      let diff = getangle([this.x, this.y], [t.x, t.y]) - this.ang;     // ángulo al enemigo vs hacia dónde apunta el cañón
-      while (diff >  Math.PI) diff -= Math.PI * 2;
-      while (diff < -Math.PI) diff += Math.PI * 2;
-      if (Math.abs(diff) > AIM_CONE) continue;                         // fuera del cono frontal → no dispara
-      if (lineBlocked(this.x, this.y, t.x, t.y)) continue;
-      bestDist = d; best = t;
-    }
-    return best;
+    if (this.laps === this.racelength && !this.finished) { this.finished = true; this.ai = true; this.finishPos = ++raceFinishCount; }
   }
 
   draw() {
@@ -950,32 +967,21 @@ class Tank {
       ctx.restore();
     }
 
-    if (this.showhitbox) strokeRect(this.x-r*0.75, this.y-r*0.75, r*1.5, r*1.5, [255,255,0]);
-
-    // Puntero del JUGADOR: triangulito que apunta al tanque desde arriba (para ubicarte entre 16), con su color.
-    if (this.id === 0) {
-      const bob = Math.sin(T * 4) * r * 0.12;
-      const ty = this.y - r * 2.0 + bob, s = r * 0.5;
-      ctx.save();
-      ctx.fillStyle = rgb(this.color);
-      ctx.strokeStyle = 'rgba(0,0,0,0.65)'; ctx.lineWidth = Math.max(1.2, r * 0.09);
-      ctx.beginPath();
-      ctx.moveTo(this.x - s, ty - s); ctx.lineTo(this.x + s, ty - s); ctx.lineTo(this.x, ty + s * 0.8);
-      ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.globalAlpha = 0.85; drawCircle(this.x, ty - s * 0.35, s * 0.28, [255, 255, 255]);   // puntito de brillo
+    if (this.showhitbox || dbgView) {                                  // caja de colisión: el cuerpo físico real (Matter), rotado
+      ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.ang);
+      ctx.strokeStyle = 'rgba(0,235,255,0.95)'; ctx.lineWidth = 1.5;
+      ctx.strokeRect(-r*1.25, -r*0.725, r*2.5, r*1.45);
       ctx.restore();
     }
 
+    // El puntero del jugador y el texto de posición final se dibujan en un PASO APARTE (drawTankOverlays),
+    // después de TODOS los tanques, para que no los tape ningún sprite (z-order).
     const rankFont = SCREEN_X < 1000 ? RS_font : S_font;
     if (this.id === 0 && this.racetime > 1) {
       // tarjeta de posición SOLO del jugador: fija arriba-izquierda (translate(cam) la despega del scroll).
       ctx.save(); ctx.translate(camX, camY);
       drawPosCard(this.rank, tanks.length, this.color, this.laps, this.racelength, this.skin);
       ctx.restore();
-    }
-    if (fin) {
-      const rk = this.rank + ordinalSuffix(this.rank) + (this.rank === 1 ? '!' : '');
-      createText(rankFont, rk, modifyColor(this.color,150), null, this.x, this.y - r*2, 10);
     }
 
     if (this.wrongway) {
@@ -1004,18 +1010,23 @@ class Bomb {
     this.y += Math.sin(this.ang) * this.vel * deltaT;
 
     for (const tank of tanks) {
-      if (tank.color !== this.color && !tank.finished &&
-          rectColision([this.x-this.radius*0.75, this.y-this.radius*0.75, this.radius*1.5, this.radius*1.5],
-                        [tank.x-tank.radius*0.75, tank.y-tank.radius*0.75, tank.radius*1.5, tank.radius*1.5])) {
+      if (tank.color === this.color || tank.finished) continue;
+      const lim = (this.radius + tank.radius) * 0.75;                  // mismo AABB que antes, sin alocar arrays
+      if (Math.abs(this.x - tank.x) < lim && Math.abs(this.y - tank.y) < lim) {
         // impacto: el tanque víctima pega una VUELTA (trompo) sin control y casi frena.
         tank.spin_timer = SPIN_TIME; tank.spin_dir = (ri(0,1) === 0 ? -1 : 1);
-        Body.setVelocity(tank.body, { x: tank.body.velocity.x * 0.15, y: tank.body.velocity.y * 0.15 });
+        _vScratch.x = tank.body.velocity.x * 0.15; _vScratch.y = tank.body.velocity.y * 0.15; Body.setVelocity(tank.body, _vScratch);
         removeFromList(bombs, this); removeFromList(sprites, this);
         return;
       }
     }
     const tr = sprites[0] ? sprites[0].track : 0, WW = worldW(tr), HH = worldH(tr);
-    if (this.x > WW+this.radius || this.x < 0-this.radius || this.y > HH+this.radius || this.y < 0-this.radius) {
+    if (TRACK_WRAP[tr]) {                                              // pista con portal: la bomba cruza al otro lado (X e Y)
+      if (this.x > WW + this.radius) this.x -= WW + this.radius * 2;
+      else if (this.x < -this.radius) this.x += WW + this.radius * 2;
+      if (this.y > HH + this.radius) this.y -= HH + this.radius * 2;
+      else if (this.y < -this.radius) this.y += HH + this.radius * 2;
+    } else if (this.x > WW+this.radius || this.x < 0-this.radius || this.y > HH+this.radius || this.y < 0-this.radius) {
       removeFromList(bombs, this); removeFromList(sprites, this);
     }
   }
@@ -1040,6 +1051,7 @@ class Bomb {
 // ════════════════ ÍTEM DE NITRO ════════════════
 // Aparece cerca de un waypoint (con offset, no sobre la raya), con animación de aparecer/desaparecer.
 // Tiene VIDA LIMITADA: si no lo agarrás antes de `ttl`, se desvanece y reaparece en otro lado.
+const NITRO_GLYPH = new Path2D('M12.5 2c.6 3-1.4 4-1.4 6.3 0 1 .7 1.7 1.6 1.7 1.2 0 1.7-1 1.6-2.2 1.7 1.3 2.7 3.4 2.7 5.5a5.5 5.5 0 0 1-11 0c0-2.7 1.7-4.6 3-6.1C10.9 5.3 11.8 3.7 12.5 2z');  // MISMA llama que el botón de nitro (path del SVG, viewBox 24×24)
 class NitroPickup {
   constructor(x, y) { this.x = x; this.y = y; this.r = xper(0.014); this.age = 0; this.ttl = rnd(6, 10); pickups.push(this); }
   scale() {                                                           // 0→1 al aparecer, 1→0 al expirar (anim)
@@ -1053,7 +1065,8 @@ class NitroPickup {
     if (this.age < this.ttl) {                                        // sólo se puede agarrar mientras no esté expirando
       for (const t of tanks) {
         if (t.finished) continue;
-        if (getdist([this.x, this.y], [t.x, t.y]) < this.r + t.radius) {
+        const dx = this.x - t.x, dy = this.y - t.y, reach = this.r + t.radius;
+        if (dx * dx + dy * dy < reach * reach) {
           t.nitro = Math.min(NITRO_MAX, t.nitro + NITRO_PICK);
           t.pickup_flash = PICKUP_FLASH;                              // destello celeste sobre el tanque
           this._remove(); return;
@@ -1070,15 +1083,13 @@ class NitroPickup {
     ctx.globalAlpha = s;
     drawCircle(this.x, this.y, r, [10, 30, 45]);                       // base oscura
     drawCircle(this.x, this.y, r * 0.86, [90, 220, 255]);            // disco cian
-    ctx.fillStyle = rgb([10, 35, 55]);                                // glifo (rayo)
-    ctx.beginPath();
-    ctx.moveTo(this.x + r*0.12, this.y - r*0.55);
-    ctx.lineTo(this.x - r*0.34, this.y + r*0.08);
-    ctx.lineTo(this.x - r*0.02, this.y + r*0.08);
-    ctx.lineTo(this.x - r*0.12, this.y + r*0.55);
-    ctx.lineTo(this.x + r*0.36, this.y - r*0.10);
-    ctx.lineTo(this.x + r*0.02, this.y - r*0.10);
-    ctx.closePath(); ctx.fill();
+    // glifo: la MISMA llama del botón de nitro (Path2D del SVG), centrada en el disco
+    ctx.translate(this.x, this.y);
+    const gsc = r * 1.5 / 18;                                          // alto de la llama (~18u en el viewBox) → entra en el disco
+    ctx.scale(gsc, gsc);
+    ctx.translate(-12, -11);                                           // centro del viewBox 24×24 (la llama va de y≈2 a y≈20)
+    ctx.fillStyle = rgb([10, 35, 55]);
+    ctx.fill(NITRO_GLYPH);
     ctx.restore();
   }
 }
@@ -1087,8 +1098,11 @@ function pointInWall(x, y) { for (const w of walls) if (x > w.x && x < w.x + w.w
 // ni encimarse. Al expirar/recogerse, el loop respawnea otro en otro lado → los ítems "rotan" por la pista.
 function ensureNitroPickups() {
   if (!trackpoints.length) return;
+  // En mundos grandes (autogenerados) hay más ítems para que no quede vacío (escala con la diagonal del mundo).
+  const tr = sprites[0] ? sprites[0].track : 0;
+  const target = Math.min(12, Math.max(PICKUP_COUNT, Math.round(PICKUP_COUNT * Math.sqrt((worldW(tr) * worldH(tr)) / (2700 * 1700)))));
   let guard = 0;
-  while (pickups.length < PICKUP_COUNT && guard++ < 60) {
+  while (pickups.length < target && guard++ < 60) {
     const tp = trackpoints[ri(1, trackpoints.length - 1)];           // evita el waypoint 0 (largada/meta)
     const a = rnd(0, TAU), d = rnd(xper(0.012), xper(0.05));          // offset aleatorio fuera de la raya
     const x = tp.x + Math.cos(a) * d, y = tp.y + Math.sin(a) * d;
@@ -1139,34 +1153,37 @@ class TrackPoint {
     trackpoints.push(this);
   }
   process() {}
-  draw() {
-    if (this.show) drawCircle(this.x, this.y, xper(0.005), this.color);
+  debugDraw() {                                                        // F2: circulito de debug (sólo cuando show)
+    drawCircle(this.x, this.y, xper(0.005), this.color);
     this.color = [50, 50, 50];
-    if (bgReady) return;                                               // meta + largada ya están en el fondo horneado
-
-    // Bandera de meta/salida: damero que llena la banda completa y abarca TODA la raya (largo 2*fl[0]).
-    const fl = FINISHLINES[this.track];
-    if (this.id === 0) {
-      const W = [255, 255, 255];
-      if ([0,1,4,5,7,8,9].includes(this.track) || BIG_VERTICAL[this.track]) {   // meta VERTICAL (la raya corre en y; ancho de banda = fl[1])
-        const x0 = this.x - fl[1], len = 2*fl[0], top = this.y - fl[0];
-        const sq = fl[1] / 2, rows = Math.max(1, Math.round(len / sq)), cell = len / rows;
-        for (let r = 0; r < rows; r++)
-          for (let c = 0; c < 2; c++)
-            if ((r + c) % 2 === 0) fillRect(x0 + c*sq, top + r*cell, sq, cell, W);
-        drawLine([this.x, top], [this.x, top + len], W, 2);
-        drawLine([x0, top], [x0, top + len], W, 2);
-      } else {                                                         // meta HORIZONTAL (la raya corre en x; alto de banda = 2*fl[1])
-        const y0 = this.y - fl[1], len = 2*fl[0], left = this.x - fl[0];
-        const sq = fl[1], cols = Math.max(1, Math.round(len / sq)), cell = len / cols;
-        for (let c = 0; c < cols; c++)
-          for (let r = 0; r < 2; r++)
-            if ((c + r) % 2 === 0) fillRect(left + c*cell, y0 + r*sq, cell, sq, W);
-        drawLine([left, this.y + fl[1]], [left + len, this.y + fl[1]], W, 2);
-        drawLine([left, this.y - fl[1]], [left + len, this.y - fl[1]], W, 2);
-      }
+  }
+  draw() {                                                             // sólo se llama al HORNEAR el fondo (meta/damero)
+    if (bgReady || this.id !== 0) return;
+    // Bandera de meta/salida: damero PERPENDICULAR al sentido de carrera → si la largada cae en una curva, la
+    // raya se dibuja en diagonal (antes era siempre vertical/horizontal y quedaba torcida respecto a la pista).
+    const fl = FINISHLINES[this.track], m = TRACKPOINT_MAPS[this.track], n = m.length;
+    let tx = 0, ty = 0;                                                // tangente promediada alrededor de la largada
+    for (let k = 1; k <= 3; k++) {
+      const f = m[k % n], b = m[(n - k) % n], dx = f[0]-b[0], dy = f[1]-b[1];
+      if (Math.hypot(dx, dy) < 1200) { tx += dx; ty += dy; }            // saltea la costura del portal
     }
-
+    if (tx === 0 && ty === 0) tx = 1;
+    const ang = Math.atan2(ty, tx), W = [255, 255, 255];
+    const asym = FINISH_ASYM[this.track];                             // autogeneradas: alcance medido a CADA pared (cubre toda la calle en curva/ancho variable)
+    const halfP = asym ? asym[0] : fl[0], halfM = asym ? asym[1] : fl[0], halfW = fl[1];   // +perp / −perp / medio-espesor
+    const total = halfP + halfM, rows = Math.max(2, Math.round(total / halfW)), cell = total / rows;
+    ctx.save();
+    ctx.translate(this.x, this.y); ctx.rotate(ang);                   // marco local: +x = avance, +y = a lo ancho de la pista (=+perp)
+    ctx.fillStyle = rgb(W);
+    for (let r = 0; r < rows; r++)
+      for (let c = 0; c < 2; c++)
+        if ((r + c) % 2 === 0) ctx.fillRect(-halfW + c*halfW, -halfM + r*cell, halfW, cell);
+    ctx.strokeStyle = rgb(W); ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-halfW, -halfM); ctx.lineTo(-halfW, halfP);
+    ctx.moveTo( halfW, -halfM); ctx.lineTo( halfW, halfP);
+    ctx.stroke();
+    ctx.restore();
   }
 }
 
@@ -1186,17 +1203,56 @@ for (let t = 0; t < 10; t++) {
 // AFUERA del offset exterior y lo de ADENTRO del interior (offset perpendicular = ancho constante).
 // Geometría verificada en Python (0 waypoints en pared, 0 largadas inválidas en las 5).
 function _sarea(p) { let a = 0, n = p.length; for (let i = 0; i < n; i++) { const A = p[i], B = p[(i+1)%n]; a += A[0]*B[1] - B[0]*A[1]; } return a/2; }
-function _offset(poly, d) {                                          // offset perpendicular del polígono por d
-  const n = poly.length, lines = [];
-  for (let i = 0; i < n; i++) { const a = poly[i], b = poly[(i+1)%n], L = Math.hypot(b[0]-a[0], b[1]-a[1]) || 1, ux = (b[0]-a[0])/L, uy = (b[1]-a[1])/L; lines.push([a[0]-uy*d, a[1]+ux*d, ux, uy]); }
+function _offset(poly, d) {                                          // offset perpendicular del polígono por d (escalar O array por-arista = ancho VARIABLE)
+  const n = poly.length, lines = [], dd = Array.isArray(d) ? (i => d[i]) : (() => d);
+  for (let i = 0; i < n; i++) { const a = poly[i], b = poly[(i+1)%n], L = Math.hypot(b[0]-a[0], b[1]-a[1]) || 1, ux = (b[0]-a[0])/L, uy = (b[1]-a[1])/L; lines.push([a[0]-uy*dd(i), a[1]+ux*dd(i), ux, uy]); }
   const res = [];
   for (let i = 0; i < n; i++) {
     const l1 = lines[(i-1+n)%n], l2 = lines[i], den = l1[2]*(-l2[3]) - l1[3]*(-l2[2]);
+    const cap = Math.max(Math.abs(dd(i)), Math.abs(dd((i-1+n)%n))) * 1.9;   // cap = MITER LIMIT (corta los picos en curvas cerradas)
     if (Math.abs(den) < 1e-9) { res.push([l2[0], l2[1]]); continue; }
     const t = ((l2[0]-l1[0])*(-l2[3]) - (l2[1]-l1[1])*(-l2[2])) / den;
-    res.push([l1[0]+l1[2]*t, l1[1]+l1[3]*t]);
+    const cp = [l1[0]+l1[2]*t, l1[1]+l1[3]*t];
+    const ex = cp[0]-poly[i][0], ey = cp[1]-poly[i][1], dist = Math.hypot(ex, ey);   // clamp del vértice → bisel chico, no pico
+    if (dist > cap) { cp[0] = poly[i][0] + ex/dist*cap; cp[1] = poly[i][1] + ey/dist*cap; }
+    res.push(cp);
   }
   return res;
+}
+// Distancia desde O hasta la 1ª intersección del rayo O→E con el segmento a-b (o null). Para medir el ancho del corredor.
+function _raySeg(ox, oy, ex, oy2, a, b) {
+  const r1x = ex-ox, r1y = oy2-oy, s2x = b[0]-a[0], s2y = b[1]-a[1], den = r1x*s2y - r1y*s2x;
+  if (Math.abs(den) < 1e-9) return null;
+  const t = ((a[0]-ox)*s2y - (a[1]-oy)*s2x) / den, u = ((a[0]-ox)*r1y - (a[1]-oy)*r1x) / den;
+  return (t >= 0 && t <= 1 && u >= 0 && u <= 1) ? t * Math.hypot(r1x, r1y) : null;
+}
+// ¿Polígono SIMPLE? (ninguna arista no-adyacente se cruza) → garantiza que el corredor no se pliega/cruza.
+function _segInt(a, b, c, d) {
+  const cw = (p, q, r) => (r[1]-p[1])*(q[0]-p[0]) - (q[1]-p[1])*(r[0]-p[0]);
+  return ((cw(c,d,a) > 0) !== (cw(c,d,b) > 0)) && ((cw(a,b,c) > 0) !== (cw(a,b,d) > 0));
+}
+function _isSimple(poly) {
+  const n = poly.length;
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i+1)%n];
+    for (let j = i+2; j < n; j++) {
+      if (i === 0 && j === n-1) continue;
+      if (_segInt(a, b, poly[j], poly[(j+1)%n])) return false;
+    }
+  }
+  return true;
+}
+// Mínima separación entre puntos NO adyacentes del centro (circular) → dos tramos paralelos pegados = topología rota.
+function _minSelfSep(wps, gap) {
+  const n = wps.length; let best = Infinity;
+  for (let i = 0; i < n; i += 2) {
+    const xi = wps[i][0], yi = wps[i][1];
+    for (let k = gap; k <= n-gap; k++) {
+      const j = (i+k) % n, dx = xi-wps[j][0], dy = yi-wps[j][1], dd = dx*dx + dy*dy;
+      if (dd < best) best = dd;
+    }
+  }
+  return Math.sqrt(best);
 }
 function _densify(v, step) {
   const wp = [], n = v.length;
@@ -1207,6 +1263,28 @@ function _cross(poly, ym) { const xs = [], n = poly.length; for (let j = 0; j < 
 function _pairs(xs) { const r = []; for (let i = 0; i+1 < xs.length; i += 2) r.push([xs[i], xs[i+1]]); return r; }
 function _subtract(A, B) { const res = []; for (const [a0,a1] of A) { let segs = [[a0,a1]]; for (const [b0,b1] of B) { const ns = []; for (const [s0,s1] of segs) { if (b1<=s0||b0>=s1) ns.push([s0,s1]); else { if (s0<b0) ns.push([s0,b0]); if (b1<s1) ns.push([b1,s1]); } } segs = ns; } res.push(...segs); } return res; }
 function _complement(I, lo, hi) { I = I.slice().sort((p,q)=>p[0]-q[0]); const res = []; let x = lo; for (const [a,b] of I) { if (a>x) res.push([x,a]); x = Math.max(x,b); } if (x<hi) res.push([x,hi]); return res.filter(([a,b]) => b-a > 15); }
+// PERF: une tiras de pared verticalmente contiguas cuyas aristas caen dentro de TOL → muchos menos cuerpos
+// estáticos para Matter (la físca con 16 tanques escala con la cantidad de cuerpos). El rect unido SÓLO crece
+// (cubre cada tira) → la calle se angosta ≤TOL, NUNCA abre un hueco (no se puede atravesar). ~16% menos cuerpos.
+function _mergeWallRects(rects, tol = 6) {
+  const cols = new Map();
+  for (const r of rects) { const k = Math.round(r[0] / tol); let g = cols.get(k); if (!g) cols.set(k, g = []); g.push(r); }
+  const out = [];
+  for (const group of cols.values()) {
+    group.sort((p, q) => p[1] - q[1]);
+    let run = null;
+    const flush = () => out.push([run.Lmin, run.y0, run.Rmax - run.Lmin, run.y1 - run.y0]);
+    for (const r of group) {
+      const L = r[0], R = r[0] + r[2], y0 = r[1], y1 = r[1] + r[3];
+      if (run && y0 <= run.y1 + 1 && Math.max(run.Lmax, L) - Math.min(run.Lmin, L) <= tol && Math.max(run.Rmax, R) - Math.min(run.Rmin, R) <= tol) {
+        run.Lmin = Math.min(run.Lmin, L); run.Lmax = Math.max(run.Lmax, L);
+        run.Rmin = Math.min(run.Rmin, R); run.Rmax = Math.max(run.Rmax, R); run.y1 = Math.max(run.y1, y1);
+      } else { if (run) flush(); run = { Lmin: L, Lmax: L, Rmin: R, Rmax: R, y0, y1 }; }
+    }
+    if (run) flush();
+  }
+  return out;
+}
 function _ringWalls(outer, inner, W, H, bands) {                    // paredes a ambos lados del corredor
   const rects = [];
   for (let i = 0; i < bands; i++) {
@@ -1214,7 +1292,7 @@ function _ringWalls(outer, inner, W, H, bands) {                    // paredes a
     const corr = _subtract(_pairs(_cross(outer, ym)), _pairs(_cross(inner, ym)));
     for (const [a,b] of _complement(corr, 0, W)) rects.push([Math.round(a), Math.round(ya), Math.round(b-a), Math.round(yb-ya)+1]);
   }
-  return rects;
+  return _mergeWallRects(rects);
 }
 // Muestrea la MISMA curva suavizada que dibuja smoothPath/drawSmoothCorridor (cuádricas por los puntos medios)
 // → la colisión sigue exactamente la pared visible (antes la colisión era el polígono recto y chocabas en el aire).
@@ -1266,6 +1344,250 @@ function trackStep(track, dir) {                                      // avanza/
   return TRACK_ORDER[((i < 0 ? 0 : i) + dir + n) % n];
 }
 
+// ════════════════ MAPA AUTOGENERADO (cada carrera libre = circuito nuevo) ════════════════
+// ESQUELETO PRIMERO: se sortea un loop rectilíneo grande en una grilla — con ejes opcionalmente "toro":
+// portales que cruzan de un borde al otro, en X, en Y o ambos — se muta para meter curvas, se valida que se
+// pueda correr, y RECIÉN AHÍ se arman las paredes. Sorteos: grilla, tamaño del mundo, portales, ancho de
+// pista, apertura de esquinas, cantidad de curvas, sentido de giro, lugar y dirección de largada, tema.
+const TRACK_WRAP = {};                                                // pistas con portal (cruce de borde a borde)
+const FINISH_ASYM = {};                                               // meta asimétrica [haciaUnLado, haciaElOtro] (autogeneradas) → cubre toda la calle aún en curva
+
+function _ptInRects(x, y, rects) { for (const r of rects) if (x > r[0] && x < r[0]+r[2] && y > r[1] && y < r[1]+r[3]) return true; return false; }
+
+// ¿La línea de carrera y un ancho cómodo de manejo (±0.55·half) están libres de pared?
+// Salta las costuras de portal y ENVUELVE los probes al mundo (los waypoints cerca del borde prueban del otro lado).
+function _corridorClear(wps, walls, half, W, H) {
+  const wr = (v, m) => ((v % m) + m) % m;
+  const n = wps.length;
+  for (let i = 0; i < n; i++) {
+    const a = wps[i], b = wps[(i+1) % n], dx = b[0]-a[0], dy = b[1]-a[1];
+    const L = Math.hypot(dx, dy);
+    if (L > 1200) continue;                                           // costura del portal
+    const px = -dy/(L||1), py = dx/(L||1), k = half * 0.55;
+    if (_ptInRects(wr(a[0], W), wr(a[1], H), walls)) return false;
+    if (_ptInRects(wr(a[0]+px*k, W), wr(a[1]+py*k, H), walls) || _ptInRects(wr(a[0]-px*k, W), wr(a[1]-py*k, H), walls)) return false;
+  }
+  return true;
+}
+// Unión de intervalos ordenada (para juntar el corredor de varias copias en una misma banda).
+function _union(I) {
+  I = I.slice().sort((p, q) => p[0] - q[0]);
+  const res = [];
+  for (const [a, b] of I) {
+    if (res.length && a <= res[res.length-1][1]) res[res.length-1][1] = Math.max(res[res.length-1][1], b);
+    else res.push([a, b]);
+  }
+  return res;
+}
+// Paredes con MULTI-COPIA: el corredor puede cruzar los bordes (portales) → se escanea el polígono y sus
+// copias desplazadas ±W/±H; pared = complemento de la unión de todos los tramos de corredor.
+function _ringWallsMulti(copies, W, H, bands) {
+  const rects = [];
+  for (let i = 0; i < bands; i++) {
+    const ya = H*i/bands, yb = H*(i+1)/bands, ym = (ya+yb)/2;
+    let corr = [];
+    for (const c of copies) corr = corr.concat(_subtract(_pairs(_cross(c.outer, ym)), _pairs(_cross(c.inner, ym))));
+    corr = corr.map(([a, b]) => [Math.max(0, a), Math.min(W, b)]).filter(([a, b]) => b > a);   // recortar al mundo (las copias del wrap salen de [0,W])
+    for (const [a, b] of _complement(_union(corr), 0, W)) rects.push([Math.round(a), Math.round(ya), Math.round(b-a), Math.round(yb-ya)+1]);
+  }
+  return _mergeWallRects(rects);                                       // PERF: fusiona tiras verticales → menos cuerpos Matter
+}
+// Chamfer de un loop CERRADO: cada esquina → dos puntos sobre sus lados (curva 45° al suavizar).
+function _chamferLoop(pts, c) {
+  const n = pts.length, out = [];
+  for (let i = 0; i < n; i++) {
+    const P = pts[i], A = pts[(i-1+n) % n], B = pts[(i+1) % n];
+    for (const Q of [A, B]) {
+      const L = Math.hypot(Q[0]-P[0], Q[1]-P[1]) || 1, k = Math.min(c, L*0.42);
+      out.push([P[0]+(Q[0]-P[0])/L*k, P[1]+(Q[1]-P[1])/L*k]);
+    }
+  }
+  return out;
+}
+// ── GENERADOR UNIFICADO: esqueleto rectilíneo sorteado en una grilla "toro" → mutado → validado → paredes.
+// Devuelve false si el sorteo salió mal (el caller reintenta con otros dados).
+// Perfil de la ISLA central (su silueta = las curvas de la pista). `tri`=zigzag, si no onda senoidal.
+// ── CIRCUITO real: loop HAMILTONIANO sobre una grilla de "rooms" (método del spanning-tree). El ciclo recorre
+// todas las celdas y vuelve → es UN solo loop, GARANTIZADO simple (jamás se cruza), serpentea por todo el mapa
+// con muchas curvas (S/U/V). El corredor es una BANDA angosta → queda lugar para más rectas y curvas.
+function _spanningTree(a, b) {                                       // árbol de expansión aleatorio (DFS) sobre grilla a×b
+  const seen = new Set(['0,0']), edges = new Set(), stack = [[0,0]];
+  while (stack.length) {
+    const [x, y] = stack[stack.length-1];
+    const nb = [[1,0],[-1,0],[0,1],[0,-1]].map(([dx,dy]) => [x+dx,y+dy]).filter(([nx,ny]) => nx>=0&&nx<a&&ny>=0&&ny<b&&!seen.has(nx+','+ny));
+    if (!nb.length) { stack.pop(); continue; }
+    const [nx, ny] = nb[ri(0, nb.length-1)];
+    seen.add(nx+','+ny); edges.add(x+','+y+'|'+nx+','+ny); edges.add(nx+','+ny+'|'+x+','+y); stack.push([nx, ny]);
+  }
+  return edges;
+}
+function _hamiltonian(a, b) {                                       // ciclo hamiltoniano sobre grilla 2a×2b de nodos
+  const edges = _spanningTree(a, b), nxt = new Map(), P = (rx, ry) => { const bx=2*rx, by=2*ry; return [[bx,by],[bx+1,by],[bx+1,by+1],[bx,by+1]]; };  // TL,TR,BR,BL (CW)
+  const K = p => p[0]+','+p[1];
+  for (let rx = 0; rx < a; rx++) for (let ry = 0; ry < b; ry++) { const p = P(rx,ry); nxt.set(K(p[0]),p[1]); nxt.set(K(p[1]),p[2]); nxt.set(K(p[2]),p[3]); nxt.set(K(p[3]),p[0]); }
+  for (let rx = 0; rx < a; rx++) for (let ry = 0; ry < b; ry++) {
+    const A = P(rx,ry);
+    if (edges.has(rx+','+ry+'|'+(rx+1)+','+ry)) { const Bp = P(rx+1,ry); nxt.set(K(A[1]), Bp[0]); nxt.set(K(Bp[3]), A[2]); }   // merge con la derecha
+    if (edges.has(rx+','+ry+'|'+rx+','+(ry+1))) { const Bp = P(rx,ry+1); nxt.set(K(A[2]), Bp[1]); nxt.set(K(Bp[0]), A[3]); }   // merge con abajo
+  }
+  const seq = []; let cur = [0,0], guard = 0, total = 4*a*b;
+  do { seq.push(cur); cur = nxt.get(K(cur)); guard++; } while (cur && !(cur[0]===0&&cur[1]===0) && guard <= total+5);
+  return { seq, ok: seq.length === total && cur && cur[0]===0 && cur[1]===0 };
+}
+function _cornersOf(seq) {                                          // quita nodos colineales → sólo esquinas (curvas)
+  const n = seq.length, out = [];
+  for (let i = 0; i < n; i++) { const a = seq[(i-1+n)%n], p = seq[i], b = seq[(i+1)%n]; if ((b[0]-a[0])*(p[1]-a[1]) - (b[1]-a[1])*(p[0]-a[0]) !== 0) out.push(p); }
+  return out;
+}
+function buildAutoTrack(idx, W, H, theme) {
+  const a = ri(2, 4), b = ri(2, 3), nC = 2*a, nR = 2*b;             // grilla de rooms → ciclo 2a×2b celdas (16..48)
+  const margin = ri(150, 300), wall = ri(120, 170);                 // inset + pared mínima entre carriles (sorteados → varían densidad)
+  const cellX = (W-2*margin)/(nC-1), cellY = (H-2*margin)/(nR-1);
+  const fit = (Math.min(cellX, cellY) - wall) / 2;                  // medio-ancho MÁXIMO que deja `wall` entre carriles contiguos
+  if (fit < 80) return false;                                       // celda muy chica → reintenta con otra grilla/mundo
+  // ESTILO de ancho (otro factor de variedad): técnico/angosto, normal o ANCHO — sesgado a más ancho; se recorta a `fit`
+  // (mientras no se fusione con el carril de al lado, le damos un ancho razonable). Combina shapes angostas + calles anchas.
+  const styles = [[72,105],[110,158],[110,158],[165,235],[165,235]];
+  const sr = styles[ri(0, styles.length-1)];
+  const half = Math.max(72, Math.min(ri(sr[0], sr[1]), fit, margin-45));
+  const { seq, ok } = _hamiltonian(a, b);
+  if (!ok) return false;
+  const cor = _cornersOf(seq);
+  const base = cor.map(([gx, gy]) => [margin + gx*cellX, margin + gy*cellY]);
+  // ANCHO VARIABLE (otro factor de variedad, prob 0.5): cada RECTA (arista de la base) sortea su propio
+  // medio-ancho ≤ fit → se combinan rectas anchas y angostas en una misma pista. Si no, ancho uniforme = half.
+  // (Como cada ancho ≤ fit y carriles contiguos están a ≥ cellX/Y, NUNCA se fusionan — verificado en Python.)
+  const variable = Math.random() < 0.5;
+  let hw;
+  if (variable) {
+    const hiW = Math.min(Math.round(fit), 235), loW = Math.max(70, Math.min(Math.round(fit*0.42), hiW-25));
+    hw = base.map(() => ri(loW, hiW));
+  } else hw = half;
+  const wMax = variable ? Math.max(...hw) : half;
+  const o1 = _offset(base, hw), o2 = _offset(base, variable ? hw.map(d => -d) : -half);
+  const a1 = Math.abs(_sarea(o1)), a2 = Math.abs(_sarea(o2));
+  if (Math.min(a1, a2) / Math.max(a1, a2) < 0.04) return false;
+  const outer = a1 > a2 ? o1 : o2, inner = (outer === o1) ? o2 : o1;
+  if (!_isSimple(outer) || !_isSimple(inner)) return false;          // offset se pliega o carriles se fusionan
+  for (const p of outer) if (p[0] < 25 || p[0] > W-25 || p[1] < 25 || p[1] > H-25) return false;
+
+  // ── PORTAL (wrap), prob 0.28: cortamos el loop con una línea LIMPIA (en mitad de celda, lejos de esquinas)
+  // y lo envolvemos. EJE sorteado: vertical (corte vertical → cruce HORIZONTAL, wrap X) o horizontal (corte
+  // horizontal → cruce VERTICAL, wrap Y). El corte sólo puede atravesar tramos RECTOS perpendiculares al borde.
+  // El loop es el MISMO (simple); se desplaza en el eje y se renderiza con copias ±W/±H → cruce recto, alineado, sin auto-cruce.
+  let wrap = false, wrapAx = 0, shift = 0;
+  if (Math.random() < 0.28) {
+    const ax = ri(0, 1), nCells = ax === 0 ? nC : nR, cell = ax === 0 ? cellX : cellY;
+    const order = []; for (let g = 0; g < nCells-1; g++) order.push(g);
+    for (let i = order.length-1; i > 0; i--) { const j = ri(0, i), t = order[i]; order[i] = order[j]; order[j] = t; }
+    for (const g of order) {
+      const c = margin + (g + 0.5) * cell, cuts = []; let straight = true;
+      for (let i = 0; i < base.length; i++) {
+        const p = base[i], q = base[(i+1) % base.length];
+        if ((p[ax]-c) * (q[ax]-c) < 0) { cuts.push((p[1-ax]+q[1-ax]) / 2); if (Math.abs(p[1-ax]-q[1-ax]) > 1) straight = false; }
+      }
+      if (!straight || cuts.length < 2) continue;                    // el corte debe atravesar SÓLO rectas perpendiculares al borde
+      cuts.sort((u, v) => u - v);
+      let okGap = true; for (let k = 0; k+1 < cuts.length; k++) if (cuts[k+1]-cuts[k] < 2*wMax + wall) okGap = false;
+      if (!okGap) continue;                                          // dos aberturas muy juntas → se fundirían
+      wrap = true; wrapAx = ax; shift = c; break;
+    }
+  }
+
+  const shP = p => wrap ? (wrapAx === 0 ? [p[0]-shift, p[1]] : [p[0], p[1]-shift]) : p;   // desplazar la costura al 0 del eje
+  const sBase = base.map(shP);
+  let copies;
+  if (wrap) {
+    const os = smoothSample(outer.map(shP), 22), is = smoothSample(inner.map(shP), 22);
+    const tile = (pts, k) => pts.map(p => wrapAx === 0 ? [p[0]+k*W, p[1]] : [p[0], p[1]+k*H]);   // tilear ±W (X) o ±H (Y)
+    copies = [0, 1].map(k => ({ outer: tile(os, k), inner: tile(is, k) }));
+  } else {
+    copies = [{ outer: smoothSample(outer, 22), inner: smoothSample(inner, 22) }];
+  }
+  const walls = _ringWallsMulti(copies, W, H, Math.round(H / 32));
+  let wp = smoothSample(sBase, 70);
+  if (wrap) wp = wp.map(p => wrapAx === 0 ? [((p[0] % W) + W) % W, p[1]] : [p[0], ((p[1] % H) + H) % H]);   // envolver el centro al mundo
+  // — largada en un tramo RECTO (baja curvatura), nunca sobre la costura del portal —
+  const nw = wp.length;
+  const turn = i => {
+    const aa = wp[(i-1+nw)%nw], bb = wp[i], cc = wp[(i+1)%nw];
+    const ax2=bb[0]-aa[0], ay=bb[1]-aa[1], bx=cc[0]-bb[0], by=cc[1]-bb[1], la=Math.hypot(ax2,ay)||1, lb=Math.hypot(bx,by)||1;
+    if (la > 1200 || lb > 1200) return 9;                            // costura del portal: no es candidato a largada
+    return Math.abs(ax2/la*by/lb - ay/la*bx/lb);
+  };
+  const cands = []; for (let i = 0; i < nw; i++) if (turn(i) < 0.1 && turn((i+1)%nw) < 0.1) cands.push(i);
+  const stt = cands.length ? cands[ri(0, cands.length-1)] : 0;
+  wp = wp.slice(stt).concat(wp.slice(0, stt));
+  // META: alcance perpendicular a CADA pared en la largada (raycast) → la raya cubre TODA la calle aún en curva/ancho variable.
+  const nwp = wp.length; let ftx = 0, fty = 0;
+  for (let k = 1; k <= 3; k++) { const f = wp[k % nwp], bb = wp[(nwp - k) % nwp], dx = f[0]-bb[0], dy = f[1]-bb[1]; if (Math.hypot(dx, dy) < 1200) { ftx += dx; fty += dy; } }
+  if (ftx === 0 && fty === 0) ftx = 1;
+  const fa = Math.atan2(fty, ftx), pnx = -Math.sin(fa), pny = Math.cos(fa), fbk = (variable ? wMax : half) + 24;
+  const reach = dir => {
+    let best = 2200; const ox = wp[0][0], oy = wp[0][1], ex = ox + pnx*dir*2200, ey = oy + pny*dir*2200;
+    for (const c of copies) for (const poly of [c.outer, c.inner])
+      for (let i = 0; i < poly.length; i++) { const hh = _raySeg(ox, oy, ex, ey, poly[i], poly[(i+1)%poly.length]); if (hh != null && hh < best) best = hh; }
+    return best < 2200 ? best : fbk;
+  };
+  // la largada es recta → ambas paredes equidistan; si un rayo roza casi paralelo y pega lejos, lo acotamos al otro lado.
+  const r1 = reach(1), r2 = reach(-1), dlo = Math.min(r1, r2), dP = Math.min(r1, dlo + 50), dM = Math.min(r2, dlo + 50);
+  WORLDS[idx] = [W, H];
+  WALL_MAPS[idx] = walls;
+  TRACK_POLY[idx] = { copies, theme };
+  TRACKPOINT_MAPS[idx] = wp;
+  const ddx = wp[1][0]-wp[0][0], ddy = wp[1][1]-wp[0][1];
+  BIG_VERTICAL[idx] = Math.abs(ddx) >= Math.abs(ddy);
+  TRACK_WRAP[idx] = wrap;                                            // portal activo sólo si encontramos un corte limpio
+  FINISHLINES[idx] = [Math.round(Math.max(dP, dM)) + 14, 13];        // (compat) media-longitud simétrica
+  FINISH_ASYM[idx] = [Math.round(dP) + 14, Math.round(dM) + 14];     // alcance real a cada pared + overshoot → cubre toda la calle
+  MAP_COUNTS[idx] = [walls.length, wp.length];
+  return true;
+}
+
+// Cablea un circuito CERRADO en `idx`. VALIDA la geometría; false = salió mala → el caller reintenta.
+function buildCircuit(idx, W, H, half, base, theme, bandDiv = 30) {
+  const o1 = _offset(base, half), o2 = _offset(base, -half);
+  const a1 = Math.abs(_sarea(o1)), a2 = Math.abs(_sarea(o2));
+  if (Math.min(a1, a2) / Math.max(a1, a2) < 0.2) return false;        // el hueco interior casi colapsa
+  const outer = a1 > a2 ? o1 : o2, inner = (outer === o1) ? o2 : o1;
+  for (const p of outer) if (p[0] < 20 || p[0] > W-20 || p[1] < 20 || p[1] > H-20) return false;
+  const walls = _ringWalls(smoothSample(outer, 22), smoothSample(inner, 22), W, H, Math.round(H / bandDiv));
+  let wp = smoothSample(base, 70);
+  if (!_corridorClear(wp, walls, half, W, H)) return false;
+  WORLDS[idx] = [W, H];
+  WALL_MAPS[idx] = walls;
+  TRACK_POLY[idx] = { outer, inner, theme };
+  const cx = W/2, cy = H/2; let best = 0, bd = 1e9;
+  for (let i = 0; i < wp.length; i++) if (wp[i][0] > cx && Math.abs(wp[i][1]-cy) < bd) { bd = Math.abs(wp[i][1]-cy); best = i; }
+  wp = wp.slice(best).concat(wp.slice(0, best));
+  TRACKPOINT_MAPS[idx] = wp;
+  const dx = wp[1][0]-wp[0][0], dy = wp[1][1]-wp[0][1];
+  BIG_VERTICAL[idx] = Math.abs(dx) >= Math.abs(dy);
+  TRACK_WRAP[idx] = false;
+  FINISHLINES[idx] = [half + 14, 13];                                 // cubre el corredor (2·half) + overshoot
+  delete FINISH_ASYM[idx];                                            // el slot AUTO se reusa: limpiar la meta asimétrica de una gen previa
+  MAP_COUNTS[idx] = [walls.length, wp.length];
+  return true;
+}
+const AUTO_TRACK = TRACK_NAMES.length;                                // slot reservado para el mapa autogenerado
+TRACK_NAMES.push('Aleatorio');
+function regenAutoTrack(forcedTheme) {                                // re-genera el mapa del slot AUTO (carrera libre: tema al azar; torneo: tema fijado)
+  const theme = forcedTheme !== undefined ? forcedTheme : ri(0, 4);
+  THEMES[AUTO_TRACK] = theme;
+  let ok = false;
+  for (let att = 0; att < 30 && !ok; att++) {
+    const W = ri(43, 52) * 100, H = ri(26, 32) * 100;                  // tamaño del mundo: otro sorteo por intento
+    ok = buildAutoTrack(AUTO_TRACK, W, H, theme);
+  }
+  if (!ok) {                                                          // red de seguridad: rectángulo chamfereado (siempre válido)
+    const M = 300, FW = 4800, FH = 3000;
+    buildCircuit(AUTO_TRACK, FW, FH, 160, _chamferLoop([[M,M],[FW-M,M],[FW-M,FH-M],[M,FH-M]], 340), theme, 32);
+  }
+  TRACK_DECO_SEED[AUTO_TRACK] = (Math.random() * 4294967296) >>> 0;     // deco + escenografía NUEVAS cada generación (getDeco/getScenery se auto-invalidan por semilla)
+  bgReady = false; bgTrack = -1; mmKey = ''; mmStatic = null;          // el slot AUTO reusa índice → forzar re-horneado (fondo+minimapa)
+}
+regenAutoTrack();                                                     // inicial, para que el slot exista
+
 class MainHandler {
   constructor() {
     this.menu = true; this.menulevel = 0; this.option = 0;
@@ -1274,15 +1596,15 @@ class MainHandler {
     this.keypressed = false; this.f1_pressed = false; this.f2_pressed = false;
     this.tournament = false;
     this.confirmQuit = false;                                          // pide confirmación antes de salir al menú
-    this.tank_points = [0,0,0,0]; this.tank_times = [0,0,0,0];
+    this.tank_points = Array(TANK_COUNT).fill(0); this.tank_times = Array(TANK_COUNT).fill(0);   // torneo: 16 tanques
+    this.tourneyRace = 0;                                              // carrera actual del torneo (0..9)
+    this.tourneySkins = null;                                          // skins/colores FIJOS toda la copa (persisten entre carreras)
   }
 
   process() {
-    [this.nWalls, this.nTrackpoints] = MAP_COUNTS[this.track];
-
     if (this.menu) {
-      if (this.menulevel === 2) { this.processPicker(); return; }      // selector de tanque (grilla 4×3)
-      if (this.menulevel === 0) this.choose_option = [0,1,2];
+      if (this.menulevel === 2) { this.processPicker(); return; }      // selector de tanque (grilla 5×4, todos)
+      if (this.menulevel === 0) this.choose_option = [0,1];          // New Race / Tournament (Exit se sacó: para salir está la X de la esquina)
       if (this.menulevel === 1 && !this.tournament) this.choose_option = [0,1,2,3];
 
       if (!this.keypressed) {
@@ -1302,7 +1624,7 @@ class MainHandler {
           if (this.menulevel === 1) {
             if (this.option === 1) this.laps = (this.laps - 1 + 3) % 3;
             if (this.option === 2) this.difficulty = (this.difficulty - 1 + 4) % 4;
-            if (this.option === 3) this.track = trackStep(this.track, -1);
+            // opt 3 (mapa) ya no cicla: la carrera libre genera un circuito nuevo cada vez.
           }
           this.keypressed = true;
         }
@@ -1310,7 +1632,6 @@ class MainHandler {
           if (this.menulevel === 1) {
             if (this.option === 1) this.laps = (this.laps + 1) % 3;
             if (this.option === 2) this.difficulty = (this.difficulty + 1) % 4;
-            if (this.option === 3) this.track = trackStep(this.track, 1);
           }
           this.keypressed = true;
         }
@@ -1350,21 +1671,30 @@ class MainHandler {
   }
 
   // — acciones reutilizables (teclado y toque comparten estas) —
-  pickOption0(opt) {                                                   // menulevel 0: elegir New Race / Tournament / Exit
+  pickOption0(opt) {                                                   // menulevel 0: elegir New Race / Tournament
     this.option = opt;
     if (opt === 0) { this.menulevel = 1; this.tournament = false; this.option = this.menuOpts()[0]; }
     if (opt === 1) { this.menulevel = 1; this.tournament = true;  this.option = this.menuOpts()[0]; }
-    // opt 2 = Exit (no-op en web)
   }
   startRace() {                                                        // menulevel 1: arrancar la carrera
+    if (this.tournament) {                                             // TORNEO: 10 carreras, mapas autogenerados con temática garantizada, colores fijos
+      this.tourneyRace = 0;
+      this.tank_points = Array(TANK_COUNT).fill(0); this.tank_times = Array(TANK_COUNT).fill(0);
+      assignRaceSkins(TANK_COUNT); this.tourneySkins = raceSkins.slice();   // 16 colores fijados para toda la copa
+      regenAutoTrack(TOURNEY_THEMES[0]); this.track = AUTO_TRACK;
+    } else {                                                           // carrera libre: mapa nuevo autogenerado cada vez (tema al azar)
+      regenAutoTrack(); this.track = AUTO_TRACK;
+    }
+    raceFinishCount = 0;                                               // reinicia el orden de llegada
     clearPhysics();                                                    // mundo limpio antes de crear los cuerpos
     const [nW, nT] = MAP_COUNTS[this.track];
-    for (let i = 0; i < nT; i++) addSprite(new TrackPoint(i, this.track));
-    for (let i = 0; i < nW; i++) addSprite(new Wall(i, this.track, themeOf(this.track)));
-    const nTanks = this.tournament ? 4 : TANK_COUNT;                   // el torneo mantiene 4 (tabla/puntaje original); carrera libre = 16
-    assignRaceSkins(nTanks);                                           // jugador = su elección; IA = skins al azar (sin repetir)
-    for (let i = 0; i < nTanks; i++) addSprite(new Tank(i, this.track, this.laps, this.difficulty));
-    addSprite(new AuxiliaryHandler(this.laps, this.track, this.difficulty, this.tournament, this.tank_points, this.tank_times));
+    // Paredes y waypoints NO van a `sprites` (se hornean al fondo): así el loop no paga ~400 llamadas/frame al pedo.
+    for (let i = 0; i < nT; i++) new TrackPoint(i, this.track);
+    for (let i = 0; i < nW; i++) new Wall(i, this.track, themeOf(this.track));
+    if (this.tournament) raceSkins = this.tourneySkins;               // colores persistentes; libre = skins recién sorteadas
+    else assignRaceSkins(TANK_COUNT);
+    for (let i = 0; i < TANK_COUNT; i++) addSprite(new Tank(i, this.track, this.laps, this.difficulty));
+    addSprite(new AuxiliaryHandler(this.laps, this.track, this.difficulty, this.tournament, this.tank_points, this.tank_times, this.tourneyRace));
     this.menu = false;
   }
   confirmExit() {                                                      // confirmar salida de carrera al menú
@@ -1373,7 +1703,7 @@ class MainHandler {
     if (sprites.length === 1) {
       this.menulevel = 0; this.option = 0; this.laps = 1; this.difficulty = 1; this.track = 0;
       this.menu = true; this.confirmQuit = false;
-      this.tank_points = [0,0,0,0]; this.tank_times = [0,0,0,0];
+      this.tank_points = Array(TANK_COUNT).fill(0); this.tank_times = Array(TANK_COUNT).fill(0); this.tourneyRace = 0;
     }
   }
   // hover del mouse → mueve la selección a la opción/celda debajo del cursor (mismo mapa que tapMenu)
@@ -1384,7 +1714,7 @@ class MainHandler {
       return;
     }
     if (this.menulevel === 0) {
-      if (near(0.5)) this.option = 0; else if (near(0.6)) this.option = 1; else if (near(0.7)) this.option = 2;
+      if (near(0.5)) this.option = 0; else if (near(0.6)) this.option = 1;
     } else {
       for (const { opt, y } of this.menuRowDefs()) if (near(y)) { this.option = opt; return; }
     }
@@ -1401,14 +1731,13 @@ class MainHandler {
     if (this.menulevel === 0) {
       if (near(0.5)) this.pickOption0(0);
       else if (near(0.6)) this.pickOption0(1);
-      else if (near(0.7)) this.pickOption0(2);
     } else {
       for (const { opt, y } of this.menuRowDefs()) {
         if (!near(y)) continue;
         this.option = opt;
         if (opt === 1)      this.laps       = (this.laps + dir + 3) % 3;
         else if (opt === 2) this.difficulty = (this.difficulty + dir + 4) % 4;
-        else if (opt === 3) { if (!this.tournament) this.track = trackStep(this.track, dir); }
+        // opt 3 (mapa): no cicla — carrera libre = circuito autogenerado por carrera.
         else if (opt === 4) this.menulevel = 2;                        // abrir selector de tanque
         return;
       }
@@ -1416,27 +1745,27 @@ class MainHandler {
     }
   }
 
-  // Opciones del setup (menulevel 1): vueltas / dificultad / mapa / tanque.
-  menuOpts() { return [1, 2, 3, 4]; }
+  // Opciones del setup (menulevel 1): vueltas / dificultad / tanque. (La fila "mapa/torneo" se sacó: el mapa es siempre autogenerado.)
+  menuOpts() { return [1, 2, 4]; }
   // Filas del setup con su posición Y, centradas verticalmente según cuántas haya.
   menuRowDefs() {
     const opts = this.menuOpts(), span = 0.095, mid = 0.56, y0 = mid - span*(opts.length - 1)/2;
     return opts.map((opt, i) => ({ opt, y: y0 + i*span }));
   }
 
-  // ── Selector de tanque (grilla 4×3 de los SELECTABLE_COUNT skins elegibles) ──
+  // ── Selector de tanque (grilla con TODOS los skins; 5 columnas) ──
   pickerCells() {
-    const cells = [], cols = 4;
-    const x0 = xper(0.205), y0 = yper(0.34), gw = xper(0.59), gh = yper(0.46);
-    const cw = gw / cols, ch = gh / 3;
-    for (let i = 0; i < SELECTABLE_COUNT; i++) {
+    const cells = [], n = SKINS.length, cols = 5, rows = Math.ceil(n / cols);
+    const x0 = xper(0.07), y0 = yper(0.27), gw = xper(0.86), gh = yper(0.56);
+    const cw = gw / cols, ch = gh / rows;
+    for (let i = 0; i < n; i++) {
       const c = i % cols, r = Math.floor(i / cols);
       cells.push({ idx: i, cx: x0 + cw*(c + 0.5), cy: y0 + ch*(r + 0.5), cw, ch });
     }
     return cells;
   }
   processPicker() {
-    const cols = 4, n = SELECTABLE_COUNT;
+    const cols = 5, n = SKINS.length;
     if (!this.keypressed) {
       let moved = true;
       if (keys.LEFT)        playerSkinIdx = (playerSkinIdx + n - 1) % n;
@@ -1450,10 +1779,10 @@ class MainHandler {
     if (!keys.LEFT && !keys.RIGHT && !keys.UP && !keys.DOWN && !keys.RETURN && !keys.ESCAPE) this.keypressed = false;
   }
   drawPicker(menucolor) {
-    createText(Math.round(M_font*0.95), 'Elegí tu tanque', menucolor, null, xper(0.5), yper(0.24), 16);
+    createText(Math.round(M_font*0.9), 'Choose your tank', menucolor, null, xper(0.5), yper(0.2), 16);
     for (const cell of this.pickerCells()) {
       const sk = SKINS[cell.idx], on = cell.idx === playerSkinIdx;
-      const pw = cell.cw*0.86, ph = cell.ch*0.86;
+      const pw = cell.cw*0.88, ph = cell.ch*0.88;
       // panel de la celda
       roundRectPath(cell.cx - pw/2, cell.cy - ph/2, pw, ph, ph*0.14);
       const g = ctx.createLinearGradient(0, cell.cy - ph/2, 0, cell.cy + ph/2);
@@ -1465,11 +1794,11 @@ class MainHandler {
       if (on) { ctx.strokeStyle = rgb(modifyColor(sk.color, 60)); ctx.lineWidth = 3; ctx.shadowColor = rgb(sk.color); ctx.shadowBlur = 16; ctx.stroke(); ctx.shadowBlur = 0; }
       else    { ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1.5; ctx.stroke(); }
       // preview del tanque (apuntando arriba) + nombre
-      paintTank(cell.cx, cell.cy - ph*0.1, -Math.PI/2, Math.min(cell.cw, cell.ch)*0.26, sk.color, 1, false, sk);
-      createText(Math.round(S_font*0.92), sk.name, on ? [245,245,250] : [150,155,170], null, cell.cx, cell.cy + ph*0.34);
+      paintTank(cell.cx, cell.cy - ph*0.12, -Math.PI/2, Math.min(cell.cw, cell.ch)*0.28, sk.color, 1, false, sk);
+      createText(Math.round(S_font*0.82), sk.name, on ? [245,245,250] : [150,155,170], null, cell.cx, cell.cy + ph*0.36);
     }
-    const hint = IS_TOUCH ? 'Tocá un tanque para elegirlo' : '← → ↑ ↓ para moverte · ENTER para confirmar';
-    createText(Math.round(S_font*1.0), hint, [180,185,200], null, xper(0.5), yper(0.86), 0);
+    const hint = IS_TOUCH ? 'Tap a tank to pick it' : '← → ↑ ↓ to move · ENTER to confirm';
+    createText(Math.round(S_font*0.95), hint, [180,185,200], null, xper(0.5), yper(0.88), 0);
   }
 
   draw() {
@@ -1487,7 +1816,7 @@ class MainHandler {
         paintTank(cx, cy, a + Math.PI/2, xper(0.022), SKINS[i].color, 0.16, false, SKINS[i]);
       }
 
-      const dim = [140, 80, 150], lock = [70, 70, 80];
+      const dim = [140, 80, 150];
       // el hover ya mueve la selección (hoverFocus), así que basta con estilar la opción seleccionada:
       // así el hover dispara EXACTAMENTE los mismos efectos que la selección (color, glow y los < >).
       const sel = on => on ? menucolor : dim;
@@ -1496,26 +1825,23 @@ class MainHandler {
         createText(B_font, 'CrazyTanks', menucolor, null, xper(0.5), yper(0.22), 28);
         createText(M_font, 'New Race',   sel(this.option === 0), null, xper(0.5), yper(0.5), gl(this.option === 0));
         createText(M_font, 'Tournament', sel(this.option === 1), null, xper(0.5), yper(0.6), gl(this.option === 1));
-        createText(M_font, 'Exit',       sel(this.option === 2), null, xper(0.5), yper(0.7), gl(this.option === 2));
       }
       if (this.menulevel === 1) {
-        const tn = TRACK_NAMES[this.track], diffNames = ['Easy','Normal','Hard','Very Hard'];
-        const lapsName = this.laps === 0 ? 'Short (10 laps)' : this.laps === 1 ? 'Normal (20 laps)' : 'Long (40 laps)';
+        const diffNames = ['Easy','Normal','Hard','Very Hard'];
+        const lapsName = this.laps === 0 ? 'Short (3 laps)' : this.laps === 1 ? 'Normal (5 laps)' : 'Long (10 laps)';
         const wrap = (on, s) => on ? `< ${s} >` : s;
         const labelFor = opt => opt === 1 ? lapsName
                               : opt === 2 ? `Difficulty: ${diffNames[this.difficulty]}`
-                              : opt === 3 ? `Map: ${tn}`
-                              : `Tanque: ${SKINS[playerSkinIdx].name} ▸`;
-        createText(B_font, 'CrazyTanks', menucolor, null, xper(0.5), yper(0.2), 28);
+                              : `Tank: ${SKINS[playerSkinIdx].name} ▸`;
+        createText(B_font, this.tournament ? 'Tournament' : 'New Race', menucolor, null, xper(0.5), yper(0.2), 28);
         for (const { opt, y } of this.menuRowDefs()) {
           const on = this.option === opt;
-          const col = opt === 3 ? (on ? menucolor : (this.tournament ? lock : dim)) : sel(on);
-          createText(M_font, wrap(on, labelFor(opt)), col, null, xper(0.5), yper(y), gl(on));
+          createText(M_font, wrap(on, labelFor(opt)), sel(on), null, xper(0.5), yper(y), gl(on));
           if (opt === 4) paintTank(xper(0.78), yper(y), 0, xper(0.018), SKINS[playerSkinIdx].color, 1, false, SKINS[playerSkinIdx]);
         }
-        // botón JUGAR (tocá/click para arrancar) — pulsa, y se ilumina al hover
+        // botón PLAY (tocá/click para arrancar) — pulsa, y se ilumina al hover
         const hj = rowHover(0.88), playPulse = 0.6 + 0.4*Math.sin(T*4);
-        createText(M_font, '▶ JUGAR', [120 + 120*playPulse, 230, 150], modifyColorPerc(menucolor, hj ? 0.32 : 0.12), xper(0.5), yper(0.88), hj ? 30 : 16);
+        createText(M_font, '▶ PLAY', [120 + 120*playPulse, 230, 150], modifyColorPerc(menucolor, hj ? 0.32 : 0.12), xper(0.5), yper(0.88), hj ? 30 : 16);
       }
       if (this.menulevel === 2) this.drawPicker(menucolor);
     }
@@ -1525,18 +1851,20 @@ class MainHandler {
 
 // ════════════════ AUXILIARY HANDLER (cuenta regresiva, pausa, scoring) ════════════════
 class AuxiliaryHandler {
-  constructor(laps, track, difficulty, tournament, tankpoints, tanktimes) {
+  constructor(laps, track, difficulty, tournament, tankpoints, tanktimes, raceIdx = 0) {
     this.laps = laps; this.track = track; this.difficulty = difficulty;
     this.racestart_timer = 5; this.racestart_cooling = 0;
-    this.playerfinished = [false, false, false, false];
+    this.playerfinished = Array(TANK_COUNT).fill(false);
     this.racefinished = false; this.post_race_option = 0;
     this.p_pressed = false; this.enter_pressed = false; this.pause = false;
     this.tournament = tournament;
-    this.points_for_rank = [4,3,2,1];
+    this.raceIdx = raceIdx;                                            // qué carrera del torneo (0..TOURNEY_RACES-1)
     this.tank_points = tankpoints; this.tank_times = tanktimes;
     this.table_timer = 3; this.table_cooldown = 0;
-    this.pointsaccounted = false; this.randombool = false; this.tournamentfinished = false;
+    this.pointsaccounted = false; this.tournamentfinished = false;
   }
+  // puntos por puesto: 1° = N, último = 1 (N = cantidad de tanques)
+  pointsForRank(rank) { return Math.max(1, tanks.length - (rank - 1)); }
 
   process() {
     [this.nWalls, this.nTrackpoints] = MAP_COUNTS[this.track];
@@ -1551,7 +1879,9 @@ class AuxiliaryHandler {
       // las IA (aunque al jugador le falten vueltas).
       const aisDone = tanks.length > 1 && tanks.every(t => t.id === 0 || t.finished);
       if (this.playerfinished[0] || aisDone) {
-        for (const tank of tanks) { tank.finished = true; tank.ai = true; }
+        // a los que NO llegaron se les fija la posición por su rank actual (orden de carrera) → no se renombran después.
+        for (const tank of tanks.slice().sort((a, b) => a.rank - b.rank))
+          if (!tank.finished) { tank.finished = true; tank.ai = true; tank.finishPos = ++raceFinishCount; }
         this.racefinished = true;
       }
 
@@ -1566,33 +1896,22 @@ class AuxiliaryHandler {
 
     } else {
       if (!this.tournament) {
-        if (keys.UP) this.post_race_option = 0;
-        if (keys.DOWN) this.post_race_option = 1;
-        if (keys.RETURN) {
-          if (this.post_race_option === 0) this._rebuildRace();
-          if (this.post_race_option === 1) this._backToMenu(false);
-        }
+        this.post_race_option = 0;                                      // único botón: Rematch (salir = X de la esquina)
+        if (keys.RETURN) this._rebuildRace();
       } else {
         this.table_cooldown += deltaT;
-
+        // tras el cartel "Gana X" se anotan los puntos UNA vez y se muestra la tabla de posiciones (16 tanques).
         if (this.table_cooldown > this.table_timer && !this.pointsaccounted) {
-          if (keys.RETURN) {
-            for (const tank of tanks) {
-              this.tank_points[tank.id] += this.points_for_rank[tank.rank - 1];
-              this.tank_times[tank.id] += tank.racetime + tank.racetime * 0.01 * (tank.rank - 1);
-            }
-            this.pointsaccounted = true; this.enter_pressed = true;
+          for (const tank of tanks) {
+            this.tank_points[tank.id] += this.pointsForRank(tank.rank);
+            this.tank_times[tank.id] += tank.racetime + tank.racetime * 0.01 * (tank.rank - 1);
           }
+          this.pointsaccounted = true; this.enter_pressed = true;
+          if (this.raceIdx >= TOURNEY_RACES - 1) this.tournamentfinished = true;
         }
-
         if (this.pointsaccounted) {
-          if (this.track === 9) { this.tournamentfinished = true; this.post_race_option = 1; }
-          if (keys.UP && !this.tournamentfinished) this.post_race_option = 0;
-          if (keys.DOWN) this.post_race_option = 1;
-          if (!this.enter_pressed && keys.RETURN) {
-            if (this.post_race_option === 0) this._tournamentNext();
-            if (this.post_race_option === 1) this._backToMenu(true);
-          }
+          this.post_race_option = 0;                                    // único botón: Next race (salir = X de la esquina)
+          if (!this.enter_pressed && keys.RETURN && !this.tournamentfinished) this._tournamentNext();
           if (!keys.RETURN) this.enter_pressed = false;
         }
       }
@@ -1600,16 +1919,17 @@ class AuxiliaryHandler {
   }
 
   // Rematch (carrera simple): limpia todo salvo MainHandler+self, re-crea, se remueve.
-  _rebuildRace() {
+  _rebuildRace() {                                                    // revancha de carrera LIBRE (el torneo usa _tournamentNext)
     const main = sprites[0];
+    regenAutoTrack(); this.track = AUTO_TRACK; [this.nWalls, this.nTrackpoints] = MAP_COUNTS[this.track];   // revancha = mapa nuevo
+    raceFinishCount = 0;
     for (const s of sprites.slice()) if (s !== main && s !== this) removeFromList(sprites, s);
     clearPhysics(); trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0; pickups.length = 0;
     if (sprites.length === 2) {
-      for (let i = 0; i < this.nTrackpoints; i++) addSprite(new TrackPoint(i, this.track));
-      for (let i = 0; i < this.nWalls; i++) addSprite(new Wall(i, this.track, themeOf(this.track)));
-      const nTanks = this.tournament ? 4 : TANK_COUNT;
-      assignRaceSkins(nTanks);                                          // re-randomiza la IA en cada revancha
-      for (let i = 0; i < nTanks; i++) addSprite(new Tank(i, this.track, this.laps, this.difficulty));
+      for (let i = 0; i < this.nTrackpoints; i++) new TrackPoint(i, this.track);
+      for (let i = 0; i < this.nWalls; i++) new Wall(i, this.track, themeOf(this.track));
+      assignRaceSkins(TANK_COUNT);                                     // re-randomiza la IA en cada revancha
+      for (let i = 0; i < TANK_COUNT; i++) addSprite(new Tank(i, this.track, this.laps, this.difficulty));
       addSprite(new AuxiliaryHandler(this.laps, this.track, this.difficulty, this.tournament, this.tank_points, this.tank_times));
       removeFromList(sprites, this);
     }
@@ -1622,56 +1942,41 @@ class AuxiliaryHandler {
     if (sprites.length === 2) {
       main.menulevel = 0; main.option = 0; main.laps = 1; main.difficulty = 1; main.track = 0;
       main.menu = true; main.keypressed = true;
-      if (tournament) { main.tank_points = [0,0,0,0]; main.tank_times = [0,0,0,0]; }
+      if (tournament) { main.tank_points = Array(TANK_COUNT).fill(0); main.tank_times = Array(TANK_COUNT).fill(0); main.tourneyRace = 0; }
       removeFromList(sprites, this);
     }
   }
 
-  _tournamentNext() {
+  _tournamentNext() {                                                 // siguiente carrera del torneo: mapa autogenerado con la temática del orden
     const main = sprites[0];
-    if (!this.randombool) { main.track += 1; this.randombool = true; }
+    raceFinishCount = 0;
+    const nextIdx = this.raceIdx + 1;
+    main.tourneyRace = nextIdx;
+    regenAutoTrack(TOURNEY_THEMES[nextIdx]); main.track = AUTO_TRACK;
     for (const s of sprites.slice()) if (s !== main && s !== this) removeFromList(sprites, s);
-    trackpoints.length = 0; walls.length = 0; tanks.length = 0;
+    clearPhysics();                                                   // sin esto las paredes/tanques viejos quedaban como colliders fantasma
+    trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0; pickups.length = 0;
     if (sprites.length === 2) {
-      [this.nWalls, this.nTrackpoints] = MAP_COUNTS[this.track + 1];
-      for (let i = 0; i < this.nTrackpoints; i++) addSprite(new TrackPoint(i, this.track + 1));
-      for (let i = 0; i < this.nWalls; i++) addSprite(new Wall(i, this.track + 1, themeOf(this.track + 1)));
-      assignRaceSkins(4);                                             // torneo: 4 tanques, IA al azar
-      for (let i = 0; i < 4; i++) addSprite(new Tank(i, this.track + 1, this.laps, this.difficulty));
-      addSprite(new AuxiliaryHandler(this.laps, this.track + 1, this.difficulty, this.tournament, this.tank_points, this.tank_times));
+      const [nW, nT] = MAP_COUNTS[main.track];
+      for (let i = 0; i < nT; i++) new TrackPoint(i, main.track);
+      for (let i = 0; i < nW; i++) new Wall(i, main.track, themeOf(main.track));
+      raceSkins = main.tourneySkins;                                  // 16 colores FIJOS toda la copa
+      for (let i = 0; i < TANK_COUNT; i++) addSprite(new Tank(i, main.track, this.laps, this.difficulty));
+      addSprite(new AuxiliaryHandler(this.laps, main.track, this.difficulty, this.tournament, this.tank_points, this.tank_times, nextIdx));
       removeFromList(sprites, this);
     }
   }
 
   // hover del mouse → mueve la selección post-carrera a la opción debajo del cursor
-  hoverFocus(ly) {
-    if (!this.racefinished) return;
-    const near = (f) => Math.abs(ly - yper(f)) < yper(0.05);
-    if (!this.tournament) {
-      if (near(0.55)) this.post_race_option = 0; else if (near(0.65)) this.post_race_option = 1;
-    } else if (this.pointsaccounted && !this.tournamentfinished) {
-      if (near(0.75)) this.post_race_option = 0; else if (near(0.85)) this.post_race_option = 1;
-    }
-  }
+  hoverFocus(ly) { this.post_race_option = 0; }                        // un solo botón → siempre seleccionado
   // toque/click sobre la pantalla de fin de carrera (coords lógicas)
   tap(lx, ly) {
     if (!this.racefinished) return;
     const near = (frac) => Math.abs(ly - yper(frac)) < yper(0.05);
     if (!this.tournament) {
-      if (near(0.55)) { this.post_race_option = 0; this._rebuildRace(); }
-      else if (near(0.65)) { this.post_race_option = 1; this._backToMenu(false); }
-    } else if (!this.pointsaccounted) {
-      if (this.table_cooldown > this.table_timer) {                    // tocar = anotar puntos (= ENTER)
-        for (const tank of tanks) {
-          this.tank_points[tank.id] += this.points_for_rank[tank.rank - 1];
-          this.tank_times[tank.id] += tank.racetime + tank.racetime * 0.01 * (tank.rank - 1);
-        }
-        this.pointsaccounted = true; this.enter_pressed = true;
-      }
-    } else {
-      if (this.tournamentfinished) { if (near(0.85)) this._backToMenu(true); }
-      else if (near(0.75)) { this.post_race_option = 0; this._tournamentNext(); }
-      else if (near(0.85)) { this.post_race_option = 1; this._backToMenu(true); }
+      if (near(0.55)) this._rebuildRace();                             // ↻ Rematch
+    } else if (this.pointsaccounted && !this.tournamentfinished) {     // los puntos se anotan solos al aparecer la tabla
+      if (near(0.84)) this._tournamentNext();                          // ▶ Next race
     }
   }
 
@@ -1699,61 +2004,39 @@ class AuxiliaryHandler {
     if (this.racefinished) {
       if (!this.tournament) {
         for (const tank of tanks) if (tank.rank === 1)
-          createText(B_font, `¡${tankName(tank)} Wins!`, modifyColor(tank.color,75), null, xper(0.5), yper(0.35), 30);
-        createText(M_font, 'Rematch',      this.post_race_option === 0 ? [255,255,255] : [150,150,150], null, xper(0.5), yper(0.55), selGlow(this.post_race_option === 0));
-        createText(M_font, 'Back to Menu', this.post_race_option === 1 ? [255,255,255] : [150,150,150], null, xper(0.5), yper(0.65), selGlow(this.post_race_option === 1));
+          createText(B_font, `${tankName(tank)} Wins!`, modifyColor(tank.color,75), null, xper(0.5), yper(0.35), 30);
+        createText(M_font, '↻ Rematch', [255,255,255], null, xper(0.5), yper(0.55), selGlow(true));   // (para salir: la X de la esquina)
       } else {
         if (this.table_cooldown < this.table_timer) {
           for (const tank of tanks) if (tank.rank === 1)
             createText(B_font, `¡${tankName(tank)} Wins!`, modifyColor(tank.color,75), null, xper(0.5), yper(0.5), 30);
         } else {
-          // panel redondeado semi-transparente
-          ctx.save();
-          ctx.globalAlpha = 0.84;
-          roundRectPath(xper(0.25), yper(0.25), xper(0.5), yper(0.4), 18); ctx.fillStyle = rgb([10,10,18]); ctx.fill();
+          // ── TABLA DE POSICIONES del torneo (16 tanques en 2 columnas de 8, ordenada por puntos) ──
+          ctx.save(); ctx.globalAlpha = 0.88;
+          roundRectPath(xper(0.06), yper(0.05), xper(0.88), yper(0.9), 18); ctx.fillStyle = rgb([10,10,18]); ctx.fill();
           ctx.restore();
-          roundRectPath(xper(0.25), yper(0.25), xper(0.5), yper(0.4), 18); ctx.strokeStyle = rgb([255,255,255]); ctx.lineWidth = 3; ctx.stroke();
-          for (let i = 0; i < 3; i++) {
-            const yy = yper(0.35 + (i === 1 ? 0.1 : i === 2 ? 0.2 : 0));
-            ctx.globalAlpha = 0.35; drawLine([xper(0.27), yy], [xper(0.73), yy], [200,200,220], 1); ctx.globalAlpha = 1;
+          roundRectPath(xper(0.06), yper(0.05), xper(0.88), yper(0.9), 18); ctx.strokeStyle = rgb([255,255,255]); ctx.lineWidth = 2.5; ctx.stroke();
+
+          const order = tanks.slice().sort((a, b) => this.tank_points[b.id] - this.tank_points[a.id] || this.tank_times[a.id] - this.tank_times[b.id]);
+          const champ = order[0];
+          if (this.tournamentfinished)
+            createText(M_font, `${tankName(champ)} — CHAMPION!`, modifyColor(champ.color, 85), null, xper(0.5), yper(0.115), 20);
+          else
+            createText(Math.round(M_font*0.78), `Race ${this.raceIdx + 1} / ${TOURNEY_RACES} · Standings`, [225,230,240], null, xper(0.5), yper(0.115), 4);
+
+          const rf = Math.round(S_font * 0.92);
+          for (let i = 0; i < order.length; i++) {
+            const tank = order[i], left = i < 8, y = yper(0.20 + (i % 8) * 0.072), isPlayer = tank.id === 0;
+            const xr = left ? xper(0.15) : xper(0.58), xi = left ? xper(0.23) : xper(0.66), xp = left ? xper(0.41) : xper(0.84);
+            if (isPlayer) { ctx.save(); ctx.globalAlpha = 0.20; ctx.fillStyle = rgb(modifyColor(tank.color, 40)); roundRectPath(xr - xper(0.035), y - yper(0.03), xper(0.31), yper(0.06), 7); ctx.fill(); ctx.restore(); }
+            createText(rf, `${i + 1}°`, isPlayer ? [255,255,255] : [205,210,225], null, xr, y, isPlayer ? 5 : 0);
+            const spr = tankSpriteFor(tank.skin, tank.radius, false), sz = spr.half * 2 * 0.78;   // sprite CACHEADO (no paintTank ×16/frame → no baja FPS)
+            ctx.drawImage(spr.cv, xi - sz/2, y - sz/2, sz, sz);
+            createText(rf, `${this.tank_points[tank.id]} pts`, modifyColor(tank.color, 78), null, xp, y, 0);
           }
 
-          const tf = 32;
-          for (const tank of tanks) {
-            let tourneyrank = tanks.length;
-            let pos_in_table = yper(0.6);
-            let points;
-
-            if (this.tank_points[tank.id] > 0) {
-              for (const tank2 of tanks) {
-                if (tank2 !== tank) {
-                  if (this.tank_points[tank.id] > this.tank_points[tank2.id]) { tourneyrank -= 1; pos_in_table -= yper(0.1); }
-                  if (this.tank_points[tank.id] === this.tank_points[tank2.id] && this.tank_times[tank.id] < this.tank_times[tank2.id]) { tourneyrank -= 1; pos_in_table -= yper(0.1); }
-                }
-              }
-              points = !this.pointsaccounted ? `${this.tank_points[tank.id]} + ${this.points_for_rank[tank.rank-1]}` : this.tank_points[tank.id];
-            } else {
-              tourneyrank = tank.id === 0 ? '1' : tank.id === 1 ? '2' : tank.id === 2 ? '3' : '4';
-              pos_in_table = tank.id === 0 ? yper(0.3) : tank.id === 1 ? yper(0.4) : tank.id === 2 ? yper(0.5) : yper(0.6);
-              points = `0 + ${this.points_for_rank[tank.rank-1]}`;
-            }
-
-            createText(tf, `${tourneyrank}°`, this.pointsaccounted ? modifyColor(tank.color,75) : [255,255,255], null, xper(0.31), pos_in_table);
-            createText(tf, `${points} pts.`, modifyColor(tank.color,75), null, xper(0.67), pos_in_table);
-            if (this.pointsaccounted && this.tournamentfinished && tourneyrank === 1)
-              createText(M_font, `¡${tankName(tank)} is the Champion!`, randcolorGray(55,255), null, xper(0.5), yper(0.16), 22);
-            if (!this.pointsaccounted) {
-              const rk = tank.rank === 1 ? '1st!' : tank.rank === 2 ? '2nd!' : tank.rank === 3 ? '3rd' : '4th';
-              createText(28, rk, modifyColor(tank.color,75), null, xper(0.55), pos_in_table);
-            }
-
-            paintTank(xper(0.42), pos_in_table, -Math.PI/2, tank.radius, tank.color, 1, false, tank.skin);
-          }
-        }
-
-        if (this.pointsaccounted) {
-          createText(M_font, this.tournamentfinished ? '' : 'Continue', this.post_race_option === 0 ? [255,255,255] : [150,150,150], null, xper(0.5), yper(0.75), selGlow(this.post_race_option === 0));
-          createText(M_font, this.tournamentfinished ? 'Back to Menu' : 'Exit Tournament', this.post_race_option === 1 ? [255,255,255] : [150,150,150], null, xper(0.5), yper(0.85), selGlow(this.post_race_option === 1));
+          if (!this.tournamentfinished)                                  // copa terminada → sólo la tabla (para salir: la X de la esquina)
+            createText(Math.round(M_font*0.92), '▶ Next race', [255,255,255], null, xper(0.5), yper(0.84), selGlow(true));
         }
       }
     }
@@ -2011,9 +2294,13 @@ function mulberry32(a) {
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
+function decoSeedFor(track) {                                          // semilla estable por pista (el slot AUTO la re-sortea en regenAutoTrack)
+  return (TRACK_DECO_SEED[track] !== undefined ? TRACK_DECO_SEED[track] : ((track + 1) * 2654435761)) >>> 0;
+}
 function getDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
-  if (decoCache[track]) return decoCache[track];
-  const rng = mulberry32(((track + 1) * 2654435761) >>> 0);
+  const seed = decoSeedFor(track);
+  if (decoCache[track] && decoCache[track].seed === seed) return decoCache[track];   // se invalida solo si cambió la semilla (nueva generación)
+  const rng = mulberry32(seed);
   const theme = themeOf(track);
   const items = [];
   const N = Math.round(80 * (ww * hh) / (SCREEN_X * SCREEN_Y));        // densidad constante: más mundo = más deco
@@ -2032,7 +2319,7 @@ function getDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
     else                  { shape = 'ember'; col = [225+rng()*30, 95+rng()*60, 25+rng()*35];          alpha = 0.26 + rng()*0.20; r = xper(0.0045)*s; }
     items.push({ x, y, r, shape, col, alpha, extra });
   }
-  decoCache[track] = { theme, items };
+  decoCache[track] = { theme, items, seed };
   return decoCache[track];
 }
 function drawDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
@@ -2082,6 +2369,175 @@ function drawDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
   const vg = ctx.createRadialGradient(ww/2, hh/2, Math.min(ww,hh)*0.32, ww/2, hh/2, vr);
   vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.34)');
   ctx.fillStyle = vg; ctx.fillRect(0, 0, ww, hh);
+}
+
+// ════════════════ ESCENOGRAFÍA TEMÁTICA DEL INFIELD (GRANDE, reconocible y 100% HORNEADA) ════════════════
+// Decoración grande por bioma: parque (árboles/arbustos/flores), desierto (dunas/pirámides/cactus),
+// nieve (muñecos/piedras), tecno (edificios/cables), lava (lagos/ríos/brasas). Se dibuja en la CAPA de PARED
+// (el infield) ANTES de calar el corredor → lo que cae sobre la pista lo borra el carve, la calle queda limpia.
+// Se hornea UNA vez por mapa: costo por frame = 0 (se blitea con el resto del fondo).
+const SCENERY_DENSITY = [13, 9, 9, 4.5, 6];                           // items por pantalla-equivalente, por tema
+const sceneryCache = {};
+function getScenery(track, ww, hh) {
+  const seed = decoSeedFor(track);
+  if (sceneryCache[track] && sceneryCache[track].seed === seed) return sceneryCache[track];
+  const theme = themeOf(track), rng = mulberry32((seed ^ 0x5bd1e995) >>> 0), af = (ww * hh) / (1280 * 720);
+  const N = Math.round(SCENERY_DENSITY[theme] * af), items = [];
+  for (let i = 0; i < N; i++) items.push({ x: rng()*ww, y: rng()*hh, s: 0.7 + rng()*0.95, rot: rng()*TAU, v: rng(), w: rng() });
+  const lines = [];                                                    // tendidos de cables (tecno): cadenas de postes
+  if (theme === 3) {
+    const chains = Math.max(2, Math.round(1.6 * af));
+    for (let c = 0; c < chains; c++) {
+      const horiz = rng() < 0.5, n = 3 + Math.floor(rng()*4), x0 = rng()*ww, y0 = rng()*hh, step = 180 + rng()*170, pts = [];
+      for (let k = 0; k < n; k++) pts.push(horiz ? [x0 + k*step, y0 + (rng()-0.5)*40] : [x0 + (rng()-0.5)*40, y0 + k*step]);
+      lines.push(pts);
+    }
+  }
+  sceneryCache[track] = { theme, items, lines, seed };
+  return sceneryCache[track];
+}
+// sombra proyectada (offset abajo-derecha) → ilusión de altura en vista cenital
+function shadowBlob(x, y, r, a) { ctx.globalAlpha = a; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(x + r*0.18, y + r*0.22, r*1.02, r*0.92, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
+function drawTree(x, y, s) {                                          // copa oscura + rim claro → contrasta sobre el pasto
+  const r = 20 + s*16;
+  shadowBlob(x, y, r, 0.24);
+  drawCircle(x, y, r, [12, 45, 22]);                                 // contorno oscuro
+  drawCircle(x + r*0.46, y + r*0.2, r*0.5, [20, 64, 32]);
+  drawCircle(x - r*0.36, y + r*0.42, r*0.46, [24, 72, 36]);
+  drawCircle(x - r*0.1, y - r*0.1, r*0.74, [30, 88, 42]);
+  drawCircle(x - r*0.28, y - r*0.28, r*0.42, [74, 152, 86]);         // lado iluminado
+}
+function drawBush(x, y, s) {
+  const r = 11 + s*9;
+  shadowBlob(x, y, r, 0.2);
+  drawCircle(x - r*0.5, y, r*0.7, [18, 60, 28]);
+  drawCircle(x + r*0.5, y, r*0.7, [18, 60, 28]);
+  drawCircle(x, y - r*0.22, r*0.85, [34, 100, 46]);
+  drawCircle(x - r*0.2, y - r*0.4, r*0.36, [82, 154, 92]);
+}
+function drawFlowers(x, y, s, rot) {
+  const r = 9 + s*7, cols = [[235,90,110], [245,210,80], [245,245,250], [200,120,235]];
+  ctx.globalAlpha = 0.92;
+  for (let i = 0; i < 5; i++) { const a = rot + i*1.2566, d = r*0.55*((i%2)+0.6); drawCircle(x + Math.cos(a)*d, y + Math.sin(a)*d, Math.max(1.6, r*0.17), cols[(i + ((rot*7)|0)) % 4]); }
+  ctx.globalAlpha = 1;
+}
+function drawPyramid(x, y, s, rot) {
+  const h = 44 + s*44, c = Math.cos(rot), sn = Math.sin(rot), sand = [212, 190, 132];
+  shadowBlob(x, y, h*1.05, 0.26);
+  const cor = [[-h,-h],[h,-h],[h,h],[-h,h]].map(([cx,cy]) => [x + cx*c - cy*sn, y + cx*sn + cy*c]);
+  const faces = [modifyColor(sand, 40), modifyColor(sand, -12), modifyColor(sand, -46), modifyColor(sand, 10)];
+  for (let i = 0; i < 4; i++) { const a = cor[i], b = cor[(i+1)%4]; ctx.fillStyle = rgb(faces[i]); ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.lineTo(x,y); ctx.closePath(); ctx.fill(); }
+  ctx.strokeStyle = rgb(modifyColor(sand, -64)); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(cor[0][0],cor[0][1]); for (let i = 1; i < 4; i++) ctx.lineTo(cor[i][0],cor[i][1]); ctx.closePath(); ctx.stroke();
+}
+function drawCactus(x, y, s) {
+  const r = 9 + s*7, g = [56, 118, 60];
+  shadowBlob(x, y, r*1.3, 0.16);
+  ctx.fillStyle = rgb(g); ctx.beginPath(); ctx.ellipse(x, y, r*0.72, r*1.32, 0, 0, TAU); ctx.fill();
+  drawCircle(x - r*0.9, y - r*0.2, r*0.5, g); drawCircle(x + r*0.92, y + r*0.1, r*0.5, g);
+  ctx.fillStyle = rgb(modifyColor(g, 30)); ctx.beginPath(); ctx.ellipse(x - r*0.18, y, r*0.22, r*1.02, 0, 0, TAU); ctx.fill();
+}
+function drawRock(x, y, s, rot, col) {
+  const r = 9 + s*15, n = 6;
+  shadowBlob(x, y, r, 0.18);
+  ctx.fillStyle = rgb(col); ctx.beginPath();
+  for (let i = 0; i < n; i++) { const a = rot + i/n*TAU, rr = r*(0.7 + ((i*53 + ((rot*9)|0)) % 10)/22), px = x + Math.cos(a)*rr, py = y + Math.sin(a)*rr; i ? ctx.lineTo(px,py) : ctx.moveTo(px,py); }
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = rgb(modifyColor(col, 30)); ctx.beginPath(); ctx.ellipse(x - r*0.2, y - r*0.24, r*0.42, r*0.3, rot, 0, TAU); ctx.fill();
+}
+function drawSnowman(x, y, s, w) {                                    // lado sombreado azulado + rim → se despega del piso nevado
+  const r = 14 + s*10, dir = (w - 0.5)*2.5;
+  shadowBlob(x, y, r, 0.22);
+  drawCircle(x, y, r, [200,216,238]); drawCircle(x - r*0.16, y - r*0.16, r*0.86, [250,251,255]); drawCircle(x - r*0.3, y - r*0.3, r*0.3, [255,255,255]); drawCircle(x, y, r*0.08, [60,64,82]);
+  const hx = x + Math.cos(dir)*r*0.75, hy = y + Math.sin(dir)*r*0.75;
+  drawCircle(hx, hy, r*0.58, [206,220,240]); drawCircle(hx - r*0.13, hy - r*0.13, r*0.46, [250,251,255]);
+  const ex = Math.cos(dir + 1.5708), ey = Math.sin(dir + 1.5708), fx = hx + Math.cos(dir)*r*0.28, fy = hy + Math.sin(dir)*r*0.28;
+  drawCircle(fx + ex*r*0.18, fy + ey*r*0.18, r*0.07, [25,25,34]); drawCircle(fx - ex*r*0.18, fy - ey*r*0.18, r*0.07, [25,25,34]);
+  ctx.fillStyle = rgb([235,132,42]); ctx.beginPath(); ctx.moveTo(hx + Math.cos(dir)*r*0.52, hy + Math.sin(dir)*r*0.52); ctx.lineTo(fx + ex*r*0.09, fy + ey*r*0.09); ctx.lineTo(fx - ex*r*0.09, fy - ey*r*0.09); ctx.closePath(); ctx.fill();
+}
+function drawSnowRock(x, y, s, rot) {
+  drawRock(x, y, s, rot, [120,126,140]);
+  const r = 9 + s*15; ctx.globalAlpha = 0.92; ctx.fillStyle = rgb([245,248,255]);
+  ctx.beginPath(); ctx.ellipse(x - r*0.1, y - r*0.26, r*0.6, r*0.34, rot*0.5, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+}
+function drawBuilding(x, y, s, rot, w) {
+  const bw = 46 + s*64, bh = 40 + w*58, steel = [40, 54, 84];         // acero oscuro → contrasta sobre el infield azul
+  ctx.save(); ctx.translate(x, y); ctx.rotate((w - 0.5)*0.5);          // casi alineados a los ejes (look de ciudad)
+  ctx.globalAlpha = 0.34; ctx.fillStyle = '#000'; ctx.fillRect(-bw/2 + 11, -bh/2 + 13, bw, bh); ctx.globalAlpha = 1;
+  ctx.fillStyle = rgb(steel); ctx.fillRect(-bw/2, -bh/2, bw, bh);
+  ctx.fillStyle = rgb(modifyColor(steel, 36)); ctx.fillRect(-bw/2, -bh/2, bw, 5);   // borde sup iluminado
+  ctx.strokeStyle = rgb(modifyColor(steel, 30)); ctx.lineWidth = 2; ctx.strokeRect(-bw/2 + 6, -bh/2 + 6, bw - 12, bh - 12);
+  for (let i = 0; i < 5; i++) { const ux = -bw/2 + 12 + ((i*41) % Math.max(1, bw - 26)), uy = -bh/2 + 12 + ((i*59) % Math.max(1, bh - 26)); ctx.fillStyle = rgb(i % 2 ? [120,205,238] : [54,68,98]); ctx.fillRect(ux, uy, 8, 8); }
+  ctx.restore();
+}
+function drawCables(lines) {
+  for (const pts of lines) {
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(14,20,38,0.55)'; ctx.lineWidth = 2.2; ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) i ? ctx.lineTo(pts[i][0], pts[i][1]) : ctx.moveTo(pts[i][0], pts[i][1]); ctx.stroke();
+    ctx.strokeStyle = 'rgba(14,20,38,0.4)'; ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) i ? ctx.lineTo(pts[i][0], pts[i][1] + 5) : ctx.moveTo(pts[i][0], pts[i][1] + 5); ctx.stroke();
+    for (const p of pts) { ctx.fillStyle = rgb([42,52,74]); ctx.fillRect(p[0]-3, p[1]-3, 6, 6); ctx.strokeStyle = rgb([94,114,154]); ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(p[0]-8, p[1]); ctx.lineTo(p[0]+8, p[1]); ctx.stroke(); }
+  }
+}
+function drawLavaPool(x, y, s, rot) {
+  const r = 40 + s*78, n = 9;
+  const gg = ctx.createRadialGradient(x, y, r*0.4, x, y, r*1.5);
+  gg.addColorStop(0, 'rgba(255,140,40,0.5)'); gg.addColorStop(1, 'rgba(255,90,20,0)');
+  ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(x, y, r*1.5, 0, TAU); ctx.fill();
+  ctx.beginPath();
+  for (let i = 0; i <= n; i++) { const a = i/n*TAU, rr = r*(0.78 + ((i*61 + ((rot*11)|0)) % 10)/26), px = x + Math.cos(a)*rr, py = y + Math.sin(a)*rr; i ? ctx.lineTo(px,py) : ctx.moveTo(px,py); }
+  ctx.closePath();
+  const lg = ctx.createRadialGradient(x - r*0.2, y - r*0.2, r*0.1, x, y, r);
+  lg.addColorStop(0, rgb([255,230,120])); lg.addColorStop(0.45, rgb([240,110,30])); lg.addColorStop(1, rgb([120,30,18]));
+  ctx.fillStyle = lg; ctx.fill();
+  ctx.strokeStyle = rgb([40,18,16]); ctx.lineWidth = 3; ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,212,92,0.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - r*0.4, y); ctx.quadraticCurveTo(x, y + r*0.2, x + r*0.45, y - r*0.1); ctx.stroke();
+}
+function drawEmber(x, y, s) {
+  const r = 3 + s*5;
+  const gg = ctx.createRadialGradient(x, y, 0, x, y, r*3);
+  gg.addColorStop(0, 'rgba(255,180,70,0.8)'); gg.addColorStop(1, 'rgba(255,90,20,0)');
+  ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(x, y, r*3, 0, TAU); ctx.fill();
+  drawCircle(x, y, r*0.6, [255,232,150]);
+}
+// textura base suave del infield (low alpha) — da variedad sin tapar las paredes
+function sceneryBase(theme, ww, hh, rng) {
+  const af = (ww * hh) / (1280 * 720);
+  if (theme === 0) {                                                   // parque: parches de pasto
+    ctx.globalAlpha = 0.06;
+    for (let i = 0; i < Math.round(14*af); i++) { const x = rng()*ww, y = rng()*hh, r = 200 + rng()*420; ctx.fillStyle = rgb(rng() < 0.5 ? [20,80,30] : [80,150,66]); ctx.beginPath(); ctx.ellipse(x, y, r, r*0.7, rng()*TAU, 0, TAU); ctx.fill(); }
+  } else if (theme === 1) {                                            // desierto: dunas (cresta clara + sombra)
+    for (let i = 0; i < Math.round(8*af); i++) { const x = rng()*ww, y = rng()*hh, r = 160 + rng()*360, a = rng()*TAU;
+      ctx.globalAlpha = 0.10; ctx.fillStyle = rgb([228,208,152]); ctx.beginPath(); ctx.ellipse(x - Math.cos(a)*r*0.2, y - Math.sin(a)*r*0.2, r, r*0.5, a, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 0.12; ctx.fillStyle = rgb([150,125,78]); ctx.beginPath(); ctx.ellipse(x + Math.cos(a)*r*0.25, y + Math.sin(a)*r*0.25, r*0.9, r*0.45, a, 0, TAU); ctx.fill(); }
+  } else if (theme === 2) {                                            // nieve: sombras frías + brillos
+    ctx.globalAlpha = 0.08;
+    for (let i = 0; i < Math.round(12*af); i++) { const x = rng()*ww, y = rng()*hh, r = 180 + rng()*360; ctx.fillStyle = rgb([180,196,226]); ctx.beginPath(); ctx.ellipse(x, y, r, r*0.6, rng()*TAU, 0, TAU); ctx.fill(); }
+    ctx.globalAlpha = 0.55; ctx.fillStyle = rgb([255,255,255]);
+    for (let i = 0; i < Math.round(26*af); i++) ctx.fillRect(rng()*ww, rng()*hh, 2, 2);
+  } else if (theme === 3) {                                            // tecno: grilla de calles tenue
+    ctx.globalAlpha = 0.10; ctx.strokeStyle = rgb([90,150,220]); ctx.lineWidth = 2; ctx.beginPath();
+    for (let gx = 0; gx <= ww; gx += 240) { ctx.moveTo(gx, 0); ctx.lineTo(gx, hh); }
+    for (let gy = 0; gy <= hh; gy += 240) { ctx.moveTo(0, gy); ctx.lineTo(ww, gy); }
+    ctx.stroke();
+  } else {                                                             // lava: mottling de roca oscura
+    ctx.globalAlpha = 0.10;
+    for (let i = 0; i < Math.round(16*af); i++) { const x = rng()*ww, y = rng()*hh, r = 140 + rng()*340; ctx.fillStyle = rgb(rng() < 0.5 ? [20,14,14] : [82,42,30]); ctx.beginPath(); ctx.ellipse(x, y, r, r*0.7, rng()*TAU, 0, TAU); ctx.fill(); }
+  }
+  ctx.globalAlpha = 1;
+}
+function drawScenery(track, ww, hh) {
+  const { theme, items, lines } = getScenery(track, ww, hh);
+  sceneryBase(theme, ww, hh, mulberry32((decoSeedFor(track) ^ 0x27d4eb2f) >>> 0));
+  if (theme === 3) drawCables(lines);
+  for (const it of items) {
+    if (theme === 0)      { if (it.v < 0.62) drawTree(it.x, it.y, it.s); else if (it.v < 0.86) drawBush(it.x, it.y, it.s); else drawFlowers(it.x, it.y, it.s, it.rot); }
+    else if (theme === 1) { if (it.v < 0.06) drawPyramid(it.x, it.y, it.s, it.rot); else if (it.v < 0.5) drawCactus(it.x, it.y, it.s); else drawRock(it.x, it.y, it.s, it.rot, [150,120,78]); }
+    else if (theme === 2) { if (it.v < 0.4) drawSnowman(it.x, it.y, it.s, it.w); else drawSnowRock(it.x, it.y, it.s, it.rot); }
+    else if (theme === 3) drawBuilding(it.x, it.y, it.s, it.rot, it.w);
+    else                  { if (it.v < 0.34) drawLavaPool(it.x, it.y, it.s, it.rot); else if (it.v < 0.64) drawRock(it.x, it.y, it.s, it.rot, [30,24,26]); else drawEmber(it.x, it.y, it.s); }
+  }
+  ctx.globalAlpha = 1; ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
 }
 
 // ════════════════ MOTIVOS SOBRE LOS OBSTÁCULOS (temática por bioma) ════════════════
@@ -2332,8 +2788,8 @@ canvas.addEventListener('pointerdown', e => {
     }
     return;
   }
-  const aux = sprites[sprites.length - 1];                            // AuxiliaryHandler (fin de carrera)
-  if (aux && aux.tap) aux.tap(lx, ly);
+  const aux = sprites.find(s => s instanceof AuxiliaryHandler);       // fin de carrera (NO sprites[last]: los pickups se appendean después)
+  if (aux) aux.tap(lx, ly);
 });
 
 // Hover del mouse sobre el canvas (coords lógicas) → ilumina la opción debajo del cursor.
@@ -2349,7 +2805,7 @@ canvas.addEventListener('pointermove', e => {
   const main = sprites[0];
   if (!main) return;
   if (main.menu) main.hoverFocus(hover.y, hover.x);
-  else { const aux = sprites[sprites.length - 1]; if (aux && aux.hoverFocus) aux.hoverFocus(hover.y); }
+  else { const aux = sprites.find(s => s instanceof AuxiliaryHandler); if (aux) aux.hoverFocus(hover.y); }
 });
 canvas.addEventListener('pointerleave', () => { hover.on = false; });
 function rowHover(frac) { return hover.on && Math.abs(hover.y - yper(frac)) < yper(0.05); }
@@ -2362,6 +2818,31 @@ function smoothPath(p) {
   const m0 = mid(n-1); ctx.moveTo(m0[0], m0[1]);
   for (let i = 0; i < n; i++) { const m = mid(i); ctx.quadraticCurveTo(p[i][0], p[i][1], m[0], m[1]); }
   ctx.closePath();
+}
+// Corredor del mapa AUTOGENERADO: pinta TODO pared y CALA el corredor de cada copia desplazada — así lo
+// que sale por un borde aparece por el otro. Soporta cualquier topología: portales en X, en Y o ambos.
+function drawCorridorCarve(poly, ww, hh, track) {
+  const wallc = THEME_WALL[poly.theme], edge = modifyColor(wallc, -45), hi = modifyColor(wallc, 35);
+  const tmp = document.createElement('canvas'); tmp.width = bgW; tmp.height = bgH;
+  const tc = tmp.getContext('2d');
+  tc.setTransform(scaleX * dpr * bgK, 0, 0, scaleY * dpr * bgK, 0, 0);
+  const prev = ctx; ctx = tc;
+  ctx.fillStyle = rgb(wallc); ctx.fillRect(0, 0, ww, hh);             // capa pared (= infield) completa...
+  drawScenery(track, ww, hh);                                        // ...escenografía GRANDE sobre el infield (lo que pise el corredor lo borra el carve)
+  ctx.globalCompositeOperation = 'destination-out';
+  for (const c of poly.copies) {                                      // ...calar el corredor suave de cada copia
+    ctx.beginPath(); smoothPath(c.outer); smoothPath(c.inner); ctx.fill('evenodd');
+  }
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.lineJoin = 'round';
+  for (const c of poly.copies) {                                      // bevel: highlight + línea oscura en ambos bordes
+    ctx.strokeStyle = rgb(hi);   ctx.lineWidth = Math.max(2, xper(0.0035));
+    ctx.beginPath(); smoothPath(c.outer); ctx.stroke(); ctx.beginPath(); smoothPath(c.inner); ctx.stroke();
+    ctx.strokeStyle = rgb(edge); ctx.lineWidth = Math.max(1.5, xper(0.002));
+    ctx.beginPath(); smoothPath(c.outer); ctx.stroke(); ctx.beginPath(); smoothPath(c.inner); ctx.stroke();
+  }
+  ctx = prev;                                                          // compositar la capa pared sobre el horneado
+  ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(tmp, 0, 0); ctx.restore();
 }
 // Corredor SUAVE de las pistas generadas: rellena lo de afuera del outer y lo de adentro del inner, con
 // curvas (sin escalones). La colisión sigue siendo las tiras de pared (invisibles). theme = color de pared.
@@ -2376,19 +2857,26 @@ function drawSmoothCorridor(poly, ww, hh) {
   ctx.strokeStyle = rgb(edge); ctx.lineWidth = Math.max(1.5, xper(0.002)); ctx.beginPath(); smoothPath(poly.outer); ctx.stroke(); ctx.beginPath(); smoothPath(poly.inner); ctx.stroke();
 }
 
+// Tope de memoria del fondo horneado (~38MB): los mundos GRANDES se hornean a menor resolución (bgK<1) y
+// se escalan al blitear — sin esto, 4800×3000 a resolución de celu serían >100MB de canvas.
+const BG_MAX_PIXELS = 4096 * 2400;
+let bgK = 1;
+function bgScaleFor(ww, hh) { return Math.min(1, Math.sqrt(BG_MAX_PIXELS / (ww * scaleX * dpr * hh * scaleY * dpr))); }
 function bakeBackground(track) {
   bgReady = false;                                                     // mientras está en false, Wall/TrackPoint SÍ dibujan
   const ww = worldW(track), hh = worldH(track), poly = TRACK_POLY[track];
-  bgW = Math.ceil(ww * scaleX * dpr); bgH = Math.ceil(hh * scaleY * dpr);   // el horneado cubre TODO el mundo
+  bgK = bgScaleFor(ww, hh);
+  bgW = Math.ceil(ww * scaleX * dpr * bgK); bgH = Math.ceil(hh * scaleY * dpr * bgK);   // cubre TODO el mundo (a escala bgK)
   if (!bgCanvas) bgCanvas = document.createElement('canvas');
   bgCanvas.width = bgW; bgCanvas.height = bgH;
   const bc = bgCanvas.getContext('2d');
-  bc.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, 0, 0);
+  bc.setTransform(scaleX * dpr * bgK, 0, 0, scaleY * dpr * bgK, 0, 0);
   ctx = bc;
   fillRect(0, 0, ww, hh, THEME_FLOOR[themeOf(track)]);
   drawDeco(track, ww, hh);
   for (const tp of trackpoints) tp.draw();                             // meta + grilla de largada (debajo)
-  if (poly) drawSmoothCorridor(poly, ww, hh);                          // pistas generadas: paredes SUAVES (curvas)
+  if (poly && poly.copies) drawCorridorCarve(poly, ww, hh, track);     // mapa autogenerado (con o sin portales)
+  else if (poly) drawSmoothCorridor(poly, ww, hh);                     // 5 circuitos curados: paredes SUAVES (curvas)
   else for (const w of walls) w.draw();                                // pistas originales: paredes con motivos
   ctx = mainCtx;
   bgTrack = track; bgReady = true;
@@ -2400,11 +2888,13 @@ let rankOrder = [];
 const RANK_EPS = 0.02;                                                // ~2% de vuelta de ventaja para adelantar
 function updateRanks() {
   if (rankOrder.length !== tanks.length || rankOrder.some(t => tanks.indexOf(t) < 0)) rankOrder = tanks.slice();
-  const prog = t => t.laps + t.lap_progress / 100;                    // progreso total de carrera
+  // Los TERMINADOS quedan congelados por su orden de llegada (prog enorme decreciente con finishPos) → no se
+  // reordenan más; los que corren se ordenan por progreso real (con histéresis para no parpadear).
+  const prog = t => t.finished ? 1e6 - t.finishPos : (t.laps + t.lap_progress / 100);
   for (let i = 0; i < rankOrder.length - 1; i++) {
-    if (prog(rankOrder[i+1]) > prog(rankOrder[i]) + RANK_EPS) {
-      const tmp = rankOrder[i]; rankOrder[i] = rankOrder[i+1]; rankOrder[i+1] = tmp;
-    }
+    const a = rankOrder[i], b = rankOrder[i+1];
+    const eps = (a.finished || b.finished) ? 0 : RANK_EPS;            // sin margen cuando hay un terminado → asienta ya
+    if (prog(b) > prog(a) + eps) { rankOrder[i] = b; rankOrder[i+1] = a; }
   }
   for (let i = 0; i < rankOrder.length; i++) rankOrder[i].rank = i + 1;
 }
@@ -2415,34 +2905,74 @@ let showFPS = false, fKeyPrev = false, dtSmoothed = 1/60;              // overla
 let T = 0;                                                             // tiempo acumulado para animaciones (menú, cuenta regresiva)
 const jMoveZone = document.getElementById('jMove');
 const actBtns = document.getElementById('actBtns'), nitroRing = document.getElementById('nitroRing'), fireRing = document.getElementById('fireRing');
+const btnFireEl = document.getElementById('btnFire'), btnNitroEl = document.getElementById('btnNitro');
 let padsShown = false, btnsShown = false;   // arrancan ocultos (en el menú)
 
+// Paredes del minimapa horneadas a un canvas chico (silueta del mundo). Se reconstruye solo al cambiar de pista.
+function minimapWallsImg(tr, mmW, mmH, sc, accent) {
+  const key = tr + '|' + Math.round(mmW * 10) + '|' + walls.length;
+  if (mmCanvas && mmKey === key) return mmCanvas;
+  const SS = 2, cw = Math.max(1, Math.ceil(mmW * SS)), ch = Math.max(1, Math.ceil(mmH * SS));
+  if (!mmCanvas) mmCanvas = document.createElement('canvas');
+  mmCanvas.width = cw; mmCanvas.height = ch;
+  const c = mmCanvas.getContext('2d');
+  c.clearRect(0, 0, cw, ch);
+  c.fillStyle = rgb(modifyColorPerc(accent, 0.7)); c.globalAlpha = 0.55;
+  for (const w of walls) c.fillRect(w.x * sc * SS, w.y * sc * SS, Math.max(0.6 * SS, w.width * sc * SS), Math.max(0.6 * SS, w.height * sc * SS));
+  mmKey = key;
+  return mmCanvas;
+}
 // ── MINIMAPA (basado en el de Snake): recuadro arriba-derecha con la forma del mundo, los tanques (jugador
 // resaltado), los ítems de nitro y el recuadro de la cámara. Se dibuja en coords de PANTALLA (fijo). ──
 function drawMinimap() {
   const main0 = sprites[0];
   if (!main0 || main0.menu || !tanks.length) return;
   const tr = main0.track, ww = worldW(tr), hh = worldH(tr);
-  const mmW = xper(0.17), mmH = mmW * (hh / ww);                       // mismo aspecto que el mundo
-  const mmX = SCREEN_X - mmW - xper(0.012), mmY = yper(0.15);          // arriba-derecha, debajo de los botones
-  const sc = mmW / ww, rad = yper(0.018);
+  // Geometría + gradiente + endpoints de meta del minimapa son INVARIANTES por pista (SCREEN_X/Y son
+  // constantes; xper/yper no dependen del resize). Se recomputaban cada frame: gradiente (alloc + 2 stops),
+  // modifyColor (alloc de array) y la trig de la línea de meta (loop + 2 hypot). Cacheamos por pista.
+  let ms = mmStatic;
+  if (!ms || ms.tr !== tr) {
+    const mmW = xper(0.17), mmH = mmW * (hh / ww);                     // mismo aspecto que el mundo
+    const mmX = SCREEN_X - mmW - xper(0.012), mmY = yper(0.15);        // arriba-derecha, debajo de los botones
+    const sc = mmW / ww, rad = yper(0.018);
+    const mx = wx => mmX + wx * sc, my = wy => mmY + wy * sc;
+    const accent = modifyColor(THEME_WALL[themeOf(tr)] || [120,120,120], 55);
+    const bg = ctx.createLinearGradient(mmX, mmY, mmX, mmY + mmH);
+    bg.addColorStop(0, 'rgba(12,16,22,0.78)'); bg.addColorStop(1, 'rgba(5,7,11,0.82)');
+    let fin = null;                                                    // endpoints de la línea de meta (coords pantalla)
+    const fwp = TRACKPOINT_MAPS[tr];
+    if (fwp && fwp.length > 1) {
+      let ftx = 0, fty = 0; const fn = fwp.length;
+      for (let k = 1; k <= 3; k++) { const f = fwp[k % fn], bb = fwp[(fn - k) % fn], dx = f[0]-bb[0], dy = f[1]-bb[1]; if (Math.hypot(dx, dy) < 1200) { ftx += dx; fty += dy; } }
+      const fmag = Math.hypot(ftx, fty) || 1, pxn = -fty/fmag, pyn = ftx/fmag;   // perpendicular unitario al sentido de carrera
+      const fa = FINISH_ASYM[tr], hl = fa ? Math.max(fa[0], fa[1]) : (FINISHLINES[tr] ? FINISHLINES[tr][0] : 150);
+      fin = { ax: mx(fwp[0][0] + pxn*hl), ay: my(fwp[0][1] + pyn*hl), bx: mx(fwp[0][0] - pxn*hl), by: my(fwp[0][1] - pyn*hl) };
+    }
+    ms = mmStatic = { tr, mmW, mmH, mmX, mmY, sc, rad, accent, bg, fin };
+  }
+  const mmW = ms.mmW, mmH = ms.mmH, mmX = ms.mmX, mmY = ms.mmY, sc = ms.sc, rad = ms.rad, accent = ms.accent;
   const mx = wx => mmX + wx * sc, my = wy => mmY + wy * sc;
-  const accent = modifyColor(THEME_WALL[themeOf(tr)] || [120,120,120], 55);
   ctx.save();
   // panel redondeado con gradiente + recorte
   roundRectPath(mmX, mmY, mmW, mmH, rad);
-  const bg = ctx.createLinearGradient(mmX, mmY, mmX, mmY + mmH);
-  bg.addColorStop(0, 'rgba(12,16,22,0.78)'); bg.addColorStop(1, 'rgba(5,7,11,0.82)');
-  ctx.fillStyle = bg; ctx.fill();
+  ctx.fillStyle = ms.bg; ctx.fill();
   ctx.save(); roundRectPath(mmX, mmY, mmW, mmH, rad); ctx.clip();
-  // paredes (silueta suave tintada al tema)
-  ctx.fillStyle = rgb(modifyColorPerc(accent, 0.7));
-  ctx.globalAlpha = 0.55;
-  for (const w of walls) ctx.fillRect(mx(w.x), my(w.y), Math.max(0.6, w.width*sc), Math.max(0.6, w.height*sc));
-  ctx.globalAlpha = 1;
+  // paredes: horneadas UNA vez por pista a un canvas chico (antes se redibujaban ~200 rects por frame → mataba el mobile)
+  ctx.drawImage(minimapWallsImg(tr, mmW, mmH, sc, accent), mmX, mmY, mmW, mmH);
   // recuadro de la cámara (lo que ves) — sutil
   ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.2;
   ctx.strokeRect(mx(camX), my(camY), SCREEN_X*sc, SCREEN_Y*sc);
+  // LÍNEA DE META/LARGADA (referencia): perpendicular a la pista en el waypoint 0, damero (blanco + guiones negros).
+  if (ms.fin) {
+    const ax = ms.fin.ax, ay = ms.fin.ay, bx = ms.fin.bx, by = ms.fin.by;
+    ctx.lineCap = 'round';
+    ctx.setLineDash([]); ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 3.2;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(0,0,0,0.9)';
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+    ctx.setLineDash([]); ctx.lineCap = 'butt';
+  }
   // ítems de nitro (celestes con glow)
   for (const p of pickups) {
     ctx.globalAlpha = 0.35; ctx.fillStyle = 'rgba(90,220,255,1)'; ctx.beginPath(); ctx.arc(mx(p.x), my(p.y), 4.5, 0, TAU); ctx.fill();
@@ -2461,6 +2991,27 @@ function drawMinimap() {
   ctx.strokeStyle = `rgba(${accent[0]},${accent[1]},${accent[2]},0.28)`; ctx.lineWidth = 5; roundRectPath(mmX, mmY, mmW, mmH, rad); ctx.stroke();
   ctx.strokeStyle = `rgba(${accent[0]},${accent[1]},${accent[2]},0.85)`; ctx.lineWidth = 1.8; roundRectPath(mmX, mmY, mmW, mmH, rad); ctx.stroke();
   ctx.restore();
+}
+
+// Encima de TODOS los tanques (z-order): puntero del jugador (no tapado por otros) + posición final congelada.
+function drawTankOverlays() {
+  const rankFont = SCREEN_X < 1000 ? RS_font : S_font;
+  for (const t of tanks) {
+    const r = t.radius, sx = t.x - camX, sy = t.y - camY, m = r * 3.5;
+    if (sx < -m || sx > SCREEN_X + m || sy < -m || sy > SCREEN_Y + m) continue;   // fuera de cámara
+    if (t.finished) {
+      const rk = t.finishPos + ordinalSuffix(t.finishPos) + (t.finishPos === 1 ? '!' : '');
+      createText(rankFont, rk, modifyColor(t.color, 150), null, t.x, t.y - r * 2.1, 10);
+    } else if (t.id === 0) {
+      const bob = Math.sin(T * 4) * r * 0.12, ty = t.y - r * 2.0 + bob, s = r * 0.5;
+      ctx.save();
+      ctx.fillStyle = rgb(t.color); ctx.strokeStyle = 'rgba(0,0,0,0.65)'; ctx.lineWidth = Math.max(1.2, r * 0.09);
+      ctx.beginPath(); ctx.moveTo(t.x - s, ty - s); ctx.lineTo(t.x + s, ty - s); ctx.lineTo(t.x, ty + s * 0.8);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = 0.85; drawCircle(t.x, ty - s * 0.35, s * 0.28, [255, 255, 255]);
+      ctx.restore();
+    }
+  }
 }
 
 function loop(now) {
@@ -2485,11 +3036,13 @@ function loop(now) {
   if (main0 && !main0.menu) {
     updateCamera(main0.track);                                        // sigue al jugador (cam 0,0 si la pista entra en pantalla)
     // fondo estático horneado (se re-hornea sólo si cambió la pista o la escala del canvas)
-    const ew = Math.ceil(worldW(main0.track) * scaleX * dpr), eh = Math.ceil(worldH(main0.track) * scaleY * dpr);
+    const ww0 = worldW(main0.track), hh0 = worldH(main0.track);
+    const k = bgScaleFor(ww0, hh0);
+    const ew = Math.ceil(ww0 * scaleX * dpr * k), eh = Math.ceil(hh0 * scaleY * dpr * k);
     if (!bgReady || bgTrack !== main0.track || bgW !== ew || bgH !== eh) bakeBackground(main0.track);
     ctx.setTransform(1, 0, 0, 1, 0, 0);
-    const sx = Math.round(camX * scaleX * dpr), sy = Math.round(camY * scaleY * dpr);   // región visible del mundo
-    ctx.drawImage(bgCanvas, sx, sy, canvas.width, canvas.height, 0, 0, canvas.width, canvas.height);
+    const sx = camX * scaleX * dpr * bgK, sy = camY * scaleY * dpr * bgK;   // región visible del mundo (en px del horneado)
+    ctx.drawImage(bgCanvas, sx, sy, canvas.width * bgK, canvas.height * bgK, 0, 0, canvas.width, canvas.height);
   } else {
     bgReady = false; camX = 0; camY = 0;                              // en menú: invalidar para re-hornear al volver a carrera
   }
@@ -2497,8 +3050,19 @@ function loop(now) {
   // Transform a coords del MUNDO, con la cámara restada (para pistas chicas camX=camY=0 → idéntico a antes)
   ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, -camX * scaleX * dpr, -camY * scaleY * dpr);
 
-  // process + draw por sprite. Paredes y trackpoints ya están en el fondo horneado → su draw es no-op.
-  for (const sprite of sprites.slice()) { sprite.process(); sprite.draw(); }
+  // process + draw por sprite (paredes/waypoints YA NO están acá: viven horneados en el fondo).
+  // El AuxiliaryHandler NO dibuja acá: su overlay (cuenta regresiva / tabla de torneo / pausa) va al FINAL,
+  // por ENCIMA del minimapa y los punteros (antes la tabla quedaba tapada por ellos).
+  for (const sprite of sprites.slice()) { sprite.process(); if (!(sprite instanceof AuxiliaryHandler)) sprite.draw(); }
+  if (tanks.length) drawTankOverlays();                               // puntero + posición final POR ENCIMA de los tanques
+  if (dbgView && tanks.length) {                                      // DEBUG (botón info): cajas de colisión del MAPA + waypoints
+    ctx.strokeStyle = 'rgba(0,235,255,0.5)'; ctx.lineWidth = 1.5;
+    for (const w of walls) { const sx = w.x - camX, sy = w.y - camY; if (sx < SCREEN_X && sx + w.width > 0 && sy < SCREEN_Y && sy + w.height > 0) ctx.strokeRect(w.x, w.y, w.width, w.height); }
+    ctx.fillStyle = 'rgba(255,220,40,0.85)';
+    for (const tp of trackpoints) { const sx = tp.x - camX, sy = tp.y - camY; if (sx > -10 && sx < SCREEN_X+10 && sy > -10 && sy < SCREEN_Y+10) { ctx.beginPath(); ctx.arc(tp.x, tp.y, 3.5, 0, TAU); ctx.fill(); } }
+  }
+  if (trackpoints.length && trackpoints[0].show)                      // F2: waypoints de debug
+    for (const tp of trackpoints) tp.debugDraw();
 
   // ── Paso de física (Matter) ── Los process() de arriba ya aplicaron las velocidades a los cuerpos;
   // acá se integran y se espeja el resultado a this.x/y/ang (lo que lee toda la lógica de juego y el draw).
@@ -2514,7 +3078,7 @@ function loop(now) {
       // sí cruzan por los huecos y aparecen del otro lado, igual que el original pero a escala del mundo).
       if (px > ww + r) { px = -r; moved = true; } else if (px < -r) { px = ww + r; moved = true; }
       if (py > hh + r) { py = -r; moved = true; } else if (py < -r) { py = hh + r; moved = true; }
-      if (moved) Body.setPosition(b, { x: px, y: py });
+      if (moved) { _vScratch.x = px; _vScratch.y = py; Body.setPosition(b, _vScratch); }
       t.x = b.position.x; t.y = b.position.y; t.ang = b.angle;
       t.vel = Math.hypot(b.velocity.x, b.velocity.y) * 60;             // px/s (para la velocidad de salida de las bombas)
     }
@@ -2522,21 +3086,26 @@ function loop(now) {
     updateRanks();                                                    // posiciones estables (con histéresis)
   }
 
-  // HUD del loop (minimapa + FPS + confirmación): fijo a pantalla → translate(cam) neutraliza el scroll de la cámara.
+  // HUD del loop (minimapa + FPS): fijo a pantalla → translate(cam) neutraliza el scroll de la cámara.
   ctx.save(); ctx.translate(camX, camY);
   drawMinimap();
   if (showFPS) createText(S_font, 'FPS: ' + Math.round(1 / Math.max(1e-3, dtSmoothed)), [255,255,0], null, xper(0.93), yper(0.03));
+  ctx.restore();
 
-  // Confirmación de salida al menú (ESC en carrera) — encima de todo. Tocá Sí / No.
+  // Overlay del AuxiliaryHandler (cuenta regresiva / TABLA del torneo / pausa) — POR ENCIMA del HUD y todo lo demás.
+  { const aux = sprites.find(s => s instanceof AuxiliaryHandler); if (aux) aux.draw(); }
+
+  // Confirmación de salida al menú (ESC en carrera) — encima de TODO (incluida la tabla). Tocá Sí / No.
   if (sprites[0] && sprites[0].confirmQuit) {
+    ctx.save(); ctx.translate(camX, camY);
     ctx.save(); ctx.globalAlpha = 0.62; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, SCREEN_X, SCREEN_Y); ctx.restore();
     const overSi = hover.on && Math.abs(hover.y - yper(0.56)) < yper(0.08) && hover.x < xper(0.5);
     const overNo = hover.on && Math.abs(hover.y - yper(0.56)) < yper(0.08) && hover.x >= xper(0.5);
-    createText(M_font, '¿Volver al menú?', [255,255,255], null, xper(0.5), yper(0.4), 18);
-    createText(M_font, 'SÍ', [255,150,140], modifyColorPerc([255,90,60], overSi ? 0.5 : 0.25), xper(0.38), yper(0.56), overSi ? 26 : 14);
+    createText(M_font, 'Back to menu?', [255,255,255], null, xper(0.5), yper(0.4), 18);
+    createText(M_font, 'YES', [255,150,140], modifyColorPerc([255,90,60], overSi ? 0.5 : 0.25), xper(0.38), yper(0.56), overSi ? 26 : 14);
     createText(M_font, 'NO', [150,210,255], modifyColorPerc([120,200,255], overNo ? 0.45 : 0.22), xper(0.62), yper(0.56), overNo ? 26 : 14);
+    ctx.restore();
   }
-  ctx.restore();
 
   // Los joysticks solo en táctil (en desktop se juega con teclado). En carrera se muestran; en el menú no.
   const inRace = !!sprites[0] && !sprites[0].menu && !sprites[0].confirmQuit;
@@ -2557,12 +3126,15 @@ function loop(now) {
     fireRing.style.background = cd > 0.001
       ? `conic-gradient(rgba(0,0,0,0.55) ${cd*360}deg, rgba(255,90,60,0.55) 0deg)`
       : 'transparent';
+    // Mismo criterio para los dos botones: ENCENDIDO cuando la acción está disponible, APAGADO cuando no.
+    if (btnFireEl) btnFireEl.style.opacity = (pl && pl.shoot_cooling <= 0.001) ? '1' : '0.4';   // listo para disparar
   }
   if (nitroRing) {
     const n = pl ? pl.nitro : 0;
     nitroRing.style.background = n > 0.001
       ? `conic-gradient(rgba(90,220,255,0.95) ${n*360}deg, rgba(255,255,255,0.10) 0deg)`
       : 'transparent';
+    if (btnNitroEl) btnNitroEl.style.opacity = (n > 0.001) ? '1' : '0.4';                        // hay carga de boost
   }
 
   requestAnimationFrame(loop);
@@ -2578,7 +3150,7 @@ const hint = document.getElementById('hint');
 setTimeout(() => hint.style.opacity = '0', 6000);
 window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true });
 </script>
-  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+  <button id="btnExit" aria-label="exit" title="Exit">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
   <script>
@@ -2621,6 +3193,7 @@ window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true 
         const showing = overlay.style.display === 'block';
         overlay.style.display = showing ? 'none' : 'block';
         btn.classList.toggle('on', !showing);
+        if (window.__setDbg) window.__setDbg(!showing);                // muestra/oculta cajas de colisión + waypoints junto con el FPS
       });
     })();
   </script>
