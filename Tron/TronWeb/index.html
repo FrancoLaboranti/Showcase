@@ -122,8 +122,8 @@
       <button id="btnRight" aria-label="girar derecha" title="Girar derecha">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
       </button>
-      <button id="btnReset" aria-label="reiniciar" title="Reiniciar partida">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+      <button id="btnMenu" aria-label="volver al menú" title="Volver al menú">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg>
       </button>
     </div>
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
@@ -517,15 +517,24 @@
   // del toque = anterior/siguiente); la seleccionada se muestra entre ‹ › con glow; el hover del mouse
   // mueve la selección; y un botón ▶ JUGAR abajo arranca la partida. ──
   // Sólo se juega contra la IA → una sola opción (cantidad de jugadores) + JUGAR.
-  const MENU_ROWS = { players: 0.5, play: 0.78 };                                 // posición Y (fracción) de cada fila
-  function nearY(ly, frac) { return Math.abs(ly - yper(frac)) < yper(0.06); }
+  // Layout COMPACTO centrado: tamaños y separaciones en px proporcionales a min(W,H) (no a la altura
+  // total) — así no se desparrama en mobile y entra bien en cualquier orientación.
   let hoverY = -1;                                                                // y del mouse sobre el canvas (CSS px); -1 = sin hover
-  function hoverRow(frac) { return hoverY >= 0 && nearY(hoverY, frac); }
+  function menuLayout() {
+    const S = Math.min(W, H), cy = H * 0.47;
+    return {
+      titleY: cy - S * 0.135, titlePx: S * 0.17,
+      divY:   cy - S * 0.045,
+      optY:   cy + S * 0.035, optPx: S * 0.052,
+      playY:  cy + S * 0.150, playPx: S * 0.052,
+      tol:    S * 0.06,
+    };
+  }
   function menuChangeValue(delta) { gh.players = (gh.players + delta + 3) % 3; }
   function tapMenu(lx, ly) {                                                       // toque/click sobre el menú (coords del canvas)
-    const dir = lx < W * 0.5 ? -1 : 1;                                            // mitad izq/der = anterior/siguiente
-    if (nearY(ly, MENU_ROWS.players))   gh.players = (gh.players + dir + 3) % 3;
-    else if (nearY(ly, MENU_ROWS.play)) startGame();
+    const L = menuLayout(), dir = lx < W * 0.5 ? -1 : 1;                          // mitad izq/der = anterior/siguiente
+    if (Math.abs(ly - L.optY) < L.tol)       gh.players = (gh.players + dir + 3) % 3;
+    else if (Math.abs(ly - L.playY) < L.tol) startGame();
   }
 
   function processMenu() {
@@ -549,9 +558,9 @@
   }
 
   // Título "TRON": halo radial + bloom multicapa + núcleo blanco caliente + tracking ancho. Respira.
-  function drawTitle(text, fx, fy, col) {
-    const fp = Math.round(220 * scl);
-    const px = xper(fx), py = yper(fy);
+  function drawTitle(yPx, fp, col) {
+    fp = Math.round(fp);
+    const px = W * 0.5, py = yPx;
     const breathe = 0.5 + 0.5 * Math.sin(T * 1.6);                                 // 0..1
     ctx.save();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -571,32 +580,37 @@
     ctx.fillStyle = rgb(col);
     for (const blur of [40, 22, 0]) {
       ctx.shadowBlur = blur * (0.7 + 0.3 * breathe);
-      ctx.fillText(text, px, py);
+      ctx.fillText('TRON', px, py);
     }
     // núcleo blanco caliente
     ctx.shadowBlur = 12;
     ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.3 * breathe})`;
-    ctx.fillText(text, px, py);
+    ctx.fillText('TRON', px, py);
 
     ctx.restore();
     ctx.letterSpacing = '0px';                                                     // que no contagie al resto del texto
   }
 
-  // Fila de opción: seleccionada → color de acento, más grande, con ‹ › y glow; si no → gris apagado.
-  function drawOption(label, fy, selected, col) {
-    if (selected) createText(50, '‹  ' + label + '  ›', rgb(col), 0.5, fy, 18);
-    else          createText(46, label, 'rgb(120,128,142)', 0.5, fy, 0);
+  // Fila de opción: seleccionada → color de acento, con ‹ › y glow; si no → gris apagado.
+  function drawOption(label, yPx, selected, col, fp) {
+    fp = Math.round(fp);
+    const txt = selected ? '‹  ' + label + '  ›' : label;
+    ctx.font = `600 ${fp}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (selected) { ctx.shadowColor = rgb(col); ctx.shadowBlur = 18; ctx.fillStyle = rgb(col); }
+    else { ctx.fillStyle = 'rgb(120,128,142)'; }
+    ctx.fillText(txt, W * 0.5, yPx); ctx.shadowBlur = 0;
   }
 
   // Botón ▶ JUGAR: píldora neón con borde + glow, late y se intensifica al hover.
-  function drawPlay(fy, col) {
-    const hj = hoverRow(fy), pulse = 0.6 + 0.4 * Math.sin(T * 4);
-    const fp = Math.round(46 * scl), px = xper(0.5), py = yper(fy), text = '▶ JUGAR';
+  function drawPlay(yPx, col, fp) {
+    fp = Math.round(fp);
+    const hj = hoverY >= 0 && Math.abs(hoverY - yPx) < fp * 1.1, pulse = 0.6 + 0.4 * Math.sin(T * 4);
+    const px = W * 0.5, text = '▶ JUGAR';
     ctx.save();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = `700 ${fp}px ${FONT}`;
     const w = ctx.measureText(text).width, padX = fp * 0.7, padY = fp * 0.42;
-    const bw = w + padX * 2, bh = fp + padY * 2, bx = px - bw / 2, by = py - bh / 2;
+    const bw = w + padX * 2, bh = fp + padY * 2, bx = px - bw / 2, by = yPx - bh / 2;
     ctx.shadowColor = rgb(col); ctx.shadowBlur = hj ? 28 : 15;
     ctx.lineWidth = 2; ctx.strokeStyle = rgba(col, hj ? 0.95 : 0.7);
     roundRectPath(bx, by, bw, bh, bh * 0.5);
@@ -604,27 +618,25 @@
     ctx.fill(); ctx.stroke();
     ctx.shadowBlur = hj ? 18 : 10;
     ctx.fillStyle = `rgba(255,255,255,${0.82 + 0.18 * pulse})`;
-    ctx.fillText(text, px, py);
+    ctx.fillText(text, px, yPx);
     ctx.restore();
   }
 
   function drawMenu() {
     drawBackground();                                                             // grilla de arena (mismo look que el juego)
-    const col = accentNow();
+    const L = menuLayout(), col = accentNow();
 
-    drawTitle('TRON', 0.5, 0.2, col);
+    drawTitle(L.titleY, L.titlePx, col);
 
     // divisor neón bajo el título
-    const dy = yper(0.35), dw = Math.min(xper(0.62), 520);
+    const dw = Math.min(W * 0.55, 420);
     ctx.save();
     ctx.strokeStyle = rgba(col, 0.55); ctx.shadowColor = rgb(col); ctx.shadowBlur = 12; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(W / 2 - dw / 2, dy); ctx.lineTo(W / 2 + dw / 2, dy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(W / 2 - dw / 2, L.divY); ctx.lineTo(W / 2 + dw / 2, L.divY); ctx.stroke();
     ctx.restore();
 
-    drawOption((gh.players + 2) + ' Players', MENU_ROWS.players, true, col);
-    drawPlay(MENU_ROWS.play, col);
-
-    createText(20, 'tocá la cantidad para cambiarla · vs IA', 'rgba(150,160,175,0.7)', 0.5, 0.9);
+    drawOption((gh.players + 2) + ' Players', L.optY, true, col, L.optPx);
+    drawPlay(L.playY, col, L.playPx);
   }
 
   function drawWinner() {
@@ -681,7 +693,7 @@
   // ◄ ►: en menú cambian el valor de la opción seleccionada; en juego doblan al humano.
   tappable(document.getElementById('btnLeft'),  () => { gh.menu ? menuChangeValue(-1) : humanTurn(-1); });
   tappable(document.getElementById('btnRight'), () => { gh.menu ? menuChangeValue(+1) : humanTurn(+1); });
-  tappable(document.getElementById('btnReset'), () => { if (!gh.menu) restart(); });   // reinicia la partida actual
+  tappable(document.getElementById('btnMenu'), () => { if (!gh.menu) backToMenu(); });  // vuelve al menú
 
   // ════════════════ LOOP ════════════════
   // OJO mobile: NO inicializar lastT con performance.now() y después medir contra el timestamp de rAF —

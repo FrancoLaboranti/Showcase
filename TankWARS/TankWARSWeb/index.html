@@ -27,16 +27,7 @@
   #stage { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 100vw; height: 100vh; overflow: hidden; }
   #c { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
 
-  #hint {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    max-width: min(88vw, 480px);
-    background: rgba(10,12,18,0.78); border: 1px solid rgba(255,255,255,0.10);
-    padding: 12px 20px; border-radius: 14px;
-    text-align: center; color: rgba(255,255,255,0.92);
-    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
-    pointer-events: none; transition: opacity 0.8s; z-index: 5;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
-  }
+  #hint { display: none; }   /* cartelito de inicio oculto a propósito */
 
   /* ── Controles táctiles (joysticks hand-rolled + botones), al estilo CrazyTanks. En desktop se ocultan
      (teclado+mouse). Cada joystick es una ZONA grande invisible: tocás en cualquier punto de su mitad de
@@ -67,6 +58,11 @@
   .btn.boost:active, .btn.boost.on { background: rgba(255,210,60,0.4); }
   .btn.missile { background: rgba(255,90,60,0.16); border-color: rgba(255,90,60,0.5); }
   .btn.missile:active, .btn.missile.on { background: rgba(255,90,60,0.42); }
+  .btn.rage { background: rgba(255,120,0,0.16); border-color: rgba(255,120,0,0.5); }
+  .btn.rage:active, .btn.rage.on { background: rgba(255,120,0,0.42); }
+  /* botón de furia LISTO (barra llena): borde + glow naranja pulsante para invitar a descargarla */
+  .btn.rage.ready { border-color: rgba(255,150,20,0.95); box-shadow: 0 0 12px rgba(255,140,0,0.85); animation: ragepulse 0.9s ease-in-out infinite; }
+  @keyframes ragepulse { 0%,100% { box-shadow: 0 0 9px rgba(255,140,0,0.6); } 50% { box-shadow: 0 0 18px rgba(255,160,30,1); } }
   /* Indicador de tienda: puntito amarillo pulsante en el botón 🛒 cuando alcanza para ALGUNA mejora. */
   #btnShop { position: relative; }
   #btnShop.canBuy { border-color: rgba(255,210,60,0.7); }
@@ -126,6 +122,10 @@
   #btnFs .ic-exit { display: none; }
   body.fs-on #btnFs .ic-enter { display: none; }
   body.fs-on #btnFs .ic-exit  { display: block; }
+  /* botón de pausa: barras cuando corre, triángulo (reanudar) cuando está en pausa */
+  #btnPause .ic-play { display: none; }
+  #btnPause.on .ic-pause { display: none; }
+  #btnPause.on .ic-play  { display: block; }
 
   /* Aviso de orientación: el juego es horizontal. Se muestra (vía JS) cuando la pantalla está vertical. */
   #rotate {
@@ -228,6 +228,9 @@
     <button class="btn missile" id="btnMissile" aria-label="misil" title="Misil">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c2.5 2.5 3.5 6 3.5 10 0 2.5-1.5 5-3.5 7-2-2-3.5-4.5-3.5-7C8.5 8 9.5 4.5 12 2z"/><path d="M8.5 14 6 17l2 1M15.5 14 18 17l-2 1"/></svg>
     </button>
+    <button class="btn rage" id="btnRage" aria-label="furia" title="Furia (Q)">
+      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/><path d="M19 2c1.2 1.2 1.8 2.6 1.8 4S20.2 8.8 19 10c-1.2-1.2-1.8-2.6-1.8-4S17.8 3.2 19 2z" opacity="0.8"/></svg>
+    </button>
   </div>
 
   <div id="rotate">
@@ -242,8 +245,10 @@
   <div id="menuPanel"></div>
 
   <div id="padMenu">
-    <button class="btn" id="btnFs" aria-label="pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
+    <!-- orden estilo Pong, de afuera (derecha) hacia adentro: salir · info · pantalla · reiniciar · pausa -->
+    <button class="btn" id="btnPause" aria-label="pausa" title="Pausa (P)"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg></button>
     <button class="btn" id="btnReset" aria-label="reiniciar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></button>
+    <button class="btn" id="btnFs" aria-label="pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
     <button class="btn" id="btnInfo" aria-label="controles" title="Controles"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg></button>
     <button class="btn" id="btnExit" aria-label="salir al menu" title="Salir al menú"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
@@ -289,11 +294,13 @@
   const MISSILE_REGEN   = 10;       // seg por misil
   const MISSILE_CONE    = Math.PI/5; // semi-ángulo del cono de auto-apuntado del misil (~36°)
   const SHIELD_CAP      = 5;
+  const RAGE_DURATION   = 12;       // FURIA (estilo GoW): segundos de "power mode" al descargar la barra llena
+  const MISSILE_LOCK    = 1.0;      // seg que un enemigo te "lockea" (con telegrafía visible) antes de soltarte el misil
   const PLAYER_R        = 0.0128;   // radio en fracción sper
   const SHOT_SPEED      = 0.8;
   const PLAYER_SPREAD   = Math.PI/60; // cono chico de dispersión del cañón del PLAYER (ángulo total, ~3°) — apenas cubre un poco más
   const MISSILE_SPEED   = 0.48;
-  const MAX_ENEMIES     = 18;
+  const MAX_ENEMIES     = 36;   // tope de enemigos en simultáneo: alto, para que el mundo grande no se sienta vacío
 
   // ── MUNDO ABIERTO ──
   const WORLD_W = 3200, WORLD_H = 1800;  // mundo 2.5× el viewport por lado (~6.3× de área); el viewport sigue 1280×720
@@ -390,6 +397,53 @@
     ctx.fillStyle = rgb(color); ctx.beginPath(); ctx.arc(x, y, Math.max(0.5, r), 0, TAU); ctx.fill();
     ctx.globalAlpha = a0; ctx.globalCompositeOperation = 'source-over';
   }
+  // Bloom gaussiano cacheado por color (estilo FireworksWeb): el resplandor de cada chispa/estallido es 1
+  // drawImage de una textura radial pre-renderizada — mucho más rico que el disco plano de glow() y más barato
+  // que shadowBlur. El color se CUANTIZA a pasos de 32 → el caché queda acotado (~decenas de sprites) aunque las
+  // explosiones tiñan con valores aleatorios. Se dibuja con 'lighter': los solapados ACUMULAN luz (el brillo).
+  const _glowCache = new Map();
+  function glowSprite(color) {
+    const r = Math.min(255, Math.round(color[0]/32)*32), g = Math.min(255, Math.round(color[1]/32)*32), b = Math.min(255, Math.round(color[2]/32)*32);
+    const key = r + ',' + g + ',' + b;
+    let s = _glowCache.get(key);
+    if (s) return s;
+    const S = 64; s = document.createElement('canvas'); s.width = S; s.height = S;
+    const gx = s.getContext('2d');
+    const grd = gx.createRadialGradient(S/2, S/2, 0, S/2, S/2, S/2);
+    grd.addColorStop(0,    'rgba(' + key + ',0.95)');
+    grd.addColorStop(0.35, 'rgba(' + key + ',0.35)');
+    grd.addColorStop(1,    'rgba(' + key + ',0)');
+    gx.fillStyle = grd; gx.fillRect(0, 0, S, S);
+    _glowCache.set(key, s);
+    return s;
+  }
+  function bloom(x, y, r, color, alpha) {
+    if (alpha <= 0.004 || r < 0.5) return;
+    const a0 = ctx.globalAlpha;
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.min(1, a0 * alpha);
+    ctx.drawImage(glowSprite(color), x - r, y - r, r*2, r*2);
+    ctx.globalAlpha = a0; ctx.globalCompositeOperation = 'source-over';
+  }
+  // Flare/estrella blanca cacheada (núcleo + cruz de 2 púas): glint sutil en las chispas más calientes. Lazy
+  // (se arma en el primer uso → sin riesgo de orden de carga). Se dibuja aditivo, como en FireworksWeb.
+  let _flareSprite = null;
+  function flareSprite() {
+    if (_flareSprite) return _flareSprite;
+    const S = 64, c = document.createElement('canvas'); c.width = c.height = S;
+    const g = c.getContext('2d'), m = S/2;
+    const rg = g.createRadialGradient(m, m, 0, m, m, S*0.16);
+    rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = rg; g.beginPath(); g.arc(m, m, S*0.16, 0, TAU); g.fill();
+    g.globalCompositeOperation = 'lighter';
+    for (let k = 0; k < 2; k++) {
+      g.save(); g.translate(m, m); g.rotate(k * Math.PI/2);
+      const lg = g.createLinearGradient(-m, 0, m, 0);
+      lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.5, 'rgba(255,255,255,0.85)'); lg.addColorStop(1, 'rgba(255,255,255,0)');
+      g.fillStyle = lg; g.fillRect(-m, -1, S, 2);
+      g.restore();
+    }
+    _flareSprite = c; return c;
+  }
   // relleno radial (centro claro desplazado → borde oscuro): da cuerpo "abombado" metálico
   function radialFill(x, y, r, inner, outer) {
     const g = ctx.createRadialGradient(x - r*0.32, y - r*0.32, r*0.12, x, y, r);
@@ -407,6 +461,18 @@
     ctx.beginPath();
     ctx.moveTo(x+r, y); ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r);
     ctx.arcTo(x, y+h, x, y, r); ctx.arcTo(x, y, x+w, y, r); ctx.closePath();
+  }
+  // barra de HUD estándar (fondo + relleno con gradiente + brillo glossy + rim) — para vida/furia/escudo, prolijas y parejas
+  function hudBar(x, y, w, h, frac, col) {
+    const r = h/2, fw = w * clampN(frac, 0, 1);
+    ctx.fillStyle = 'rgba(0,0,0,0.5)'; roundRectPath(x, y, w, h, r); ctx.fill();
+    ctx.save(); roundRectPath(x, y, w, h, r); ctx.clip();
+    const g = ctx.createLinearGradient(x, y, x, y+h);
+    g.addColorStop(0, rgb(modifyColorPerc(col,1.5))); g.addColorStop(1, rgb(modifyColorPerc(col,0.7)));
+    ctx.fillStyle = g; ctx.fillRect(x, y, fw, h);
+    ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.2; ctx.fillStyle = '#fff'; ctx.fillRect(x, y, fw, h*0.42);
+    ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.restore();
+    roundRectPath(x, y, w, h, r); ctx.strokeStyle = rgb(modifyColorPerc(col,1.9)); ctx.lineWidth = Math.max(1, sper(0.0018)); ctx.stroke();
   }
   // texto arcade: contorno oscuro (se lee sobre cualquier fondo) + bloom aditivo suave + relleno.
   // Respeta el globalAlpha entrante (el banner de oleada lo usa para el fade in/out) y lo restaura.
@@ -431,7 +497,7 @@
   // ── ESTADO GLOBAL (mimica los globals del original) ──
   let dt = 0, fr = 1;            // fr = dt*60 → escala la acumulación "por frame" del original
   let background = [0,0,0];
-  let tanks = [], enemies = [], shots = [], coins = [], walls = [], explosions = [], lootBoxes = [];
+  let tanks = [], enemies = [], shots = [], coins = [], walls = [], explosions = [], lootBoxes = [], mines = [];
   let player = null;
   const toRemove = new Set();
   const decay = (val, perFrame) => val * Math.pow(perFrame, fr);
@@ -485,14 +551,13 @@
   function updatePopups() {
     for (let i = popups.length - 1; i >= 0; i--) { popups[i].t += dt; if (popups[i].t > 0.9) popups.splice(i, 1); }
   }
+  // Se dibuja en el pase de HUD restando la cámara (coords mundo → pantalla), junto al crosshair/minimapa.
   function drawPopups() {
     for (const p of popups) {
       if (!inView(p.x, p.y, 80)) continue;
-      const a = 1 - p.t/0.9;
-      ctx.globalAlpha = a;
-      const yy = p.y - sper(0.02) - p.t * sper(0.05);
-      text(p.str, [0,0,0], p.x + 1.5, yy + 1.5, p.px, 'center');
-      text(p.str, p.color, p.x, yy, p.px, 'center');
+      ctx.globalAlpha = clampN(1 - p.t/0.9, 0, 1);
+      const sx = p.x - camX, sy = p.y - camY - sper(0.02) - p.t * sper(0.05);
+      textGlow(p.str, p.color, sx, sy, p.px, 'center');
     }
     ctx.globalAlpha = 1;
   }
@@ -634,6 +699,7 @@
 
       // daño de disparos del bando contrario
       for (const shot of shots) {
+        if (toRemove.has(shot)) continue;                 // ya consumido por un muro/caja este frame → no atraviesa
         if (this.isPlayer === shot.isPlayerShot) continue;
         const d = getDist([this.x,this.y],[shot.x,shot.y]);
         if (this.shielded) {
@@ -649,11 +715,14 @@
           const pscale = (isP && !shot.missile) ? PRIMARY_SCALE : 1;
           this.health = Math.max(this.health - 0.05*atk*this.defense*(shot.missile?10:1)*pscale, 0);
           this.hitCD = 0.03;
-          if (shot.isPlayerShot && player) player.score += shot.missile ? 250 : 6;
+          if (shot.isPlayerShot && player) {
+            player.score += shot.missile ? 250 : 6;
+            if (player.powerModeActiveTime <= 0) player.rage = Math.min(player.rage + (shot.missile ? 0.032 : 0.007) * (player.powerUps.fastRage ? 1.6 : 1), 1);   // pegar carga FURIA (más lento que antes)
+          }
           // chispas de impacto + shake: misiles pegan FUERTE (más chispas y sacudón); que te peguen también sacude
           if (inView(shot.x, shot.y, 60)) burst(shot.x, shot.y, modifyColorPerc(shot.color, 1.3), shot.missile ? 14 : 5, sper(0.22), 0.45);
           if (shot.missile) addShake(sper(0.005));
-          if (this.isPlayer) addShake(sper(0.006));
+          if (this.isPlayer) { addShake(sper(0.006)); if (this.powerModeActiveTime <= 0) this.rage = Math.min(this.rage + 0.013, 1); }   // recibir daño también carga FURIA
           toRemove.add(shot);
         }
       }
@@ -710,6 +779,14 @@
       new SecondaryShot(this);
       this.recoil(sper(0.012));
       this.secondaryShotCD = 10 * this.secondaryShotAS;
+    }
+    // Misil enemigo CON LOCK: cuando el cañón secundario está listo, primero "lockea" al jugador MISSILE_LOCK seg
+    // (mientras mantenga línea de tiro; la telegrafía la dibuja Enemy.draw) y recién ahí dispara. fire() se llama
+    // sólo con línea de tiro; si se pierde, Enemy.process resetea missileLockT a 0 → hay que mantener el lock seguido.
+    fireMissileLocked() {
+      if (this.secondaryShotCD > 0) { this.missileLockT = 0; return; }
+      this.missileLockT += dt;
+      if (this.missileLockT >= MISSILE_LOCK) { this.secondaryShotAction(); this.missileLockT = 0; }
     }
     getBorderPush() {
       // empuje contra los bordes del MUNDO (es lo único que contiene a los tanques; matter no tiene cerco)
@@ -787,14 +864,19 @@
       this.regSecondaryShotAS = 1; this.regMoveSpeed = 1; this.regHealthRegenSpeed = 1;
       this.attack = PLAYER_ATTACK; this.defense = 1; this.primaryShotAS = PRIMARY_AS;
       this.secondaryShotAS = 1; this.moveSpeed = 1; this.healthRegenSpeed = 1;
-      this.missileMax = MISSILE_MAX; this.missileStack = MISSILE_MAX; this.missileRegenCD = 0;
+      this.missileMax = MISSILE_MAX; this.missileStack = MISSILE_MAX; this.missileRegenCD = 0; this.missileRegenMult = 1;
       this.boosting = false;
-      this.iceSlowCD = 0;   // los disparos de Icy frenan al jugador un instante (no estando en power mode)
+      this.iceSlowCD = 0;   // los disparos de Icy frenan al jugador (no estando en furia)
       this.shieldUpCD = 0;  // sostener-escudo tras detectar un disparo cerca (mismo 0.5s que la IA)
-      // Power mode (lootbox 'power'): 30s con stats potenciados (defensa 0 = invulnerable, fuego rápido, x2 vel).
+      // FURIA: el viejo "power mode" ahora se DESCARGA desde una barra que se carga peleando (rage 0..1). Mientras
+      // dura (powerModeActiveTime), stats potenciados (defensa 0 = invulnerable, fuego rápido, x2 vel, misiles infinitos).
+      this.rage = 0;
       this.powerModeActiveTime = 0;
       this.powHealthRegenSpeed = 0.0025; this.powAttack = 4; this.powDefense = 0;
       this.powPrimaryShotAS = 0.0125; this.powSecondaryShotAS = 0.05; this.powMoveSpeed = 2;
+      // Mejoras ESPECIALES (lootbox 'power', permanentes en la run): triple disparo, recarga rápida de misiles,
+      // cañón ancho, furia veloz. Con todas, el lootbox 'power' dropea MUCHO oro.
+      this.powerUps = { triple: false, fastReload: false, bigShots: false, fastRage: false };
       this.moneyToAdd = 0; this.moneyToAddCD = 0; this.coinGrabbedCD = 0;
       this.money = 0; this.score = 0;
       player = this;
@@ -818,12 +900,17 @@
       }
 
       const inp = readInput();
+      // FURIA: con la barra LLENA (rage>=1) y sin furia activa, el botón / tecla Q la DESCARGA → power mode RAGE_DURATION seg.
+      if (inp.rage && this.rage >= 1 && this.powerModeActiveTime <= 0) {
+        this.powerModeActiveTime = RAGE_DURATION; this.rage = 0; this.secondaryShotCD = 0;
+        popup(this.x, this.y - this.radius*2, '¡FURIA!', randColor(), sper(0.03)); addShake(sper(0.011));
+      }
       // Movimiento OMNIDIRECCIONAL: una sola palanca. La dirección de la palanca es la dirección de
       // movimiento; el cuerpo apunta hacia ahí. Velocidad directa (máxima tracción): arranca y frena al
       // instante. Seteamos la velocidad del cuerpo de matter acá (pisa la que puso Tank.process).
       this.boosting = inp.boost;
       const mag = Math.min(1, Math.hypot(inp.moveX, inp.moveY));
-      const spd = sper(MOVE_SPEED) * this.moveSpeed * (this.boosting ? BOOST_MULT : 1) * mag * (this.iceSlowCD > 0 ? 0.4 : 1);
+      const spd = sper(MOVE_SPEED) * this.moveSpeed * (this.boosting ? BOOST_MULT : 1) * mag * (this.iceSlowCD > 0 ? 0.55 : 1);   // Icy: 55% (lento real, pero seguís móvil)
       // El MOVIMIENTO va SIEMPRE en la dirección de la palanca (instantáneo, máxima tracción, sin arco).
       // El ángulo del cuerpo es sólo VISUAL (apuntás con la torreta/mouse aparte), así que lo desacoplamos.
       let moveX = 0, moveY = 0;
@@ -866,7 +953,7 @@
       this.missileRegenCD = Math.max(this.missileRegenCD - dt, 0);
       if (this.missileStack < this.missileMax && this.missileRegenCD === 0) {
         this.missileStack++;
-        this.missileRegenCD = MISSILE_REGEN * this.regSecondaryShotAS;
+        this.missileRegenCD = MISSILE_REGEN * this.regSecondaryShotAS * this.missileRegenMult;
       }
 
       this.getBorderPush();
@@ -890,43 +977,52 @@
         this.moneyToAdd -= tr; this.money += tr; this.moneyToAddCD = 0.01;
       }
 
-      if (this.health <= 0) { manager.gameover = true; addShake(sper(0.016)); toRemove.add(this); player = null; }
+      if (this.health <= 0) {
+        manager.gameover = true; addShake(sper(0.016));
+        // como el .py original: al morir, el jugador EXPLOTA largando sus monedas (en base a la plata acumulada),
+        // hasta 50 monedas de 30-50 c/u, restándolas de la plata.
+        let dropLimit = 50;
+        while (this.money > 40 && dropLimit-- > 0) { const value = ri(30, 50); new Coin(this.x, this.y, value); this.money -= value; }
+        toRemove.add(this); player = null;
+      }
     }
     autoShield() {
-      // como el shieldEval de la IA: detectar un disparo enemigo cerca arma el escudo y lo SOSTIENE 0.5s
+      // como el shieldEval de la IA: detectar un disparo enemigo cerca arma el escudo y lo SOSTIENE
       // (shieldUpCD), no solo ese frame — mientras el disparo siga cerca, el timer se va refrescando.
+      // Para el JUGADOR el sostén forzado es 0.25s: la MITAD que la IA (0.5s) → el auto-escudo gasta menos carga.
       for (const shot of shots) {
         if (!shot.isPlayerShot && getDistSq([this.x,this.y],[shot.x,shot.y]) < (this.radius*4)**2) {
-          this.shieldUpCD = 0.5; break;
+          this.shieldUpCD = 0.25; break;
         }
       }
       this.shieldUpCD = Math.max(this.shieldUpCD - dt, 0);
       if (this.shieldUpCD > 0) this.shieldAction();
     }
+    primaryShotAction() {
+      const ready = this.primaryShotCD <= 0;
+      super.primaryShotAction();                          // tiro central + fogonazo + retroceso + cooldown
+      if (ready && this.powerUps.triple) { new PrimaryShot(this, 0.16); new PrimaryShot(this, -0.16); }   // alas del TRIPLE (más área)
+    }
     secondaryShotAction() {
       const powered = this.powerModeActiveTime > 0;
       if (this.secondaryShotCD > 0) return;
-      if (!powered && this.missileStack <= 0) return;     // sin power, necesitás stack; con power, misiles infinitos
+      if (!powered && this.missileStack <= 0) return;     // sin furia, necesitás stack; con furia, misiles infinitos
       new SecondaryShot(this);
       this.recoil(sper(0.012));
       if (!powered) {
         this.missileStack--;
         // Si el regen no estaba corriendo (stack venía lleno), arrancarlo ahora → si no, el frame siguiente
         // regeneraba uno al instante (regenCD==0) y el primer misil salía "gratis".
-        if (this.missileRegenCD === 0) this.missileRegenCD = MISSILE_REGEN * this.regSecondaryShotAS;
+        if (this.missileRegenCD === 0) this.missileRegenCD = MISSILE_REGEN * this.regSecondaryShotAS * this.missileRegenMult;
       }
       this.secondaryShotCD = powered ? 10 * this.secondaryShotAS : 0.25;
     }
     draw() {
       const flash = this.hitCD > 0;
-      this.drawColor = flash ? modifyColor(this.color,112) : this.coinGrabbedCD > 0 ? [255,255,0] : this.powerModeActiveTime > 0 ? randColor() : this.color;
+      this.drawColor = flash ? modifyColor(this.color,112) : this.coinGrabbedCD > 0 ? [255,255,0] : this.powerModeActiveTime > 0 ? randColor() : this.iceSlowCD > 0 ? [120,200,255] : this.color;
       drawTankBody(this);
       if (this.shielded) shieldRing(this);
-      if (this.powerModeActiveTime > 0) {   // barra de tiempo de power mode arriba del tanque
-        const dr = this.drawRadius, tl = this.powerModeActiveTime / 30;
-        line(this.x-dr*1.5, this.y-dr*1.75, this.x-dr*1.5+dr*3, this.y-dr*1.75, [0,0,0], dr/3);
-        line(this.x-dr*1.425, this.y-dr*1.76, this.x-dr*1.425+dr*2.925*tl, this.y-dr*1.76, this.drawColor, dr/5);
-      }
+      // (la barra de FURIA vive en el HUD arriba-izquierda, debajo de la vida — ver drawHUD)
       // proa: triángulo claro que marca el frente del tanque
       const a = this.ang, dr = this.drawRadius;
       ctx.fillStyle = rgb(modifyColorPerc(this.drawColor, 2.2));
@@ -967,6 +1063,7 @@
       this.dropCoins = 0; this.coinValue = 0; this.scoreValue = 0;
       this.shieldUpCD = 0; this.useShield = false;   // useShield: el enemigo evalúa solo si levantar escudo ante disparos
       this.avoidSide = 1; this.avoidCD = 0;          // histéresis de la esquiva de muros (sostener el lado elegido)
+      this.missileLockT = 0;                         // tiempo de lock acumulado antes de soltar el misil (telegrafía)
       this.pickScout(false);
       enemies.push(this);
     }
@@ -995,7 +1092,7 @@
       // un enemigo que perdió el lock (15s sin línea de tiro) orbitaba su scout para siempre → stragglers
       // pasivos que llenaban MAX_ENEMIES y estancaban las oleadas de jefe.
       if (player && !this.playerLocked && getDistSq([this.x,this.y],[player.x,player.y]) < sper(0.45)**2) {
-        this.playerLocked = true; this.scoutModeTimer = 0;
+        this.playerLocked = true; this.scoutModeTimer = 0; this.avoidCD = 0;   // re-lock → reevaluar la esquiva
       }
       // al llegar al scout, sortear el próximo (sesgado hacia el player) — el scout fijo era de la arena chica
       if (!this.playerLocked && getDistSq([this.x,this.y],[this.scoutX,this.scoutY]) < (this.radius*4)**2) this.pickScout(true);
@@ -1003,6 +1100,7 @@
       this.aimAngle = getAngle2(this.turretAng, [this.x,this.y], [this.targetX,this.targetY]);
 
       if (this.shotAllowed()) {
+        if (!this.playerLocked) this.avoidCD = 0;   // recién re-lockeó para dispararme → reevaluar por dónde esquivar
         this.playerLocked = true; this.scoutModeTimer = 0;
         const d = getDist([this.x,this.y],[this.targetX,this.targetY]);
         if (d > this.maxDistToPlayer || !this.inScreen) this.vel += sper(THRUST)*fr;
@@ -1095,6 +1193,7 @@
       this.getBorderPush();   // contención del mundo SIEMPRE (el gate por inScreen era de la era pantalla==mundo)
 
       if (this.shotAllowed()) this.fire();
+      else this.missileLockT = 0;   // sin línea de tiro → se cancela el lock del misil (tiene que ser 1s SEGUIDO)
     }
     fire() { this.primaryShotAction(); }
     shotAllowed() {
@@ -1135,6 +1234,19 @@
         line(this.x-dr*1.5, this.y-dr*1.75, this.x-dr*1.5+dr*3, this.y-dr*1.75, [0,0,0], dr/3);
         line(this.x-dr*1.425, this.y-dr*1.76, this.x-dr*1.425+dr*2.925*this.health, this.y-dr*1.76, hc, dr/5);
       }
+      // TELEGRAFÍA de lock de misil: haz hacia el jugador que se intensifica y vira amarillo→rojo mientras carga
+      // el lock (te avisa para esquivar / cortar línea / escudar antes de que salga el misil).
+      if (this.missileLockT > 0 && player) {
+        const p = clampN(this.missileLockT / MISSILE_LOCK, 0, 1), dr = this.drawRadius;
+        const a = getAngle([this.x,this.y],[player.x,player.y]);
+        const mx = this.x + Math.cos(a)*dr*1.5, my = this.y + Math.sin(a)*dr*1.5;
+        const col = [255, cl(190 - 150*p), 35], blink = 0.45 + 0.55*Math.abs(Math.sin(T*16));
+        ctx.globalAlpha = (0.22 + 0.5*p) * blink;
+        line(mx, my, player.x, player.y, col, sper(0.0015 + 0.002*p));
+        ctx.globalAlpha = 1;
+        glow(mx, my, dr*0.55*(1+p), col, 0.45*blink);                          // foco en la boca del cañón
+        circle(player.x, player.y, player.radius*(2.4 - 1.2*p), col, sper(0.0016));   // anillo que se cierra sobre vos
+      }
     }
     drawDetail() { drawTurret(this); }
   }
@@ -1143,8 +1255,8 @@
   class SmallPink extends Enemy {
     constructor() { super();
       this.color=[175,0,175]; this.radius=sper(0.0096); this.drawRadius=this.radius;
-      this.attack=0.1; this.defense=7; this.moveSpeed=1.2; this.primaryShotAS=0.3;
-      this.shieldAugment=-4.5; this.dropCoins=ri(0,2); this.scoreValue=60;
+      this.attack=0.12; this.defense=7; this.moveSpeed=1.3; this.primaryShotAS=0.35;   // peón de enjambre: inofensivo solo, muere de 1 tiro
+      this.shieldAugment=-4.5; this.dropCoins=ri(0,2); this.scoreValue=40;
     }
     drawDetail() {
       const a=this.ang, dr=this.drawRadius, c=modifyColorPerc(this.drawColor,1.25);
@@ -1156,15 +1268,15 @@
   class BasicRed extends Enemy {
     constructor() { super();
       this.radius=sper(0.0128); this.drawRadius=this.radius; this.color=[75,0,0];
-      this.attack=0.5; this.defense=3; this.moveSpeed=0.9; this.primaryShotAS=1;
-      this.shieldAugment=-4.5; this.dropCoins=ri(2,3); this.coinValue=5; this.scoreValue=105;
+      this.attack=0.5; this.defense=3; this.moveSpeed=0.95; this.primaryShotAS=0.9;   // tirador básico
+      this.shieldAugment=-4.5; this.dropCoins=ri(2,3); this.coinValue=5; this.scoreValue=90;
     }
   }
   class BasicBlue extends Enemy {
     constructor() { super();
       this.radius=sper(0.0128); this.drawRadius=this.radius; this.color=[0,0,150];
-      this.attack=0.8; this.defense=2; this.moveSpeed=1; this.primaryShotAS=0.8;
-      this.shieldAugment=-4.5; this.dropCoins=ri(4,6); this.coinValue=5; this.scoreValue=210;
+      this.attack=0.8; this.defense=2; this.moveSpeed=1; this.primaryShotAS=0.75;   // tirador resistente
+      this.shieldAugment=-4.5; this.dropCoins=ri(4,6); this.coinValue=5; this.scoreValue=180;
     }
     drawDetail() {
       const a=this.ang, dr=this.drawRadius, c=modifyColorPerc(this.drawColor,2);
@@ -1176,9 +1288,9 @@
   class Rhomb extends Enemy {
     constructor() { super();
       this.startRadius=sper(0.01); this.radius=this.startRadius; this.drawRadius=this.radius;
-      this.startAttack=0.2; this.startDefense=3; this.attack=0.2; this.defense=3;
-      this.moveSpeed=1.3; this.primaryShotAS=0.2; this.shieldAugment=-4.5;
-      this.dropCoins=ri(6,9); this.coinValue=10; this.scoreValue=360; this.sRedInt=100; this.color=[100,50,50];
+      this.startAttack=0.25; this.startDefense=3; this.attack=0.25; this.defense=3;   // berserker: más letal y más tanque cuanto más herido
+      this.moveSpeed=1.35; this.primaryShotAS=0.2; this.shieldAugment=-4.5;
+      this.dropCoins=ri(5,8); this.coinValue=10; this.scoreValue=300; this.sRedInt=100; this.color=[100,50,50];
     }
     process() {
       super.process();
@@ -1204,8 +1316,8 @@
   class Icy extends Enemy {
     constructor() { super();
       this.radius=sper(0.0128); this.drawRadius=this.radius; this.color=[0,125,150];
-      this.attack=0.5; this.defense=0.7; this.moveSpeed=0.9; this.primaryShotAS=0.5;
-      this.shieldAugment=-3; this.useShield=true; this.dropCoins=ri(8,12); this.coinValue=10; this.scoreValue=480;
+      this.attack=0.5; this.defense=0.8; this.moveSpeed=0.95; this.primaryShotAS=0.5;   // te RALENTIZA al pegarte; algo tanque + escudo
+      this.shieldAugment=-3; this.useShield=true; this.dropCoins=ri(7,11); this.coinValue=10; this.scoreValue=420;
     }
     fire() {                                   // marca sus disparos como "icy" para que frenen al jugador al impactar
       const n = shots.length; this.primaryShotAction();
@@ -1215,7 +1327,7 @@
       super.process();
       if (player && player.powerModeActiveTime === 0) {
         for (const shot of shots) {
-          if (shot.icy && getDistSq([player.x,player.y],[shot.x,shot.y]) < player.radius*player.radius) player.iceSlowCD = 0.12;
+          if (shot.icy && getDistSq([player.x,player.y],[shot.x,shot.y]) < (player.radius*1.4)**2) player.iceSlowCD = 1.0;   // congelado ~1s (antes 0.12 = imperceptible)
         }
       }
     }
@@ -1230,10 +1342,10 @@
   class Purple extends Enemy {
     constructor() { super();
       this.radius=sper(0.017); this.drawRadius=this.radius; this.color=[60,24,90];
-      this.attack=1.1; this.defense=1; this.moveSpeed=1; this.primaryShotAS=0.5;
-      this.shieldAugment=-4; this.useShield=true; this.dropCoins=ri(10,14); this.coinValue=15; this.scoreValue=630;
+      this.attack=0.7; this.defense=1.1; this.moveSpeed=1; this.primaryShotAS=0.5; this.secondaryShotAS=1;   // MISIL: 0.05·0.7·10 = 0.35/impacto c/10s + cañón
+      this.shieldAugment=-4; this.useShield=true; this.dropCoins=ri(10,14); this.coinValue=15; this.scoreValue=820;
     }
-    fire() { this.primaryShotAction(); this.secondaryShotAction(); }
+    fire() { this.primaryShotAction(); this.fireMissileLocked(); }
     drawDetail() {
       const a=this.ang, ta=this.turretAng, dr=this.drawRadius, dc=this.drawColor, c2=modifyColorPerc(dc,2);
       line(this.x+Math.cos(a)*-dr*0.4+Math.cos(a+Math.PI/2)*dr, this.y+Math.sin(a)*-dr*0.4+Math.sin(a+Math.PI/2)*dr,
@@ -1246,10 +1358,10 @@
   class Mortar extends Enemy {
     constructor() { super();
       this.radius=sper(0.0128); this.drawRadius=this.radius; this.color=[150,150,0];
-      this.attack=1; this.defense=1; this.moveSpeed=0.4; this.primaryShotAS=1; this.secondaryShotAS=0.3;
-      this.shieldAugment=-2; this.useShield=true; this.dropCoins=ri(12,17); this.coinValue=15; this.scoreValue=765;
+      this.attack=0.6; this.defense=1; this.moveSpeed=0.4; this.primaryShotAS=1; this.secondaryShotAS=0.45;   // artillería SÓLO misil: 0.3/impacto c/4.5s, lento (flanqueable)
+      this.shieldAugment=-2; this.useShield=true; this.dropCoins=ri(12,17); this.coinValue=15; this.scoreValue=900;
     }
-    fire() { this.secondaryShotAction(); }
+    fire() { this.fireMissileLocked(); }
     drawDetail() {
       const a=this.ang, ta=this.turretAng, dr=this.drawRadius, dc=this.drawColor, c15=modifyColorPerc(dc,1.5);
       line(this.x-Math.cos(a)*dr*1.25, this.y-Math.sin(a)*dr*1.25, this.x+Math.cos(a)*dr*1.25, this.y+Math.sin(a)*dr*1.25, c15, dr/4);
@@ -1261,8 +1373,8 @@
   class Invis extends Enemy {
     constructor() { super();
       this.radius=sper(0.0128); this.drawRadius=this.radius; this.healthRegenSpeed=0.005;
-      this.attack=4; this.defense=1; this.moveSpeed=0.7; this.primaryShotAS=3;
-      this.shieldAugment=-4.5; this.dropCoins=ri(13,18); this.coinValue=15; this.scoreValue=810;
+      this.attack=3.5; this.defense=1.3; this.moveSpeed=0.75; this.primaryShotAS=2.5;   // francotirador invisible: pega fuerte y lento; visible si lo encontrás
+      this.shieldAugment=-4.5; this.dropCoins=ri(13,18); this.coinValue=15; this.scoreValue=680;
       this.stealth=true;   // drawTankBody le saca glow/brillo → queda camuflado con el fondo
     }
     process() { super.process(); this.color = background.slice(); }   // se camufla con el fondo (sólo lo delata la barra de vida)
@@ -1279,8 +1391,8 @@
   class Exploder extends Enemy {
     constructor() { super();
       this.radius=sper(0.0128); this.drawRadius=this.radius; this.color=[140,70,0];
-      this.attack=2; this.defense=1; this.moveSpeed=1; this.primaryShotAS=0.5;
-      this.shieldAugment=-4.5; this.dropCoins=ri(14,20); this.coinValue=15; this.scoreValue=900; this.exploded=false;
+      this.attack=1; this.defense=1.2; this.moveSpeed=1.05; this.primaryShotAS=0.6;   // kamikaze: su peligro es el reventón, no el cañón
+      this.shieldAugment=-4.5; this.dropCoins=ri(12,17); this.coinValue=15; this.scoreValue=560; this.exploded=false;
     }
     process() {
       super.process();
@@ -1293,7 +1405,7 @@
       if (this.health <= 0 && !this.exploded) {        // explosión: daño en área (la baja/limpieza la hace Tank.process el próximo frame)
         this.exploded = true;
         if (player && getDist([this.x,this.y],[player.x,player.y]) < this.radius*6 && player.powerModeActiveTime === 0) {
-          player.health = Math.max(player.health - (player.shielded ? 0.1 : 0.4), 0); player.hitCD = 0.03;
+          player.health = Math.max(player.health - (player.shielded ? 0.1 : 0.35), 0); player.hitCD = 0.03;
         }
       }
     }
@@ -1311,8 +1423,8 @@
   class Commander extends Enemy {
     constructor() { super();
       this.radius=sper(0.0228); this.drawRadius=this.radius; this.healthRegenSpeed=0.01;
-      this.attack=1.5; this.defense=0.5; this.moveSpeed=0.8; this.primaryShotAS=0.1;
-      this.shieldAugment=0; this.useShield=true; this.dropCoins=ri(17,25); this.coinValue=20; this.scoreValue=1250;
+      this.attack=1.2; this.defense=0.5; this.moveSpeed=0.8; this.primaryShotAS=0.12;   // élite: ametralla y BUFFEA a los de alrededor (aura)
+      this.shieldAugment=0; this.useShield=true; this.dropCoins=ri(17,25); this.coinValue=20; this.scoreValue=1400;
     }
     process() {
       super.process();
@@ -1341,14 +1453,14 @@
   class Breeder extends Enemy {
     constructor() { super();
       this.radius=sper(0.032); this.drawRadius=this.radius; this.color=[75,0,75];
-      this.attack=1; this.defense=0.1; this.moveSpeed=0.2; this.shieldAugment=10; this.shieldChargeSpeed=2;
-      this.useShield=true; this.dropCoins=ri(21,30); this.coinValue=20; this.scoreValue=1500; this.spawnTimer=0;
+      this.attack=1; this.defense=0.2; this.moveSpeed=0.2; this.shieldAugment=10; this.shieldChargeSpeed=2;   // muro criadero: muy tanque + escudo, cría peones (def 0.1→0.2 para que no sea eterno)
+      this.useShield=true; this.dropCoins=ri(21,30); this.coinValue=20; this.scoreValue=1700; this.spawnTimer=0;
     }
     fire() {}   // no dispara: sólo escudo + criar hijos
     process() {
       super.process();
       this.spawnTimer = Math.max(this.spawnTimer - dt, 0);
-      if (this.spawnTimer === 0) { new BreederChild(this.x, this.y); this.spawnTimer = 10; }
+      if (this.spawnTimer === 0) { new BreederChild(this.x, this.y); this.spawnTimer = 8; }
     }
     drawDetail() {
       const a=this.ang, dr=this.drawRadius, dc=this.drawColor, c15=modifyColorPerc(dc,1.5), c25=modifyColorPerc(dc,2.5);
@@ -1368,10 +1480,10 @@
   class BossGreen extends Enemy {
     constructor() { super();
       this.radius=sper(0.0256); this.drawRadius=this.radius; this.color=[0,100,0];
-      this.attack=2; this.defense=0.3; this.moveSpeed=0.5; this.primaryShotAS=0.7; this.shieldAugment=5; this.shieldChargeSpeed=2;
-      this.useShield=true; this.dropCoins=ri(28,40); this.coinValue=20; this.scoreValue=2000;
+      this.attack=1.2; this.defense=0.3; this.moveSpeed=0.55; this.primaryShotAS=0.7; this.shieldAugment=5; this.shieldChargeSpeed=2;   // mini-jefe MISIL: 0.6/impacto (antes 1.0 = one-shot)
+      this.useShield=true; this.dropCoins=ri(28,40); this.coinValue=20; this.scoreValue=2600;
     }
-    fire() { this.primaryShotAction(); this.secondaryShotAction(); }
+    fire() { this.primaryShotAction(); this.fireMissileLocked(); }
     drawDetail() {
       const a=this.ang, ta=this.turretAng, dr=this.drawRadius, dc=this.drawColor, c15=modifyColorPerc(dc,1.5);
       const P=(f,g)=>[this.x+Math.cos(a)*dr*f+Math.cos(a+Math.PI/2)*dr*g, this.y+Math.sin(a)*dr*f+Math.sin(a+Math.PI/2)*dr*g];
@@ -1386,12 +1498,12 @@
   class FinalBoss extends Enemy {
     constructor() { super();
       this.radius=sper(0.035); this.drawRadius=this.radius;
-      this.attack=2; this.defense=0.015; this.moveSpeed=1; this.primaryShotAS=0.2; this.secondaryShotAS=0.3;
+      this.attack=1.8; this.defense=0.015; this.moveSpeed=1; this.primaryShotAS=0.2; this.secondaryShotAS=0.35;   // MISIL: 0.9/impacto c/3.5s (el def del jugador, ya bajo en endgame, lo amortigua)
       this.shieldAugment=25; this.shieldChargeSpeed=3; this.useShield=true; this.shieldCharge=30;
-      this.dropCoins=50; this.coinValue=50; this.scoreValue=10000;
+      this.dropCoins=50; this.coinValue=50; this.scoreValue=12000;
       this.teleportCD=10; this.spawnCD=0; this.rageMode=false; this.maxDistToPlayer=sper(0.2);
     }
-    fire() { this.primaryShotAction(); this.secondaryShotAction(); }
+    fire() { this.primaryShotAction(); this.fireMissileLocked(); }
     process() {
       super.process();
       this.teleportCD = Math.max(this.teleportCD - dt, 0);
@@ -1455,13 +1567,14 @@
     }
   }
   const ENEMY_TYPES = { SmallPink, BasicRed, BasicBlue, Rhomb, Purple, Icy, Mortar, Invis, Exploder, Commander, Breeder, BossGreen, FinalBoss };
+  const BOSS_TYPES  = new Set(['Commander', 'Breeder', 'BossGreen', 'FinalBoss']);   // élites/jefes: no se multiplican por dificultad ni inflan la oleada
 
   // ════════════════ DISPAROS ════════════════
   class PrimaryShot {
-    constructor(tank) {
+    constructor(tank, angOffset = 0) {         // angOffset: alas del disparo TRIPLE (mejora power)
       this.color = modifyColor(tank.color,150);
-      this.radius = tank.radius*0.3;
-      this.ang = tank.turretAng;
+      this.radius = tank.radius*0.17 * (tank.isPlayer && tank.powerUps.bigShots ? 1.7 : 1);   // cañón ANCHO (mejora power)
+      this.ang = tank.turretAng + angOffset;
       if (tank.isPlayer) this.ang += rnd(-PLAYER_SPREAD/2, PLAYER_SPREAD/2);  // cono chico solo para el jugador
       this.x = tank.x + Math.cos(this.ang)*this.radius*7;
       this.y = tank.y + Math.sin(this.ang)*this.radius*7;
@@ -1483,17 +1596,17 @@
     }
     draw() {
       const tx = Math.cos(this.ang), ty = Math.sin(this.ang), r = this.radius;
-      glow(this.x, this.y, r*2.4, this.color, 0.5);                                    // halo
-      line(this.x-tx*r*3.5, this.y-ty*r*3.5, this.x, this.y, this.color, r);           // estela
-      line(this.x-tx*r*1.4, this.y-ty*r*1.4, this.x, this.y, modifyColorPerc(this.color,1.7), r*0.5);
-      circle(this.x, this.y, r*0.72, [255,255,235]);                                   // núcleo blanco-cálido
+      glow(this.x, this.y, r*2, this.color, 0.42);                                     // halo (un toque más chico)
+      line(this.x-tx*r*3.4, this.y-ty*r*3.4, this.x, this.y, this.color, r*0.7);       // estela más fina
+      line(this.x-tx*r*1.2, this.y-ty*r*1.2, this.x, this.y, modifyColorPerc(this.color,1.7), r*0.34);
+      circle(this.x, this.y, r*0.5, [255,255,235]);                                    // núcleo blanco-cálido
     }
   }
   class SecondaryShot {
     constructor(tank) {
       this.color = tank.color.slice(); this.baseColor = tank.color.slice();
       this.glowColor = modifyColorPerc(tank.color,2); this.colorTimer = 0;
-      this.radius = tank.radius*0.3;
+      this.radius = tank.radius*0.36;          // misil un toque más grande
       this.ang = tank.turretAng;
       this.x = tank.x + Math.cos(this.ang)*this.radius*4;
       this.y = tank.y + Math.sin(this.ang)*this.radius*4;
@@ -1507,22 +1620,34 @@
       this.preX = this.x; this.preY = this.y;
       this.lifeSpan -= dt; if (this.lifeSpan <= 0) toRemove.add(this);
 
-      // Auto-apuntado por CONO: el misil sale en la dirección que lo lanzaron (turretAng) y busca, dentro de
-      // un cono MISSILE_CONE hacia adelante, el blanco de MAYOR importancia (scoreValue × vida actual → prefiere
-      // blancos valiosos Y sanos; los moribundos los remata el cañón); a igual importancia, el más cercano.
-      // Si no hay nada en el cono, vuela derecho (no le pega a nada).
-      const targets = this.isPlayerShot ? enemies : (player ? [player] : []);
-      let best = null, bestImp = -Infinity, bestDist = Infinity;
-      for (const t of targets) {
-        let da = Math.atan2(t.y-this.y, t.x-this.x) - this.ang;
+      // Auto-apuntado por CONO: el misil busca, dentro de un cono MISSILE_CONE hacia adelante, el blanco de
+      // MAYOR importancia (a igual importancia, el más cercano). Los del jugador priorizan POR CAPAS, estricto:
+      //   ENEMIGOS (1e9 + score×vida)  >  LOOTBOXES (1e6)  >  CAJAS/CRATES (vida ~3-5).
+      // NO apunta a: enemigos con ESCUDO activo (el misil lo absorbe sin daño) ni blancos TAPADOS por un muro
+      // o caja que no atraviesa (lo consume antes de llegar). El chequeo de línea (clearPath) es caro, así que
+      // sólo se evalúa cuando el candidato ya mejoraría al mejor actual. Sin blanco válido en el cono → derecho.
+      let bx = 0, by = 0, bestImp = -Infinity, bestDist = Infinity, have = false;
+      const consider = (tx, ty, imp, ignoreWall) => {
+        if (!inView(tx, ty, sper(0.02))) return;               // SIN rango infinito: si no está en pantalla, no se considera
+        let da = Math.atan2(ty-this.y, tx-this.x) - this.ang;
         da = mod(da + Math.PI, TAU) - Math.PI;                 // diferencia angular en [-PI, PI]
-        if (Math.abs(da) > MISSILE_CONE) continue;             // fuera del cono → ignorar
-        const d = Math.hypot(t.x-this.x, t.y-this.y);
-        const imp = (t.scoreValue || 1) * Math.max(t.health, 0);   // "importancia" del blanco: valor en score × vida
-        if (imp > bestImp || (imp === bestImp && d < bestDist)) { best = t; bestImp = imp; bestDist = d; }
+        if (Math.abs(da) > MISSILE_CONE) return;               // fuera del cono → ignorar
+        const d = Math.hypot(tx-this.x, ty-this.y);
+        if (!(imp > bestImp || (imp === bestImp && d < bestDist))) return;   // no mejora → ni evaluamos la línea
+        if (!this.clearPath(tx, ty, ignoreWall)) return;       // tapado por un muro/caja → inalcanzable, descartar
+        bx = tx; by = ty; bestImp = imp; bestDist = d; have = true;
+      };
+      if (this.isPlayerShot) {
+        // saltear enemigos con escudo activo O DISPONIBLE (useShield + carga + sin cooldown): si pueden, lo levantan
+        // reflejamente cuando el misil llega y lo absorben → apuntarles es al pedo. Sólo si NO pueden bloquear ahora.
+        for (const e of enemies) { if (e.shielded || (e.useShield && e.shieldCharge > 0 && e.shieldCD === 0)) continue; consider(e.x, e.y, 1e9 + (e.scoreValue || 1) * Math.max(e.health, 0), null); }
+        for (const b of lootBoxes) consider(b.x, b.y, 1e6, null);                                                                             // lootboxes: capa media (sobre cajas)
+        for (const w of walls) if (w.breakable) consider(w.x + w.width/2, w.y + w.height/2, Math.max(w.health, 0), w);                        // cajas: capa baja (ignora la propia como tapón)
+      } else if (player) {
+        consider(player.x, player.y, 1, null);                 // el misil enemigo SIEMPRE te apunta (con escudo o sin él — para eso está el escudo: bloquearlo)
       }
-      if (best) {                                              // hay blanco en el cono → girar hacia él
-        const aim = getAngle2(this.ang, [this.x,this.y], [best.x,best.y]);
+      if (have) {                                              // hay blanco en el cono → girar hacia él
+        const aim = getAngle2(this.ang, [this.x,this.y], [bx, by]);
         this.ang += (aim > this.ang ? this.angVel : -this.angVel) * dt;
       }
       this.x += Math.cos(this.ang)*this.vel*dt;
@@ -1541,6 +1666,24 @@
                   rnd(0.3, 0.55), this.radius*0.8, [130,130,130], 0.94);
         this.smokeCD = 0.03;
       }
+    }
+    // ¿hay línea recta libre de muros desde el misil hasta (tx,ty)? Muestrea el segmento con paso < caja mínima
+    // (para no saltear muros finos) e ignora ignoreWall (la caja-blanco, que no debe contar como tapón de sí misma).
+    // Muros sólidos Y cajas consumen al misil (Wall.process / Crate.process lo borran al impactar) → ambos tapan
+    // lo que haya detrás. Cap de 80 pasos: a blancos lejanos sólo chequea el tramo cercano (igual reevalúa cada
+    // frame al acercarse, así que se autocorrige cuando un tapón lejano entra en rango).
+    clearPath(tx, ty, ignoreWall) {
+      const dx = tx - this.x, dy = ty - this.y, dist = Math.hypot(dx, dy);
+      if (dist < 1) return true;
+      const n = Math.min(Math.ceil(dist / sper(0.016)), 80);
+      for (let i = 1; i < n; i++) {                            // sin el extremo: sólo lo que hay ANTES del blanco
+        const f = i/n, px = this.x + dx*f, py = this.y + dy*f;
+        for (const w of walls) {
+          if (w === ignoreWall) continue;
+          if (px >= w.x && px <= w.x+w.width && py >= w.y && py <= w.y+w.height) return false;
+        }
+      }
+      return true;
     }
     draw() {
       const tx = Math.cos(this.ang), ty = Math.sin(this.ang), r = this.radius;
@@ -1587,6 +1730,7 @@
     process() {
       // El bloqueo tanque↔muro lo hace matter; acá solo destruimos los disparos que pegan en el muro.
       for (const shot of shots) {
+        if (toRemove.has(shot)) continue;
         if (rectCollision([shot.x-shot.radius*0.75,shot.y-shot.radius*0.75,shot.radius*1.5,shot.radius*1.5],[this.x,this.y,this.width,this.height])) toRemove.add(shot);
       }
     }
@@ -1607,6 +1751,141 @@
       ctx.beginPath(); ctx.moveTo(x+w, y); ctx.lineTo(x+w, y+h); ctx.lineTo(x, y+h); ctx.stroke();
       // contorno fino oscuro para separarlo del piso
       rectFill(x+0.5, y+0.5, w-1, h-1, modifyColorPerc(c,0.28), 1.5);
+    }
+  }
+
+  // ════════════════ CAJA DESTRUCTIBLE ════════════════
+  // Bloquea el paso (cuerpo estático de matter, vive en `walls` → la IA la esquiva y frena disparos) pero el
+  // jugador la rompe a tiros (el misil de un toque) para abrir camino y soltar monedas. Se distingue del muro
+  // por su material de madera/metal con aspas en X.
+  class Crate {
+    constructor() {
+      this.color = randColorInRange(120,165,80,115,40,70);   // madera/metal cálido (distinto de los muros)
+      this.breakable = true; this.broken = false;
+      this.maxHealth = ri(3,5); this.health = this.maxHealth; this.hitCD = 0;
+      const s = rnd(xper(0.035), xper(0.06)); this.width = s; this.height = s;   // cuadradas
+      // grietas pseudo-fijas (no parpadean): se revelan, quebradas, a medida que baja la vida.
+      // cada una: [midX,midY, endX,endY] en fracciones de la caja (centro→quiebre→punta).
+      this.cracks = [];
+      for (let i = 0; i < 5; i++) {
+        const a = rnd(0, TAU), len = rnd(0.3, 0.48);
+        const ex = 0.5 + Math.cos(a)*len, ey = 0.5 + Math.sin(a)*len;
+        const mx = 0.5 + (ex-0.5)*0.5 + rnd(-0.09,0.09), my = 0.5 + (ey-0.5)*0.5 + rnd(-0.09,0.09);
+        this.cracks.push([mx, my, ex, ey]);
+      }
+      let tries = 0, ok = false;
+      while (!ok && tries++ < 40) {
+        this.x = rnd(xper(0.03), WORLD_W - this.width - xper(0.03));
+        this.y = rnd(yper(0.05), WORLD_H - this.height - yper(0.05));
+        ok = true;
+        for (const w of walls) if (rectCollision([w.x,w.y,w.width,w.height],[this.x,this.y,this.width,this.height])) { ok = false; break; }
+        if (ok && player) { const m = player.radius*7; if (rectCollision([player.x-m,player.y-m,m*2,m*2],[this.x,this.y,this.width,this.height])) ok = false; }
+      }
+      if (!ok) return;
+      this.body = Bodies.rectangle(this.x+this.width/2, this.y+this.height/2, this.width, this.height, { isStatic: true });
+      World.add(world, this.body);
+      walls.push(this);   // entra al array de muros → la IA la esquiva, frena LOS de enemigos, sale en el radar
+    }
+    process() {
+      this.hitCD = Math.max(this.hitCD - dt, 0);
+      for (const shot of shots) {
+        if (toRemove.has(shot)) continue;
+        if (rectCollision([shot.x-shot.radius*0.75,shot.y-shot.radius*0.75,shot.radius*1.5,shot.radius*1.5],[this.x,this.y,this.width,this.height])) {
+          if (shot.isPlayerShot) {                          // sólo el jugador la rompe; al enemigo le frena el tiro
+            this.health -= shot.missile ? this.health : 1;  // el misil la revienta de un toque
+            this.hitCD = 0.06; if (player) player.score += 5;
+          }
+          toRemove.add(shot);
+          if (this.health <= 0) break;
+        }
+      }
+      if (this.health <= 0 && !this.broken) {
+        this.broken = true;
+        const cx = this.x+this.width/2, cy = this.y+this.height/2, cw = this.width;
+        for (let i = 0; i < ri(2,10); i++) new Coin(cx, cy, ri(15,30));   // cantidad de monedas más variable
+        // rotura con cuerpo: tablas claras rápidas + astillas oscuras grandes + polvillo brillante + fogonazo
+        burst(cx, cy, modifyColorPerc(this.color, 1.5),  16, sper(0.36), 0.6,  sper(0.008));
+        burst(cx, cy, modifyColorPerc(this.color, 0.65), 13, sper(0.2),  0.9,  sper(0.011));
+        burst(cx, cy, [255,236,180], 9, sper(0.46), 0.34, sper(0.004));
+        spawnPart(cx, cy, 0, 0, 0.16, cw*0.72, [255,240,205], 0.55);   // fogonazo central breve (pop)
+        addShake(sper(0.0065));
+        if (player) { player.score += 50; popup(cx, cy, '+50', [255,235,160], sper(0.02)); }
+        toRemove.add(this);
+      }
+    }
+    draw() {
+      const x=this.x, y=this.y, w=this.width, h=this.height;
+      const base = this.hitCD > 0 ? modifyColor(this.color,120) : this.color;
+      ctx.fillStyle = rgb(modifyColorPerc(base,0.8)); ctx.fillRect(x,y,w,h);
+      ctx.fillStyle = rgb(modifyColorPerc(base,1.12)); ctx.fillRect(x+w*0.12,y+h*0.12,w*0.76,h*0.76);   // panel interior
+      ctx.strokeStyle = rgb(modifyColorPerc(base,0.55)); ctx.lineWidth = Math.max(2, w*0.09);           // aspas en X
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+w,y+h); ctx.moveTo(x+w,y); ctx.lineTo(x,y+h); ctx.stroke();
+      ctx.strokeStyle = rgb(modifyColorPerc(base,1.5)); ctx.lineWidth = Math.max(2, w*0.08);             // marco
+      ctx.strokeRect(x+1.5,y+1.5,w-3,h-3);
+      const dmg = 1 - this.health/this.maxHealth;                                                        // grietas quebradas según daño
+      const n = Math.round(dmg * this.cracks.length);
+      ctx.strokeStyle = rgb(modifyColorPerc(base,0.3)); ctx.lineWidth = Math.max(1, w*0.055);
+      for (let i = 0; i < n; i++) { const c = this.cracks[i];
+        ctx.beginPath(); ctx.moveTo(x+w*0.5, y+h*0.5); ctx.lineTo(x+w*c[0], y+h*c[1]); ctx.lineTo(x+w*c[2], y+h*c[3]); ctx.stroke(); }
+    }
+  }
+
+  // ════════════════ MINA TRAMPA ════════════════
+  // Estática; cuando un tanque (cualquiera) entra al radio de gatillo enciende la mecha (parpadeo rápido) y
+  // explota en área. Por defecto aparece LEJOS del player (trampa para toparte). Lastima a player y enemigos.
+  class Mine {
+    constructor(x, y) {
+      this.radius = sper(0.008); this.ang = rnd(0, TAU);
+      this.trigger = this.radius*5.5; this.blast = this.radius*6;
+      this.armCD = 1.2; this.fuse = 0;
+      if (x === undefined) {
+        const cx0 = player ? player.x : WORLD_W/2, cy0 = player ? player.y : WORLD_H/2;
+        let tries = 0;
+        do {
+          const a = rnd(0, TAU), d = rnd(xper(0.25), xper(0.7));
+          this.x = clampN(cx0+Math.cos(a)*d, xper(0.04), WORLD_W-xper(0.04));
+          this.y = clampN(cy0+Math.sin(a)*d, yper(0.04), WORLD_H-yper(0.04));
+        } while (++tries < 20 && (walls.some(w => rectCollision([this.x-this.radius*2,this.y-this.radius*2,this.radius*4,this.radius*4],[w.x,w.y,w.width,w.height]))
+                 || tanks.some(t => getDistSq([this.x,this.y],[t.x,t.y]) < (this.trigger*1.3)**2)));   // no nacer encima de un tanque (gift-detona)
+      } else { this.x = x; this.y = y; }
+      mines.push(this);
+    }
+    process() {
+      this.armCD = Math.max(this.armCD - dt, 0);
+      if (this.armCD > 0) return;
+      if (this.fuse === 0) {
+        for (const t of tanks) if (getDistSq([this.x,this.y],[t.x,t.y]) < this.trigger*this.trigger) { this.fuse = 0.55; break; }
+      } else {
+        this.fuse -= dt;
+        if (this.fuse <= 0) this.detonate();
+      }
+    }
+    detonate() {
+      new Explosion(this.x, this.y, this.radius*1.6);
+      burst(this.x, this.y, [255,150,40], 26, sper(0.34), 0.85, sper(0.006));
+      addShake(sper(0.008));
+      for (const t of tanks) {
+        if (getDist([this.x,this.y],[t.x,t.y]) >= this.blast) continue;
+        if (t.isPlayer) { if (t.powerModeActiveTime === 0) { t.health = Math.max(t.health - (t.shielded?0.12:0.4), 0); t.hitCD = 0.04; } }
+        else { t.health = Math.max(t.health - 0.5, 0); t.hitCD = 0.04; }   // también lastima enemigos (táctica)
+      }
+      toRemove.add(this);
+    }
+    draw() {
+      const r = this.radius;
+      ctx.globalAlpha = 0.25; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(this.x, this.y+r*0.3, r*1.1, r*0.7, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1;
+      const fusing = this.fuse > 0;
+      const blink = fusing ? (Math.sin(T*30) > 0) : (Math.sin(T*3) > 0.6);
+      const body = fusing ? [130,24,24] : [62,66,74];
+      for (let i = 0; i < 8; i++) { const a = this.ang + TAU*i/8;
+        line(this.x+Math.cos(a)*r*0.7, this.y+Math.sin(a)*r*0.7, this.x+Math.cos(a)*r*1.28, this.y+Math.sin(a)*r*1.28, modifyColorPerc(body,0.75), r*0.3); }
+      circle(this.x, this.y, r, modifyColorPerc(body,0.7));
+      circle(this.x, this.y, r*0.66, modifyColorPerc(body,1.1));
+      if (this.armCD <= 0) {                                  // luz central que late (roja; rápida con mecha)
+        const lit = fusing || blink;
+        glow(this.x, this.y, r*0.95, fusing?[255,40,30]:[255,90,40], fusing?0.6:0.3);
+        circle(this.x, this.y, r*0.3, lit?[255,190,90]:[150,40,30]);
+      }
     }
   }
 
@@ -1647,18 +1926,77 @@
       ctx.globalAlpha = 0.85; circle(this.x - r*0.3, this.y - r*0.3, r*0.26, [255,255,235]); ctx.globalAlpha = 1;  // brillo especular
     }
   }
+  // Estallido estilo FireworksWeb: fogonazo blanco-caliente (bloom gaussiano) + onda expansiva + una lluvia de
+  // CHISPAS con física (velocidad/drag), cada una con su bloom aditivo (los solapados acumulan luz), núcleo que
+  // nace blanco y vira al color del fuego, y glint de estrella en las más calientes. Todo ∝ radio: los impactos
+  // chicos de bala quedan en un fogonazo sin chispas; muertes/minas/misiles esparcen la lluvia completa.
+  // Con tint (opcional) el estallido se TIÑE con ese color (la onda, el remanente y las chispas no-calientes) →
+  // las muertes de enemigos explotan en SU color. Sin tint, fuego cálido normal. Firma vieja sigue válida.
   class Explosion {
-    constructor(x,y,radius) { this.x=x; this.y=y; this.startRadius=radius; this.radius=radius; this.repeat=false; explosions.push(this); }
+    constructor(x, y, radius, tint = null) {
+      this.x = x; this.y = y;
+      this.startRadius = radius; this.radius = radius;
+      this.life = 0;
+      this.maxLife = clampN(radius / sper(0.04), 0.34, 0.85);    // dura ∝ tamaño
+      this.flash = 1;                                            // fogonazo inicial (decae rápido)
+      this.color = tint ? tint.slice() : [255, ri(150, 205), ri(30, 75)];   // tint → boom de color (enemigo); si no, fuego
+      this.sparks = [];
+      const n = clampN(Math.round(radius / sper(0.002)) - 1, 0, 34);   // 0 chispas en impactos chicos de bala
+      for (let i = 0; i < n; i++) {
+        const a = rnd(0, TAU), sp = radius * rnd(8, 20);         // velocidad radial (mezcla lentas/rápidas)
+        const hot = Math.random() < 0.45;                        // ~mitad calientes (blanco-amarillo, con glint)
+        const life = this.maxLife * rnd(0.55, 1);
+        this.sparks.push({
+          x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp,
+          size: radius * rnd(0.12, 0.26), drag: rnd(0.78, 0.88),
+          life, maxLife: life, hot,
+          color: hot ? [255, 236, 184] : (tint ? modifyColorPerc(tint, 1.2) : [255, ri(120, 190), ri(20, 70)]),
+        });
+      }
+      explosions.push(this);
+    }
     process() {
-      this.radius += sper(0.3)*dt;
-      if (this.radius > this.startRadius*3 && this.startRadius > sper(0.01) && !this.repeat) { new Explosion(this.x,this.y,this.radius/5); this.repeat=true; }
-      if (this.radius > this.startRadius*6) toRemove.add(this);
+      this.life += dt;
+      this.radius = this.startRadius * (1 + 1.6 * (this.life / this.maxLife));   // onda expansiva ∝ tamaño
+      this.flash = Math.max(this.flash - dt / 0.1, 0);
+      for (const s of this.sparks) {
+        s.life -= dt;
+        const dr = Math.pow(s.drag, fr);
+        s.vx *= dr; s.vy *= dr;
+        s.x += s.vx * dt; s.y += s.vy * dt;
+      }
+      if (this.life >= this.maxLife) toRemove.add(this);
     }
     draw() {
-      const lifeF = clampN(1 - (this.radius - this.startRadius)/(this.startRadius*5), 0, 1);   // ~1 joven → 0 viejo
-      glow(this.x, this.y, this.radius*0.95, [255,150,40], 0.45*lifeF);
-      circle(this.x, this.y, this.radius, [255, ri(150,255), ri(0,60)], this.radius/6);         // anillo de fuego
-      if (lifeF > 0.45) circle(this.x, this.y, this.radius*0.55*lifeF, [255,235,170]);          // núcleo blanco joven
+      const lifeF = clampN(1 - this.life / this.maxLife, 0, 1);
+      // fogonazo blanco-caliente que se hincha y se apaga, + remanente cálido que decae con la vida
+      if (this.flash > 0) bloom(this.x, this.y, this.startRadius * (2.4 + 2.4*(1 - this.flash)), [255, 246, 222], 0.55 * this.flash);
+      bloom(this.x, this.y, this.startRadius * (1.4 + 1.5*(1 - lifeF)), this.color, 0.4 * lifeF);
+      // onda expansiva: aro fino y brillante que se abre y se desvanece
+      if (lifeF > 0.02) {
+        ctx.globalAlpha = lifeF * lifeF;
+        circle(this.x, this.y, this.radius, modifyColorPerc(this.color, 1.7), Math.max(1, this.startRadius * 0.16 * lifeF));
+        ctx.globalAlpha = 1;
+      }
+      // chispas: bloom aditivo + núcleo (blanco caliente joven → vira al color) + glint de estrella
+      for (const s of this.sparks) {
+        const lf = clampN(s.life / s.maxLife, 0, 1);
+        if (lf <= 0.01) continue;
+        const b = Math.pow(lf, 1.5);
+        const r = Math.max(0.4, s.size * (0.45 + 0.55*lf));
+        bloom(s.x, s.y, r * 4.5, s.color, b * 0.5);
+        const w = s.hot ? (0.4 + 0.6*lf) : 0.3*lf;
+        const c0 = s.color;
+        ctx.globalAlpha = Math.min(1, b * 1.1);
+        circle(s.x, s.y, r, [ (c0[0]+(255-c0[0])*w)|0, (c0[1]+(255-c0[1])*w)|0, (c0[2]+(255-c0[2])*w)|0 ]);
+        ctx.globalAlpha = 1;
+        if (s.hot && b > 0.6) {                                   // glint sólo en lo más brillante
+          const fr2 = r * (3 + 4*(b - 0.6)/0.4), a0 = ctx.globalAlpha;
+          ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = Math.min(0.5, (b - 0.6) * 1.1);
+          ctx.drawImage(flareSprite(), s.x - fr2, s.y - fr2, fr2*2, fr2*2);
+          ctx.globalAlpha = a0; ctx.globalCompositeOperation = 'source-over';
+        }
+      }
     }
   }
 
@@ -1672,17 +2010,17 @@
       this.startRadius = sper(0.0192); this.radius = this.startRadius;
       this.lifeSpan = 30; this.health = 10; this.hitCD = 0; this.destroyed = false;
       const chance = Math.random();
-      this.boxType = chance <= 0.1 ? 'power' : chance <= 0.3 ? 'firstAid' : 'coin';
-      // posición CERCA del player (anillo 0.2-0.55×W: encontrable antes de que expire), libre de muros y tanques
-      const cx0 = player ? player.x : WORLD_W/2, cy0 = player ? player.y : WORLD_H/2;
+      this.boxType = chance <= 0.1 ? 'power' : chance <= (manager.bossWave ? 0.6 : 0.3) ? 'firstAid' : 'coin';   // en pelea de jefe sesga a botiquín (heal fiable)
+      // posición SIEMPRE dentro de la vista actual (rect de cámara con margen) → la ves aparecer; libre de muros/tanques
+      const mgx = W*0.13, mgy = H*0.13;
       let tries = 0;
       do {
-        const a = rnd(0, TAU), d = rnd(xper(0.2), xper(0.55));
-        this.x = clampN(cx0 + Math.cos(a)*d, xper(0.05), WORLD_W - xper(0.05));
-        this.y = clampN(cy0 + Math.sin(a)*d, yper(0.05), WORLD_H - yper(0.05));
+        this.x = clampN(camX + rnd(mgx, W - mgx), xper(0.05), WORLD_W - xper(0.05));
+        this.y = clampN(camY + rnd(mgy, H - mgy), yper(0.05), WORLD_H - yper(0.05));
         var bad = walls.some(w => rectCollision([this.x-this.radius*1.5, this.y-this.radius*1.5, this.radius*3, this.radius*3], [w.x,w.y,w.width,w.height]))
                || tanks.some(t => rectCollision([this.x-this.radius*1.5, this.y-this.radius*1.5, this.radius*3, this.radius*3], [t.x-t.radius, t.y-t.radius, t.radius*2, t.radius*2]));
-      } while (bad && ++tries < 30);
+        if (!bad && player && getDistSq([this.x,this.y],[player.x,player.y]) < (this.radius*5)**2) bad = true;   // tampoco encima del jugador
+      } while (bad && ++tries < 40);
       lootBoxes.push(this);
     }
     process() {
@@ -1691,6 +2029,7 @@
       this.hitCD = Math.max(this.hitCD - dt, 0);
       this.ang += this.angVel * dt;
       for (const shot of shots) {
+        if (toRemove.has(shot)) continue;
         if (shot.isPlayerShot && getDistSq([shot.x,shot.y],[this.x,this.y]) < this.radius*this.radius) {
           this.health -= shot.missile ? this.health : 1;   // el MISIL la revienta de un toque; el cañón le saca 1
           this.hitCD = 0.05;
@@ -1700,8 +2039,23 @@
         }
       }
       if (this.health <= 0 && !this.destroyed) {
-        if (this.boxType === 'power' && player) { player.powerModeActiveTime = 30; player.secondaryShotCD = 0; popup(this.x, this.y, '¡POWER!', randColor(), sper(0.024)); }
-        else if (this.boxType === 'firstAid' && player) { player.health = Math.min(player.health + 0.33, 1); popup(this.x, this.y, '+VIDA', [100,255,0], sper(0.022)); }
+        if (this.boxType === 'power' && player) {
+          // Mejora ESPECIAL aleatoria entre las que aún no tenés; si ya las tenés TODAS, MUCHO oro.
+          const pu = player.powerUps, pool = [];
+          if (!pu.triple)     pool.push(['triple',     '¡TRIPLE DISPARO!']);
+          if (!pu.fastReload) pool.push(['fastReload', '¡MISILES RÁPIDOS!']);
+          if (!pu.bigShots)   pool.push(['bigShots',   '¡CAÑÓN ANCHO!']);
+          if (!pu.fastRage)   pool.push(['fastRage',   '¡FURIA VELOZ!']);
+          if (pool.length) {
+            const pick = pool[ri(0, pool.length - 1)]; pu[pick[0]] = true;
+            if (pick[0] === 'fastReload') { player.missileRegenMult = 0.3; player.missileMax += 2; player.missileStack += 2; }   // recarga ×3 + 2 misiles
+            popup(this.x, this.y, pick[1], [205,130,255], sper(0.026));
+          } else {                                                    // todas las mejoras → cofre de ORO
+            for (let i = 0; i < ri(35, 50); i++) new Coin(this.x, this.y, ri(45, 75));
+            popup(this.x, this.y, '¡ORO!', [255,215,60], sper(0.028));
+          }
+        }
+        else if (this.boxType === 'firstAid' && player) { const wasFull = player.health >= 1; player.health = Math.min(player.health + 0.33, 1.5); popup(this.x, this.y, wasFull ? '+VIDA EXTRA' : '+VIDA', wasFull ? [120,235,255] : [100,255,0], sper(0.022)); }   // overheal hasta 1.5: si ya estabas full, suma colchón extra
         else if (this.boxType === 'coin') { for (let i = 0; i < ri(17,25); i++) new Coin(this.x, this.y, ri(20,40)); popup(this.x, this.y, '$$$', [255,255,0], sper(0.022)); }
         burst(this.x, this.y, this.boxType === 'power' ? randColor() : this.boxType === 'firstAid' ? [100,255,0] : [255,210,60], 16, sper(0.25), 0.7);
         addShake(sper(0.004));
@@ -1739,43 +2093,63 @@
 
   // ════════════════ MANAGER / OLEADAS ════════════════
   const manager = {
-    waveTime: 0, waveNumber: 0, gameover: false, victory: false, scoreEffectCD: 0, shopOpen: false, lootBoxCD: 0, wallColor: [120,120,120],
-    menu: true, hardMode: false, colorSelected: 0, menuEffectCD: 0,   // estado del menú principal (elegir color + dificultad)
+    waveTime: 0, waveNumber: 0, gameover: false, victory: false, scoreEffectCD: 0, shopOpen: false, lootBoxCD: 0, bossWave: false, wallColor: [120,120,120],
+    menu: true, paused: false, hardMode: false, colorSelected: 0, menuEffectCD: 0, mineCD: 0,   // menú + pausa + minas
     playerColors: [[0,0,80],[80,0,0],[0,80,0],[90,90,0],[0,70,90],[70,0,90],[80,80,80],[100,50,0]],   // paleta del original
-    // Lista COMPLETA de 151 oleadas del original (TankWARS.py). Cada entrada: [tipo, cantidad, segundos].
-    // Jefes a las 49/74/99/119/149 y FinalBoss a la 150. waveTime 3600 = "esperá a limpiar la oleada".
+    // Oleadas MIXTAS, en formato [waveTime, [Tipo, cant], ...]. waveTime corto = se acumulan (presión);
+    // largo (25-44) = respiro; 3600 = oleada de JEFE (no avanza hasta limpiarla). Curva: básicos → especialistas
+    // → misiles/jefes → gauntlet → JEFE FINAL. Bucle al terminar. Arena nueva cada 5 oleadas.
     waveList: [
-      ['BasicRed',3,30],['BasicRed',3,30],['BasicRed',4,30],['BasicRed',4,30],['BasicRed',4,30],
-      ['BasicRed',6,5],['BasicBlue',2,55],['BasicBlue',4,30],['BasicRed',6,30],['BasicBlue',5,30],
-      ['Rhomb',1,5],['BasicRed',3,55],['BasicBlue',4,30],['BasicRed',5,30],['Purple',1,30],
-      ['BasicRed',6,5],['SmallPink',4,55],['BasicBlue',4,5],['BasicRed',5,55],['Rhomb',2,30],
-      ['SmallPink',8,5],['SmallPink',4,55],['BasicBlue',3,30],['Rhomb',1,5],['Purple',1,55],
-      ['BasicRed',7,30],['BasicRed',7,5],['Mortar',1,55],['SmallPink',5,5],['BasicRed',7,55],
-      ['BasicBlue',5,30],['BasicRed',5,30],['BasicBlue',5,5],['BasicRed',5,55],['Rhomb',3,30],
-      ['Purple',2,30],['SmallPink',10,30],['Mortar',2,30],['Rhomb',2,5],['Rhomb',3,55],
-      ['BasicRed',6,30],['BasicRed',6,30],['BasicBlue',8,30],['SmallPink',7,5],['SmallPink',7,55],
-      ['BasicBlue',8,30],['BasicRed',6,5],['BasicBlue',4,55],['Purple',2,30],['BossGreen',1,3600],
-      ['BasicBlue',8,30],['Rhomb',4,30],['BasicBlue',8,30],['BasicRed',8,5],['Icy',2,55],
-      ['Mortar',2,5],['Purple',1,55],['Icy',1,5],['Rhomb',3,30],['BasicBlue',10,30],
-      ['Exploder',2,30],['Exploder',3,30],['Icy',2,5],['Exploder',2,5],['BasicRed',7,80],
-      ['BasicRed',10,30],['BasicBlue',10,30],['Purple',3,30],['Mortar',3,30],['Exploder',3,30],
-      ['Invis',2,30],['Invis',3,30],['Invis',2,5],['Invis',3,5],['Invis',4,80],
-      ['Rhomb',4,30],['Invis',3,5],['Icy',2,5],['BasicBlue',10,80],['BossGreen',2,3600],
-      ['SmallPink',8,5],['Rhomb',3,5],['SmallPink',4,80],['Rhomb',6,5],['SmallPink',10,55],
-      ['SmallPink',10,30],['SmallPink',6,5],['BasicBlue',8,55],['BasicRed',8,5],['Purple',3,55],
-      ['Rhomb',5,5],['SmallPink',7,55],['Rhomb',3,5],['Invis',3,5],['Icy',2,80],
-      ['BasicRed',15,30],['Mortar',3,5],['BasicBlue',12,55],['Exploder',3,5],['BossGreen',2,3600],
-      ['Commander',1,5],['BasicRed',6,1],['BasicBlue',7,54],['Invis',12,5],['Purple',3,55],
-      ['Icy',6,10],['Exploder',4,50],['Rhomb',7,1],['Mortar',4,59],['Rhomb',15,60],
-      ['Exploder',10,1],['Commander',1,59],['Breeder',1,1],['SmallPink',8,1],['Icy',4,58],
-      ['Commander',1,1],['Mortar',3,1],['Rhomb',4,1],['Purple',2,1],['BossGreen',1,3600],
-      ['Breeder',2,1],['Rhomb',6,1],['Icy',2,1],['Exploder',2,1],['Breeder',1,3600],
-      ['Invis',14,1],['Commander',1,59],['Mortar',9,60],['Purple',6,60],['BossGreen',3,3600],
-      ['Icy',1,1],['Exploder',4,1],['Invis',4,1],['Breeder',2,5],['Commander',1,3600],
-      ['Rhomb',6,1],['BossGreen',1,1],['BasicBlue',6,1],['Breeder',1,1],['Commander',1,3600],
-      ['Invis',4,4],['Mortar',4,4],['Icy',4,4],['Exploder',4,4],['Breeder',2,3600],
-      ['Purple',6,5],['Rhomb',10,55],['Breeder',4,5],['BossGreen',4,5],['Commander',2,3600],
-      ['FinalBoss',1,3600],
+      // ── intro: básicos ──
+      [28, ['BasicRed',4]],
+      [28, ['BasicRed',5], ['SmallPink',3]],
+      [30, ['BasicBlue',3], ['BasicRed',3]],
+      [6,  ['SmallPink',10]],
+      [32, ['BasicBlue',4], ['BasicRed',4]],
+      // ── llegan los especialistas ──
+      [34, ['Rhomb',2], ['BasicRed',4]],
+      [34, ['Icy',2], ['BasicBlue',3]],
+      [30, ['BasicRed',6], ['SmallPink',4]],
+      [36, ['Exploder',2], ['BasicRed',4]],
+      [5,  ['SmallPink',12]],
+      [38, ['Purple',2], ['BasicBlue',3]],
+      [34, ['Rhomb',3], ['Icy',2]],
+      [3600, ['BossGreen',1], ['BasicRed',4]],
+      // ── sube la temperatura ──
+      [34, ['BasicBlue',6], ['Exploder',2]],
+      [36, ['Invis',2], ['BasicRed',4]],
+      [6,  ['SmallPink',10], ['Rhomb',2]],
+      [40, ['Mortar',1], ['BasicBlue',4]],
+      [36, ['Purple',2], ['Icy',2], ['BasicRed',3]],
+      [34, ['Exploder',3], ['Rhomb',2]],
+      [3600, ['Commander',1], ['BasicRed',5]],
+      [38, ['Invis',3], ['BasicBlue',3]],
+      [36, ['Mortar',2], ['Purple',2]],
+      // ── intenso ──
+      [6,  ['SmallPink',14], ['Exploder',2]],
+      [40, ['Purple',3], ['Icy',3]],
+      [3600, ['BossGreen',1], ['Invis',2], ['BasicRed',4]],
+      [36, ['Rhomb',4], ['Mortar',1]],
+      [38, ['Exploder',3], ['BasicBlue',4], ['SmallPink',5]],
+      [40, ['Invis',3], ['Purple',2]],
+      [3600, ['Breeder',1], ['BasicRed',4]],
+      [40, ['Mortar',2], ['Icy',3], ['BasicBlue',3]],
+      // ── guante de élites ──
+      [6,  ['SmallPink',16], ['Rhomb',3]],
+      [42, ['Purple',3], ['Exploder',3], ['Icy',2]],
+      [3600, ['Commander',1], ['BossGreen',1]],
+      [40, ['Invis',4], ['Mortar',2]],
+      [42, ['Rhomb',5], ['Purple',3]],
+      [40, ['Exploder',4], ['BasicBlue',5], ['SmallPink',6]],
+      [3600, ['Breeder',2], ['Icy',3]],
+      [42, ['Mortar',3], ['Purple',3]],
+      [8,  ['SmallPink',18], ['Exploder',3]],
+      [3600, ['BossGreen',2], ['Invis',3]],
+      // ── pre-final ──
+      [44, ['Purple',4], ['Mortar',3], ['Icy',3]],
+      [3600, ['Commander',2], ['Breeder',1]],
+      [44, ['Invis',5], ['Rhomb',5], ['Exploder',4]],
+      [3600, ['FinalBoss',1]],
     ],
     process() {
       if (manager.gameover) return;
@@ -1789,36 +2163,51 @@
       }
       manager.waveTime = Math.max(manager.waveTime - dt, 0);
       if (manager.waveTime === 0 || enemies.length === 0) {
-        const w = manager.waveList[manager.waveNumber];
-        manager.callWave(w[0], w[1], w[2]);
+        manager.callWave(manager.waveList[manager.waveNumber]);
       }
       // Lootboxes: aparecen cada 30-50s durante la oleada activa (waveTime < 100, casi siempre).
       manager.lootBoxCD = Math.max(manager.lootBoxCD - dt, 0);
-      if (manager.lootBoxCD === 0 && manager.waveTime < 100) {
+      if (manager.lootBoxCD === 0 && (manager.waveTime < 100 || manager.bossWave)) {   // también en peleas de jefe (waveTime 3600), si no quedaban sin heal
         new LootBox();
         manager.lootBoxCD = manager.hardMode ? ri(50, 70) : ri(30, 50);
       }
+      // minas: aparecen de a una cada ~12-22s hasta un tope (más en hardcore)
+      manager.mineCD = Math.max(manager.mineCD - dt, 0);
+      if (manager.mineCD === 0 && mines.length < (manager.hardMode ? 14 : 9)) {
+        new Mine();
+        manager.mineCD = manager.hardMode ? ri(8, 16) : ri(12, 22);
+      }
     },
-    callWave(name, amount, waveTime) {
-      if (manager.waveNumber % 5 === 0) {     // cada 5 oleadas: arena nueva (muros + deco del piso)
-        clearWalls();
+    // wave = [waveTime, [Tipo, cant], [Tipo, cant], ...] → oleadas MIXTAS (varios tipos a la vez).
+    callWave(wave) {
+      if (manager.waveNumber % 5 === 0) {     // cada 5 oleadas: arena nueva (muros + cajas + minas + deco)
+        clearWalls(); mines.length = 0;        // las minas viejas quedarían dentro del layout nuevo
         manager.wallColor = randColorInRange(50,255,50,255,50,255);
         for (let i = 0; i < ri(WALL_COUNT_LO, WALL_COUNT_HI); i++) new Wall(manager.wallColor);
+        for (let i = 0; i < ri(4, 8); i++) new Crate();      // cajas destructibles que bloquean el paso
+        for (let i = 0; i < ri(3, 6); i++) new Mine();       // minas trampa sembradas en la arena
         genDeco();
       }
       manager.waveNumber = (manager.waveNumber + 1) % manager.waveList.length;
-      manager.waveTime = waveTime;
-      // banner de oleada (con aviso especial si es de jefe)
-      const isBoss = waveTime >= 3600;
+      manager.waveTime = wave[0];
+      const groups = wave.slice(1);
+      // banner (aviso especial si la oleada trae un jefe / el jefe final)
+      const hasFinal = groups.some(g => g[0] === 'FinalBoss');
+      const hasBoss  = groups.some(g => BOSS_TYPES.has(g[0]));
+      manager.bossWave = hasBoss;   // las oleadas de jefe (waveTime 3600) igual sueltan lootboxes (heal) — ver gate abajo
       manager.banner = {
         text: 'OLEADA ' + (manager.waveNumber === 0 ? manager.waveList.length : manager.waveNumber),
-        sub: name === 'FinalBoss' ? '¡¡JEFE FINAL!!' : isBoss ? '¡JEFE!' : '',
+        sub: hasFinal ? '¡¡JEFE FINAL!!' : hasBoss ? '¡JEFE!' : '',
         t: 0,
       };
-      const n = manager.hardMode ? amount : Math.max(Math.floor(amount*0.5), 1);   // Hardcore: cantidad full; Normal: la mitad (mín 1)
-      for (let i = 0; i < n; i++) {
-        if (enemies.length >= MAX_ENEMIES) break;
-        new ENEMY_TYPES[name]();
+      // spawn por grupos. Mooks: cantidad TAL CUAL en Normal (oleadas bien pobladas), ×1.6 en Hardcore. Los
+      // élites/jefes (BOSS_TYPES) NO se inflan. Tope global MAX_ENEMIES (las oleadas se acumulan en pantalla).
+      for (const [type, count] of groups) {
+        const n = BOSS_TYPES.has(type) ? count : (manager.hardMode ? Math.round(count * 1.6) : count);
+        for (let i = 0; i < n; i++) {
+          if (enemies.length >= MAX_ENEMIES) break;
+          new ENEMY_TYPES[type]();
+        }
       }
     },
   };
@@ -1836,7 +2225,7 @@
   let aimLockTarget = null;                       // blanco enganchado por el imán (para el marcador de lock-on)
   let mouseLeft = false, mouseRight = false;
   const canvasPointers = new Map();               // pointers táctiles sobre el canvas → disparan apuntando
-  const btnState = { missile: false, boost: false };
+  const btnState = { missile: false, boost: false, rage: false };
   const moveVec = { x: 0, y: 0 };                 // palanca de movimiento (hand-rolled), y en coords pantalla (+ abajo)
   const aimVec  = { x: 0, y: 0, active: false };  // palanca de puntería (hand-rolled, mobile): dirección de la mira + dispara
   let aimDown = false;                            // palanca der TOCADA → dispara aunque la aprietes en el centro (sin zona muerta)
@@ -1863,30 +2252,31 @@
         aimY = clampN(aimY + (aimVec.y / am) * sp, camY, camY + H);
       }
     }
-    // IMÁN de puntería (mobile): vos acercás la mira al blanco que querés; cuando YA está cerca (dentro del
-    // radio de captura) el imán la engancha suave hacia él. Enganchan ENEMIGOS y LOOTBOXES en cámara.
-    // CLAVE: la fuerza del imán se ESCALA por cuánto estás empujando la palanca — empujando fuerte el imán
-    // suelta del todo (podés cambiar de blanco sin pelearle al lock); al aflojar, re-engancha.
+    // LOCK / IMÁN de puntería. Blancos "lockeables" en cámara: ENEMIGOS, LOOTBOXES y CAJAS DESTRUCTIBLES.
+    // - Touch: cuando la mira ya está cerca, el imán la engancha suave (fuerza escalada por la palanca: a
+    //   fondo suelta, así cambiás de blanco). El anillo de lock aparece mientras el imán manda.
+    // - Desktop: NO hay imán; el anillo aparece cuando la mira (cursor) está SOBRE el blanco.
+    // aimLockTarget guarda un snapshot {x,y,r} (centro + radio para el anillo del HUD).
     aimLockTarget = null;
-    if (IS_TOUCH && (enemies.length || lootBoxes.length)) {
-      let bt = null, bd = Infinity;
-      for (const e of enemies) {
-        if (!inView(e.x, e.y, 0)) continue;
-        const d = getDistSq([aimX, aimY], [e.x, e.y]);
-        if (d < bd) { bd = d; bt = e; }
-      }
-      for (const b of lootBoxes) {
-        if (!inView(b.x, b.y, 0)) continue;
-        const d = getDistSq([aimX, aimY], [b.x, b.y]);
-        if (d < bd) { bd = d; bt = b; }
-      }
-      const r = sper(AIM_MAGNET_RANGE);
-      if (bt && bd < r * r) {                                 // sólo si la mira YA está cerca de un blanco
-        const push = aimVec.active ? clampN((Math.hypot(aimVec.x, aimVec.y) - AIM_DEAD) / (1 - AIM_DEAD), 0, 1) : 0;
-        const k = (1 - Math.pow(1 - AIM_MAGNET, fr)) * (1 - push);   // empujando a fondo → imán 0
-        aimX += (bt.x - aimX) * k;
-        aimY += (bt.y - aimY) * k;
-        if (push < 0.6) aimLockTarget = bt;                   // marcador de lock solo cuando el imán manda
+    {
+      let bcx = 0, bcy = 0, brad = 0, bd = Infinity;
+      const scan = (cx, cy, r) => { if (!inView(cx, cy, 0)) return; const d = getDistSq([aimX, aimY], [cx, cy]); if (d < bd) { bd = d; bcx = cx; bcy = cy; brad = r; } };
+      for (const e of enemies) scan(e.x, e.y, e.radius);
+      for (const b of lootBoxes) scan(b.x, b.y, b.radius);
+      for (const w of walls) if (w.breakable) scan(w.x + w.width/2, w.y + w.height/2, Math.max(w.width, w.height)*0.6);   // cajas
+      if (brad > 0) {
+        if (IS_TOUCH) {
+          const r = sper(AIM_MAGNET_RANGE);
+          if (bd < r * r) {
+            const push = aimVec.active ? clampN((Math.hypot(aimVec.x, aimVec.y) - AIM_DEAD) / (1 - AIM_DEAD), 0, 1) : 0;
+            const k = (1 - Math.pow(1 - AIM_MAGNET, fr)) * (1 - push);   // empujando a fondo → imán 0
+            aimX += (bcx - aimX) * k; aimY += (bcy - aimY) * k;
+            if (push < 0.6) aimLockTarget = { x: bcx, y: bcy, r: brad };
+          }
+        } else {
+          const lockR = brad * 2.2;                            // desktop: anillo si el cursor está sobre el blanco
+          if (bd < lockR * lockR) aimLockTarget = { x: bcx, y: bcy, r: brad };
+        }
       }
     }
     return {
@@ -1895,6 +2285,7 @@
       primary: mouseLeft || canvasPointers.size > 0 || aimVec.active || aimDown,
       missile: mouseRight || btnState.missile,
       boost: keys.has('shift') || btnState.boost,
+      rage: keys.has('q') || btnState.rage,
     };
   }
 
@@ -1959,7 +2350,10 @@
   }
   holdBtn('btnMissile', 'missile');
   holdBtn('btnBoost', 'boost');
+  holdBtn('btnRage', 'rage');
   document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); showMenu(); });   // ↻ = volver al menú
+  document.getElementById('btnPause').addEventListener('pointerdown', e => { e.preventDefault(); togglePause(); });
+  addEventListener('keydown', e => { if (e.key === 'p' || e.key === 'P') togglePause(); });   // P = pausa (desktop)
 
   // ════════════════ TIENDA / MEJORAS (port del shop del Pygame) ════════════════
   // 8 upgrades. Cada compra: si alcanza la plata y el nivel ≤ 10, descuenta, aplica el stat, y la próxima
@@ -2081,9 +2475,10 @@
       : 'WASD mover · Mouse apuntar/disparar · Click der misil · Shift boost · TAB tienda';
   }
   function showMenu() {
-    manager.menu = true; manager.gameover = false; manager.victory = false; manager.menuEffectCD = 0;
+    manager.menu = true; manager.paused = false; manager.gameover = false; manager.victory = false; manager.menuEffectCD = 0; manager.mineCD = 0;
+    { const b = document.getElementById('btnPause'); if (b) b.classList.remove('on'); }   // resetear ícono pausa
     Composite.clear(world, false); physAcc = 0;
-    tanks = []; enemies = []; shots = []; coins = []; walls = []; explosions = []; lootBoxes = [];
+    tanks = []; enemies = []; shots = []; coins = []; walls = []; explosions = []; lootBoxes = []; mines = [];
     toRemove.clear(); player = null;
     camX = (WORLD_W - W)/2; camY = (WORLD_H - H)/2; camShake = 0;   // cámara quieta al centro del mundo
     parts.length = 0; popups.length = 0; deco = []; manager.banner = null;
@@ -2091,6 +2486,13 @@
     updateMenu();
     menuPanel.classList.add('show');
     document.body.classList.add('inMenu');
+  }
+
+  // Pausa: congela el update (el loop sigue dibujando el frame quieto) y muestra overlay. Sólo en partida.
+  function togglePause(force) {
+    if (manager.menu || manager.gameover || manager.victory) return;
+    manager.paused = (force === undefined) ? !manager.paused : force;
+    const b = document.getElementById('btnPause'); if (b) b.classList.toggle('on', manager.paused);
   }
 
   // Debug HUD: tecla ` (backtick) — herramienta de dev, ya no ocupa un botón.
@@ -2225,38 +2627,59 @@
   // ════════════════ HUD ════════════════
   // ── MINIMAPA (esquina sup-der, debajo de los botones): muros, enemigos, lootboxes, player y el RECT de
   // lo que ve la cámara — en mundo abierto es el radar que te dice de dónde vienen (patrón CrazyTanks/Snake).
+  // RADAR arriba-DERECHA, pegado a los botones de esa esquina (justo debajo de #padMenu), grande y legible.
   function drawMinimap() {
-    const mmW = xper(0.135), mmH = mmW * WORLD_H / WORLD_W;
-    const mmX = W - mmW - xper(0.012), mmY = yper(0.17);
-    const sc = mmW / WORLD_W;
-    ctx.globalAlpha = 0.55; rectFill(mmX, mmY, mmW, mmH, [8,10,14]); ctx.globalAlpha = 1;
-    // clip al marco: nada del radar se dibuja fuera del recuadro (entidades apenas pasadas del borde, anillos)
-    ctx.save(); ctx.beginPath(); ctx.rect(mmX, mmY, mmW, mmH); ctx.clip();
-    ctx.globalAlpha = 0.6;
-    for (const w of walls) rectFill(mmX + w.x*sc, mmY + w.y*sc, Math.max(1, w.width*sc), Math.max(1, w.height*sc), modifyColorPerc(manager.wallColor, 1.2));
-    ctx.globalAlpha = 0.5;
-    rectFill(mmX + camX*sc, mmY + camY*sc, W*sc, H*sc, [255,255,255], 1);      // lo que ve la cámara
-    ctx.globalAlpha = 1;
-    for (const b of lootBoxes) if (Math.sin(T*6) > -0.3) circle(mmX + b.x*sc, mmY + b.y*sc, 2.2, [255,210,60]);   // titilan
-    for (const e of enemies) circle(mmX + e.x*sc, mmY + e.y*sc, e.scoreValue >= 1000 ? 3.2 : 2, [255,70,60]);     // jefes más grandes
+    const mmW = xper(0.2), mmH = mmW * WORLD_H / WORLD_W;       // grande
+    // arriba-derecha, debajo de la barra de botones. El +36/scaleY baja ~36px de PANTALLA (en mobile la barra
+    // queda más abajo por el safe-area-inset, y a esta altura ya no la pisa). scaleY: 1 unidad lógica = scaleY px css.
+    const mmX = W - mmW - xper(0.012), mmY = yper(0.072) + 36 / scaleY;
+    const sc = mmW / WORLD_W, rad = 7;
+    // panel opaco (buen contraste) + clip redondeado
+    ctx.fillStyle = 'rgba(6,9,15,0.84)'; roundRectPath(mmX, mmY, mmW, mmH, rad); ctx.fill();
+    ctx.save(); roundRectPath(mmX, mmY, mmW, mmH, rad); ctx.clip();
+    // muros (gris-azulado) y cajas destructibles (cálidas, para distinguirlas)
+    for (const w of walls) {
+      ctx.fillStyle = rgb(w.breakable ? [170,120,60] : modifyColorPerc(manager.wallColor, 1.3));
+      ctx.fillRect(mmX + w.x*sc, mmY + w.y*sc, Math.max(1.5, w.width*sc), Math.max(1.5, w.height*sc));
+    }
+    // (las minas son trampas: NO se marcan en el radar)
+    // rectángulo de lo que ve la cámara
+    ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 1.4;
+    ctx.strokeRect(mmX + camX*sc, mmY + camY*sc, W*sc, H*sc);
+    // lootboxes (doradas, titilando)
+    if (Math.sin(T*6) > -0.3) for (const b of lootBoxes) circle(mmX + b.x*sc, mmY + b.y*sc, 3, [255,210,60]);
+    // enemigos: punto rojo con glow; jefes más grandes
+    for (const e of enemies) {
+      const r = e.scoreValue >= 1000 ? 4.2 : 2.8;
+      glow(mmX + e.x*sc, mmY + e.y*sc, r*1.7, [255,60,50], 0.45);
+      circle(mmX + e.x*sc, mmY + e.y*sc, r, [255,90,80]);
+    }
+    // jugador: triángulo blanco orientado (se ve hacia dónde mirás) + glow
     if (player) {
-      circle(mmX + player.x*sc, mmY + player.y*sc, 2.6, [255,255,255]);
-      circle(mmX + player.x*sc, mmY + player.y*sc, 4 + 1.5*Math.abs(Math.sin(T*4)), [255,255,255], 1.2);  // anillo pulsante
+      const px = mmX + player.x*sc, py = mmY + player.y*sc, a = player.ang;
+      glow(px, py, 8, [255,255,255], 0.55);
+      ctx.fillStyle = '#fff'; ctx.beginPath();
+      ctx.moveTo(px + Math.cos(a)*7, py + Math.sin(a)*7);
+      ctx.lineTo(px + Math.cos(a+2.5)*4.5, py + Math.sin(a+2.5)*4.5);
+      ctx.lineTo(px + Math.cos(a-2.5)*4.5, py + Math.sin(a-2.5)*4.5);
+      ctx.closePath(); ctx.fill();
     }
     ctx.restore();
-    // marco doble: glow ancho translúcido + línea fina (glow barato, sin shadowBlur)
-    ctx.globalAlpha = 0.3; rectFill(mmX, mmY, mmW, mmH, modifyColorPerc(manager.wallColor, 1.6), 4); ctx.globalAlpha = 1;
-    rectFill(mmX, mmY, mmW, mmH, modifyColorPerc(manager.wallColor, 2.2), 1.5);
+    // marco doble: glow ancho + línea fina (glow barato, sin shadowBlur)
+    ctx.globalAlpha = 0.32; roundRectPath(mmX, mmY, mmW, mmH, rad); ctx.strokeStyle = rgb(modifyColorPerc(manager.wallColor, 1.7)); ctx.lineWidth = 5; ctx.stroke(); ctx.globalAlpha = 1;
+    roundRectPath(mmX, mmY, mmW, mmH, rad); ctx.strokeStyle = rgb(modifyColorPerc(manager.wallColor, 2.4)); ctx.lineWidth = 1.6; ctx.stroke();
   }
 
   function drawHUD() {
     // viñeta (oscurece bordes, profundidad) — debajo de todo el HUD
     ctx.fillStyle = vigDark; ctx.fillRect(0, 0, W, H);
     if (player) {
+      // botón de furia (mobile): clase .ready (glow pulsante) cuando la barra está llena y se puede descargar
+      { const rb = document.getElementById('btnRage'); if (rb) rb.classList.toggle('ready', player.rage >= 1 && player.powerModeActiveTime <= 0); }
       // viñeta ROJA pulsante con vida baja (se lee de reojo sin mirar la barra)
       if (player.health < 0.35) {
         const u = (0.35 - player.health) / 0.35;
-        ctx.globalAlpha = u * (0.3 + 0.18*Math.sin(T*6));
+        ctx.globalAlpha = u * (0.1 + 0.06*Math.sin(T*6));   // mucho más sutil que antes (era 0.3 + 0.18)
         ctx.fillStyle = vigRed; ctx.fillRect(0, 0, W, H);
         ctx.globalAlpha = 1;
       }
@@ -2266,35 +2689,48 @@
                : [cl(Math.abs(255*(player.health-0.5)-255)), cl(255*player.health), 0];
       const sc = player.shieldOverheat > 0 ? [ri(100,150),0,0] : player.shieldCD === 0 ? [52,204,255] : [26,102,127];
 
-      const bx = xper(0.008), bw = xper(0.17);
-      // barra de VIDA: redondeada, con gradiente, brillo glossy y rim
-      const hy = yper(0.012), bh = yper(0.028), hf = clampN(player.health, 0, 1);
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; roundRectPath(bx, hy, bw, bh, bh/2); ctx.fill();
-      ctx.save(); roundRectPath(bx, hy, bw, bh, bh/2); ctx.clip();
-      const hg = ctx.createLinearGradient(bx, hy, bx, hy+bh);
-      hg.addColorStop(0, rgb(modifyColorPerc(hc,1.5))); hg.addColorStop(1, rgb(modifyColorPerc(hc,0.7)));
-      ctx.fillStyle = hg; ctx.fillRect(bx, hy, bw*hf, bh);
-      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.22; ctx.fillStyle = '#fff'; ctx.fillRect(bx, hy, bw*hf, bh*0.42);
-      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.restore();
-      roundRectPath(bx, hy, bw, bh, bh/2); ctx.strokeStyle = rgb(modifyColorPerc(hc,1.9)); ctx.lineWidth = Math.max(1, sper(0.0022)); ctx.stroke();
-      // barra de ESCUDO: más finita, con divisiones por unidad de carga
-      const sy = yper(0.047), sbw = xper(0.15), sbh = yper(0.02);
-      ctx.fillStyle = 'rgba(0,0,0,0.5)'; roundRectPath(bx, sy, sbw, sbh, sbh/2); ctx.fill();
-      ctx.save(); roundRectPath(bx, sy, sbw, sbh, sbh/2); ctx.clip();
-      const sg = ctx.createLinearGradient(bx, sy, bx, sy+sbh);
-      sg.addColorStop(0, rgb(modifyColorPerc(sc,1.5))); sg.addColorStop(1, rgb(modifyColorPerc(sc,0.7)));
-      ctx.fillStyle = sg; ctx.fillRect(bx, sy, sbw*Math.max(0,charge), sbh);
-      ctx.fillStyle = 'rgba(0,0,0,0.6)';
-      for (let i = 1; i < maxCharge; i++) ctx.fillRect(bx + sbw/maxCharge*i - 1, sy, 2, sbh);
+      // ── columna sup-izquierda: VIDA · FURIA · ESCUDO (compactas, alineadas) ──
+      const bx = xper(0.01), bw = xper(0.15), gap = yper(0.0065);
+      // VIDA
+      const hy = yper(0.016), bh = yper(0.022), hf = clampN(player.health, 0, 1);
+      hudBar(bx, hy, bw, bh, hf, hc);
+      if (player.health > 1) {                                  // overheal (tope 1.5): franja celeste extra
+        ctx.save(); roundRectPath(bx, hy, bw, bh, bh/2); ctx.clip();
+        ctx.globalCompositeOperation = 'lighter';
+        const ov = clampN((player.health - 1) / 0.5, 0, 1);
+        const og = ctx.createLinearGradient(bx, hy, bx, hy+bh);
+        og.addColorStop(0, 'rgba(190,248,255,0.95)'); og.addColorStop(1, 'rgba(90,205,255,0.6)');
+        ctx.fillStyle = og; ctx.fillRect(bx, hy, bw*ov, bh);
+        ctx.globalCompositeOperation = 'source-over'; ctx.restore();
+      }
+      // FURIA (abajo de la vida): carga peleando (rojo→naranja); llena pulsa (lista p/ Q o botón); en furia, drena el tiempo
+      const raging = player.powerModeActiveTime > 0;
+      const rf = raging ? player.powerModeActiveTime / RAGE_DURATION : player.rage, rdy = player.rage >= 1 && !raging;
+      const fc = raging ? [255, ri(150,220), 35] : rdy ? [255,170,25] : [255,100,25];   // naranja VIVO (bien distinto del cian del escudo)
+      const fbw = bw * 0.76, fbh = yper(0.0105);   // más ANGOSTA y finita que vida/escudo → se distingue de un vistazo
+      const fy = hy + bh + gap;
+      hudBar(bx, fy, fbw, fbh, rf, fc);
+      if (rdy) {   // LISTA para activar: contorno brillante + glow que SIGUEN el borde de la barra (sin círculo)
+        const pulse = 0.55 + 0.45*Math.sin(T*8), ox = bx-1.5, oy = fy-1.5, ow = fbw+3, oh = fbh+3, orr = oh/2;
+        ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.5*pulse;
+        roundRectPath(ox, oy, ow, oh, orr); ctx.strokeStyle = rgb(fc); ctx.lineWidth = sper(0.006); ctx.stroke();   // glow del contorno (halo ancho aditivo)
+        ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
+        roundRectPath(ox, oy, ow, oh, orr); ctx.strokeStyle = rgb(modifyColorPerc(fc, 2.4)); ctx.lineWidth = Math.max(1.5, sper(0.0026)); ctx.stroke();   // contorno fino brillante
+      }
+      // ESCUDO (con divisiones por unidad de carga)
+      const sy = fy + fbh + gap, sbh = yper(0.014);
+      hudBar(bx, sy, bw, sbh, Math.max(0,charge), sc);
+      ctx.save(); roundRectPath(bx, sy, bw, sbh, sbh/2); ctx.clip();
+      ctx.fillStyle = 'rgba(0,0,0,0.55)';
+      for (let i = 1; i < maxCharge; i++) ctx.fillRect(bx + bw/maxCharge*i - 0.75, sy, 1.5, sbh);
       ctx.restore();
-      roundRectPath(bx, sy, sbw, sbh, sbh/2); ctx.strokeStyle = rgb(modifyColorPerc(sc,1.9)); ctx.lineWidth = Math.max(1, sper(0.002)); ctx.stroke();
-      // moneda (oro abombado) + plata + score, con glow
-      const ciX = xper(0.018), ciY = yper(0.088), cir = sper(0.012);
-      glow(ciX, ciY, cir*1.5, [255,210,60], 0.3);
+      // ── ORO + SCORE (compactos, debajo) ──
+      const cir = sper(0.0092), ciX = xper(0.018), ciY = sy + sbh + yper(0.024);
+      glow(ciX, ciY, cir*1.4, [255,210,60], 0.3);
       radialFill(ciX, ciY, cir, [255,240,150], [205,150,12]); circle(ciX, ciY, cir, [255,235,120], Math.max(1, cir*0.16));
-      textGlow(String(player.money), [255,225,90], ciX + cir*1.5, ciY, sper(0.026), 'left');
-      textGlow('SCORE ' + player.score, [235,240,255], xper(0.1), ciY, sper(0.02), 'left');
-      if (player.moneyToAdd > 0) textGlow('+' + player.moneyToAdd, [255,225,90], ciX, yper(0.118), sper(0.019), 'left');
+      textGlow(String(player.money), [255,225,90], ciX + cir*1.6, ciY, sper(0.021), 'left');
+      textGlow('SCORE ' + player.score, [235,240,255], xper(0.095), ciY, sper(0.0165), 'left');
+      if (player.moneyToAdd > 0) textGlow('+' + player.moneyToAdd, [255,225,90], ciX, ciY + yper(0.028), sper(0.0155), 'left');
 
       // pips de misiles, columna abajo-izquierda (subidos ~50px para no pisar el botón de salir).
       // Un puntito por misil hasta MISSILE_MAX (4), en COLOR DEL JUGADOR. El que se está regenerando muestra
@@ -2323,10 +2759,11 @@
       const ax = aimX - camX, ay = aimY - camY;
       const recoil = Math.max(player.primaryShotCD*150/player.primaryShotAS*0.01, 1);
       const cc = (player.powerModeActiveTime <= 0 && (player.secondaryShotCD > 0 || player.missileStack <= 0)) ? [75,75,75] : modifyColorPerc(player.color,3);
-      // marcador de LOCK-ON del imán: 4 arcos girando alrededor del blanco enganchado (solo touch)
+      // marcador de LOCK-ON: 4 arcos girando alrededor del blanco bajo la mira (enemigo / lootbox / caja).
+      // En touch lo arma el imán; en desktop aparece cuando el cursor está sobre el blanco.
       if (aimLockTarget) {
         const lx = aimLockTarget.x - camX, ly = aimLockTarget.y - camY;
-        const lr = aimLockTarget.radius*1.8 + sper(0.003)*Math.sin(T*6);
+        const lr = aimLockTarget.r*1.8 + sper(0.003)*Math.sin(T*6);
         ctx.strokeStyle = rgb(cc); ctx.lineWidth = sper(0.0022);
         for (let i = 0; i < 4; i++) {
           const a0 = T*2.5 + i*Math.PI/2;
@@ -2349,6 +2786,8 @@
       drawMinimap();
     }
 
+    drawPopups();   // texto flotante (+score / premios) en coords pantalla, nítido
+
     // banner de oleada: entra deslizándose, se sostiene y se va (con aviso pulsante si es de jefe)
     if (manager.banner) {
       const b = manager.banner;
@@ -2365,6 +2804,25 @@
         }
         ctx.globalAlpha = 1;
       }
+    }
+
+    if (manager.paused && !manager.menu && !manager.gameover && !manager.victory) {
+      ctx.fillStyle = 'rgba(5,7,12,0.66)'; ctx.fillRect(0, 0, W, H);   // sólo velo
+      // un solo cartel: "Pausa", grande y prolijo — tracking de letras + contorno oscuro + bloom cian + relleno
+      // con gradiente (blanco arriba → celeste abajo). Sin símbolo, sin recuadro, sin parpadeo.
+      const cx = W/2, cy = H*0.5, size = sper(0.13);
+      ctx.save();
+      ctx.font = '800 ' + Math.round(size) + "px 'Segoe UI', system-ui, sans-serif";
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+      ctx.letterSpacing = Math.round(size * 0.06) + 'px';                 // tracking (ignorado si el browser no lo soporta)
+      ctx.lineWidth = Math.max(2, size * 0.13); ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.strokeText('Pausa', cx, cy);
+      ctx.globalCompositeOperation = 'lighter'; ctx.globalAlpha = 0.4;
+      ctx.fillStyle = 'rgb(90,200,255)'; ctx.fillText('Pausa', cx, cy);   // bloom suave
+      ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+      const tg = ctx.createLinearGradient(0, cy - size*0.55, 0, cy + size*0.55);
+      tg.addColorStop(0, '#ffffff'); tg.addColorStop(1, '#bfe8ff');
+      ctx.fillStyle = tg; ctx.fillText('Pausa', cx, cy);
+      ctx.restore();
     }
 
     if (manager.victory) {
@@ -2399,10 +2857,11 @@
   function startGame() {
     Composite.clear(world, false);                 // saca todos los cuerpos (tanques + muros) del mundo
     physAcc = 0;
-    tanks = []; enemies = []; shots = []; coins = []; walls = []; explosions = []; lootBoxes = [];
+    tanks = []; enemies = []; shots = []; coins = []; walls = []; explosions = []; lootBoxes = []; mines = [];
     toRemove.clear();
-    manager.waveTime = 0; manager.waveNumber = 0; manager.gameover = false; manager.victory = false; manager.scoreEffectCD = 0; manager.lootBoxCD = 0;
-    manager.menu = false;                                      // salir del menú
+    manager.waveTime = 0; manager.waveNumber = 0; manager.gameover = false; manager.victory = false; manager.scoreEffectCD = 0; manager.lootBoxCD = 0; manager.mineCD = 0;
+    manager.menu = false; manager.paused = false;              // salir del menú
+    { const b = document.getElementById('btnPause'); if (b) b.classList.remove('on'); }   // ícono pausa a "barras"
     if (typeof menuPanel !== 'undefined') menuPanel.classList.remove('show');
     document.body.classList.remove('inMenu');
     if (typeof toggleShop === 'function') toggleShop(false);   // cerrar tienda si estaba abierta
@@ -2425,20 +2884,42 @@
     for (const s of toRemove) {
       if (tanks.includes(s)) {
         tanks.splice(tanks.indexOf(s),1); if (s.body) World.remove(world, s.body);
-        new Explosion(s.x,s.y,s.radius);
-        if (inView(s.x, s.y, 100)) {   // restos del tanque volando + sacudón (más grande = más fuerte)
-          burst(s.x, s.y, modifyColorPerc(s.color, 2), 22, sper(0.3), 0.8, sper(0.005));
-          addShake(Math.min(sper(0.01), s.radius * 0.35));
+        const seen = inView(s.x, s.y, 200);
+        if (s.isPlayer) {
+          new Explosion(s.x, s.y, s.radius);
+          if (seen) { burst(s.x, s.y, modifyColorPerc(s.color, 2), 22, sper(0.3), 0.8, sper(0.005)); addShake(Math.min(sper(0.012), s.radius * 0.4)); }
+        } else {
+          // muerte de ENEMIGO: MUCHO más llamativa — estallido grande TEÑIDO con su color (onda + chispas de color)
+          // + un núcleo de fuego, lluvia de restos en su color, chispas claras veloces y más sacudón.
+          new Explosion(s.x, s.y, s.radius * 2.4, s.color);
+          if (seen) {
+            new Explosion(s.x, s.y, s.radius * 1.3);                                   // núcleo de fuego blanco-naranja
+            burst(s.x, s.y, modifyColorPerc(s.color, 1.8), 30, sper(0.45), 0.85, sper(0.006));
+            burst(s.x, s.y, [255, 240, 180], 14, sper(0.55), 0.5, sper(0.004));        // chispas claras veloces
+            addShake(Math.min(sper(0.016), s.radius * 0.6));
+          }
         }
       }
       if (enemies.includes(s)) enemies.splice(enemies.indexOf(s),1);
       if (shots.includes(s)) {
         shots.splice(shots.indexOf(s),1);
-        // explosioncita solo si se ve: los disparos que mueren lejos (errados, fuera de vista) no generan basura
-        if (inView(s.x, s.y, 150)) new Explosion(s.x,s.y,s.missile?s.radius*2:s.radius/2);
+        // explosión sólo si se ve (los tiros que mueren lejos no generan basura). El MISIL revienta GRANDE y
+        // llamativo: aro ancho + lluvia de chispas + núcleo extra + fogonazo claro + sacudón. El cañón, chiquito.
+        if (inView(s.x, s.y, 200)) {
+          if (s.missile) {
+            const R = Math.max(s.radius * 9, sper(0.04));     // aro/radio MUCHO más grandes
+            new Explosion(s.x, s.y, R);
+            new Explosion(s.x, s.y, R * 0.5);                 // segundo núcleo de fuego (más cuerpo)
+            burst(s.x, s.y, [255, 235, 160], 20, sper(0.55), 0.5, sper(0.005));   // chispas claras veloces
+            addShake(sper(0.009));
+          } else {
+            new Explosion(s.x, s.y, s.radius / 2);
+          }
+        }
       }
       if (coins.includes(s)) coins.splice(coins.indexOf(s),1);
       if (lootBoxes.includes(s)) lootBoxes.splice(lootBoxes.indexOf(s),1);
+      if (mines.includes(s)) mines.splice(mines.indexOf(s),1);
       if (walls.includes(s)) { walls.splice(walls.indexOf(s),1); if (s.body) World.remove(world, s.body); }
       if (explosions.includes(s)) explosions.splice(explosions.indexOf(s),1);
     }
@@ -2483,60 +2964,53 @@
     const shX = camShake ? rnd(-camShake, camShake) : 0, shY = camShake ? rnd(-camShake, camShake) : 0;
 
     // Transform: pantalla → fondo "afuera del mundo" más oscuro; después translate de cámara (+shake) →
-    // coords de MUNDO. Queda puesto ANTES del update porque el escudo se dibuja durante process() (igual
-    // que el original) y si no lo borraría.
+    // coords de MUNDO. Queda ANTES del update porque el escudo se dibuja durante process() (igual que el original).
     ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, 0, 0);
-    ctx.fillStyle = rgb(modifyColorPerc(background, 0.45)); ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = rgb(modifyColorPerc(background, 0.45)); ctx.fillRect(0, 0, W, H);
     ctx.translate(-camX + shX, -camY + shY);
     rectFill(0, 0, WORLD_W, WORLD_H, background);   // piso del mundo
     drawBackdrop();                                  // grilla + deco + borde del mundo
 
-    // update. En el MENÚ sólo corren explosiones de fondo (flair); el juego no procesa. Con la tienda abierta
-    // se pausa todo (como el original con TAB).
+    // update. En el MENÚ corren sólo explosiones; con tienda abierta o en PAUSA, el juego se congela.
     if (manager.menu) {
       manager.menuEffectCD -= dt;
       if (manager.menuEffectCD <= 0) { new Explosion(camX + rnd(0,W), camY + rnd(0,H), rnd(sper(0.0064), sper(0.0128))); manager.menuEffectCD = 0.05; }
       for (const e of explosions) e.process();
       purge();
-    } else if (!manager.shopOpen) {
+    } else if (!manager.shopOpen && !manager.paused) {
       manager.process();
       for (const w of walls) w.process();
       const prevPX = player ? player.x : null, prevPY = player ? player.y : null;
-      // Control hand-rolled de cada tanque (setea la velocidad de su cuerpo de matter)…
       for (const t of tanks) t.process();
-      // …matter integra y resuelve choques (tanque↔muro, tanque↔tanque)…
       stepPhysics(dt);
-      // …y leemos las posiciones corregidas de vuelta a los objetos del juego, con CERCO DURO del mundo:
-      // el borderPush es un resorte (~37 px/s) que el boost/power mode vence — sin este clamp podías salirte
-      // del mapa y pelear fuera de la vista (la cámara clampea al mundo).
+      // readback de matter + CERCO DURO del mundo (el borderPush solo no contiene con boost/power)
       for (const t of tanks) if (t.body) {
         t.x = t.body.position.x; t.y = t.body.position.y;
         const hx = clampN(t.x, t.radius, WORLD_W - t.radius), hy = clampN(t.y, t.radius, WORLD_H - t.radius);
         if (hx !== t.x || hy !== t.y) { t.x = hx; t.y = hy; Body.setPosition(t.body, { x: hx, y: hy }); }
       }
-      // TOUCH: la mira ACOMPAÑA al tanque (mantiene el offset relativo al moverte — manejás el tanque y la
-      // mira viaja con vos; la palanca derecha ajusta el offset). Con mouse no: ahí manda el cursor.
-      // Con LOCK del imán tampoco: la mira se queda clavada al blanco aunque muevas el tanque (el imán la
-      // sigue centrando solo); si acompañara al tanque, le pelearía al lock en cada strafe.
+      // TOUCH sin lock: la mira ACOMPAÑA al tanque (offset relativo); con lock se queda clavada al blanco
       if (player && prevPX !== null && mouseSX < 0 && !aimLockTarget) { aimX += player.x - prevPX; aimY += player.y - prevPY; }
       for (const s of shots) s.process();
       for (const c of coins) c.process();
       for (const b of lootBoxes) b.process();
+      for (const m of mines) m.process();
       for (const e of explosions) e.process();
       updateParts(); updatePopups();
       purge();
     }
 
-    // draw (coords de mundo, culleado a la vista — con mundo 6× hay mucho fuera de cámara)
+    // draw del MUNDO (en el buffer, culleado a la vista)
     const camRect = [camX - 60, camY - 60, W + 120, H + 120];
     for (const w of walls) if (rectCollision(camRect, [w.x, w.y, w.width, w.height])) w.draw();
+    for (const m of mines) if (inView(m.x, m.y, m.radius*6)) m.draw();
     for (const b of lootBoxes) if (inView(b.x, b.y, b.radius*4)) b.draw();
     for (const t of tanks) if (t.isPlayer || inView(t.x, t.y, t.radius*5)) t.draw();
     for (const s of shots) if (inView(s.x, s.y, s.radius*12)) s.draw();
     for (const e of explosions) if (inView(e.x, e.y, e.radius + 80)) e.draw();
     drawParts();
     for (const c of coins) if (inView(c.x, c.y, c.radius*4)) c.draw();   // monedas ENCIMA de todo (solo HUD las tapa)
-    drawPopups();
+    // (los popups de texto se dibujan en drawHUD, sobre el canvas nítido — en el buffer pixel-art quedarían borrosos)
 
     // HUD en coords de PANTALLA (sin cámara ni shake)
     ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, 0, 0);

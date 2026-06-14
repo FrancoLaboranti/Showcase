@@ -23,16 +23,7 @@
     cursor: none;                                                                /* hide the OS cursor — we draw our own dot at the steering point (port of pygame.mouse.set_visible(False)) */
   }
 
-  #hint {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    max-width: min(88vw, 480px);
-    background: rgba(8,16,8,0.78); border: 1px solid rgba(120,255,120,0.22);
-    padding: 12px 20px; border-radius: 14px;
-    text-align: center; color: rgba(180,255,180,0.95);
-    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
-    pointer-events: none; transition: opacity 0.8s; z-index: 2;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
-  }
+  #hint { display: none; }   /* cartelito de inicio oculto a propósito */
 
   /* ── Controles FLOTANTES sobre el canvas, sin barra (estilo TankWARS/CrazyTanks) ── */
 
@@ -40,10 +31,10 @@
   #padMenu {
     position: absolute; top: calc(env(safe-area-inset-top) + 8px);
     right: calc(env(safe-area-inset-right) + 8px);
-    z-index: 10; display: flex; gap: 8px;
+    z-index: 10; display: flex; gap: 5px;
   }
   #padMenu button {
-    width: 34px; height: 34px; border-radius: 50%;
+    width: 29px; height: 29px; border-radius: 50%;
     border: 1px solid rgba(0,255,140,0.3);
     background: rgba(0,40,25,0.5);
     color: rgba(180,255,210,0.9);
@@ -51,7 +42,7 @@
     cursor: pointer; touch-action: none; padding: 0;
     transition: background 0.1s, transform 0.08s, border-color 0.12s;
   }
-  #padMenu button svg { display: block; width: 16px; height: 16px; pointer-events: none; }
+  #padMenu button svg { display: block; width: 14px; height: 14px; pointer-events: none; }
   #padMenu button:active { background: rgba(0,255,140,0.28); transform: scale(0.9); }
   #padMenu button.on { background: rgba(0,255,140,0.3); border-color: rgba(0,255,140,0.6); color: #fff; }
   #btnFs .ic-exit { display: none; }
@@ -135,21 +126,33 @@
   #levelup.show { display: flex; }
   #luTitle { color: #eafff6; font-size: 26px; font-weight: 800; letter-spacing: 0.04em; text-shadow: 0 0 18px rgba(0,255,190,0.7); }
   #luSub { color: rgba(180,255,220,0.8); font-size: 13px; margin-top: -8px; letter-spacing: 0.04em; }
-  #luCards { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; max-width: min(94vw, 540px); }
+  #luCards { display: flex; flex-direction: column; gap: 9px; width: min(92vw, 400px); }
+  /* Carta de mejora: 1 por fila (ícono | terse+desc | pill). Borde+glow por RAREZA (--rc/--rg), pop de entrada. */
   .luCard {
-    width: 150px; min-height: 142px; border-radius: 16px; padding: 14px 12px; cursor: pointer;
-    border: 1px solid rgba(0,255,140,0.35);
-    background: linear-gradient(160deg, rgba(0,60,40,0.6), rgba(0,22,16,0.72));
-    color: #eafff2; display: flex; flex-direction: column; gap: 7px; touch-action: none; text-align: left;
-    transition: transform 0.08s ease, border-color 0.12s ease, box-shadow 0.12s ease;
-    box-shadow: inset 0 0 18px rgba(0,255,150,0.08), 0 6px 22px -8px rgba(0,255,150,0.4);
+    width: 100%; border-radius: 14px; padding: 10px 14px; cursor: pointer; position: relative;
+    --rc: #e6edf2; --rg: rgba(225,236,242,0.55);                                  /* color de RAREZA (se setea inline por carta) */
+    border: 2px solid var(--rc); color: #eafff2; touch-action: none; text-align: left;
+    display: flex; flex-direction: row; align-items: center; gap: 12px;
+    background: linear-gradient(160deg, rgba(8,26,30,0.78), rgba(4,14,16,0.86));
+    box-shadow: inset 0 0 16px rgba(0,0,0,0.4), 0 0 18px -2px var(--rg);
+    transition: transform 0.08s ease, box-shadow 0.12s ease;
+    animation: luPop 0.22s ease both;
   }
-  .luCard:active { transform: scale(0.95); border-color: rgba(120,255,200,0.95); box-shadow: 0 0 26px rgba(0,255,150,0.55); }
-  .luCard .luIco { font-size: 26px; line-height: 1; }
-  .luCard .luName { font-weight: 800; font-size: 15px; }
-  .luCard .luDesc { font-size: 12px; line-height: 1.35; color: rgba(200,255,230,0.85); }
-  .luCard.passive { border-color: rgba(255,200,90,0.55); background: linear-gradient(160deg, rgba(70,52,0,0.55), rgba(26,18,0,0.72)); }
-  .luCard.passive .luName { color: #ffe6a8; }
+  .luCard.shine { animation: luPop 0.22s ease both, luGlow 1.3s ease-in-out infinite; } /* legendario/mítico: pulso de glow */
+  .luCard:active { transform: scale(0.97); box-shadow: 0 0 26px var(--rg); }
+  .luCard .luIco { font-size: 26px; line-height: 1; flex-shrink: 0; }
+  .luCard .luBody { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+  .luCard .luTerse { font-weight: 800; font-size: 16px; line-height: 1.1; }
+  .luCard .luDesc { font-size: 11px; line-height: 1.2; color: rgba(200,235,225,0.7); }
+  .luPill { flex-shrink: 0; font-size: 9px; font-weight: 800; letter-spacing: 0.08em;
+            padding: 2px 7px; border-radius: 6px; color: #06121a; background: var(--rc); }
+  @keyframes luPop { from { opacity: 0; transform: scale(0.82) translateY(10px); } to { opacity: 1; transform: none; } }
+  @keyframes luGlow { 0%,100% { box-shadow: inset 0 0 16px rgba(0,0,0,0.4), 0 0 16px -2px var(--rg); }
+                       50%     { box-shadow: inset 0 0 16px rgba(0,0,0,0.4), 0 0 32px 2px var(--rg); } }
+  #luReroll { margin-top: 4px; min-height: 44px; padding: 0 18px; border-radius: 999px; touch-action: none;
+              font: 700 13px 'Segoe UI', system-ui, sans-serif; color: #bfeaff; cursor: pointer;
+              background: rgba(40,90,120,0.5); border: 1px solid rgba(120,200,255,0.5); }
+  #luReroll.disabled { opacity: 0.4; pointer-events: none; }
 
 </style>
 </head>
@@ -160,6 +163,7 @@
     <div id="luTitle">¡NIVEL <span id="luLvl">2</span>!</div>
     <div id="luSub">elegí una mejora</div>
     <div id="luCards"></div>
+    <button id="luReroll" type="button">↻ Rebarajar (1)</button>
   </div>
   <div id="padMenu">
     <button id="btnPause" aria-label="pausa" title="Pausa">
@@ -168,11 +172,11 @@
     <button id="btnReset" aria-label="reiniciar" title="Reiniciar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
     </button>
-    <button id="btnDebug" aria-label="debug" title="Info / debug">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
-    </button>
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+    </button>
+    <button id="btnDebug" aria-label="debug" title="Info / debug">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
     <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -220,17 +224,30 @@
   const easeOutBack = t => { const c1 = 1.70158, c3 = c1 + 1, u = t - 1; return 1 + c3*u*u*u + c1*u*u; }; // pop con leve rebote
   const smoothstep = t => t*t*(3 - 2*t);                                          // S(0)=0,S(1)=1,S'(0)=S'(1)=0 → base del perfil del dash (sin tirón)
   // Tipos de estrella DEFINIDOS: color fijo + puntos. Las de más puntos son más raras (menor weight).
-  const STAR_TYPES = [
-    { hue: 45,  points: 100, weight: 48 },                                        // ámbar (la original) — la más común
-    { hue: 135, points: 200, weight: 27 },                                        // verde
-    { hue: 280, points: 300, weight: 17 },                                        // violeta
-    { hue: 210, points: 400, weight: 8  },                                        // azul — la más rara
+  // ════════════════ RAREZAS UNIFICADAS (las ESTRELLAS y las MEJORAS comparten estos 6 tiers) ════════════════
+  // Por tier: color (hue/sat/light para estrella+partículas, col/glow para cartas), ESTRELLA (points + peso sw),
+  // MEJORA (RF = multiplicador del efecto sobre el baseline + peso uw). Común = blanca/clarita (casi sin color).
+  const RARITY = [
+    { id:'comun',      label:'COMÚN',      hue:205, sat:18,  light:82, col:'#e6edf2', glow:'rgba(225,236,242,0.55)', points:50,   sw:45, RF:1,    uw:60   },
+    { id:'especial',   label:'ESPECIAL',   hue:146, sat:90,  light:47, col:'#0ce469', glow:'rgba(12,228,105,0.62)', points:200,  sw:25, RF:1.25, uw:25   },
+    { id:'raro',       label:'RARO',       hue:208, sat:92,  light:60, col:'#48b4ff', glow:'rgba(72,180,255,0.7)',   points:400,  sw:15, RF:1.5,  uw:10   },
+    { id:'epico',      label:'ÉPICO',      hue:280, sat:90,  light:62, col:'#c06bff', glow:'rgba(192,107,255,0.72)', points:600,  sw:10, RF:2,    uw:4    },
+    { id:'legendario', label:'LEGENDARIO', hue:48,  sat:100, light:58, col:'#ffd23a', glow:'rgba(255,210,58,0.9)',   points:800,  sw:4,  RF:3,    uw:0.9  },
+    { id:'mitico',     label:'MÍTICO',     hue:0,   sat:92,  light:58, col:'#ff4040', glow:'rgba(255,64,64,0.92)',   points:1000, sw:1,  RF:5,    uw:0.1  },
   ];
-  const STAR_WEIGHT = STAR_TYPES.reduce((s, t) => s + t.weight, 0);
-  function pickStarType() {
+  const RAR_BY_ID = {};
+  RARITY.forEach((R, i) => { R.tier = i + 1; RAR_BY_ID[R.id] = R; });
+  const STAR_WEIGHT = RARITY.reduce((s, R) => s + R.sw, 0);                        // total para ESTRELLAS (45/25/15/10/4/1)
+  const UPG_WEIGHT  = RARITY.reduce((s, R) => s + R.uw, 0);                        // total para MEJORAS  (60/25/10/4/.9/.1)
+  function pickStarType() {                                                        // estrella: sorteo ponderado por sw → devuelve una RAREZA
     let r = Math.random() * STAR_WEIGHT;
-    for (const t of STAR_TYPES) { if ((r -= t.weight) < 0) return t; }
-    return STAR_TYPES[0];
+    for (const R of RARITY) { if ((r -= R.sw) < 0) return R; }
+    return RARITY[0];
+  }
+  function rollRarity() {                                                          // mejora: sorteo ponderado por uw (probabilidades FIJAS)
+    let r = Math.random() * UPG_WEIGHT, a = 0;
+    for (const R of RARITY) { if (r < (a += R.uw)) return R; }
+    return RARITY[0];
   }
   const DEATH_FADE = 1.6, DEATH_TEXT_DELAY = 0.7;                                 // game over: vida media de las partículas y delay del texto
   const WORLD_FACTOR = 1.7;                                                       // radio del lago = sper(WORLD_FACTOR) (mundo circular grande; cámara fija en la cabeza)
@@ -243,6 +260,40 @@
   const LEN_GROW_FRAC = 0.3;                                                      // qué fracción del crecimiento va al LARGO (el resto es engorde). Bajalo si se sigue amontonando; 0 = sólo engorda
   const AGILITY_DROP = 0.4;                                                       // pérdida de agilidad de giro proporcional al engorde (gorda = gira más lento)
   const ENEMY_TARGET = 8;                                                         // cuántas serpientes enemigas mantener en juego (más población)
+  const LOAD_TIME = 1.0;                                                          // pantalla de "Cargando" al arrancar (s): congela el juego y da tiempo a que cargue la foto del fondo
+  // ── BOSSES: criaturas grandes con barra ON-SCREEN. Aparecen CADA 10 NIVELES y ROTAN entre 3 tipos
+  //    (pez globo → pez piedra → pez linterna). Las enemigas normales SIGUEN apareciendo durante la pelea. ──
+  const BOSS_FIRST_LEVEL = 5, BOSS_LEVEL_STEP = 5;                                // TEST: jefes a nivel 5/10/15/20 (globo/piedra/linterna/globo...) para verlos rápido. PRODUCCIÓN: poné 10 y 10 (cada 10 niveles)
+  const BOSS_HP_BASE = 240, BOSS_HP_GROW = 75;                                   // vida del jefe — ×8 sobre el nerfeo previo (45/19): más tanques. (Original era 900/380.) El daño que hacen sigue suave (ver *_DMG)
+  const BOSS_KILL_SCORE = 1200 + BOSS_HP_BASE*2;                                                   // bonus de score por matar un jefe
+  // PEZ GLOBO (puffer): cicla desinflado↔inflado; vulnerable al dash DESINFLADO, muerde con púas inflado
+  const PUFFER_R_F = 0.075, PUFFER_SPEED_F = 0.16;
+  const PUFFER_DEFLATE_T = 3.6, PUFFER_INFLATE_WIND = 0.55, PUFFER_INFLATE_T = 2.6, PUFFER_DEFLATE_WIND = 0.45;
+  const PUFFER_SPIKE_DMG = 16, PUFFER_SPIKES = 16, PUFFER_ARMOR_INFLATED = 0.82;   // daño bajado (era 16) para ser más amable
+  // PEZ PIEDRA (stone): camuflado y quieto; embosca con aguijón VENENOSO (DoT); vulnerable SÓLO al recuperar
+  const STONE_R_F = 0.068, STONE_SPEED_F = 0.20, STONE_DETECT_F = 0.22;
+  const STONE_PROWL_SPEED_F = 0.08, STONE_WANDER_T = 2.4;                          // MERODEA el arrecife (ya no se queda quieto): nada hacia waypoints
+  const STONE_FOLLOW_F = 0.5, STONE_CHASE_SPEED_F = 0.12;                          // si te acercás un toque deja de vagar y te PERSIGUE (como las otras enemigas), más rápido que merodeando
+  const STONE_ARM_CD = 1.1;                                                        // tras aguijonear no vuelve a cargar por este tiempo (anti-spam)
+  const STONE_TELE_T = 1, STONE_STRIKE_T = 0.26, STONE_STRIKE_SPEED_F = 2.0, STONE_RECOVER_T = 1.4; // telegrafía más larga (se entiende cuándo va a golpear); strike colisiona SWEPT → no tunelea
+  const STONE_ARMOR_IDLE = 0.30, STONE_VENOM_DMG = 20, STONE_VENOM_DPS = 5, STONE_VENOM_T = 4; // veneno (DoT) — al conectar BLOQUEA la regen STONE_VENOM_T s
+  // PEZ LINTERNA (angler): OSCURECE la escena + señuelo + cono de luz; muerde y se teletransporta; vulnerable BOCA ABIERTA
+  const ANGLER_R_F = 0.072, ANGLER_SPEED_F = 0.13;
+  const ANGLER_LURE_T = 2.5, ANGLER_DARK_T = 1.1;
+  const ANGLER_AGGRO_F = 0.5;                                                      // acecha hasta que entrás en este radio → ARMA la embestida (× sper)
+  const ANGLER_WINDUP_T = 0.55;                                                    // TELEGRAFÍA: se frena, apunta, retrocede y abre la boca; el cono se pone ROJO (aviso claro)
+  const ANGLER_LUNGE_T = 0.5, ANGLER_LUNGE_SPEED_F = 1.2;                          // EMBESTIDA: dash recto BOCA ABIERTA = ventana para contraatacar (no corrige rumbo → esquivable)
+  const ANGLER_RECOVER_T = 1.5;                                                    // enfriamiento tras morder/errar — NO vuelve a lanzarse de inmediato
+  const ANGLER_STAGGER_T = 1.2;                                                    // si lo CONTRAATACÁS en plena embestida: aturdido, inmóvil y super expuesto (y NO te muerde)
+  const ANGLER_TP_CD = 7, ANGLER_TP_FAR_F = 0.85;                                  // teletransporte: si te alejás > sper(ANGLER_TP_FAR_F) (o cada ANGLER_TP_CD s estando fuera de rango)
+  const ANGLER_BITE_DMG = 40, ANGLER_BITE_REACH_F = 0.02, ANGLER_ARMOR_CLOSED = 0.80; // boca cerrada = muy blindado (apenas le rascás); pegale BOCA ABIERTA
+  const ANGLER_COUNTER_MULT = 2.0, ANGLER_CONE_HALF = 0.5, ANGLER_CONE_LEN_F = 0.42; // CRIT al contraatacar en plena embestida (daño claramente mayor + lo aturde)
+  const BOSS_TYPES = {                                                            // tabla por tipo (estilo "inline data tables" del repo); sólo factores, sper() se llama en runtime
+    puffer: { name: 'Puffer',    hue: 282, rF: PUFFER_R_F, speedF: PUFFER_SPEED_F },
+    stone:  { name: 'Stone',   hue: 38,  rF: STONE_R_F,  speedF: STONE_SPEED_F },
+    angler: { name: 'Angler', hue: 168, rF: ANGLER_R_F, speedF: ANGLER_SPEED_F },
+  };
+  const BOSS_ROTATION = ['stone','puffer', 'stone', 'angler'];                            // orden de rotación por cada jefe aparecido
   const ENEMY_HUES = [5, 22, 60, 225, 255, 275];                                  // paleta más amplia (rojo/naranja/amarillo/azul/índigo/violeta) → menos coincidencias de color casuales
   const ENEMY_MAX_LEN = 130;                                                      // tope de largo de un enemigo (perf)
   const WAVE_TOTAL = 0.2;                                                          // duración de la onda de "respiración" (igual que el wave_time_total del jugador)
@@ -258,6 +309,7 @@
   const STRIKE_PEAK = 0.76;                                                        // dónde (0..1) cae el PICO de la embestida: 0.30 = arranque rápido/snap; 0.5 = simétrico. NO cambia el alcance neto (sólo el carácter del golpe)
   const ATTACK_HIT_F = 0.085;                                                      // RADIO de impacto (× sper): durante la embestida, el daño SÓLO cae si la cabeza llega a esta distancia del rival; sino erra
   const HAZARD_DMG = 14;                                                           // vida que saca una mina (más fuerte)
+  const BORDER_DPS = 22;                                                           // daño POR SEGUNDO del borde del lago: ya no mata de una, te quema mientras estás pegado a la orilla (regen lo contrarresta apenas te despegás)
   const HP_REGEN = 1;                                                              // regeneración de vida por segundo
   const HEAL_RATE = 12;                                                            // velocidad de curación de la estrella (HP/s): la cura entra POR TIEMPO, no de golpe
   const SIZE_DMG_MAX = 0.5;                                                         // bonus de daño máximo por ser MÁS GRANDE que la víctima (+50%); 0 a igual tamaño
@@ -277,7 +329,7 @@
   // ── NIVELES (XP MIXTA): matar suma mucho, comer suma poco. Al llenar la barra subís de nivel y elegís 1 de 3
   //    mejoras (stats base + alguna pasiva). El umbral crece por nivel. ──
   const XP_KILL = 10, XP_EAT = 1;                                                  // XP por matar una enemiga / por comer una estrella
-  const XP_BASE = 16, XP_GROWTH = 1.4;                                             // XP del nivel 1 y factor de crecimiento por nivel
+  const XP_BASE = 14, XP_GROWTH = 1.18, XP_LINEAR = 6;                             // curva híbrida xpNeed = XP_BASE·GROWTH^(n-1) + LINEAR·(n-1): lvl5~51 lvl10~116 lvl20~430, no explota
   const HIT_SCORE = 1;                                                             // puntos por punto de daño que hacés (pegar suma score)
   const KILL_SCORE = 150;                                                          // bonus de score al matar una enemiga (+ su vida máxima → las grandes valen más)
 
@@ -311,6 +363,10 @@
   let vL = 0, vR = 0, vT = 0, vB = 0;                                             // límites de la vista en coords de mundo (culling), se fijan por frame en el loop
   const inView = (x, y) => x >= vL && x <= vR && y >= vT && y <= vB;
   const ambient = [];                                                            // motas a la deriva (sensación de corriente)
+  const fishes = [];                                                             // pececitos ambientales (decorativos): nadan/serpentean/aletean, envuelven la cámara
+  const corals = [];                                                             // (sin uso ahora) corales procedurales — reemplazados por la FOTO de fondo; se conservan por si vuelven
+  const coralSprites = [];                                                       // (sin uso ahora) sprites bakeados de coral
+  let seafloorReq = false, seafloorTex = null, seafloorReady = false;            // FONDO DEL MAR: foto horneada/tileada; seafloorReady = la carga TERMINÓ (dispara el fade-in)
   let currentAng = 0.7;                                                          // dirección de la corriente del lago (rota lentísimo)
 
   // ── HELPERS DE RESOLUCIÓN (idénticos a Snake.py) ──
@@ -393,6 +449,13 @@
     const hitR = sper(ATTACK_HIT_F) + extraR, dx = victimHead.x - hx, dy = victimHead.y - hy;
     return dx*dx + dy*dy < hitR*hitR;
   }
+  function segPointDist2(ax, ay, bx, by, px, py) {                                // dist² del punto P al SEGMENTO AB — colisión barrida (no tunelea aunque el paso sea grande)
+    const vx = bx - ax, vy = by - ay, wx = px - ax, wy = py - ay;
+    const len2 = vx*vx + vy*vy; let t = len2 > 1e-9 ? (wx*vx + wy*vy)/len2 : 0;
+    t = t < 0 ? 0 : (t > 1 ? 1 : t);
+    const dx = px - (ax + vx*t), dy = py - (ay + vy*t);
+    return dx*dx + dy*dy;
+  }
 
   // IMÁN: si el comestible está a tiro de la cabeza, se atrae hacia ella (más fuerte cuanto más cerca). Deja
   // una VELOCIDAD RESIDUAL: al salir del rango sigue moviéndose un toque y se frena suave (no se clava).
@@ -427,10 +490,13 @@
   // `awayAng`, frenan en el agua y, al morir, se DESVANECEN o se vuelven ESTRELLA re-comestible (CHUNK_STAR_CHANCE).
   function spawnChunks(x, y, hue, awayAng, count, r) {
     for (let i = 0; i < count; i++) {
+      // TELEGRAFÍA: el pedazo toma el COLOR de una estrella. Si va a spawnear estrella, será ESA misma (starType);
+      // si no, igual usa un color de estrella al azar (entre los tipos) para que no desentone. (hue del cuerpo se ignora.)
+      const becomesStar = Math.random() < CHUNK_STAR_CHANCE, st = pickStarType();
       const a = awayAng + rndRange(-0.95, 0.95), sp = sper(0.12) + Math.random()*sper(0.26);
       chunks.push({ x: x + rndRange(-r, r), y: y + rndRange(-r, r), vx: Math.cos(a)*sp, vy: Math.sin(a)*sp,
-        r: r*rndRange(0.7, 1.15), hue, life: CHUNK_LIFE, maxLife: CHUNK_LIFE, ang: Math.random()*TAU,
-        spin: rndRange(-7, 7), star: Math.random() < CHUNK_STAR_CHANCE });
+        r: r*rndRange(0.7, 1.15), hue: st.hue, sat: st.sat, life: CHUNK_LIFE, maxLife: CHUNK_LIFE, ang: Math.random()*TAU,
+        spin: rndRange(-7, 7), star: becomesStar, starType: st });
     }
   }
   function updateChunks() {
@@ -439,7 +505,7 @@
     const out = [];
     for (const c of chunks) {
       c.life -= deltaT;
-      if (c.life <= 0) { if (c.star && !manager.gameOver) new Food(c.x, c.y); continue; } // al morir: estrella o nada
+      if (c.life <= 0) { if (c.star && !manager.gameOver) new Food(c.x, c.y, c.starType); continue; } // al morir: la estrella telegrafiada, o nada
       if (!manager.pause) { c.x += c.vx*deltaT; c.y += c.vy*deltaT; c.vx *= drag; c.vy *= drag; c.ang += c.spin*deltaT; clampToLake(c); }
       out.push(c);
     }
@@ -449,15 +515,15 @@
     if (!chunks.length) return;
     for (const c of chunks) {
       const a = c.life / c.maxLife;                                               // 1→0
-      const toStar = c.star ? (1 - a) : 0;                                         // si va a ser estrella, vira a ámbar y "estrellea" al final
-      const hue = c.hue + toStar*(45 - c.hue);
+      const hue = c.hue, sat = c.sat != null ? c.sat : 90;                        // ya es el color de la estrella (telegrafía); común = whitish (sat bajo)
+      const lb = c.star ? (1 - a)*16 : 0;                                          // las que serán estrella brillan un poco más al final
       ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = `hsla(${hue},95%,60%,${0.22*(0.4 + a)})`;
+      ctx.fillStyle = `hsla(${hue},${sat}%,60%,${0.22*(0.4 + a) + (c.star ? (1-a)*0.18 : 0)})`;
       ctx.beginPath(); ctx.arc(c.x, c.y, c.r*1.6, 0, TAU); ctx.fill();
       ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = `hsla(${hue},85%,${52 + toStar*14}%,${0.45 + 0.5*a})`;
+      ctx.fillStyle = `hsla(${hue},${sat}%,${64 + lb}%,${0.45 + 0.5*a})`;
       ctx.beginPath(); ctx.arc(c.x, c.y, c.r*(0.6 + a*0.5), 0, TAU); ctx.fill();
-      ctx.fillStyle = `hsla(${hue},100%,92%,${0.5*a})`;
+      ctx.fillStyle = `hsla(${hue},${sat}%,92%,${0.5*a})`;
       ctx.beginPath(); ctx.arc(c.x - c.r*0.3, c.y - c.r*0.3, c.r*0.3, 0, TAU); ctx.fill();
     }
   }
@@ -492,8 +558,16 @@
     ctx.strokeStyle = style; ctx.lineWidth = w; ctx.lineCap = 'butt';
     ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   }
+  // path de rectángulo redondeado (cápsula). Usa ctx.roundRect si existe, sino lo arma con arcTo (fallback robusto).
+  function rRect(x, y, w, h, r) {
+    r = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    if (ctx.roundRect) { ctx.roundRect(x, y, w, h, r); return; }
+    ctx.moveTo(x+r, y); ctx.arcTo(x+w, y, x+w, y+h, r); ctx.arcTo(x+w, y+h, x, y+h, r);
+    ctx.arcTo(x, y+h, x, y, r); ctx.arcTo(x, y, x+w, y, r); ctx.closePath();
+  }
   // cabeza de criatura genérica (cuerpo + sheen + 2 ojos con reflejo mirando hacia `ang`); la usan las cabezas extra
-  function drawCreatureHead(x, y, ang, rad, hue, sat, light) {
+  function drawCreatureHead(x, y, ang, rad, hue, sat, light, mood = 0, painProg = 0) {
     ctx.fillStyle = `hsl(${hue},${sat}%,${light}%)`;
     ctx.beginPath(); ctx.arc(x, y, rad, 0, TAU); ctx.fill();
     ctx.fillStyle = `hsla(${hue},100%,90%,0.5)`;
@@ -505,6 +579,51 @@
       const lx = ex + ca*pupR*0.9, ly = ey + sa*pupR*0.9;
       ctx.fillStyle = '#0c1014';         ctx.beginPath(); ctx.arc(lx, ly, pupR, 0, TAU); ctx.fill();
       ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.arc(lx - pupR*0.3, ly - pupR*0.3, pupR*0.36, 0, TAU); ctx.fill();
+    }
+    drawFace(x, y, ang, rad, mood, `hsl(${hue},${sat}%,${light}%)`, painProg);   // expresión (cejas + párpados color piel); no dibuja nada si mood=0
+  }
+  // EXPRESIONES: por ahora SÓLO las CEJAS, dibujadas ARRIBA de los ojos (hacia atrás de la cabeza, lado craneal),
+  // sin tocar los ojos normales que ya pintó el caller. mood: 0 = nada; 1/'angry' = cejas fruncidas (interior hacia
+  // el hocico = enojo); 2/'pain' = cejas levantadas por dentro (preocupado). Marco local f=ca/sa, p=px/py; ×rad.
+  function drawFace(x, y, ang, rad, mood, skin, painProg) {                       // painProg = progreso 0→1 del dolor (para timear la lágrima a la duración del flash)
+    if (!mood || mood === 'neutral') return;                                      // neutral = ojos abiertos (no se dibuja párpado)
+    const ca = Math.cos(ang), sa = Math.sin(ang), px = -sa, py = ca;
+    const angry = (mood === 1 || mood === 'angry');
+    const eyeR = rad*0.42, lift = rad*0.52, tilt = rad*0.17;                       // lift = altura de la ceja sobre el ojo; tilt = inclinación enojo/dolor
+    skin = skin || '#1a2230';                                                     // color del PÁRPADO = piel de la cabeza (tapa el ojo desde arriba)
+    ctx.lineCap = 'round';
+    for (const sgn of [1, -1]) {
+      const ex = x + ca*rad*0.36 + px*rad*0.5*sgn, ey = y + sa*rad*0.36 + py*rad*0.5*sgn; // centro del ojo
+      // CEJA: arriba del ojo, inclinada (enojo = interior hacia el hocico; dolor = interior hacia atrás = preocupada)
+      const bx = ex - ca*lift, by = ey - sa*lift;
+      const inF  = angry ?  tilt : -tilt, outF = angry ? -tilt :  tilt;
+      const ix = bx + ca*inF  - px*rad*0.10*sgn, iy = by + sa*inF  - py*rad*0.10*sgn;
+      const ox = bx + ca*outF + px*rad*0.42*sgn, oy = by + sa*outF + py*rad*0.42*sgn;
+      // PÁRPADO: tapa el ojo desde el lado craneal con el color de la piel, con el MISMO ángulo que la ceja.
+      // enojo = cierra ~42% (entrecerrado fruncido); dolor = cierra del todo (ojo cerrado). Recortado al disco del ojo.
+      const browAng = Math.atan2(oy - iy, ox - ix), closeFrac = angry ? 0.42 : 1.0;
+      ctx.save();
+      ctx.beginPath(); ctx.arc(ex, ey, eyeR, 0, TAU); ctx.clip();
+      ctx.translate(ex, ey); ctx.rotate(browAng);
+      const s = (ca*Math.sin(browAng) - sa*Math.cos(browAng)) >= 0 ? 1 : -1;       // signo del lado craneal en Y-local
+      const creaseY = s * eyeR * (1 - 2*closeFrac);
+      ctx.fillStyle = skin;
+      ctx.fillRect(-eyeR*1.6, s > 0 ? creaseY : creaseY - eyeR*3.2, eyeR*3.2, eyeR*3.2);
+      ctx.restore();
+      if (!angry) {                                                               // dolor: línea de ojo cerrado (curva suave)
+        ctx.strokeStyle = '#0c1014'; ctx.lineWidth = Math.max(1.3, rad*0.11);
+        ctx.beginPath(); ctx.moveTo(ex - px*eyeR*0.8, ey - py*eyeR*0.8);
+        ctx.quadraticCurveTo(ex + ca*eyeR*0.32, ey + sa*eyeR*0.32, ex + px*eyeR*0.8, ey + py*eyeR*0.8); ctx.stroke();
+        if (sgn === -1) {                                                         // LAGRIMITA por la cara EXTERNA del otro ojo; cae RECTA (hacia el hocico), arranca pegada al ojo
+          const drip = Math.min(1, Math.max(0, painProg || 0)), dist = eyeR*(0.45 + drip*1.5), tr = eyeR*0.42*(1 - drip*0.28), al = Math.min(1, (1 - drip)*1.6); // timeada al flash de dolor: completa la caída en una sola pasada
+          const lat = eyeR*0.5;                                                   // offset lateral FIJO hacia afuera (no diagonal: la caída es sólo hacia adelante)
+          const tx = ex + px*sgn*lat + ca*dist, ty = ey + py*sgn*lat + sa*dist;
+          ctx.fillStyle = `rgba(120,205,255,${0.92*al})`; ctx.beginPath(); ctx.arc(tx, ty, tr, 0, TAU); ctx.fill();
+          ctx.fillStyle = `rgba(255,255,255,${0.6*al})`; ctx.beginPath(); ctx.arc(tx - tr*0.32, ty - tr*0.32, tr*0.42, 0, TAU); ctx.fill();
+        }
+      }
+      ctx.strokeStyle = '#0c1014'; ctx.lineWidth = Math.max(1.7, rad*0.17);        // ceja encima
+      ctx.beginPath(); ctx.moveTo(ix, iy); ctx.lineTo(ox, oy); ctx.stroke();
     }
   }
 
@@ -537,7 +656,7 @@
     }
 
     process() {
-      if (manager.gameOver || manager.pause) return;
+      if (manager.gameOver || manager.pause || manager.loadT > 0) return;        // congelado durante la "carga" inicial
 
       if (this.id === 0) {
         // CABEZA: control por DIRECCIÓN persistente. targetAng se fija SÓLO en cada input (ver aimAt en
@@ -570,12 +689,19 @@
         if (manager.lungeT > 0) {                                                 // ataque: retracción → embestida; el daño SÓLO si CONECTA
           const v = lungeVel(manager.lungeT);                                    // perfil con easing (retracción → embestida)
           this.x += manager.lungeX*v*deltaT; this.y += manager.lungeY*v*deltaT;
+          manager.lungeDisp += v*deltaT;                                         // desplazamiento NETO sobre el eje del dash (negativo en la retracción, sube en la embestida)
           manager.lungeT -= deltaT;
-          if (manager.lungeT <= LUNGE_TIME && !manager.atkHit) {                 // ventana de embestida: probar conexión cada frame (si erra, no pega)
+          if (manager.lungeT <= LUNGE_TIME && manager.lungeDisp > 0 && !manager.atkHit) { // sólo pega cuando la cabeza YA pasó el origen yendo adelante (no en plena retracción)
             const e = manager.atkTarget;
             if (e && !e.dead && hitConnect(this.x, this.y, e.pieces[0], e.pieces, curR*e.sizeMul*e.g)) {
               manager.hitEnemy(e, PLAYER_DMG * manager.dmgMul * sizeMod(girth, e.sizeMul*e.g, SIZE_DMG_MAX + manager.sizeDmgBonus), this.ang);
               manager.atkHit = true;
+            } else if (!e) {                                                      // embestida contra un JEFE (sin atkTarget enemigo): conecta por proximidad al cuerpo
+              for (const b of bosses) {
+                if (b.dead) continue;
+                const dx = b.x - this.x, dy = b.y - this.y, rr = b.bodyR() + sper(ATTACK_HIT_F);
+                if (dx*dx + dy*dy < rr*rr) { b.takeHit(PLAYER_DMG * manager.dmgMul, this.ang); manager.atkHit = true; break; }
+              }
             }
           }
         }
@@ -712,15 +838,19 @@
           ctx.fillStyle = '#0c1014';         ctx.beginPath(); ctx.arc(lx, ly, pupR, 0, TAU); ctx.fill();
           ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.arc(lx - pupR*0.3, ly - pupR*0.3, pupR*0.36, 0, TAU); ctx.fill();
         }
+        const faceMood = manager.hitFlash > 0 ? 2 : (manager.lungeT > 0 ? 1 : 0); // dolor al recibir golpe / enojo durante TODO el ataque (carga + embestida)
+        if (faceMood) drawFace(drawX, drawY, this.ang, radius, faceMood, bodyStr, 1 - manager.hitFlash/HAZARD_FLASH_TIME); // párpado = color del cuerpo; progreso de dolor para la lágrima
       }
       ctx.globalAlpha = 1;
     }
 
     checkHeadCol() {
       const hx = this.x, hy = this.y, thr = curR*girth*2, thr2 = thr*thr;        // colisión escala con el engorde
-      // mundo circular (lago): si la cabeza llega a la orilla, muerte. (Las serpientes NO mueren por chocarse
-      // entre sí — el combate es por ataque/vida, ver manager.playerCombat / EnemySnake.combat.)
-      if (hx*hx + hy*hy > (WORLD_R - curR)*(WORLD_R - curR)) { manager.die(); return; }
+      // mundo circular (lago): la orilla YA NO mata de una NI te frena. Podés SALIR AL VACÍO (afuera del lago)
+      // pero te quema (DPS) todo el tiempo que estés afuera — riesgo/recompensa. Al volver adentro, la regen
+      // recupera. (Las serpientes NO mueren por chocarse entre sí — combate por ataque/vida.)
+      const edge = WORLD_R - curR;
+      if (hx*hx + hy*hy > edge*edge) manager.borderHurt();                       // el vacío: SIN clamp, sólo DPS mientras estés afuera
       // radio de agarre GENEROSO para comestibles: acorde al tamaño visual (estrella ~curR*1.55, medusa
       // ~curR*1.75) y SIN esperar a que termine de aparecer (si spawnea pegada, se come igual).
       const eatThr = curR*3.2, eatThr2 = eatThr*eatThr;
@@ -734,7 +864,7 @@
           manager.fed += amt;                                                    // ENGORDE: el girth escala con la comida ACUMULADA (no con el largo)
           manager.pendingGrow += amt * LEN_GROW_FRAC;                            // largo reducido → deja de amontonarse sin espacio
           manager.healQueue += amt * manager.healMul;                            // CURA gradual ("Festín" la duplica)
-          manager.addXP(XP_EAT);                                                 // XP mixta: comer suma poco
+          manager.addXP(XP_EAT * f.points / 100);                                // XP escala con el NIVEL de estrella (amarilla 1 … naranja 5)
           this.wave_time = this.wave_time_total;
         }
       }
@@ -761,7 +891,7 @@
 
   // ════════════════ FOOD (estrella giratoria con glow parpadeante) ════════════════
   class Food {
-    constructor(atX, atY) {                                                       // (atX,atY) opcional: aparece ahí (drop al morir), salteando la búsqueda de posición
+    constructor(atX, atY, type) {                                                 // (atX,atY) opcional: aparece ahí (drop al morir); type opcional: fuerza el tipo (lo telegrafía el pedazo)
       this.z = -1;
       this.ang = Math.random()*TAU;
       this.glowCD = 1;
@@ -771,8 +901,8 @@
       this.appear = 0;                                                           // animación de aparición (0→1)
       this.bob = Math.random()*TAU;                                              // fase de cabeceo (flota en el agua)
       this.driftAng = Math.random()*TAU;                                         // cada comestible deriva lento en SU dirección al azar
-      const t = pickStarType();                                                  // tipo definido: ámbar 100 / verde 200 / violeta 300 / azul 400
-      this.hue = t.hue; this.points = t.points;
+      const t = type || pickStarType();                                          // t = una RAREZA (color/sat/light + puntos): común blanca … mítico roja 1000pts
+      this.hue = t.hue; this.sat = t.sat; this.light = t.light; this.points = t.points;
       if (atX !== undefined) {                                                    // drop en una posición dada (al morir): sin búsqueda
         this.x = atX; this.y = atY;
       } else {
@@ -815,26 +945,23 @@
       const breath = 1 + Math.sin(waveClock*5 + this.ang)*0.12;
       const r = curR * 1.55 * breath * easeOutBack(this.appear);                 // escala de aparición (pop) — un poco más grande
 
-      // urgencia: cuando está por expirar PARPADEA OSCURECIÉNDOSE (más rápido y más oscuro cuanto
-      // menos tiempo queda) — contra el fondo negro se nota mucho más que aclarándose.
-      let dim = 0;
+      // urgencia: al expirar PARPADEA por OPACIDAD (no por color) → todas las estrellas del MISMO tipo tienen el
+      // MISMO tono siempre; en fondo negro el fade igual se nota. (Antes oscurecía el `light` → tonos distintos.)
+      let blink = 1;
       if (this.timer <= 5) {
         const urg = 1 - this.timer/5;                                            // 0 (5s) .. 1 (0s)
-        dim = (0.5 + 0.5*Math.sin(waveClock*(7 + urg*18))) * (0.4 + urg*0.55);    // amplitud y frecuencia crecen con la urgencia
+        blink = 1 - (0.5 + 0.5*Math.sin(waveClock*(7 + urg*18))) * (0.35 + urg*0.6); // amplitud/frecuencia crecen con la urgencia
       }
-      const hue = this.hue;                                                      // gema de color random
-      const light = 64 - dim*54;                                                 // baja hacia oscuro al parpadear
-      const fade  = (1 - dim*0.85) * Math.min(1, this.appear*1.4);               // incluye el fade-in de aparición
+      const hue = this.hue, sat = this.sat, light = this.light;                  // TONO FIJO por tipo (rareza): común whitish (sat bajo, light alto) … colores vivos
+      ctx.globalAlpha = blink * Math.min(1, this.appear*1.4);                     // toda la estrella parpadea por alpha (mismo tono)
 
-      // glow aditivo barato (SIN shadowBlur, que es carísimo en mobile y se redibuja cada frame):
-      // 2 discos translúcidos con 'lighter'
+      // glow aditivo barato (SIN shadowBlur): 2 discos translúcidos con 'lighter'
       ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = `hsla(${hue},100%,55%,${0.20*fade})`;
+      ctx.fillStyle = `hsla(${hue},${sat}%,${light-8}%,0.20)`;
       ctx.beginPath(); ctx.arc(cx, cy, r*1.5, 0, TAU); ctx.fill();
-      ctx.fillStyle = `hsla(${hue},100%,62%,${0.30*fade})`;
+      ctx.fillStyle = `hsla(${hue},${sat}%,${light-2}%,0.30)`;
       ctx.beginPath(); ctx.arc(cx, cy, r*0.9, 0, TAU); ctx.fill();
-      // ESTRELLA DE 5 PUNTAS giratoria: UN solo path relleno (más barato que las 4 líneas de antes, y como
-      // NO es 4-simétrica el giro se LEE bien sin estroboscopiar). a = this.ang la hace rotar.
+      // ESTRELLA DE 5 PUNTAS giratoria: UN solo path relleno; NO es 4-simétrica → el giro se LEE sin estroboscopiar.
       const SP = 5, outerR = r*1.5, innerR = r*0.62;
       ctx.beginPath();
       for (let i = 0; i < SP*2; i++) {
@@ -844,13 +971,13 @@
         if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
       }
       ctx.closePath();
-      ctx.fillStyle = `hsl(${hue},100%,${light}%)`; ctx.fill();                   // cuerpo de la estrella
+      ctx.fillStyle = `hsl(${hue},${sat}%,${light}%)`; ctx.fill();                // cuerpo de la estrella (tono fijo por rareza)
       ctx.lineWidth = Math.max(1.5, r*0.12);                                      // rim brillante (con 'lighter' suma bloom)
-      ctx.strokeStyle = `hsla(${hue},100%,${Math.max(30,light+22)}%,${0.95*fade})`; ctx.stroke();
-      // brillo central (se apaga al oscurecer)
+      ctx.strokeStyle = `hsla(${hue},${sat}%,${Math.min(95,light+16)}%,0.95)`; ctx.stroke();
       ctx.globalCompositeOperation = 'source-over';
-      ctx.fillStyle = `rgba(255,255,255,${0.9*fade})`;
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';                                    // brillo central
       ctx.beginPath(); ctx.arc(cx, cy, r*0.26, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -1099,7 +1226,7 @@
       this.chase = 1;
       this.maxHp = 50 * this.sizeMul; this.hp = this.maxHp;
       this.damage = ENEMY_DMG; this.attackCD = 0;
-      this.lungeT = 0; this.lungeX = 0; this.lungeY = 0;
+      this.lungeT = 0; this.lungeX = 0; this.lungeY = 0; this.lungeDisp = 0;
       this.atkFoe = null; this.atkPlayer = false; this.atkHit = false;           // objetivo del ataque en curso (daño al iniciar el dash)
       this.turbo = 1; this.boosting = false;                                     // turbo propio, MISMA mecánica que el jugador
       const len = Math.round(20 + (this.sizeMul - 0.7) * 55);                    // largo correlacionado con el tamaño
@@ -1117,7 +1244,7 @@
       enemies.push(this);
     }
     grow(n) { const last = this.pieces[this.pieces.length-1]; for (let i = 0; i < n && this.pieces.length < ENEMY_MAX_LEN; i++) this.pieces.push({ x: last.x, y: last.y, ang: last.ang, wt: 0 }); }
-    startLunge(tx, ty) { const h = this.pieces[0], dx = tx-h.x, dy = ty-h.y, d = Math.hypot(dx, dy) || 1; this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; }
+    startLunge(tx, ty) { const h = this.pieces[0], dx = tx-h.x, dy = ty-h.y, d = Math.hypot(dx, dy) || 1; this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; this.lungeDisp = 0; }
     // ── CABEZAS EXTRA: modelo unificado (cuellos que muerden solos). Un parámetro por cabeza define dónde se
     //    ancla al cuerpo (baseIdx), su largo (neckCount), su dirección de reposo (restOff/side) y cuánta
     //    LIBERTAD tiene para apuntar (freedom). De ahí salen los 3 looks: 'cluster', 'hydra' y 'body'. ──
@@ -1127,7 +1254,7 @@
       const mk = (baseIdx, restOff, neckCount, freedom, side) => {
         const anchor = this.pieces[Math.min(baseIdx, this.pieces.length-1)];
         const h = { baseIdx, restOff, freedom, side, neckCount, ang: this.ang, targetAng: this.ang,
-          x: anchor.x, y: anchor.y, neck: [], attackCD: rndRange(0, ATTACK_CD), lungeT: 0, lungeX: 0, lungeY: 0,
+          x: anchor.x, y: anchor.y, neck: [], attackCD: rndRange(0, ATTACK_CD), lungeT: 0, lungeX: 0, lungeY: 0, lungeDisp: 0,
           atkPlayer: false, atkFoe: null, atkHit: false, wt: 0, bow: Math.random()*TAU };
         for (let i = 0; i < neckCount; i++) h.neck.push({ x: anchor.x, y: anchor.y });
         this.extraHeads.push(h);
@@ -1143,7 +1270,7 @@
         for (let i = 0; i < n; i++) mk(3 + Math.floor((i+1)*span/(n+1)), 0, 3, 0.6, (i % 2 === 0) ? 1 : -1);
       }
     }
-    startExtraLunge(h, tx, ty) { const dx = tx-h.x, dy = ty-h.y, d = Math.hypot(dx, dy) || 1; h.lungeX = dx/d; h.lungeY = dy/d; h.lungeT = LUNGE_WIND + LUNGE_TIME; h.attackCD = ATTACK_CD; h.wt = WAVE_TOTAL; }
+    startExtraLunge(h, tx, ty) { const dx = tx-h.x, dy = ty-h.y, d = Math.hypot(dx, dy) || 1; h.lungeX = dx/d; h.lungeY = dy/d; h.lungeT = LUNGE_WIND + LUNGE_TIME; h.lungeDisp = 0; h.attackCD = ATTACK_CD; h.wt = WAVE_TOTAL; }
     extraHeadHit(h) {                                                             // daño de una cabeza extra, SÓLO si la embestida conecta (hit-test)
       const mySize = this.sizeMul * this.g;
       if (h.atkPlayer && snake[0] && manager.immunity <= 0 && hitConnect(h.x, h.y, snake[0], snake, curR*girth)) {
@@ -1181,8 +1308,8 @@
         const hx = anchor.x + Math.cos(h.ang)*reach, hy = anchor.y + Math.sin(h.ang)*reach; // posición deseada (sobre el cuello, estirado desde el anchor)
         h.x += (hx - h.x) * Math.min(1, deltaT*10); h.y += (hy - h.y) * Math.min(1, deltaT*10); // seguimiento fluido
         if (h.lungeT > 0) {                                                       // embestida de la cabeza extra
-          const v = lungeVel(h.lungeT); h.x += h.lungeX*v*deltaT; h.y += h.lungeY*v*deltaT; h.lungeT -= deltaT;
-          if (h.lungeT <= LUNGE_TIME && !h.atkHit) this.extraHeadHit(h);
+          const v = lungeVel(h.lungeT); h.x += h.lungeX*v*deltaT; h.y += h.lungeY*v*deltaT; h.lungeDisp += v*deltaT; h.lungeT -= deltaT;
+          if (h.lungeT <= LUNGE_TIME && h.lungeDisp > 0 && !h.atkHit) this.extraHeadHit(h); // sólo en el salto adelante, no en la retracción
         }
         // cuello: puntos repartidos entre la cabeza y el anchor, con un leve arco vivo
         h.bow += deltaT*3;
@@ -1332,8 +1459,9 @@
       if (this.lungeT > 0) {                                                      // ataque: RETRACCIÓN → EMBESTIDA; el daño SÓLO si CONECTA (hit-test)
         const v = lungeVel(this.lungeT);
         head.x += this.lungeX*v*deltaT; head.y += this.lungeY*v*deltaT;
+        this.lungeDisp += v*deltaT;                                              // desplazamiento NETO sobre el eje del dash (negativo en la retracción)
         this.lungeT -= deltaT;
-        if (this.lungeT <= LUNGE_TIME && !this.atkHit) {
+        if (this.lungeT <= LUNGE_TIME && this.lungeDisp > 0 && !this.atkHit) {   // sólo pega cuando la cabeza YA pasó el origen yendo adelante (no en plena retracción)
           const mySize = this.sizeMul * this.g;
           if (this.atkPlayer && snake[0] && manager.immunity <= 0 && hitConnect(head.x, head.y, snake[0], snake, curR*girth)) {
             manager.hurtPlayer(this.damage * sizeMod(mySize, girth), this.ang, this); this.atkHit = true;
@@ -1456,6 +1584,8 @@
             ctx.fillStyle = '#0c1014';         ctx.beginPath(); ctx.arc(lx, ly, pupR, 0, TAU); ctx.fill();
             ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.beginPath(); ctx.arc(lx - pupR*0.3, ly - pupR*0.3, pupR*0.36, 0, TAU); ctx.fill();
           }
+          const faceMood = this.hurt > 0 ? 2 : (this.lungeT > 0 ? 1 : 0);         // dolor al recibir golpe / enojo durante todo el ataque
+          if (faceMood) drawFace(h0.x, h0.y, this.ang, rad, faceMood, `hsl(${hue},${flash>0?95:80}%,${light}%)`, 1 - this.hurt/HAZARD_FLASH_TIME); // párpado = color de la cabeza; progreso de dolor
         }
         // barra de VIDA sobre la cabeza (sólo si está dañada)
         if (this.hp < this.maxHp - 0.5) {
@@ -1475,8 +1605,285 @@
         }
         let hrad = r0;
         if (eh.wt > 0) { const wf = (WAVE_TOTAL - eh.wt)/WAVE_TOTAL; hrad += r0 * Math.sin(Math.PI*wf) * 2; } // pulso al morder
-        drawCreatureHead(eh.x, eh.y, eh.ang, hrad, hue, flash>0?95:80, light+6);
+        const ehMood = this.hurt > 0 ? 2 : (eh.lungeT > 0 ? 1 : 0);               // cada cabeza extra: enojo durante su ataque; dolor cuando la criatura recibe golpe
+        drawCreatureHead(eh.x, eh.y, eh.ang, hrad, hue, flash>0?95:80, light+6, ehMood, 1 - this.hurt/HAZARD_FLASH_TIME);
       }
+    }
+  }
+
+  // ════════════════ BOSSES ════════════════
+  // Esqueleto pensado para sumar pez piedra / pez linterna como nuevos `type` reusando HP, barra y daño.
+  // PEZ GLOBO: deriva lento hacia vos; cicla DESINFLADO (vulnerable, pegale) → INFLADO (púas, casi invulnerable,
+  // te muerde si lo tocás). Le pegás con el DASH (igual que a las enemigas). Lo matás → lluvia de estrellas.
+  let bosses = [];                                                               // a lo sumo 1 a la vez por ahora
+  class Boss {
+    constructor(type, hp) {
+      const def = BOSS_TYPES[type] || BOSS_TYPES.puffer;
+      this.type = type; this.dead = false;
+      this.maxHp = hp; this.hp = hp; this.hurt = 0; this.spawnT = 0;
+      const a = Math.random()*TAU, rr = WORLD_R * 1.08;                          // entra desde fuera del lago
+      this.x = Math.cos(a)*rr; this.y = Math.sin(a)*rr; this.ang = a + Math.PI;
+      this.integrated = false; this.bob = Math.random()*TAU;
+      this.rF = def.rF; this.speedF = def.speedF; this.name = def.name; this.hue = def.hue;
+      // PEZ GLOBO — this.inflate lo lee bodyR() para TODOS los tipos → debe arrancar en 0
+      this.phase = 'deflated'; this.phaseT = PUFFER_DEFLATE_T; this.inflate = 0;
+      // PEZ PIEDRA
+      this.sphase = 'settling'; this.sphaseT = 0; this.tele = 0; this.wx = this.x; this.wy = this.y; this.armCD = 0; this.lvx = 0; this.lvy = 0; this.struck = false;
+      // PEZ LINTERNA
+      this.aphase = 'luring'; this.aphaseT = ANGLER_LURE_T; this.mouth = 0; this.lurePhase = Math.random()*TAU; this.lureX = this.x; this.lureY = this.y; this.darkA = 0; this.tx = this.x; this.ty = this.y; this.tpCD = ANGLER_TP_CD; this.bitten = false;
+    }
+    bodyR() { return sper(this.rF) * (1 + 0.42*this.inflate) * Math.min(1, 0.45 + this.spawnT*0.55); }
+    hitZone() { return this.bodyR() * (this.inflate > 0.5 ? 1.5 : 1.0); }
+    seekHead(h, factor) {                                                         // gira y avanza hacia el jugador (factor escala la velocidad → la pone cada estado)
+      if (!h) return;
+      const dx = h.x - this.x, dy = h.y - this.y;
+      let d = Math.atan2(dy, dx) - this.ang; d = ((d+Math.PI)%TAU+TAU)%TAU - Math.PI;
+      this.ang += d * Math.min(1, deltaT*1.5);
+      const sp = sper(this.speedF) * factor * (this.integrated ? 1 : 1.7);
+      this.x += Math.cos(this.ang)*sp*deltaT; this.y += Math.sin(this.ang)*sp*deltaT;
+    }
+    pickWander() {                                                                // PEZ PIEDRA: elige un nuevo punto del arrecife al que merodear
+      const a = Math.random()*TAU, r = Math.random()*WORLD_R*0.85;
+      this.wx = Math.cos(a)*r; this.wy = Math.sin(a)*r; this.sphaseT = STONE_WANDER_T;
+    }
+    process() {
+      if (manager.gameOver || manager.pause) return;
+      this.spawnT = Math.min(1, this.spawnT + deltaT*0.6);
+      this.bob += deltaT;
+      if (this.hurt > 0) this.hurt = Math.max(0, this.hurt - deltaT);
+      const h = snake[0];
+      if (this.type === 'puffer') this.procPuffer(h);
+      else if (this.type === 'stone') this.procStone(h);
+      else this.procAngler(h);
+      const hd = Math.hypot(this.x, this.y) || 1;                                // SHARED: integración + clamp al lago
+      if (!this.integrated && hd < WORLD_R - this.bodyR()) this.integrated = true;
+      if (this.integrated) { const lim = WORLD_R - this.bodyR()*0.8; if (hd > lim) { this.x = this.x/hd*lim; this.y = this.y/hd*lim; } }
+    }
+    procPuffer(h) {                                                              // ciclo desinflado↔inflado + mordida de púas
+      this.seekHead(h, this.phase === 'inflated' ? 0.4 : 1);
+      this.phaseT -= deltaT;
+      if (this.phase === 'deflated')  { this.inflate = Math.max(0, this.inflate - deltaT/PUFFER_DEFLATE_WIND); if (this.phaseT <= 0) { this.phase = 'inflating'; this.phaseT = PUFFER_INFLATE_WIND; } }
+      else if (this.phase === 'inflating') { this.inflate = Math.min(1, this.inflate + deltaT/PUFFER_INFLATE_WIND); if (this.phaseT <= 0) { this.phase = 'inflated'; this.phaseT = PUFFER_INFLATE_T; } }
+      else if (this.phase === 'inflated')  { this.inflate = 1; if (this.phaseT <= 0) { this.phase = 'deflating'; this.phaseT = PUFFER_DEFLATE_WIND; } }
+      else { this.inflate = Math.max(0, this.inflate - deltaT/PUFFER_DEFLATE_WIND); if (this.phaseT <= 0) { this.phase = 'deflated'; this.phaseT = PUFFER_DEFLATE_T; } }
+      if (h && this.inflate > 0.5 && manager.immunity <= 0 && manager.hitFlash <= 0) {
+        const dx = h.x - this.x, dy = h.y - this.y, rr = this.hitZone() + curR*girth;
+        if (dx*dx + dy*dy < rr*rr) manager.hurtPlayer(PUFFER_SPIKE_DMG, Math.atan2(dy, dx), null);
+      }
+    }
+    procStone(h) {                                                               // PROWLER venenoso: MERODEA el arrecife → telegrafía → AGUIJONAZO (veneno, colisión barrida) → EXPUESTO → sigue merodeando
+      if (this.sphase === 'settling') {                                          // entra al lago y empieza a merodear
+        this.seekHead(h, 1);
+        if ((Math.hypot(this.x, this.y) || 1) < WORLD_R*0.78) { this.integrated = true; this.sphase = 'prowl'; this.pickWander(); }
+        return;
+      }
+      this.sphaseT -= deltaT;
+      if (this.armCD > 0) this.armCD -= deltaT;
+      if (this.sphase === 'prowl') {                                             // MERODEA hacia un waypoint; si te acercás un toque te PERSIGUE; carga si quedás muy cerca y el CD venció
+        this.tele = Math.max(0, this.tele - deltaT*2);
+        const hx = h ? h.x - this.x : 0, hy = h ? h.y - this.y : 0, hd2 = hx*hx + hy*hy;
+        const chase = h && hd2 < sper(STONE_FOLLOW_F)*sper(STONE_FOLLOW_F);      // un toque cerca → seguir al jugador (como las otras enemigas)
+        const tx = chase ? h.x : this.wx, ty = chase ? h.y : this.wy;
+        const dx = tx - this.x, dy = ty - this.y, d = Math.hypot(dx, dy) || 1;   // nada hacia el objetivo (gira suave)
+        let da = Math.atan2(dy, dx) - this.ang; da = ((da+Math.PI)%TAU+TAU)%TAU - Math.PI; this.ang += da * Math.min(1, deltaT*1.4);
+        const sp = sper(chase ? STONE_CHASE_SPEED_F : STONE_PROWL_SPEED_F); this.x += Math.cos(this.ang)*sp*deltaT; this.y += Math.sin(this.ang)*sp*deltaT;
+        if (!chase && (d < sper(0.05) || this.sphaseT <= 0)) this.pickWander();  // sólo re-elige waypoint si NO está persiguiendo
+        if (chase && this.armCD <= 0 && hd2 < sper(STONE_DETECT_F)*sper(STONE_DETECT_F)) { this.sphase = 'telegraph'; this.sphaseT = STONE_TELE_T; this.ang = Math.atan2(hy, hx); } // muy cerca → carga el aguijonazo
+      } else if (this.sphase === 'telegraph') {                                  // CARGA visible: se frena, apunta despacio (esquivable), espinas erectas. tele 0→1
+        this.tele = 1 - this.sphaseT/STONE_TELE_T;
+        if (h) { const a = Math.atan2(h.y - this.y, h.x - this.x); let d = a - this.ang; d = ((d+Math.PI)%TAU+TAU)%TAU - Math.PI; this.ang += d * Math.min(1, deltaT*3); }
+        if (this.sphaseT <= 0) { this.sphase = 'strike'; this.sphaseT = STONE_STRIKE_T; const sp = sper(STONE_STRIKE_SPEED_F); this.lvx = Math.cos(this.ang)*sp; this.lvy = Math.sin(this.ang)*sp; this.struck = false; }
+      } else if (this.sphase === 'strike') {                                     // AGUIJONAZO rápido: colisión BARRIDA (segmento prev→actual vs cabeza) → conecta aunque sea rapidísimo
+        const px = this.x, py = this.y;                                         // posición ANTES de moverse este frame
+        const k = Math.max(0, this.sphaseT/STONE_STRIKE_T);
+        this.x += this.lvx*k*deltaT; this.y += this.lvy*k*deltaT;
+        if (h && !this.struck && manager.immunity <= 0) {                       // UNA aplicación por embestida; respeta el escudo (si no, ni daño ni veneno)
+          const rr = this.bodyR() + curR*girth;
+          if (segPointDist2(px, py, this.x, this.y, h.x, h.y) < rr*rr) { this.struck = true; manager.hurtPlayer(STONE_VENOM_DMG, Math.atan2(h.y - this.y, h.x - this.x), null); manager.venom = Math.max(manager.venom, STONE_VENOM_T); } // conecta → daño + VENENO (bloquea tu regen)
+        }
+        if (this.sphaseT <= 0) { this.sphase = 'recover'; this.sphaseT = STONE_RECOVER_T; this.armCD = STONE_ARM_CD; } // erró o pinchó → EXPUESTO + enfría
+      } else { this.tele = Math.max(0, this.tele - deltaT*2); if (this.sphaseT <= 0) { this.sphase = 'prowl'; this.pickWander(); } } // recover: EXPUESTO (única ventana de daño pleno), luego vuelve a merodear
+    }
+    procAngler(h) {                                                              // LINTERNA: acecha → TELEGRAFÍA (cono ROJO) → EMBESTIDA boca abierta = contraatacable → enfría. Golpe en plena embestida = aturdido y NO muerde
+      this.lurePhase += deltaT*2.2;
+      this.lureX = this.x + Math.cos(this.ang)*this.bodyR()*1.6;                  // señuelo: orbe colgado al frente de la boca
+      this.lureY = this.y + Math.sin(this.ang)*this.bodyR()*1.6;
+      this.aphaseT -= deltaT;
+      if (this.tpCD > 0) this.tpCD -= deltaT;                                    // cooldown del teletransporte
+      const dist = h ? Math.hypot(h.x - this.x, h.y - this.y) : 1e9;
+      if (this.aphase === 'luring') {                                            // ACECHA de cerca, boca cerrada (blindado), hasta que entrás en rango y ARMA la embestida
+        this.seekHead(h, 0.8); this.mouth = Math.max(0, this.mouth - deltaT/0.25);
+        if (h && dist < sper(ANGLER_AGGRO_F)) { this.aphase = 'windup'; this.aphaseT = ANGLER_WINDUP_T; } // en rango → telegrafía (prioridad: si estás cerca, pelea)
+        else if (h && (dist > sper(ANGLER_TP_FAR_F) || this.tpCD <= 0)) { this.aphase = 'blackout'; this.aphaseT = ANGLER_DARK_T; } // si no, reubica (te alejaste, o CD vencido estando lejos)
+      } else if (this.aphase === 'windup') {                                     // TELEGRAFÍA: se frena, apunta despacio, RETROCEDE y abre la boca (aviso claro de la embestida)
+        const k = 1 - this.aphaseT/ANGLER_WINDUP_T;                              // 0→1
+        this.mouth = 0.35 + 0.3*k;                                              // boca entreabriéndose → ya vulnerable (boca abierta)
+        if (h) { const a = Math.atan2(h.y - this.y, h.x - this.x); let d = a - this.ang; d = ((d+Math.PI)%TAU+TAU)%TAU - Math.PI; this.ang += d * Math.min(1, deltaT*4); } // apunta (esquivable, no es instantáneo)
+        const back = sper(this.speedF)*0.6; this.x -= Math.cos(this.ang)*back*deltaT; this.y -= Math.sin(this.ang)*back*deltaT; // pre-carga: retrocede un toque
+        if (this.aphaseT <= 0) { this.aphase = 'lunge'; this.aphaseT = ANGLER_LUNGE_T; this.bitten = false; const sp = sper(ANGLER_LUNGE_SPEED_F); this.lvx = Math.cos(this.ang)*sp; this.lvy = Math.sin(this.ang)*sp; } // LANZA: fija rumbo y velocidad (ya no corrige)
+      } else if (this.aphase === 'lunge') {                                      // EMBESTIDA: dash recto, BOCA ABIERTA = ventana para contraatacar; muerde UNA vez si conecta
+        this.mouth = Math.min(1, this.mouth + deltaT/0.12);                      // boca de par en par
+        const k = Math.max(0, this.aphaseT/ANGLER_LUNGE_T);                      // rápido al inicio, frena al final
+        this.x += this.lvx*k*deltaT; this.y += this.lvy*k*deltaT;
+        if (h && !this.bitten && manager.immunity <= 0) {                        // mordida única; si lo contraatacaste ya pasó a 'stagger' (este bloque no corre) → no te muerde
+          const dx = h.x - this.x, dy = h.y - this.y, rr = this.bodyR()*1.2 + sper(ANGLER_BITE_REACH_F) + curR*girth;
+          if (dx*dx + dy*dy < rr*rr) { this.bitten = true; manager.hurtPlayer(ANGLER_BITE_DMG, Math.atan2(dy, dx), null); }
+        }
+        if (this.aphaseT <= 0) { this.aphase = 'recover'; this.aphaseT = ANGLER_RECOVER_T; } // erró o mordió → ENFRÍA (no re-embiste de inmediato)
+      } else if (this.aphase === 'stagger') {                                    // ATURDIDO (lo contraatacaste): inmóvil, boca cerrándose, SUPER expuesto
+        this.mouth = Math.max(0, this.mouth - deltaT/0.3);
+        if (this.aphaseT <= 0) { this.aphase = 'recover'; this.aphaseT = ANGLER_RECOVER_T; }
+      } else if (this.aphase === 'recover') {                                    // enfriamiento: deriva lento, boca CERRADA (blindado de nuevo), no puede armar embestida todavía
+        this.seekHead(h, 0.35); this.mouth = Math.max(0, this.mouth - deltaT/0.4);
+        if (this.aphaseT <= 0) { this.aphase = 'luring'; this.aphaseT = ANGLER_LURE_T; }
+      } else if (this.aphase === 'blackout') {                                   // apagón total: el señuelo se apaga y elige nuevo lugar lejos del jugador
+        this.mouth = Math.max(0, this.mouth - deltaT/0.2);
+        if (this.aphaseT <= 0 && h) {
+          const ra = Math.random()*TAU, rd = sper(0.30) + Math.random()*sper(0.18);
+          let tx = h.x + Math.cos(ra)*rd, ty = h.y + Math.sin(ra)*rd;
+          const td = Math.hypot(tx, ty) || 1, lim = WORLD_R - this.bodyR()*0.8; if (td > lim) { tx = tx/td*lim; ty = ty/td*lim; }
+          this.tx = tx; this.ty = ty; this.aphase = 'reposition'; this.aphaseT = 0.35;
+        }
+      } else { this.x = this.tx; this.y = this.ty; if (h) this.ang = Math.atan2(h.y - this.y, h.x - this.x); this.aphase = 'luring'; this.aphaseT = ANGLER_LURE_T; this.tpCD = ANGLER_TP_CD; } // reposition = teletransporte → reinicia el CD
+    }
+    takeHit(dmg, fromAng) {                                                       // el dash conecta. La ARMADURA por tipo define la ventana vulnerable (boss NO escala por sizeMod)
+      if (this.dead) return;
+      let real, countered = false;
+      if (this.type === 'puffer')     real = dmg * (this.inflate > 0.5 ? (1 - PUFFER_ARMOR_INFLATED) : 1);   // pegale DESINFLADO
+      else if (this.type === 'stone') real = dmg * (this.sphase === 'recover' ? 1 : (1 - STONE_ARMOR_IDLE)); // pegale al RECUPERAR
+      else {                                                                                                 // ANGLER: blindado salvo BOCA ABIERTA; golpe en plena embestida = CONTRAATAQUE
+        const open = this.aphase === 'windup' || this.aphase === 'lunge';
+        real = dmg * ((open || this.aphase === 'stagger') ? 1 : (1 - ANGLER_ARMOR_CLOSED));
+        if (open) { real *= ANGLER_COUNTER_MULT; countered = true; this.aphase = 'stagger'; this.aphaseT = ANGLER_STAGGER_T; this.bitten = true; this.lvx = 0; this.lvy = 0; } // CRIT + aturdido + cancela su mordida (el jugador se procesa ANTES que el jefe → el bloque de mordida ya no corre)
+      }
+      this.hp -= real; this.hurt = HAZARD_FLASH_TIME;
+      manager.score += Math.round(real * HIT_SCORE);
+      if (manager.lifesteal > 0) manager.healQueue += real * manager.lifesteal;
+      const R = this.bodyR();
+      spawnChunks(this.x - Math.cos(fromAng)*R, this.y - Math.sin(fromAng)*R, this.hue, fromAng, Math.max(1, Math.min(CHUNK_MAX, Math.round(real/CHUNK_DMG_PER))), R*0.4);
+      if (countered) { manager.shockwave = { x: this.x, y: this.y, r0: R*0.55, r: R*0.55, hue: 50, life: 0.35, maxLife: 0.35 }; spawnChunks(this.x, this.y, 50, fromAng, 12, R*0.55); } // CONTRAATAQUE: anillo + chispas amarillas → el daño extra se VE
+      if (this.hp <= 0) this.die();
+    }
+    die() {                                                                       // MUERTE COPADA: flash + onda de choque + implosión→estallido (nube grande) + lluvia de estrellas + glow lento
+      if (this.dead) return;
+      this.dead = true;
+      manager.score += BOSS_KILL_SCORE; manager.addXP(XP_KILL*4);
+      const R = this.bodyR();
+      manager.luFlash = 1; manager.flashGlow = `hsla(${this.hue},95%,62%,0.7)`;
+      manager.shockwave = { x: this.x, y: this.y, r0: R*0.5, r: R*0.5, hue: this.hue, life: 0.55, maxLife: 0.55 };
+      manager.deathGlow = { x: this.x, y: this.y, hue: this.hue, life: 0.9, maxLife: 0.9 };
+      for (let k = 0; k < 46; k++) {                                              // nube: mitad implota hacia adentro, mitad estalla
+        const a = Math.random()*TAU, inward = k % 2 === 0, dir = inward ? -1 : 1, off = inward ? R*0.6 : R*0.1;
+        const sp = sper(0.10) + Math.random()*sper(0.40);
+        manager.deathParticles.push({ x: this.x + Math.cos(a)*off, y: this.y + Math.sin(a)*off, vx: Math.cos(a)*sp*dir, vy: Math.sin(a)*sp*dir, r: R*rndRange(0.18, 0.55), life: rndRange(0.5, 1.0), maxLife: 1.0, hue: this.hue });
+      }
+      for (let k = 0; k < 28; k++) { const a = Math.random()*TAU, rr = Math.random()*R*1.6; new Food(this.x + Math.cos(a)*rr, this.y + Math.sin(a)*rr); } // lluvia de estrellas (doble que antes)
+      spawnChunks(this.x, this.y, this.hue, Math.random()*TAU, CHUNK_MAX, R*0.6);
+    }
+    draw() {
+      const R = this.bodyR();
+      ctx.save(); ctx.translate(this.x, this.y);                                 // halo compartido
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = `hsla(${this.hue},90%,60%,${0.12 + 0.1*this.inflate})`;
+      ctx.beginPath(); ctx.arc(0, 0, R*1.6, 0, TAU); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.restore();
+      if (this.type === 'puffer') this.drawPuffer(R);
+      else if (this.type === 'stone') this.drawStone(R);
+      else this.drawAngler(R);
+      this.drawHpBar(R);                                                          // barra de vida PROMINENTE sobre la cabeza
+    }
+    drawHpBar(R) {                                                                // barra de vida sobre la cabeza, SIN nombre (el nombre se reserva para bosses con barra full-screen)
+      if (this.type === 'angler' && (this.aphase === 'blackout' || this.aphase === 'reposition')) return; // LINTERNA: oculta la barra mientras se oscurece/teletransporta
+      const frac = Math.max(0, this.hp/this.maxHp);
+      const bw = R*3.2, bh = Math.max(5, R*0.4), bx = this.x - bw/2, by = this.y - R*1.5 - bh, rr = bh/2;
+      ctx.save();
+      rRect(bx, by, bw, bh, rr); ctx.fillStyle = 'rgba(30,4,8,0.82)'; ctx.fill(); // track oscuro
+      if (frac > 0) {                                                            // relleno ROJO con brillo
+        ctx.save(); rRect(bx, by, bw, bh, rr); ctx.clip();
+        const g = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+        g.addColorStop(0, 'hsl(0,85%,46%)'); g.addColorStop(1, 'hsl(0,95%,62%)');
+        ctx.fillStyle = g; ctx.fillRect(bx, by, bw*frac, bh);
+        ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(bx, by, bw*frac, bh*0.45);
+        ctx.restore();
+      }
+      rRect(bx + 0.5, by + 0.5, bw - 1, bh - 1, rr); ctx.lineWidth = Math.max(1.5, R*0.03); ctx.strokeStyle = 'rgba(255,120,120,0.85)'; ctx.stroke();
+      ctx.restore();
+    }
+    drawPuffer(R) {
+      const infl = this.inflate, flash = this.hurt > 0 ? this.hurt/HAZARD_FLASH_TIME : 0, sat = 70 + flash*25, light = 52 + flash*22;
+      const bodyR = R * (0.85 + 0.15*infl), fin = Math.sin(this.bob*4)*0.28;
+      ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.ang);
+      ctx.fillStyle = `hsla(${this.hue},${sat}%,${light}%,0.85)`;                  // ALETAS (cola + pectorales) que aletean
+      ctx.save(); ctx.translate(-bodyR*0.9, 0); ctx.rotate(fin); ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-bodyR*0.7, -bodyR*0.55, -bodyR*0.95, 0); ctx.quadraticCurveTo(-bodyR*0.7, bodyR*0.55, 0, 0); ctx.fill(); ctx.restore();
+      for (const s of [-1, 1]) { ctx.save(); ctx.translate(0, s*bodyR*0.72); ctx.rotate(s*(0.6 + fin)); ctx.beginPath(); ctx.ellipse(0, 0, bodyR*0.42, bodyR*0.2, 0, 0, TAU); ctx.fill(); ctx.restore(); }
+      if (infl > 0.05) {                                                         // PÚAS (al inflarse)
+        ctx.fillStyle = `hsl(${this.hue},${sat}%,${light-10}%)`;
+        for (let i = 0; i < PUFFER_SPIKES; i++) {
+          const a = (i/PUFFER_SPIKES)*TAU + this.bob*0.2, sl = R*(0.3 + 0.55*infl);
+          const bx = Math.cos(a)*R*0.92, by = Math.sin(a)*R*0.92, px = Math.cos(a+0.14)*R*0.92, py = Math.sin(a+0.14)*R*0.92;
+          ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(Math.cos(a)*(R+sl), Math.sin(a)*(R+sl)); ctx.lineTo(px, py); ctx.closePath(); ctx.fill();
+        }
+      }
+      const grd = ctx.createRadialGradient(-bodyR*0.32, -bodyR*0.32, bodyR*0.1, 0, 0, bodyR); // CUERPO
+      grd.addColorStop(0, `hsl(${this.hue},${sat}%,${light+16}%)`); grd.addColorStop(1, `hsl(${this.hue},${sat}%,${light-8}%)`);
+      ctx.fillStyle = grd; ctx.beginPath(); ctx.arc(0, 0, bodyR, 0, TAU); ctx.fill();
+      ctx.lineWidth = Math.max(1.5, bodyR*0.05); ctx.strokeStyle = `hsl(${this.hue},${sat}%,${light-24}%)`; ctx.stroke(); // contorno
+      ctx.fillStyle = `hsla(${this.hue},40%,90%,0.22)`; ctx.beginPath(); ctx.ellipse(0, bodyR*0.34, bodyR*0.66, bodyR*0.4, 0, 0, TAU); ctx.fill(); // panza
+      ctx.fillStyle = `hsla(${this.hue},${sat}%,${light-16}%,0.45)`;             // motas
+      for (let i = 0; i < 5; i++) { const a = i*1.25 + 0.4; ctx.beginPath(); ctx.arc(Math.cos(a)*bodyR*0.42, Math.sin(a)*bodyR*0.42, bodyR*0.08, 0, TAU); ctx.fill(); }
+      ctx.lineWidth = Math.max(1, bodyR*0.05); ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.arc(0, 0, bodyR*0.9, Math.PI*1.05, Math.PI*1.55); ctx.stroke(); // brillo de borde
+      ctx.restore();
+      const mood = flash > 0 ? 2 : (infl > 0.5 ? 1 : 0);
+      drawFace(this.x, this.y, this.ang, bodyR, mood, `hsl(${this.hue},${sat}%,${light}%)`, 1 - this.hurt/HAZARD_FLASH_TIME);
+    }
+    drawStone(R) {
+      if (!inView(this.x, this.y)) return;
+      const flash = this.hurt > 0 ? this.hurt/HAZARD_FLASH_TIME : 0;
+      const seen = Math.max(this.tele, (this.sphase === 'strike' || this.sphase === 'recover') ? 1 : 0); // semi-visible merodeando, full al cargar/atacar
+      ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.ang); ctx.globalAlpha = Math.min(1, 0.44 + 0.5*seen + flash*0.2);
+      if (seen > 0.4) {                                                          // rim verde tóxico al despertar
+        ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `hsla(${this.hue+95},80%,55%,${0.16*seen})`;
+        ctx.beginPath(); ctx.arc(0, 0, R*1.5, 0, TAU); ctx.fill(); ctx.globalCompositeOperation = 'source-over';
+      }
+      const grd = ctx.createRadialGradient(-R*0.3, -R*0.3, R*0.1, 0, 0, R);       // CUERPO ROCA: silueta IRREGULAR (no elipse lisa)
+      grd.addColorStop(0, `hsl(${this.hue},${28+30*seen}%,${34+14*seen+flash*20}%)`); grd.addColorStop(1, `hsl(${this.hue},${22+18*seen}%,${20+8*seen}%)`);
+      ctx.fillStyle = grd; ctx.beginPath();
+      const N = 11;
+      for (let i = 0; i <= N; i++) { const a = (i/N)*TAU, rr = R*(0.78 + 0.22*Math.sin(i*2.3)) * (i%2 ? 0.92 : 1.04), x = Math.cos(a)*rr, y = Math.sin(a)*rr*0.82; i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); }
+      ctx.closePath(); ctx.fill();
+      ctx.lineWidth = Math.max(1.5, R*0.05); ctx.strokeStyle = `hsl(${this.hue},${20+15*seen}%,${14+6*seen}%)`; ctx.stroke(); // contorno oscuro
+      ctx.strokeStyle = `hsl(${this.hue},25%,${16+6*seen}%)`; ctx.lineWidth = Math.max(1, R*0.03);                            // grietas
+      for (let i = 0; i < 3; i++) { const a = i*2.1; ctx.beginPath(); ctx.moveTo(Math.cos(a)*R*0.1, Math.sin(a)*R*0.1); ctx.lineTo(Math.cos(a)*R*0.7, Math.sin(a)*R*0.55); ctx.stroke(); }
+      for (let i = 0; i < 6; i++) { const a = i/6*TAU + this.bob*0.1, rr = R*0.5; ctx.fillStyle = `hsl(${this.hue},30%,${26+8*Math.sin(i)+flash*15}%)`; ctx.beginPath(); ctx.arc(Math.cos(a)*rr, Math.sin(a)*rr*0.82, R*0.2, 0, TAU); ctx.fill(); } // bultos
+      const erect = 0.15 + 0.85*seen;                                            // espinas dorsales venenosas: planas dormido, erectas al atacar
+      ctx.strokeStyle = `hsl(${this.hue+95},75%,${45+25*seen}%)`; ctx.lineWidth = Math.max(1.4, R*0.055); ctx.lineCap = 'round';
+      for (let i = 0; i < 9; i++) { const t = (i/8 - 0.5), by = t*R*0.85, len = R*(0.3+0.55*erect)*(1 - Math.abs(t)*0.4) + Math.sin(this.bob*30)*R*0.02*this.tele; ctx.beginPath(); ctx.moveTo(-R*0.1, by); ctx.lineTo(-R*0.1 - len*(0.3+0.7*erect), by + (by < 0 ? -1 : 1)*len*0.3); ctx.stroke(); }
+      ctx.restore(); ctx.globalAlpha = 1;
+      if (seen > 0.4) { const mood = flash > 0 ? 2 : ((this.sphase === 'telegraph' || this.sphase === 'strike') ? 1 : 0); drawFace(this.x, this.y, this.ang, R*0.7, mood, `hsl(${this.hue},35%,42%)`, 1 - this.hurt/HAZARD_FLASH_TIME); }
+    }
+    drawAngler(R) {
+      if (!inView(this.x, this.y) && !inView(this.lureX, this.lureY)) return;
+      const flash = this.hurt > 0 ? this.hurt/HAZARD_FLASH_TIME : 0, l = 16 + flash*30, fin = Math.sin(this.bob*3)*0.25;
+      ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.ang);
+      ctx.fillStyle = `hsl(${this.hue},45%,${Math.max(5, l-3)}%)`;                 // ALETAS (cola + dorsal)
+      ctx.save(); ctx.translate(-R*0.85, 0); ctx.rotate(fin); ctx.beginPath(); ctx.moveTo(0, 0); ctx.quadraticCurveTo(-R*0.8, -R*0.6, -R, 0); ctx.quadraticCurveTo(-R*0.8, R*0.6, 0, 0); ctx.fill(); ctx.restore();
+      ctx.beginPath(); ctx.moveTo(-R*0.2, -R*0.68); ctx.quadraticCurveTo(R*0.1, -R, R*0.4, -R*0.58); ctx.lineTo(R*0.1, -R*0.5); ctx.closePath(); ctx.fill();
+      ctx.strokeStyle = `hsl(${this.hue},50%,${l+12}%)`; ctx.lineWidth = Math.max(1.5, R*0.06); ctx.lineCap = 'round'; // ILICIO (caña del señuelo) desde la frente
+      ctx.beginPath(); ctx.moveTo(R*0.2, -R*0.5); ctx.quadraticCurveTo(R*1.1, -R*0.9, R*1.5, 0); ctx.stroke();
+      const grd = ctx.createRadialGradient(-R*0.3, -R*0.3, R*0.1, 0, 0, R);       // CUERPO gota
+      grd.addColorStop(0, `hsl(${this.hue},35%,${l+10}%)`); grd.addColorStop(1, `hsl(${this.hue},48%,${l}%)`);
+      ctx.fillStyle = grd; ctx.beginPath(); ctx.ellipse(-R*0.1, 0, R*1.05, R*0.8, 0, 0, TAU); ctx.fill();
+      ctx.lineWidth = Math.max(1.5, R*0.045); ctx.strokeStyle = `hsl(${this.hue},50%,${Math.max(3, l-8)}%)`; ctx.stroke(); // contorno
+      const m = this.mouth*0.95;                                                 // MANDÍBULA (grande) + dientes
+      ctx.fillStyle = `hsl(${this.hue},55%,${Math.max(5, l-7)}%)`;
+      for (const s of [-1, 1]) { ctx.beginPath(); ctx.moveTo(R*0.5, 0); ctx.arc(R*0.5, 0, R*0.78, s*0.05, s*(0.05+m), s < 0); ctx.closePath(); ctx.fill(); }
+      if (this.mouth > 0.08) { ctx.fillStyle = 'rgba(240,255,255,0.92)'; for (let i = 0; i < 6; i++) { const a = (-m) + (2*m)*(i/5), fx = R*0.5 + Math.cos(a)*R*0.78, fy = Math.sin(a)*R*0.78; ctx.beginPath(); ctx.moveTo(fx, fy); ctx.lineTo(fx - R*0.14, fy*0.6); ctx.lineTo(fx - R*0.05, fy); ctx.closePath(); ctx.fill(); } }
+      ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = `hsla(${this.hue},90%,70%,0.8)`; ctx.beginPath(); ctx.arc(-R*0.1, -R*0.25, R*0.12, 0, TAU); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; // ojo que brilla
+      ctx.fillStyle = '#0a0f14'; ctx.beginPath(); ctx.arc(-R*0.08, -R*0.25, R*0.06, 0, TAU); ctx.fill();
+      ctx.restore();
+      const mood = flash > 0 ? 2 : (this.mouth > 0.4 ? 1 : 0);
+      if (mood) drawFace(this.x, this.y, this.ang, R*0.8, mood, `hsl(${this.hue},30%,${l+12}%)`, 1 - this.hurt/HAZARD_FLASH_TIME);
     }
   }
 
@@ -1489,6 +1896,7 @@
       this.pause = false;
       this.pauseBlinkCD = 0;
       this.initCD = 4;
+      this.loadT = LOAD_TIME;                                                     // "carga" 1 seg antes de empezar
       this.hitFlash = 0;                                                          // timer del destello rojo al chocar una mina
       this.pendingShrink = 0;                                                     // segmentos a sacar (se aplican fuera del for de proceso)
       this.pendingGrow = 0;                                                       // segmentos a sumar (se materializan de a pocos por frame, no apilados)
@@ -1504,6 +1912,8 @@
       this.healQueue = 0;                                                         // cura pendiente de la estrella (entra por tiempo, no de golpe)
       this.turbo = 1; this.boosting = false;                                      // turbo con carga (se drena al usar, se recarga al soltar)
       this.enemyCD = 2;                                                           // delay hasta la próxima serpiente enemiga
+      this.nextBossLevel = BOSS_FIRST_LEVEL; this.bossesSpawned = 0;              // próximo NIVEL que invoca un jefe (cada 10) / cuántos llevamos (escalan vida + rotan tipo)
+      this.venom = 0; this.shockwave = null; this.deathGlow = null;               // veneno del pez piedra (DoT) + FX de muerte del jefe (onda de choque + glow)
       this.dying = false;                                                         // animación de "rotura" en curso
       this.deathT = 0;                                                            // tiempo desde la muerte
       this.deathParticles = [];                                                   // partículas en que se deshace la víbora (estilo Fireworks)
@@ -1513,22 +1923,29 @@
       this.turboDrainMul = 1; this.turboRechargeMul = 1;                          // turbo dura más / recarga más rápido
       this.atkRangeMul = 1; this.atkConeBonus = 0; this.turnMul = 1; this.sizeDmgBonus = 0; // alcance / cono / giro / bonus por tamaño
       this.lifesteal = 0; this.thorns = 0; this.armor = 0; this.magnetMul = 1;    // pasivas: robo de vida / espinas / coraza / imán
-      // ── NIVELES (XP mixta) ──
+      // ── NIVELES (XP mixta + rarezas) ──
       this.xp = 0; this.level = 1; this.xpNeed = XP_BASE; this.choosing = false;  // choosing = eligiendo mejora (congela el juego)
       this.takenPassives = new Set();                                            // pasivas ya tomadas (no se repiten en el pool)
+      this.rerolls = START_REROLLS;                                              // rebarajadas disponibles (1 + 1 cada GAIN_REROLL_EVERY niveles)
+      this.luFlash = 0; this.flashGlow = 'rgba(120,230,220,0.5)';                // flash de pantalla al subir (decae en el loop) + su color (teñido por rareza)
     }
     addXP(n) { this.xp += n; if (this.xp >= this.xpNeed && !this.choosing) this.startLevelUp(); }
     startLevelUp() {
       this.xp -= this.xpNeed; this.level++;
-      this.xpNeed = Math.round(XP_BASE * Math.pow(XP_GROWTH, this.level - 1));
+      this.xpNeed = Math.round(XP_BASE * Math.pow(XP_GROWTH, this.level - 1) + XP_LINEAR * (this.level - 1)); // curva híbrida: siempre hay próximo nivel a la vista
+      if (this.level % GAIN_REROLL_EVERY === 0) this.rerolls++;                   // +1 rebarajada cada N niveles
       this.choosing = true; this.pause = true;                                    // congela y abre el overlay de elección
       showUpgradeOverlay(rollUpgrades());
     }
-    applyUpgrade(u) {
-      u.apply(this);
+    applyUpgrade(entry) {                                                         // entry = {u, rar}: pasa RF y tier al apply
+      const { u, rar } = entry;
+      u.apply(this, rar.RF, rar.tier);
       if (u.passive) this.takenPassives.add(u.id);
       this.choosing = false; this.pause = false;
       if (this.xp >= this.xpNeed) this.startLevelUp();                            // encadena si juntaste varios niveles de un saque
+    }
+    levelJuice(rar) {                                                             // juice al elegir: SÓLO flash de pantalla teñido (sin partículas: confundían con estrellas que aparecen)
+      this.luFlash = 1; this.flashGlow = rar.glow;
     }
     hitEnemy(e, dmg, fromAng) {                                                   // el JUGADOR le pega a una enemiga (único camino → otorga XP y SCORE)
       if (!e || e.dead) return;
@@ -1536,7 +1953,7 @@
       e.shedChunk(fromAng, Math.max(1, Math.min(CHUNK_MAX, Math.round(dmg/CHUNK_DMG_PER))));
       this.score += Math.round(dmg * HIT_SCORE);                                 // PEGAR da puntos
       if (this.lifesteal > 0) this.healQueue += dmg * this.lifesteal;            // "Sanguijuela"
-      if (e.hp <= 0) { this.score += KILL_SCORE + Math.round(e.maxHp); e.die(); this.addXP(XP_KILL); } // MATAR da bonus
+      if (e.hp <= 0) { this.score += KILL_SCORE + Math.round(e.maxHp); e.die(); this.addXP(XP_KILL + Math.round(e.maxHp*0.2)); } // MATAR da bonus de score y XP (grandes valen más)
     }
     hurtPlayer(dmg, fromAng, attacker) {                                          // una enemiga (o mina) le pega al jugador
       if (this.immunity > 0 || this.gameOver) return;                            // escudo bloquea
@@ -1546,6 +1963,12 @@
       this.shedPlayerChunk(fromAng, Math.max(1, Math.min(CHUNK_MAX, Math.round(dmg/CHUNK_DMG_PER))));
       if (this.thorns > 0 && attacker && !attacker.dead) this.hitEnemy(attacker, dmg*this.thorns, fromAng + Math.PI); // "Espinas"
       if (this.hp <= 0) this.die();
+    }
+    borderHurt() {                                                                // orilla del lago: daño POR TIEMPO (no de una). Ambiental → ignora el escudo de medusa, pero la "Coraza" igual ayuda.
+      if (this.gameOver) return;
+      this.hp -= BORDER_DPS * (1 - this.armor) * deltaT;
+      this.hitFlash = Math.max(this.hitFlash, HAZARD_FLASH_TIME*0.6);            // destello rojo + cara de dolor sostenidos mientras roza la pared
+      if (this.hp <= 0) { this.hp = 0; this.die(); }
     }
     shedPlayerChunk(awayAng, count) {                                             // golpe al jugador → arranca pedazos (se acortan de la cola; los pedazos vuelan desde la cabeza)
       const h = snake[0]; if (!h) return;
@@ -1624,8 +2047,14 @@
       if (this.choosing) return;                                                 // eligiendo mejora: congela TODO (no drena escudo/boost ni spawnea)
       if (this.hitFlash > 0) this.hitFlash = Math.max(this.hitFlash - deltaT, 0);
       if (this.immunity > 0) this.immunity = Math.max(this.immunity - deltaT, 0);
+      if (this.venom > 0) {                                                        // VENENO del pez piedra: DoT como el borde (respeta Coraza, ignora el escudo; se congela acá en pausa/elección)
+        this.venom = Math.max(0, this.venom - deltaT);
+        this.hp -= STONE_VENOM_DPS * (1 - this.armor) * deltaT;
+        this.hitFlash = Math.max(this.hitFlash, HAZARD_FLASH_TIME*0.5);            // tinte de dolor sostenido mientras dura el veneno
+        if (this.hp <= 0) { this.hp = 0; this.die(); }
+      }
       if (this.speedBoost > 0) this.speedBoost = Math.max(this.speedBoost - deltaT, 0);
-      if (this.healQueue > 0) {                                                  // cura de la estrella, gradual (no de golpe)
+      if (this.healQueue > 0 && this.venom <= 0) {                               // cura pendiente (estrella + robo de vida "Sanguijuela"), gradual; el VENENO también la PAUSA (no sólo la regen) → ningún upgrade saltea el veneno
         const amt = Math.min(this.healQueue, HEAL_RATE*deltaT);
         this.hp = Math.min(this.maxHp, this.hp + amt); this.healQueue -= amt;
       }
@@ -1637,7 +2066,7 @@
       // COMBATE del jugador: si ACELERA (boost/sprint) con la cabeza de una enemiga en su cono, lanza la embestida
       // hacia la MÁS CERCANA en cono. El daño no es automático: cae sólo si el dash CONECTA (ver SnakePiece).
       if (this.attackCD > 0) this.attackCD -= deltaT;
-      this.hp = Math.min(this.maxHp, this.hp + HP_REGEN*this.regenMul*deltaT);    // regen (mejora "Regeneración")
+      if (this.venom <= 0) this.hp = Math.min(this.maxHp, this.hp + HP_REGEN*this.regenMul*deltaT); // regen ("Regeneración"): BLOQUEADA mientras el VENENO del pez piedra esté activo
       const accel = this.boosting || this.speedBoost > 0;
       if (accel && this.attackCD <= 0 && snake[0]) {
         const h = snake[0], range = sper(ATTACK_RANGE_F)*this.atkRangeMul, cos = Math.cos(ATTACK_ANG + this.atkConeBonus);
@@ -1646,9 +2075,20 @@
           const eh = e.pieces[0], dx = eh.x-h.x, dy = eh.y-h.y, d2 = dx*dx+dy*dy;
           if (d2 < bd && inAttackCone(h.x, h.y, h.ang, eh.x, eh.y, range, cos)) { bd = d2; best = e; }
         }
-        if (best) {
+        let bestBoss = null;                                                      // los jefes también son blanco del dash (cuerpo grande → cono con alcance extra)
+        for (const b of bosses) {
+          if (b.dead) continue;
+          const dx = b.x-h.x, dy = b.y-h.y, d2 = dx*dx+dy*dy;
+          if (d2 < bd && inAttackCone(h.x, h.y, h.ang, b.x, b.y, range + b.bodyR(), cos)) { bd = d2; best = null; bestBoss = b; }
+        }
+        if (bestBoss) {
+          const dx = bestBoss.x-h.x, dy = bestBoss.y-h.y, d = Math.hypot(dx, dy) || 1;
+          this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; this.lungeDisp = 0; this.attackCD = ATTACK_CD;
+          this.atkTarget = null; this.atkHit = false;                            // sin atkTarget enemigo → el hit-test de embestida prueba los jefes
+          h.wave_time = h.wave_time_total;
+        } else if (best) {
           const eh = best.pieces[0], dx = eh.x-h.x, dy = eh.y-h.y, d = Math.hypot(dx, dy) || 1;
-          this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; this.attackCD = ATTACK_CD;
+          this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; this.lungeDisp = 0; this.attackCD = ATTACK_CD;
           this.atkTarget = best; this.atkHit = false;
           h.wave_time = h.wave_time_total;
         }
@@ -1688,6 +2128,15 @@
           this.enemyCD = rndRange(3, 7);
         }
       } else this.enemyCD = rndRange(3, 7);
+
+      // BOSS cada 10 NIVELES, ROTANDO entre los 3 tipos (globo→piedra→linterna). Si subís varios niveles con un
+      // jefe vivo, el siguiente espera a que muera (!bosses.length). La vida escala por cada jefe ya visto. Las
+      // enemigas normales SIGUEN apareciendo (no es arena 1v1).
+      if (this.level >= this.nextBossLevel && !bosses.length) {
+        const type = BOSS_ROTATION[this.bossesSpawned % BOSS_ROTATION.length];
+        bosses.push(new Boss(type, BOSS_HP_BASE + BOSS_HP_GROW*this.bossesSpawned));
+        this.bossesSpawned++; this.nextBossLevel += BOSS_LEVEL_STEP;
+      }
 
       // minas: ídem, con dificultad creciente (arranca en 5, sube con el score). Se reciclan al alejarte
       // (ver Hazard.process) → siempre hay densidad cerca tuyo, no podés irte a una zona vacía.
@@ -1764,19 +2213,22 @@
       }
     }
     reset() {
-      snake = []; food = []; hazards = []; treasures = []; seahorses = []; enemies = []; chunks = []; spritesToRemove = [];
+      snake = []; food = []; hazards = []; treasures = []; seahorses = []; enemies = []; chunks = []; spritesToRemove = []; bosses = [];
+      this.nextBossLevel = BOSS_FIRST_LEVEL; this.bossesSpawned = 0;
+      this.venom = 0; this.shockwave = null; this.deathGlow = null;
       this.speedBoost = 0;
       this.gameOver = false; this.dying = false; this.deathT = 0; this.deathParticles = [];
-      this.score = 0; this.initCD = 4; this.pause = false;
+      this.score = 0; this.initCD = 4; this.pause = false; this.loadT = LOAD_TIME;
       this.pendingGrow = 0; this.pendingShrink = 0; this.fed = 0;
       this.maxHp = PLAYER_MAX_HP; this.hp = this.maxHp;                           // las mejoras subían maxHp → volver a base
-      this.attackCD = 0; this.lungeT = 0; this.atkTarget = null; this.atkHit = false; this.healQueue = 0;
+      this.attackCD = 0; this.lungeT = 0; this.lungeDisp = 0; this.atkTarget = null; this.atkHit = false; this.healQueue = 0;
       this.turbo = 1; this.boosting = false;
       // reset de mejoras + nivel
       this.dmgMul = 1; this.regenMul = 1; this.healMul = 1; this.turboDrainMul = 1; this.turboRechargeMul = 1;
       this.atkRangeMul = 1; this.atkConeBonus = 0; this.turnMul = 1; this.sizeDmgBonus = 0;
       this.lifesteal = 0; this.thorns = 0; this.armor = 0; this.magnetMul = 1;
       this.xp = 0; this.level = 1; this.xpNeed = XP_BASE; this.choosing = false; this.takenPassives.clear();
+      this.rerolls = START_REROLLS; this.luFlash = 0;
       const ov = document.getElementById('levelup'); if (ov) ov.classList.remove('show');
       camX = 0; camY = 0; initAmbient();
     }
@@ -1794,6 +2246,8 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     WORLD_R = sper(WORLD_FACTOR);                                                 // radio del lago (mundo circular)
     if (!ambient.length) initAmbient();
+    if (!fishes.length) initFishes();                                             // cardumen ambiental (1 sola vez; sobrevive resizes)
+    if (!seafloorReq) { seafloorReq = true; initSeafloor(); }                     // fondo del mar: carga + hornea la foto 1 sola vez (sobrevive resizes)
   }
   window.addEventListener('resize', resize);
 
@@ -1825,6 +2279,243 @@
       ctx.beginPath(); ctx.arc(m.x, m.y, m.r, 0, TAU); ctx.fill();
     }
     ctx.globalCompositeOperation = 'source-over';
+  }
+
+  // ── PECECITOS AMBIENTALES: cardumen decorativo y SUTIL (no es gameplay). Nadan hacia adelante, serpentean
+  //    suave (wander), aletean la cola, y se envuelven alrededor de la cámara (densidad constante, como las motas). ──
+  const FISH_COUNT = 11;
+  const FISH_HUES = [45, 38, 30, 190, 205, 52];                                  // amarillo/naranja/cyan: paleta de pez de arrecife (como el de la foto)
+  const FISH_FLEE_R = 0.20;                                                      // radio (× sper) en que una serpiente PELEANDO (dasheando) espanta a los peces
+  const FISH_SCARE_TIME = 1.3;                                                   // segundos que siguen huyendo tras asustarse
+  const FISH_FLEE_MULT = 3.2;                                                    // cuánto más rápido nadan asustados
+  function makeFish(x, y) {
+    return { x, y, ang: Math.random()*TAU, sp: rndRange(0.10, 0.22),             // rumbo + velocidad (× sper)
+      size: sper(rndRange(0.011, 0.020)), hue: FISH_HUES[(Math.random()*FISH_HUES.length) | 0],
+      a: rndRange(0.32, 0.55), ph: Math.random()*TAU, wf: rndRange(7, 12),        // alpha sutil + fase/freq del aleteo de cola
+      ws: rndRange(0.5, 1.3), wph: Math.random()*TAU, scared: 0, fleeAng: 0 };    // wander + estado de SUSTO (huida del combate)
+  }
+  function initFishes() {
+    fishes.length = 0;
+    const hx = snake[0] ? snake[0].x : 0, hy = snake[0] ? snake[0].y : 0;
+    for (let i = 0; i < FISH_COUNT; i++) fishes.push(makeFish(hx + rndRange(-W*0.6, W*0.6), hy + rndRange(-H*0.6, H*0.6)));
+  }
+  function updateFishes() {
+    if (manager.gameOver || manager.pause || manager.loadT > 0) return;          // congelados en pausa/muerte/carga
+    const hx = camX, hy = camY, bx = W*0.6, by = H*0.6, lim = WORLD_R - sper(0.02); // lim = no salir del círculo del lago
+    const fr = sper(FISH_FLEE_R), fr2 = fr*fr;
+    for (const f of fishes) {
+      // ¿hay una serpiente PELEANDO (en pleno dash) cerca? → susto. Origen del combate = tx,ty.
+      let tx = null, ty = null;
+      if (manager.lungeT > 0 && snake[0]) { const dx=f.x-snake[0].x, dy=f.y-snake[0].y; if (dx*dx+dy*dy < fr2) { tx=snake[0].x; ty=snake[0].y; } }
+      if (tx === null) for (const e of enemies) { if (e.lungeT > 0) { const eh=e.pieces[0], dx=f.x-eh.x, dy=f.y-eh.y; if (dx*dx+dy*dy < fr2) { tx=eh.x; ty=eh.y; break; } } }
+      if (tx !== null) { f.scared = FISH_SCARE_TIME; f.fleeAng = Math.atan2(f.y-ty, f.x-tx); } // huir en dirección OPUESTA al combate
+      f.ph += deltaT * f.wf;                                                     // aleteo de cola
+      if (f.scared > 0) {                                                        // ASUSTADO: gira rápido lejos del combate, acelera, aletea más
+        f.scared -= deltaT;
+        let d = f.fleeAng - f.ang; d = ((d+Math.PI)%TAU+TAU)%TAU - Math.PI; f.ang += d * Math.min(1, deltaT*6);
+        f.ph += deltaT * f.wf * 1.3;
+        const sp = sper(f.sp) * FISH_FLEE_MULT;
+        f.x += Math.cos(f.ang)*sp*deltaT; f.y += Math.sin(f.ang)*sp*deltaT;
+      } else {                                                                   // tranquilo: serpenteo suave (wander)
+        f.ang += Math.sin(waveClock*f.ws + f.wph) * 0.6 * deltaT;
+        const sp = sper(f.sp);
+        f.x += Math.cos(f.ang)*sp*deltaT; f.y += Math.sin(f.ang)*sp*deltaT;
+      }
+      if (f.x < hx - bx) f.x += bx*2; else if (f.x > hx + bx) f.x -= bx*2;       // envolver alrededor de la cámara (densidad constante)
+      if (f.y < hy - by) f.y += by*2; else if (f.y > hy + by) f.y -= by*2;
+      const dd = Math.hypot(f.x, f.y);                                           // CÍRCULO DEL LAGO: no salir → rebote hacia adentro
+      if (dd > lim) { f.x = f.x/dd*lim; f.y = f.y/dd*lim; f.ang = Math.atan2(-f.y, -f.x) + rndRange(-0.5, 0.5); f.scared = 0; }
+    }
+  }
+  function drawFishes() {
+    for (const f of fishes) {
+      if (!inView(f.x, f.y)) continue;
+      const s = f.size, wig = Math.sin(f.ph);
+      ctx.save();
+      ctx.translate(f.x, f.y); ctx.rotate(f.ang); ctx.globalAlpha = f.a;
+      ctx.fillStyle = `hsl(${f.hue},75%,52%)`;                                    // COLA (triángulo que aletea de lado a lado)
+      ctx.beginPath(); ctx.moveTo(-s*0.85, 0);
+      ctx.lineTo(-s*1.7, -s*0.62 + wig*s*0.45); ctx.lineTo(-s*1.7, s*0.62 + wig*s*0.45);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = `hsl(${f.hue},62%,60%)`;                                    // CUERPO (elipse con leve coleo lateral)
+      ctx.beginPath(); ctx.ellipse(0, wig*s*0.12, s, s*0.5, 0, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(8,14,20,0.85)';                                       // OJO
+      ctx.beginPath(); ctx.arc(s*0.55, -s*0.08, s*0.13, 0, TAU); ctx.fill();
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // ── FONDO DEL MAR: corales/rocas BAKEADOS (blits). Se hornea un puñado de sprites (varios tipos × tonos)
+  //    una sola vez en un canvas offscreen, y se esparcen ~110 instancias por el disco con posición FIJA en
+  //    el mundo. Al dibujar se cullean a la vista y se les da un vaivén suave (corriente). Es el análogo del
+  //    "render por blits bakeados" de Newton's Cradle: dibujar el coral cada frame sería carísimo. ──
+  const CORAL_PX = 128;                                                          // resolución de bakeo de un coral simple (se escala al mundo al blitear)
+  const REEF_PX = 192;                                                           // resolución de bakeo de un ARRECIFE compuesto (más motas → más resolución)
+  function makeCoralSprite(type, hue, sat, light) {
+    const S = (type === 'reef_a' || type === 'reef_b') ? REEF_PX : CORAL_PX, cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+    const g = cv.getContext('2d'), cx = S/2, cy = S/2;
+    const base = `hsl(${hue},${sat}%,${light}%)`, lite = `hsl(${hue},${sat}%,${Math.min(82,light+18)}%)`,
+          glow = `hsla(${hue},${sat}%,${Math.min(88,light+30)}%,0.5)`;
+    g.lineCap = 'round'; g.lineJoin = 'round';
+    if (type === 'brain') {                                                      // coral cerebro: domo con surcos concéntricos ondulados (visto desde arriba)
+      g.fillStyle = base; g.beginPath(); g.arc(cx, cy, S*0.34, 0, TAU); g.fill();
+      g.strokeStyle = lite; g.lineWidth = S*0.022;
+      for (let r = S*0.30; r > S*0.05; r -= S*0.07) {
+        g.beginPath();
+        for (let a = 0; a <= TAU + 0.1; a += 0.22) {
+          const rr = r + Math.sin(a*6 + r)*S*0.02, x = cx + Math.cos(a)*rr, y = cy + Math.sin(a)*rr;
+          a === 0 ? g.moveTo(x, y) : g.lineTo(x, y);
+        }
+        g.stroke();
+      }
+    } else if (type === 'branch') {                                              // coral cuerno: ramas radiales con bifurcaciones (staghorn desde arriba)
+      g.strokeStyle = base; g.lineWidth = S*0.05;
+      const n = 7 + (Math.random()*3 | 0);
+      for (let i = 0; i < n; i++) {
+        const a = (i/n)*TAU + rndRange(-0.2, 0.2), len = S*rndRange(0.22, 0.4);
+        const mx = cx + Math.cos(a)*len*0.6, my = cy + Math.sin(a)*len*0.6;
+        g.beginPath(); g.moveTo(cx, cy); g.lineTo(mx, my); g.lineTo(cx + Math.cos(a)*len, cy + Math.sin(a)*len); g.stroke();
+        const fa = a + (Math.random() < 0.5 ? 0.5 : -0.5);                       // una bifurcación por rama
+        g.beginPath(); g.moveTo(mx, my); g.lineTo(mx + Math.cos(fa)*len*0.4, my + Math.sin(fa)*len*0.4); g.stroke();
+      }
+      g.globalCompositeOperation = 'lighter'; g.fillStyle = glow;
+      g.beginPath(); g.arc(cx, cy, S*0.06, 0, TAU); g.fill();
+      g.globalCompositeOperation = 'source-over';
+    } else if (type === 'anemone') {                                            // anémona: tentáculos ondulados radiales + centro que brilla (tono cálido)
+      const n = 18; g.strokeStyle = base; g.lineWidth = S*0.035;
+      for (let i = 0; i < n; i++) {
+        const a = (i/n)*TAU, len = S*rndRange(0.28, 0.4);
+        g.beginPath(); g.moveTo(cx, cy);
+        for (let t = 0.25; t <= 1.001; t += 0.25) {
+          const rr = len*t, wob = Math.sin(t*6 + i)*S*0.03;
+          g.lineTo(cx + Math.cos(a)*rr - Math.sin(a)*wob, cy + Math.sin(a)*rr + Math.cos(a)*wob);
+        }
+        g.stroke();
+      }
+      g.fillStyle = lite; g.beginPath(); g.arc(cx, cy, S*0.12, 0, TAU); g.fill();
+      g.globalCompositeOperation = 'lighter'; g.fillStyle = glow;
+      g.beginPath(); g.arc(cx, cy, S*0.18, 0, TAU); g.fill();
+      g.globalCompositeOperation = 'source-over';
+    } else if (type === 'reef_a' || type === 'reef_b') {                         // ARRECIFE: varias motas de coral compuestas en UN solo sprite (vista cenital) → un clump = 1 blit
+      const motifs = type === 'reef_a' ? ['brain', 'branch', 'anemone'] : ['rock', 'branch', 'brain']; // SÓLO tipos simples (jamás 'reef_*' → recursión de 1 nivel, en bakeo)
+      const k = 5 + (Math.random()*2 | 0);                                       // 5-6 motas por arrecife
+      for (let i = 0; i < k; i++) {
+        const a = (i/k)*TAU + rndRange(-0.3, 0.3), rr = S*rndRange(0.06, 0.26);
+        const mx = cx + Math.cos(a)*rr, my = cy + Math.sin(a)*rr, ms = S*rndRange(0.30, 0.46);
+        const sub = makeCoralSprite(motifs[(Math.random()*motifs.length) | 0], hue + rndRange(-14, 14), sat, Math.min(82, light + rndRange(-6, 8)));
+        g.globalAlpha = rndRange(0.78, 0.95);
+        g.drawImage(sub, mx - ms/2, my - ms/2, ms, ms);                          // compone motas pre-bakeadas en un solo lienzo
+      }
+      g.globalAlpha = 1;
+    } else {                                                                     // 'rock': roca redondeada oscura con motas
+      g.fillStyle = base; g.beginPath();
+      const m = 9;
+      for (let i = 0; i <= m; i++) { const a = (i/m)*TAU, rr = S*0.3*rndRange(0.7, 1.05), x = cx + Math.cos(a)*rr, y = cy + Math.sin(a)*rr; i === 0 ? g.moveTo(x, y) : g.lineTo(x, y); }
+      g.closePath(); g.fill();
+      g.fillStyle = lite;
+      for (let i = 0; i < 5; i++) { g.beginPath(); g.arc(cx + rndRange(-S*0.18, S*0.18), cy + rndRange(-S*0.18, S*0.18), S*0.03, 0, TAU); g.fill(); }
+    }
+    return cv;
+  }
+  function initCorals() {                                                        // bakea los sprites y esparce las instancias (1 sola vez; posición fija en el mundo)
+    coralSprites.length = 0; corals.length = 0;
+    const palettes = [['brain',180,45,34], ['brain',280,38,40], ['branch',190,55,42], ['branch',330,42,46],
+                      ['anemone',22,70,52], ['anemone',315,58,55], ['rock',200,12,22], ['rock',190,14,28],
+                      ['reef_a',195,40,34], ['reef_b',205,18,26]];                // 8,9 = ARRECIFES compuestos
+    for (const p of palettes) coralSprites.push(makeCoralSprite(p[0], p[1], p[2], p[3]));
+    // CLUSTERS en vez de scatter uniforme: K centros de arrecife, y alrededor de cada uno apiño un arrecife
+    // compuesto + 2-3 acentos sueltos con jitter gaussiano → "conjuntos" con piso desnudo entre medio. Cada
+    // clump comparte una PROFUNDIDAD: más profundo = más transparente y un toque más chico (escorzo cenital).
+    const REEF_IDX = [8, 9], SINGLE_IDX = [0, 1, 2, 3, 4, 5, 6, 7];
+    const K = 16;                                                                 // número de arrecifes (subir para más densidad, sigue barato)
+    const RLIM = WORLD_R * 0.93;                                                  // ningún coral cruza la orilla
+    const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 1.5; // ~normal en [-1,1]
+    for (let kc = 0; kc < K; kc++) {
+      const ca = Math.random()*TAU, crr = Math.sqrt(Math.random())*(WORLD_R*0.85); // centro del clump (lejos de la orilla)
+      const ccx = Math.cos(ca)*crr, ccy = Math.sin(ca)*crr, depth = Math.random(); // depth 0 somero (brillante) .. 1 profundo (transparente)
+      const tierAl = 0.72 + (0.30 - 0.72)*depth, tierSz = 1.0 + (0.82 - 1.0)*depth, spread = sper(0.10);
+      const push = (sp, scLo, scHi, sprMul) => {
+        let x = ccx + gauss()*spread*sprMul, y = ccy + gauss()*spread*sprMul;
+        const d = Math.hypot(x, y); if (d > RLIM) { x = x/d*RLIM; y = y/d*RLIM; } // clamp adentro del lago
+        corals.push({ x, y, sp, rot: Math.random()*TAU, sc: rndRange(scLo, scHi)*tierSz,
+          al: Math.max(0.18, Math.min(0.82, tierAl + rndRange(-0.05, 0.05))), sw: rndRange(0.4, 1.0), ph: Math.random()*TAU, dp: depth });
+      };
+      push(REEF_IDX[(Math.random()*REEF_IDX.length) | 0], 1.2, 1.8, 0.4);         // arrecife central (pieza focal, jitter chico)
+      const M = 2 + (Math.random()*2 | 0);                                        // 2-3 acentos sueltos alrededor
+      for (let m = 0; m < M; m++) push(SINGLE_IDX[(Math.random()*SINGLE_IDX.length) | 0], 0.7, 1.6, 1.0);
+    }
+    corals.sort((a, b) => b.dp - a.dp);                                           // 1 sola vez: profundos primero, someros encima (Z cenital)
+  }
+  // ── FONDO DEL MAR (FOTO): seafloor.jpg horneada UNA vez (blur + desaturada/teal + oscura) y mirror-tileada
+  //    por el piso del lago. El blur/desat/oscurecido vuelven irreconocibles los "landmarks" → tilea sin que se
+  //    note la repetición. Si el archivo no está, seafloorTex queda null y se ve el gradiente del lago (fallback). ──
+  const SEAFLOOR_PROCESS = false;                                                // false = FOTO CRUDA máxima calidad (test) · true = procesada (blur+desat+oscura, look "fondo")
+  const SEAFLOOR_MODE = 'tile';                                                 // 'tile' = mosaico mirror a NITIDEZ NATIVA (repite, sin perder calidad) · 'cover' = 1 imagen a todo el mapa (blanda)
+  const SEAFLOOR_TILE_SCALE = 1;                                                // 1 = PÍXEL-PERFECTO (baldosa = px nativos/dpr → 1 px imagen = 1 px pantalla, máxima nitidez). Subir = baldosas más grandes pero más blandas / menos repetición
+  const SEAFLOOR_ALPHA = 0.3;                                                   // OPACIDAD de la foto (1 = sólida; bajar → más transparente, deja ver el lago teal por debajo)
+  const SEAFLOOR_TINT = 'rgba(12,45,85,0.4)';                                  // capa AZULADA por ENCIMA → profundidad de mar (subí el alpha para más hondo/oscuro; cambiá el color para más/menos azul)
+  const SEAFLOOR_TILE_PX = 256;                                                  // resolución del tile bakeado en modo procesado (chico → poca memoria; igual va borroso)
+  const SEAFLOOR_MAX_PX = 2048;                                                  // TOPE del lado largo de la foto al cargar (la downscalea): una foto enorme (4000px) daba baldosa gigante = "media imagen" + ~48MB de RAM. Bajar = baldosa más chica / repite más / menos memoria
+  function bakeSeafloor(img) {
+    const S = SEAFLOOR_TILE_PX, cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+    const g = cv.getContext('2d');
+    // BLUR iOS-safe (sin ctx.filter): bajar fuerte a un canvas chico y volver a subir suavizado
+    const sm = document.createElement('canvas'); sm.width = 48; sm.height = 48;
+    const sg = sm.getContext('2d'); sg.imageSmoothingEnabled = true;
+    sg.drawImage(img, 0, 0, 1, 1);                                            // colapsa el detalle (corales → mancha)
+    g.imageSmoothingEnabled = true; g.drawImage(sm, 0, 0, S, S);                // re-expande → blur fuerte y universal
+    // DESATURAR + BAJO BRILLO + TINTE TEAL con UN overlay (source-over, sin blend modes → seguro en iOS)
+    g.fillStyle = 'rgba(6,26,30,0.1)'; g.fillRect(0, 0, S, S);
+    return cv;
+  }
+  function downscaleImg(img, maxPx) {                                            // downscalea la foto al cargar: baldosa razonable + memoria sana (la fuente enorme se libera)
+    const iw = img.width || 1, ih = img.height || 1, s = Math.min(1, maxPx / Math.max(iw, ih));
+    if (s >= 1) return img;                                                      // ya es chica → usar directo
+    const w = Math.max(1, Math.round(iw*s)), h = Math.max(1, Math.round(ih*s));
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const g = cv.getContext('2d'); g.imageSmoothingEnabled = true; g.imageSmoothingQuality = 'high';
+    g.drawImage(img, 0, 0, w, h);                                                // downscale de alta calidad (achicar nunca pixela)
+    return cv;
+  }
+  function initSeafloor() {
+    const img = new Image();
+    const ready = () => { seafloorReady = true; };                             // la carga TERMINÓ (éxito o error) → recién acá arranca el fade-in
+    img.onload = () => { const src = downscaleImg(img, SEAFLOOR_MAX_PX); seafloorTex = SEAFLOOR_PROCESS ? bakeSeafloor(src) : src; ready(); }; // downscale; crudo = máxima calidad
+    img.onerror = () => { seafloorTex = null; ready(); };                      // sin archivo → fallback (se ve el lago), igual destraba el fade
+    setTimeout(ready, 4000);                                                   // safety: si la imagen cuelga, no quedarse en negro para siempre
+    img.src = 'img.png?v=' + Date.now();                                        // CACHE-BUST: fuerza carga fresca cada vez. Al fijar la imagen final, ponelo 'img.png?v=1'.
+  }
+  function drawSeaFloor() {                                                      // dibuja la foto del fondo recortada al disco del lago. 2 modos: 'cover' (1 imagen) o 'tile' (mosaico)
+    if (!seafloorTex) return;                                                    // fallback: el gradiente del lago (drawLake) queda visible
+    const iw = seafloorTex.width || 1, ih = seafloorTex.height || 1, ar = iw/ih;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(0, 0, WORLD_R, 0, TAU); ctx.clip();                 // recortado a la orilla del lago
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';        // mejor calidad de escalado
+    ctx.globalAlpha = SEAFLOOR_ALPHA;                                            // transparencia de la foto: deja ver el gradiente del lago por debajo
+    if (SEAFLOOR_MODE === 'cover') {                                             // UNA imagen estirada a TODO el mapa, en aspecto correcto (el sobrante lo recorta el disco)
+      let dw = WORLD_R*2, dh = WORLD_R*2; if (ar > 1) dw = dh*ar; else dh = dw/ar;
+      ctx.drawImage(seafloorTex, -dw/2, -dh/2, dw, dh);
+    } else {                                                                     // MOSAICO mirror (espeja celdas alternas → sin costuras), respetando el aspecto de la foto
+      const TWx = (iw/dpr)*SEAFLOOR_TILE_SCALE, TWy = (ih/dpr)*SEAFLOOR_TILE_SCALE; // baldosa = px nativos / dpr → 1 px imagen = 1 px pantalla (sin upscaling = máxima nitidez)
+      const ix0 = Math.floor(vL/TWx), ix1 = Math.floor(vR/TWx), iy0 = Math.floor(vT/TWy), iy1 = Math.floor(vB/TWy);
+      for (let ix = ix0; ix <= ix1; ix++) for (let iy = iy0; iy <= iy1; iy++) {
+        ctx.save();
+        ctx.translate((ix + 0.5)*TWx, (iy + 0.5)*TWy);
+        ctx.scale((ix & 1) ? -1 : 1, (iy & 1) ? -1 : 1);
+        ctx.drawImage(seafloorTex, -TWx/2, -TWy/2, TWx, TWy);
+        ctx.restore();
+      }
+    }
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = SEAFLOOR_TINT;                                               // capa AZULADA por ENCIMA → profundidad de mar (recortada al disco)
+    ctx.fillRect(-WORLD_R, -WORLD_R, WORLD_R*2, WORLD_R*2);
+    if (SEAFLOOR_PROCESS) {                                                       // viñeta de profundidad SÓLO en el look procesado (en test crudo se ve plano y completo)
+      const vg = ctx.createRadialGradient(0, 0, WORLD_R*0.25, 0, 0, WORLD_R);
+      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(3,12,16,0.6)');
+      ctx.fillStyle = vg; ctx.fillRect(-WORLD_R, -WORLD_R, WORLD_R*2, WORLD_R*2);
+    }
+    ctx.restore();
   }
 
   // ── LAGO: disco grande con gradiente teal y orilla. La cámara mantiene la cabeza en el centro, así que
@@ -1859,16 +2550,117 @@
     ctx.fillStyle = '#eafff6';
     ctx.fillText(String(manager.score), x, y + small + 3);
     ctx.shadowBlur = 0;
-    // barra de XP + nivel (debajo del score). XP mixta: matar suma mucho, comer poco.
-    const bw = Math.max(120, W*0.2), bh = Math.max(6, 7*tscale()), by = y + small + 3 + big + 6;
+    // ── BARRA DE XP: cápsula redondeada, centrada arriba, llenando el hueco entre el score (izq) y los botones
+    //    (der) con margen y simétrica respecto al centro. Sólo el NÚMERO de nivel debajo (sin "NIVEL", sin x/need). ──
+    const scoreRight = x + ctx.measureText(String(manager.score)).width;         // borde derecho del score (fuente grande aún activa)
+    const pr = document.getElementById('padMenu') ? document.getElementById('padMenu').getBoundingClientRect() : null;
+    const mmR0 = Math.max(42, Math.min(W, H) * 0.10), mg = 16;                    // radio del minimapa (igual que drawMinimap)
+    const by = (pr ? pr.bottom : 44) + 8;                                        // DEBAJO de los botones → despeja la cámara selfie en mobile
+    const rightBound = (W - 14 - 2*mmR0) - mg;                                    // borde izquierdo del minimapa
+    const hw = Math.max(60, Math.min(W/2 - (scoreRight + mg), rightBound - W/2)); // medio-ancho simétrico al centro, despejado del score y el minimapa
+    const bw = hw*2, bx = W/2 - hw, bh = Math.max(7, 8*tscale()), rr = bh/2;
     const frac = manager.xpNeed ? Math.max(0, Math.min(1, manager.xp/manager.xpNeed)) : 0;
-    ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(x, by, bw, bh);
-    ctx.fillStyle = 'rgba(120,230,220,0.9)'; ctx.fillRect(x, by, bw*frac, bh);
-    ctx.strokeStyle = 'rgba(120,230,220,0.35)'; ctx.lineWidth = 1; ctx.strokeRect(x+0.5, by+0.5, bw, bh);
-    ctx.font = `700 ${small}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillStyle = 'rgba(180,255,240,0.9)';
-    ctx.fillText('NIVEL ' + manager.level, x, by + bh + 3);
+    rRect(bx, by, bw, bh, rr); ctx.fillStyle = 'rgba(10,30,34,0.55)'; ctx.fill(); // track
+    if (frac > 0) {                                                              // relleno verde-azulado (en temática), recortado a la cápsula
+      ctx.save(); rRect(bx, by, bw, bh, rr); ctx.clip();
+      const g = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+      g.addColorStop(0, '#17e3c2'); g.addColorStop(1, '#3a9dff');
+      ctx.fillStyle = g; ctx.fillRect(bx, by, bw*frac, bh);
+      ctx.restore();
+    }
+    rRect(bx + 0.5, by + 0.5, bw - 1, bh - 1, rr); ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(130,235,225,0.30)'; ctx.stroke(); // borde fino
+    ctx.font = `800 ${Math.round(13*tscale())}px 'Segoe UI', system-ui, sans-serif`; // sólo el NÚMERO de nivel, centrado debajo
+    ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(190,255,240,0.92)';
+    ctx.fillText(String(manager.level), W/2, by + bh + 4);
+    // ── MODIFICADORES activos: lista de filas (ícono + valor) debajo del score; sólo los que difieren de la base ──
+    const m = manager, rows = [];
+    if (m.dmgMul           > 1)             rows.push(['⚔️', 'x' + m.dmgMul.toFixed(1)]);
+    if (m.maxHp            > PLAYER_MAX_HP) rows.push(['❤️', String(Math.round(m.maxHp))]);
+    if (m.regenMul         > 1)             rows.push(['➕', 'x' + m.regenMul.toFixed(1)]);
+    if (m.sizeDmgBonus     > 0)             rows.push(['🦈', '+' + Math.round(m.sizeDmgBonus*100) + '%']);
+    if (m.atkRangeMul      > 1)             rows.push(['🎯', 'x' + m.atkRangeMul.toFixed(1)]);
+    if (m.atkConeBonus     > 0)             rows.push(['📐', '+' + Math.round(m.atkConeBonus*180/Math.PI) + '°']);
+    if (m.turnMul          > 1)             rows.push(['🌀', 'x' + m.turnMul.toFixed(1)]);
+    if (m.turboDrainMul    < 1)             rows.push(['⚡', '+' + Math.round((1/m.turboDrainMul - 1)*100) + '%']);
+    if (m.turboRechargeMul > 1)             rows.push(['🔋', 'x' + m.turboRechargeMul.toFixed(1)]);
+    if (m.lifesteal        > 0)             rows.push(['🩸', Math.round(m.lifesteal*100) + '%']);
+    if (m.thorns           > 0)             rows.push(['🛡️', Math.round(m.thorns*100) + '%']);
+    if (m.armor            > 0)             rows.push(['🪖', '-' + Math.round(m.armor*100) + '%']);
+    if (m.healMul          > 1)             rows.push(['🍽️', 'x' + m.healMul.toFixed(0)]);
+    if (m.magnetMul        > 1)             rows.push(['🧲', 'x' + m.magnetMul.toFixed(1)]);
+    if (rows.length) {
+      const fs = Math.round(12*tscale()), rowH = Math.round(fs*1.5);
+      let ly = y + small + 3 + big + 12;                                          // arranca debajo del número de score
+      ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+      ctx.font = `600 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+      for (const [ico, val] of rows) {
+        ctx.fillStyle = 'rgba(150,235,225,0.6)';  ctx.fillText(ico, x, ly);       // ícono tenue
+        ctx.fillStyle = 'rgba(225,255,245,0.92)'; ctx.fillText(val, x + Math.round(fs*1.7), ly); // valor brillante
+        ly += rowH;
+      }
+    }
     ctx.restore();                                                                // (la vida va sobre la cabeza como las otras; el turbo en el propio orbe)
+  }
+
+  // ── PEZ LINTERNA: oscurece TODA la escena (1 fill screen-space) y deja sólo el SEÑUELO + un CONO de luz.
+  //    Va después del mundo (restore) y antes del HUD → atenúa el juego pero NO la barra/minimapa. Barato:
+  //    1 fillRect + 2 gradientes radiales (cono recortado a triángulo + orbe), sin trabajo por-píxel. ──
+  function drawAnglerDark() {
+    const ab = bosses.find(b => !b.dead && b.type === 'angler'); if (!ab || manager.gameOver) return;
+    const lit = ab.aphase === 'blackout' || ab.aphase === 'reposition';          // apagón total al reposicionar
+    const arming = ab.aphase === 'windup' || ab.aphase === 'lunge';              // armando/embistiendo → el cono se pone ROJO (AVISO)
+    const tgt = lit ? 0.9 : (arming ? 0.42 : 0.5);                              // fuera del apagón NO muy oscuro → las enemigas siguen visibles
+    ab.darkA += (tgt - ab.darkA) * Math.min(1, deltaT*6);                        // ease suave del oscurecimiento
+    ctx.fillStyle = `rgba(2,6,10,${ab.darkA})`; ctx.fillRect(0, 0, W, H);
+    const glow = lit ? 0 : Math.min(1, (ANGLER_LURE_T - ab.aphaseT) / 0.3);       // ramp: el señuelo aparece a medida que se levanta el apagón (sin pop)
+    if (glow <= 0) return;
+    const sx = W/2 + (ab.lureX - camX), sy = H/2 + (ab.lureY - camY);            // mundo → pantalla (inverso del translate de la cámara)
+    const len = sper(ANGLER_CONE_LEN_F);
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';                        // CONO: clip triangular + 1 gradiente
+    ctx.beginPath(); ctx.moveTo(sx, sy);
+    ctx.lineTo(sx + Math.cos(ab.ang - ANGLER_CONE_HALF)*len, sy + Math.sin(ab.ang - ANGLER_CONE_HALF)*len);
+    ctx.lineTo(sx + Math.cos(ab.ang + ANGLER_CONE_HALF)*len, sy + Math.sin(ab.ang + ANGLER_CONE_HALF)*len);
+    ctx.closePath(); ctx.clip();
+    const coneHue = arming ? 8 : ab.hue, coneInt = arming ? 0.85 : 0.5;          // ROJO e intenso al armar/embestir (telegrafía clara del golpe)
+    const cg = ctx.createRadialGradient(sx, sy, 0, sx, sy, len);
+    cg.addColorStop(0, `hsla(${coneHue},95%,${arming ? 58 : 62}%,${coneInt*glow})`); cg.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = cg; ctx.fillRect(sx - len, sy - len, len*2, len*2);
+    ctx.restore();
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';                        // ORB del señuelo: 1 gradiente chico + núcleo brillante
+    const lr = sper(0.05)*(0.85 + 0.15*Math.sin(ab.lurePhase));
+    const og = ctx.createRadialGradient(sx, sy, 0, sx, sy, lr);
+    og.addColorStop(0, `hsla(${arming ? 8 : ab.hue},100%,${arming ? 70 : 80}%,${0.95*glow})`); og.addColorStop(1, 'rgba(0,0,0,0)'); // el orbe también vira a rojo al armar
+    ctx.fillStyle = og; ctx.beginPath(); ctx.arc(sx, sy, lr, 0, TAU); ctx.fill();
+    ctx.fillStyle = `rgba(230,255,255,${0.95*glow})`; ctx.beginPath(); ctx.arc(sx, sy, lr*0.18, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
+  // ── BARRA DE BOSS: cápsula full-width (de lado a lado) debajo de la barra de XP. Sólo durante la pelea.
+  //    Nombre centrado arriba + fill en el color del jefe. ──
+  function drawBossBar() {
+    const b = bosses[0]; if (!b || manager.gameOver) return;
+    const frac = Math.max(0, Math.min(1, b.hp/b.maxHp)), hue = 0;                // barra SIEMPRE ROJA (hue 0), sin importar el color del jefe
+    const pm = document.getElementById('padMenu');
+    const top = (pm ? pm.getBoundingClientRect().bottom : 44) + 8;               // = altura de la barra de XP (debajo de los botones)
+    const xpBh = Math.max(7, 8*tscale());
+    const bh = Math.max(13, H*0.024), mgn = Math.max(16, W*0.05), bx = mgn, bw = W - mgn*2;
+    const by = top + xpBh + 24, rr = bh/2;                                       // debajo de la XP y su número de nivel
+    ctx.save();
+    ctx.font = `800 ${Math.round(13*tscale())}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = `hsl(${hue},90%,78%)`; ctx.shadowColor = `hsla(${hue},90%,60%,0.9)`; ctx.shadowBlur = 10;
+    ctx.fillText(b.name, W/2, by - 5); ctx.shadowBlur = 0;
+    rRect(bx, by, bw, bh, rr); ctx.fillStyle = 'rgba(22,6,16,0.72)'; ctx.fill(); // track
+    if (frac > 0) {
+      ctx.save(); rRect(bx, by, bw, bh, rr); ctx.clip();
+      const g = ctx.createLinearGradient(bx, 0, bx + bw, 0);
+      g.addColorStop(0, `hsl(${hue},85%,44%)`); g.addColorStop(1, `hsl(${hue},95%,66%)`);
+      ctx.fillStyle = g; ctx.fillRect(bx, by, bw*frac, bh);
+      ctx.fillStyle = 'rgba(255,255,255,0.13)'; ctx.fillRect(bx, by, bw*frac, bh*0.45); // brillo superior
+      ctx.restore();
+    }
+    rRect(bx + 0.5, by + 0.5, bw - 1, bh - 1, rr); ctx.lineWidth = 1.5; ctx.strokeStyle = `hsla(${hue},90%,78%,0.5)`; ctx.stroke();
+    ctx.restore();
   }
 
   // ── MINIMAPA: disco en la esquina sup-derecha (debajo de los botones) que muestra el lago entero y la
@@ -1876,7 +2668,7 @@
   // escala al radio del minimapa; el origen del mundo cae en el centro del minimapa. ──
   function drawMinimap() {
     if (manager.gameOver) return;
-    const mmR = Math.max(36, Math.min(W, H) * 0.085);
+    const mmR = Math.max(42, Math.min(W, H) * 0.10);
     const mmx = W - 14 - mmR, mmy = 58 + mmR;                                     // sup-derecha, despejado de la fila de botones
     const scale = mmR / WORLD_R;
     ctx.save();
@@ -1897,10 +2689,16 @@
         ctx.beginPath(); ctx.arc(mmx + e.pieces[0].x*scale, mmy + e.pieces[0].y*scale, pr, 0, TAU); ctx.stroke();
       }
     }
-    for (const f of food)      dot(f.x, f.y, `hsl(${f.hue},90%,62%)`, 2);
+    for (const f of food)      dot(f.x, f.y, `hsl(${f.hue},${f.sat}%,${Math.min(72,f.light)}%)`, 2); // tono de la rareza (común whitish)
     for (const h of hazards)   dot(h.x, h.y, 'rgba(255,90,200,0.9)', 2);
     for (const j of treasures) dot(j.x, j.y, 'hsl(335,100%,72%)', 2.6);
     for (const s of seahorses) dot(s.x, s.y, 'hsl(32,100%,60%)', 2.6);
+    for (const b of bosses) {                                                    // JEFE: punto grande pulsante + anillo en su color (siempre localizable)
+      const pr = 4 + 2*Math.abs(Math.sin(waveClock*4));
+      dot(b.x, b.y, `hsl(${b.hue},90%,62%)`, 3.4);
+      ctx.lineWidth = 1.8; ctx.strokeStyle = `hsl(${b.hue},90%,78%)`;
+      ctx.beginPath(); ctx.arc(mmx + b.x*scale, mmy + b.y*scale, pr, 0, TAU); ctx.stroke();
+    }
     const head = snake[0];
     if (head) {                                                                  // cabeza: punto brillante con halo
       ctx.fillStyle = 'rgba(0,255,190,0.35)'; ctx.beginPath(); ctx.arc(mmx + head.x*scale, mmy + head.y*scale, 5, 0, TAU); ctx.fill();
@@ -2050,45 +2848,81 @@
     ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(190,255,220,0.8)'; ctx.stroke();
   }
 
-  // ════════════════ MEJORAS (pool del sistema de niveles) ════════════════
-  // Cada mejora: id, ícono, nombre, desc y apply(manager). Las `passive` son ÚNICAS (no se repiten en el pool).
-  // Pediste stats base + alguna pasiva: las primeras 9 son numéricas (repetibles), las últimas 5 son pasivas.
+  // ════════════════ NIVELES: pool + roll + overlay (las RAREZAS son la tabla unificada `RARITY`, definida arriba) ════════════════
+  const LU_CHOICES = 4;                                                           // cartas por nivel (1 por fila, apiladas)
+  const START_REROLLS = 1, GAIN_REROLL_EVERY = 5;                                 // rerolls al arrancar + 1 cada N niveles
+  // MEJORAS: id, ico, terse(R)->label corta (con el número del tier), apply(m, RF, tier). minTier = piso de
+  // rareza (pasivas no salen comunes). fixedRar = rareza fija. hpLow = sólo aparece si te falta vida.
   const UPGRADES = [
-    { id:'hp',     ico:'❤️',  name:'Vitalidad',       desc:'+25 vida máxima y te curás',        apply:m=>{ m.maxHp += 25; m.hp = m.maxHp; } },
-    { id:'regen',  ico:'➕',  name:'Regeneración',    desc:'+60% regeneración de vida',          apply:m=>{ m.regenMul += 0.6; } },
-    { id:'dmg',    ico:'⚔️',  name:'Filo',            desc:'+20% daño de ataque',                apply:m=>{ m.dmgMul += 0.2; } },
-    { id:'size',   ico:'🦈',  name:'Depredador',      desc:'+25% al bonus de daño por tamaño',   apply:m=>{ m.sizeDmgBonus += 0.25; } },
-    { id:'turbA',  ico:'⚡',  name:'Turbo extendido', desc:'el turbo dura ~30% más',             apply:m=>{ m.turboDrainMul *= 0.78; } },
-    { id:'turbR',  ico:'🔋',  name:'Recarga',         desc:'+45% recarga de turbo',              apply:m=>{ m.turboRechargeMul += 0.45; } },
-    { id:'range',  ico:'🎯',  name:'Alcance',         desc:'+22% alcance del ataque',            apply:m=>{ m.atkRangeMul += 0.22; } },
-    { id:'cone',   ico:'📐',  name:'Embestida ancha', desc:'cono de ataque más ancho',           apply:m=>{ m.atkConeBonus = Math.min(0.35, m.atkConeBonus + 0.18); } },
-    { id:'turn',   ico:'🌀',  name:'Agilidad',        desc:'+20% velocidad de giro',             apply:m=>{ m.turnMul += 0.2; } },
-    { id:'leech',  ico:'🩸',  name:'Sanguijuela',     desc:'PASIVA: curás 25% del daño que hacés', passive:true, apply:m=>{ m.lifesteal += 0.25; } },
-    { id:'thorn',  ico:'🛡️',  name:'Espinas',         desc:'PASIVA: quien te ataca recibe 40% de vuelta', passive:true, apply:m=>{ m.thorns += 0.4; } },
-    { id:'armor',  ico:'🪖',  name:'Coraza',          desc:'PASIVA: -20% daño recibido',         passive:true, apply:m=>{ m.armor = Math.min(0.7, m.armor + 0.2); } },
-    { id:'feast',  ico:'🍽️',  name:'Festín',          desc:'PASIVA: comer cura el doble',        passive:true, apply:m=>{ m.healMul += 1; } },
-    { id:'magnet', ico:'🧲',  name:'Imán',            desc:'PASIVA: atraés la comida de más lejos', passive:true, apply:m=>{ m.magnetMul += 0.8; } },
+    // TODAS escalan el efecto BASELINE por RF (1 / 1.25 / 1.5 / 2 / 3 / 5 según rareza). terse muestra el número redondeado.
+    { id:'dmg',   ico:'⚔️', desc:'Daño de tu mordida',      terse:R=>`+${Math.round(15*R.RF)}% ATK`,     apply:(m,RF)=>{ m.dmgMul += 0.15*RF; } },
+    { id:'hp',    ico:'❤️', desc:'Vida máxima',             terse:R=>`+${Math.round(20*R.RF)} HP`,       apply:(m,RF)=>{ m.maxHp += 20*RF; m.hp = m.maxHp; } },
+    { id:'regen', ico:'➕', desc:'Recuperás vida sola',     terse:R=>`+${Math.round(45*R.RF)}% REGEN`,   apply:(m,RF)=>{ m.regenMul += 0.45*RF; } },
+    { id:'size',  ico:'🦈', desc:'+daño si sos más grande', terse:R=>`+${Math.round(18*R.RF)}% MORDIDA`, apply:(m,RF)=>{ m.sizeDmgBonus += 0.18*RF; } },
+    { id:'range', ico:'🎯', desc:'Atacás de más lejos',     terse:R=>`+${Math.round(18*R.RF)}% ALCANCE`, apply:(m,RF)=>{ m.atkRangeMul += 0.18*RF; } },
+    { id:'turn',  ico:'🌀', desc:'Girás más rápido',        terse:R=>`+${Math.round(15*R.RF)}% GIRO`,    apply:(m,RF)=>{ m.turnMul += 0.15*RF; } },
+    { id:'turbA', ico:'⚡', desc:'El turbo dura más',        terse:R=>`TURBO +${Math.round(14*R.RF)}%`,   apply:(m,RF)=>{ m.turboDrainMul = Math.max(0.2, m.turboDrainMul * (1 - 0.14*RF)); } },
+    { id:'turbR', ico:'🔋', desc:'El turbo recarga antes',  terse:R=>`RECARGA +${Math.round(35*R.RF)}%`, apply:(m,RF)=>{ m.turboRechargeMul += 0.35*RF; } },
+    { id:'cone',  ico:'📐', desc:'Cono de ataque más ancho',terse:R=>`+${Math.round(7*R.RF)}° CONO`,     apply:(m,RF)=>{ m.atkConeBonus = Math.min(0.5, m.atkConeBonus + 0.12*RF); } },
+    // pasivas (ÚNICAS; piso de rareza tier≥2 → no salen comunes; el valor escala con RF)
+    { id:'leech',  ico:'🩸', desc:'Curás parte del daño que hacés', passive:true, minTier:2, terse:R=>`Robo ${Math.round(15*R.RF)}%`,    apply:(m,RF)=>{ m.lifesteal = Math.max(m.lifesteal, 0.15*RF); } },
+    { id:'thorn',  ico:'🛡️', desc:'Devolvés daño al que te pega',   passive:true, minTier:2, terse:R=>`Espinas ${Math.round(30*R.RF)}%`,  apply:(m,RF)=>{ m.thorns = Math.max(m.thorns, 0.30*RF); } },
+    { id:'armor',  ico:'🪖', desc:'Recibís menos daño',             passive:true, minTier:2, terse:R=>`Coraza -${Math.round(15*R.RF)}%`,  apply:(m,RF)=>{ m.armor = Math.min(0.75, Math.max(m.armor, 0.15*RF)); } },
+    { id:'feast',  ico:'🍽️', desc:'Comer cura más',                 passive:true, minTier:2, terse:R=>`Festín +${Math.round(60*R.RF)}%`,  apply:(m,RF)=>{ m.healMul += 0.6*RF; } },
+    { id:'magnet', ico:'🧲', desc:'Atraés la comida de lejos',      passive:true, minTier:2, terse:R=>`Imán +${Math.round(60*R.RF)}%`,    apply:(m,RF)=>{ m.magnetMul += 0.6*RF; } },
+    // utilitaria: cura clutch (rareza fija, sólo si te falta vida)
+    { id:'fullheal', ico:'✨', desc:'Te cura al máximo', fixedRar:'raro', hpLow:true, terse:R=>`CURA TOTAL`, apply:(m)=>{ m.hp = m.maxHp; } },
   ];
-  function rollUpgrades() {                                                       // 3 mejoras al azar (excluye pasivas ya tomadas)
-    const bag = UPGRADES.filter(u => !(u.passive && manager.takenPassives.has(u.id)));
-    const pick = [];
-    while (pick.length < 3 && bag.length) pick.push(bag.splice(ri(0, bag.length-1), 1)[0]);
-    return pick;
+  function rollUpgrades() {                                                        // LU_CHOICES cartas distintas, cada una con su rareza sorteada
+    const pool = UPGRADES.filter(u =>
+      !(u.passive && manager.takenPassives.has(u.id)) &&
+      !(u.hpLow && manager.hp > manager.maxHp * 0.6)
+    );
+    const out = [], used = new Set(); let guard = 0;
+    while (out.length < LU_CHOICES && guard++ < 60) {
+      const u = pool[ri(0, pool.length - 1)];
+      if (used.has(u.id)) continue;
+      let rar = rollRarity();
+      if (u.fixedRar) rar = RARITY.find(R => R.id === u.fixedRar);
+      else if (u.minTier && rar.tier < u.minTier) rar = RARITY[u.minTier - 1];     // piso de rareza (pasivas)
+      used.add(u.id);
+      out.push({ u, rar });
+    }
+    return out;
+  }
+  function rerollUpgrades() {                                                      // re-tira las cartas Y sus rarezas (no aplica, no cierra)
+    if (manager.rerolls <= 0) return;
+    manager.rerolls--;
+    showUpgradeOverlay(rollUpgrades());
   }
   function showUpgradeOverlay(list) {
     const ov = document.getElementById('levelup');
     document.getElementById('luLvl').textContent = manager.level;
-    const cards = document.getElementById('luCards');
-    cards.innerHTML = '';
-    list.forEach(u => {
+    // (el estado de los modificadores se muestra siempre en el HUD, debajo del score — ya no en el overlay)
+    // CARTAS color-coded por rareza, label tersa + pill
+    const cards = document.getElementById('luCards'); cards.innerHTML = '';
+    list.forEach((entry, i) => {
+      const { u, rar } = entry;
       const c = document.createElement('div');
-      c.className = 'luCard' + (u.passive ? ' passive' : '');
-      c.innerHTML = `<div class="luIco">${u.ico}</div><div class="luName">${u.name}</div><div class="luDesc">${u.desc}</div>`;
-      c.addEventListener('pointerdown', e => { e.preventDefault(); ov.classList.remove('show'); ov.setAttribute('aria-hidden', 'true'); manager.applyUpgrade(u); });
+      c.className = 'luCard' + (rar.tier >= 5 ? ' shine' : '');                    // legendario/mítico pulsan
+      c.style.setProperty('--rc', rar.col);                                       // borde/pill por rareza (inline → soporta los 6 tiers)
+      c.style.setProperty('--rg', rar.glow);                                      // glow/sombra por rareza
+      c.style.animationDelay = (i*0.06) + 's';
+      c.innerHTML = `<div class="luIco">${u.ico}</div><div class="luBody"><div class="luTerse">${u.terse(rar)}</div><div class="luDesc">${u.desc}</div></div><div class="luPill">${rar.label}</div>`;
+      c.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        ov.classList.remove('show'); ov.setAttribute('aria-hidden', 'true');
+        manager.applyUpgrade(entry);
+        manager.levelJuice(rar);
+      });
       cards.appendChild(c);
     });
+    const rb = document.getElementById('luReroll');
+    rb.textContent = '↻ Rebarajar (' + manager.rerolls + ')';
+    rb.classList.toggle('disabled', manager.rerolls <= 0);
     ov.classList.add('show'); ov.setAttribute('aria-hidden', 'false');
   }
+  document.getElementById('luReroll').addEventListener('pointerdown', e => { e.preventDefault(); rerollUpgrades(); });
 
   // ════════════════ LOOP ════════════════
   function loop(now) {
@@ -2096,11 +2930,13 @@
     deltaT = Math.min(0.05, (now - lastT) / 1000);                               // dt real, clamp 50ms (igual que Snake.py)
     lastT = now;
     dtSmoothed = dtSmoothed*0.9 + deltaT*0.1;
+    if (seafloorReady && manager.loadT > 0) manager.loadT = Math.max(0, manager.loadT - deltaT); // el fade-in arranca RECIÉN cuando la imagen de fondo terminó de cargar (antes: negro pleno, congelado)
     if (!manager.gameOver && !manager.pause) { waveClock += deltaT; currentAng += deltaT*0.02; } // wiggle + giro lentísimo de la corriente
     curR = sper(0.01);                                                           // radio base, 1 sola vez por frame
     girth = 1 + GIRTH_MAX * Math.min(1, manager.fed / GIRTH_FOOD);               // engorde según la COMIDA acumulada (no el largo): crecés a lo ancho al comer
-    manager.updateTurbo();                                                       // carga/descarga del turbo del jugador (antes de mover)
+    if (!manager.pause) manager.updateTurbo();                                   // carga/descarga del turbo del jugador (antes de mover); CONGELADO en pausa / elección de mejora: con la pantalla detenida no drena ni recarga (los 2 dedos sobre el overlay ya no gastan el boost)
     if (pairAlert > 0) pairAlert = Math.max(pairAlert - deltaT, 0);              // aviso de pareja en el minimapa
+    if (manager.luFlash > 0) manager.luFlash = Math.max(0, manager.luFlash - deltaT*1.6); // flash de subida de nivel (decae aun en pausa)
 
     // ── PROCESO (lógica; no dibuja) ──
     if (!manager.gameOver) {
@@ -2116,10 +2952,15 @@
     for (const s of seahorses) s.process();
     for (const e of enemies) e.process();
     if (enemies.some(e => e.dead)) enemies = enemies.filter(e => !e.dead);       // quitar las que murieron por choque (el manager respawnea desde afuera)
+    for (const b of bosses) b.process();
+    if (bosses.some(b => b.dead)) bosses = bosses.filter(b => !b.dead);          // jefe muerto → fuera (la barra desaparece)
     manager.updateParticles();
+    if (manager.shockwave) { const s = manager.shockwave; s.life -= deltaT; s.r = s.r0 + s.r0*7*(1 - s.life/s.maxLife); if (s.life <= 0) manager.shockwave = null; } // onda de choque de muerte de jefe
+    if (manager.deathGlow) { manager.deathGlow.life -= deltaT; if (manager.deathGlow.life <= 0) manager.deathGlow = null; }
     updateChunks();                                                              // pedazos voladores (golpes): mueven, frenan y se vuelven estrella o se desvanecen
     manager.process();
     updateAmbient();
+    updateFishes();
 
     // mina: sacar segmentos de la cola DESPUÉS de procesar (popear durante el for dejaría índices undefined).
     if (manager.pendingShrink > 0) {
@@ -2141,8 +2982,11 @@
     ctx.translate(W/2 - camX, H/2 - camY);
 
     drawLake();
+    drawSeaFloor();                                                             // corales/rocas bakeados sobre el piso del lago (debajo de todo lo vivo)
     drawAmbient();
+    drawFishes();                                                               // pececitos ambientales (sobre el fondo, debajo de las criaturas y el jugador)
     for (const e of enemies) e.draw();                                          // serpientes enemigas (debajo del jugador y los objetos)
+    for (const b of bosses) b.draw();                                           // jefe (criatura grande; el jugador y los objetos se dibujan encima)
 
     // GLOW del cuerpo: UN solo stroke aditivo a lo largo de toda la víbora (mucho más barato que N halos).
     // Si hay ESCUDO (medusa) se agrega un 2º stroke rosado, más ancho y tenue, sobre el mismo trazo → un
@@ -2199,14 +3043,24 @@
     for (const s of seahorses) s.draw();
     drawChunks();                                                               // pedazos desprendidos por los golpes
     manager.drawParticles();                                                    // bursts de medusa + dispersión de muerte
+    if (manager.shockwave) { const s = manager.shockwave, a = s.life/s.maxLife; ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = `hsla(${s.hue},95%,68%,${0.6*a})`; ctx.lineWidth = sper(0.012)*(0.4+a); ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TAU); ctx.stroke(); ctx.globalCompositeOperation = 'source-over'; } // onda de choque
+    if (manager.deathGlow) { const g = manager.deathGlow, a = g.life/g.maxLife, gr = sper(0.12)*(1.4-a); const rg = ctx.createRadialGradient(g.x, g.y, 0, g.x, g.y, gr); rg.addColorStop(0, `hsla(${g.hue},95%,65%,${0.45*a})`); rg.addColorStop(1, `hsla(${g.hue},95%,65%,0)`); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(g.x, g.y, gr, 0, TAU); ctx.fill(); ctx.globalCompositeOperation = 'source-over'; } // glow lento
     removeSprites();
 
     ctx.restore();
 
     // ── HUD / overlays (coords de PANTALLA, fuera de la cámara) ──
+    drawAnglerDark();                                                           // PEZ LINTERNA: oscurece la escena (screen-space) + señuelo/cono; va ANTES del HUD para no tapar barra/minimapa
+    // drawBossBar();                                                           // DESACTIVADA: la barra del jefe ahora va PROMINENTE sobre su cabeza (Boss.drawHpBar). Descomentá para tener también la de arriba.
     drawHUD();
     drawMinimap();
     manager.draw();                                                             // game over / pausa / debug
+    if (manager.luFlash > 0) {                                                  // FLASH de subida de nivel: 1 gradiente radial teñido por la rareza elegida (barato)
+      const g = ctx.createRadialGradient(W/2, H*0.42, 0, W/2, H*0.42, Math.max(W,H)*0.7);
+      g.addColorStop(0, manager.flashGlow); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.save(); ctx.globalAlpha = manager.luFlash * 0.28; ctx.fillStyle = g;
+      ctx.fillRect(0, 0, W, H); ctx.restore();
+    }
 
     // punto-guía: en DESKTOP, en la posición del mouse (sólo visual). En touch alcanza con la palanca.
     if (!IS_TOUCH && !manager.gameOver) {
@@ -2218,7 +3072,18 @@
       ctx.fillStyle = 'rgba(255,255,255,0.9)';
       ctx.beginPath(); ctx.arc(mouseX, mouseY, cr, 0, TAU); ctx.fill();
     }
-    if (IS_TOUCH) drawJoystick();                                                 // palanca activa (touch) por encima de todo
+    if (IS_TOUCH) {                                                               // palanca (canvas): se funde con el intro aplicándole la opacidad del fade directamente
+      const rev = manager.loadT > 0 ? 1 - Math.min(1, manager.loadT/LOAD_TIME) : 1;
+      if (rev >= 1) drawJoystick();
+      else { ctx.save(); ctx.globalAlpha = rev; drawJoystick(); ctx.restore(); }
+    }
+
+    const domCtl = [document.getElementById('btnSprint'), document.getElementById('jMoveRest')]; // controles DOM que flotan sobre el canvas: boost + palanca-EN-REPOSO (la activa es canvas y la funde el wrap de arriba)
+    if (manager.loadT > 0) {                                                      // FADE-IN DESDE NEGRO al arrancar: negro pleno → transparente en LOAD_TIME (juego congelado mientras tanto)
+      const a = Math.min(1, manager.loadT / LOAD_TIME);
+      ctx.fillStyle = `rgba(0,0,0,${a})`; ctx.fillRect(0, 0, W, H);
+      for (const el of domCtl) if (el) el.style.opacity = String(1 - a);          // boost + palanca en reposo se funden con la escena
+    } else for (const el of domCtl) { if (el && el.style.opacity !== '' && el.style.opacity !== '1') el.style.opacity = ''; } // al terminar, restaurar (1 sola vez)
 
     requestAnimationFrame(loop);
   }

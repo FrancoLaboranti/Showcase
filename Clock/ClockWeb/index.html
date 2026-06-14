@@ -376,13 +376,15 @@
   const btnAuto = document.getElementById('btnAuto');
   let autoTimer = null;
   let autoOn = false;                                                             // estado restaurado por load()
-  function setAuto(on) {
-    if (on && !autoTimer)      autoTimer = setInterval(cycleColor, 2000);
-    else if (!on && autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  function setAuto(on, instant) {
+    if (on && !autoTimer) {
+      if (instant) cycleColor();                                                  // feedback inmediato: salta un color al toque, no espera los 2 s
+      autoTimer = setInterval(cycleColor, 2000);
+    } else if (!on && autoTimer) { clearInterval(autoTimer); autoTimer = null; }
     btnAuto.classList.toggle('on', !!autoTimer);
     save();
   }
-  function toggleAuto() { setAuto(!autoTimer); }
+  function toggleAuto() { setAuto(!autoTimer, true); }
   btnAuto.addEventListener('pointerdown', e => { e.preventDefault(); toggleAuto(); });
 
   // ── PERSISTENCIA (color + modo del segundero + auto) ──

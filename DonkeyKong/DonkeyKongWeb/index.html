@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Donkey Kong</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../Arcade/arcade-shell.css">
+<style>
+  :root { --bar-height: 66px; }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    width: 100%; height: 100%;
+    background: #000;
+    overflow: hidden;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    font-family: 'Press Start 2P', 'Segoe UI', system-ui, sans-serif;
+  }
+  /* El canvas ocupa sólo el área SOBRE la barra. Tamaños seteados explícito desde JS en cada resize. */
+  #c {
+    display: block; position: absolute;
+    top: 0; left: 0;
+  }
+
+  #hint {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    max-width: min(88vw, 480px);
+    background: rgba(18,10,12,0.78); border: 1px solid rgba(255,255,255,0.10);
+    padding: 12px 20px; border-radius: 14px;
+    text-align: center; color: rgba(255,255,255,0.92);
+    font-size: 11px; letter-spacing: 0.04em; line-height: 1.6;
+    pointer-events: none; transition: opacity 0.8s; z-index: 2;
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+  }
+
+  /* Barra inferior: ◄ ▲ ▼ ► (caminar / trepar). Saltar = tocar la pantalla. Mismo shell que TronWeb. */
+  #bar {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    padding: 0 16px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.85);
+    border-top: 1px solid rgba(255,255,255,0.08);
+    z-index: 3;
+  }
+  #ui { display: flex; gap: 8px; }
+  #ui button {
+    width: 48px; height: 48px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.22);
+    background: rgba(255,255,255,0.08);
+    color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none;
+    transition: background 0.1s, transform 0.08s;
+    padding: 0;
+  }
+  #ui button:active, #ui button.held { background: rgba(255,93,146,0.30); transform: scale(0.92); }
+  #ui button svg { display: block; width: 24px; height: 24px; pointer-events: none; }
+
+  /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
+  /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
+  #fpsOverlay {
+    position: absolute;
+    left: calc(8px + env(safe-area-inset-left));
+    top: calc(8px + env(safe-area-inset-top));
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 13px;
+    line-height: 18px;
+    color: rgba(255,255,255,0.9);
+    background: rgba(0,0,0,0.55);
+    padding: 4px 6px;
+    pointer-events: none;
+    display: none;
+    z-index: 9;
+  }
+</style>
+</head>
+<body>
+  <!-- DEBUG temporal: muestra en pantalla cualquier error JS (para diagnosticar en mobile, donde no hay
+       consola a mano). Registrado antes que el script principal, así caza también errores de parseo. -->
+  <script>
+  (function () {
+    function show(msg) {
+      var d = document.getElementById('__err');
+      if (!d) {
+        d = document.createElement('div');
+        d.id = '__err';
+        d.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);' +
+          'max-width:90vw;max-height:80vh;overflow:auto;z-index:99999;background:rgba(150,0,0,0.95);' +
+          'border:1px solid rgba(255,255,255,0.4);border-radius:8px;' +
+          'color:#fff;font:12px/1.4 monospace;padding:14px;white-space:pre-wrap;word-break:break-word;text-align:left;';
+        (document.body || document.documentElement).appendChild(d);
+      }
+      d.textContent += msg + '\n';
+    }
+    window.addEventListener('error', function (e) {
+      show((e.message || 'error') + '  @ ' + ((e.filename || '').split('/').pop()) + ':' + e.lineno + ':' + e.colno);
+    });
+    window.addEventListener('unhandledrejection', function (e) {
+      show('promise: ' + (e.reason && (e.reason.message || e.reason)));
+    });
+  })();
+  </script>
+  <canvas id="c"></canvas>
+  <div id="hint">◄ ► caminar · ▲ ▼ trepar escaleras<br>tocá la pantalla para SALTAR</div>
+  <div id="bar">
+  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
+<div id="ui">
+      <button id="btnLeft"  aria-label="caminar izquierda" title="Caminar izquierda">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+      </button>
+      <button id="btnUp" aria-label="trepar arriba" title="Trepar arriba">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg>
+      </button>
+      <button id="btnDown" aria-label="bajar" title="Bajar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg>
+      </button>
+      <button id="btnRight" aria-label="caminar derecha" title="Caminar derecha">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+      </button>
+    </div>
+    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+    </button>
+    <button id="btnInfo" aria-label="info" title="Info / FPS">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+    </button>
+  </div>
+
+  <script>
+  // ════════════════════════════════════════════════════════════════════
+  //  DONKEY KONG — homenaje web al arcade de 1981, con el shell mobile de
+  //  TronWeb (v1) en PORTRAIT. Sin .py original: este es un juego nuevo.
+  //
+  //  · Nivel clásico de vigas inclinadas + escaleras (algunas rotas).
+  //  · DK tira barriles que ruedan, caen por los bordes y a veces bajan
+  //    por las escaleras. Saltarlos da puntos; tocarlos mata.
+  //  · Martillos para romper barriles, bolas de fuego desde el tambor de
+  //    aceite, BONUS que baja con el tiempo, vidas y récord (localStorage).
+  //  · Todo el arte son sprites pixel-art definidos como strings y
+  //    horneados en canvas offscreen (imageSmoothing off = look arcade).
+  //  · TODA la geometría va en FRACCIONES del playfield (PF) — el análogo
+  //    de xper/yper de los .py — así el resize en pleno juego no rompe nada.
+  // ════════════════════════════════════════════════════════════════════
+  const TAU = Math.PI * 2;
+  const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+  const rnd = (a, b) => a + Math.random() * (b - a);
+
+  // ── TUNING ──
+  const ASPECT      = 0.58;     // relación de aspecto del playfield (portrait, ~9:15.5)
+  const WALK        = 0.155;    // velocidad de Mario (PF.w / s)
+  const CLIMB       = 0.085;    // velocidad trepando (PF.h / s)
+  const GRAV        = 0.85;     // gravedad (PF.h / s²)
+  const JUMP_V      = 0.26;     // impulso de salto (PF.h / s) → ápice ≈ 0.04 PF.h
+  const FALL_DEATH  = 0.23;     // caída (desde el pico) mayor a esto = muerte (PF.h) — sobrevive bajar 1 viga
+                                //   (caminar off-edge ~0.11 / saltar hacia abajo ~0.20), mata caer 2+ vigas (~0.27)
+  const BARREL_SPD  = 0.19;     // velocidad base de barriles (PF.w / s)
+  const BARREL_DESC = 0.16;     // barril bajando escalera (PF.h / s)
+  const FIRE_SPD    = 0.055;    // bola de fuego (PF.w / s)
+  const HAMMER_TIME = 8;        // s de martillo
+  const HAMMER_HOVER= 0.082;    // a cuánto flota el martillo sobre la viga (PF.h) — sólo se agarra saltando
+  const BONUS_TICK  = 2.0;      // s entre descuentos de bonus
+  const MAX_BARRELS = 12;
+
+  const canvas = document.getElementById('c');
+  const ctx = canvas.getContext('2d');
+
+  let W = 0, H = 0, dpr = 1;
+  // Playfield: rect portrait centrado dentro del canvas (en desktop quedan bandas laterales tipo arcade).
+  const PF = { x: 0, y: 0, w: 1, h: 1 };
+  const ppx = f => PF.x + f * PF.w;     // fracción → px (los análogos de xper/yper)
+  const ppy = f => PF.y + f * PF.h;
+
+  const FONT = '"Press Start 2P", monospace';
+  function ptext(txt, fx, fy, sizeF, color, align = 'center') {
+    ctx.font = Math.max(7, Math.round(sizeF * PF.h)) + 'px ' + FONT;
+    ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'middle';
+    ctx.fillText(txt, ppx(fx), ppy(fy));
+  }
+  const pad = (n, d) => String(Math.max(0, n | 0)).padStart(d, '0');
+
+  // ════════════════ NIVEL (fracciones del playfield) ════════════════
+  // Vigas: superficie lineal de (x0,yL) a (x1,yR). Los barriles ruedan hacia el extremo MÁS BAJO
+  // (y mayor) y caen por el borde abierto. Índice 0 = viga de abajo; 6 = plataforma de Pauline.
+  const GIRDERS = [
+    { x0: 0.00, x1: 1.00, yL: 0.893, yR: 0.867 },   // 0 · piso: cae hacia el tambor de aceite (izq)
+    { x0: 0.00, x1: 0.93, yL: 0.732, yR: 0.758 },   // 1 · baja a la derecha
+    { x0: 0.07, x1: 1.00, yL: 0.623, yR: 0.597 },   // 2 · baja a la izquierda
+    { x0: 0.00, x1: 0.93, yL: 0.462, yR: 0.488 },   // 3 · baja a la derecha
+    { x0: 0.07, x1: 1.00, yL: 0.353, yR: 0.327 },   // 4 · baja a la izquierda
+    { x0: 0.00, x1: 0.93, yL: 0.195, yR: 0.218 },   // 5 · viga de DK: los barriles arrancan acá
+    { x0: 0.30, x1: 0.62, yL: 0.115, yR: 0.115 },   // 6 · plataforma de Pauline (llegar = ganar)
+  ];
+  const PAULINE_G = 6;
+  function surfY(gi, fx) {
+    const g = GIRDERS[gi];
+    const t = clamp((fx - g.x0) / (g.x1 - g.x0), 0, 1);
+    return g.yL + (g.yR - g.yL) * t;
+  }
+  function rollDir(gi) { const g = GIRDERS[gi]; return g.yR > g.yL ? 1 : -1; }   // rueda hacia el lado bajo
+
+  // Escaleras: {x, lo, hi, broken}. Las rotas no las puede usar Mario (los barriles sí bajan).
+  const LADDERS = [
+    { x: 0.60, lo: 0, hi: 1, broken: false },
+    { x: 0.84, lo: 0, hi: 1, broken: false },
+    { x: 0.26, lo: 0, hi: 1, broken: true  },
+    { x: 0.14, lo: 1, hi: 2, broken: false },
+    { x: 0.50, lo: 1, hi: 2, broken: true  },
+    { x: 0.74, lo: 1, hi: 2, broken: false },
+    { x: 0.20, lo: 2, hi: 3, broken: false },
+    { x: 0.36, lo: 2, hi: 3, broken: true  },
+    { x: 0.82, lo: 2, hi: 3, broken: false },
+    { x: 0.30, lo: 3, hi: 4, broken: false },
+    { x: 0.64, lo: 3, hi: 4, broken: false },
+    { x: 0.86, lo: 3, hi: 4, broken: true  },
+    { x: 0.24, lo: 4, hi: 5, broken: true  },
+    { x: 0.55, lo: 4, hi: 5, broken: false },
+    { x: 0.86, lo: 4, hi: 5, broken: false },
+    { x: 0.36, lo: 5, hi: 6, broken: false },
+    { x: 0.56, lo: 5, hi: 6, broken: false },
+  ];
+
+  const OIL_X = 0.06;                                       // tambor de aceite (viga 0)
+  const DK_X = 0.13;                                        // DK parado en la viga 5
+  const PAULINE_X = 0.46;
+  const MARIO_START = 0.18;
+  const HAMMER_SPOTS = [ { g: 4, x: 0.40 }, { g: 1, x: 0.38 } ];
+
+  // ════════════════ SPRITES pixel-art ════════════════
+  // makeSprite hornea un mapa de strings a un canvas offscreen 1px-por-celda; se dibuja escalado
+  // con imageSmoothing apagado (pixeles duros = look arcade). '.' = transparente.
+  function makeSprite(rows, pal) {
+    const h = rows.length, w = Math.max(...rows.map(r => r.length));
+    const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+    const c = cv.getContext('2d');
+    rows.forEach((row, y) => {
+      for (let x = 0; x < row.length; x++) {
+        const ch = row[x];
+        if (ch !== '.' && pal[ch]) { c.fillStyle = pal[ch]; c.fillRect(x, y, 1, 1); }
+      }
+    });
+    return { cv, w, h };
+  }
+  // dibuja centrado en (px,py) con alto ph (px); flip espeja horizontal; rot en radianes.
+  function drawSpr(s, px, py, ph, flip = false, rot = 0, alpha = 1) {
+    const pw = ph * s.w / s.h;
+    ctx.save();
+    ctx.translate(px, py);
+    if (rot) ctx.rotate(rot);
+    if (flip) ctx.scale(-1, 1);
+    if (alpha < 1) ctx.globalAlpha = alpha;
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(s.cv, -pw / 2, -ph / 2, pw, ph);
+    ctx.restore();
+  }
+
+  const MPAL = { R:'#e83b2a', H:'#7a3b12', S:'#ffc69b', W:'#ffffff', B:'#2456e6', X:'#26140a' };
+  const M_IDLE = makeSprite([
+    '...RRRRR....',
+    '..RRRRRRRRR.',
+    '..HHHSSWS...',
+    '.HSHHSSWSS..',
+    '.HSHHSSSSS..',
+    '.HHSSSSSS...',
+    '...SSSSSS...',
+    '..BBRRRRBB..',
+    '.BBBRRRRBBB.',
+    'BBBBRRRRBBBB',
+    'SS.BRRRRB.SS',
+    '...RRRRRR...',
+    '..RRR..RRR..',
+    '..HHH..HHH..',
+    '.HHHH..HHHH.',
+  ], MPAL);
+  const M_RUN = makeSprite([
+    '...RRRRR....',
+    '..RRRRRRRRR.',
+    '..HHHSSWS...',
+    '.HSHHSSWSS..',
+    '.HSHHSSSSS..',
+    '.HHSSSSSS...',
+    '...SSSSSS...',
+    '..BBRRRRBB..',
+    '.BBBRRRRBBS.',
+    'BBBBRRRRBBSS',
+    'SSBBRRRRBB..',
+    '...RRRRRR...',
+    '..RRR.RRR...',
+    '.HHH...HHH..',
+    'HHHH....HHH.',
+  ], MPAL);
+  const M_JUMP = makeSprite([
+    '...RRRRR....',
+    '..RRRRRRRRR.',
+    '..HHHSSWS...',
+    '.HSHHSSWSS..',
+    '.HSHHSSSSS..',
+    '.HHSSSSSS...',
+    '...SSSSSS...',
+    'S.BBRRRRBB.S',
+    'SSBBRRRRBBSS',
+    '.BBBRRRRBBB.',
+    '..BRRRRRRB..',
+    '..RRRRRRRR..',
+    '..HHH..HHH..',
+    '.HHH....HHH.',
+  ], MPAL);
+  const M_CLIMB = makeSprite([
+    '...RRRRR....',
+    '..RRRRRRRR..',
+    '..HHHHHHH...',
+    '.S.HHHHH....',
+    '.S.BBBBBB...',
+    '...BBRRBB.S.',
+    '..BBBRRBBBS.',
+    '..BBRRRRBB..',
+    '..BRRRRRRB..',
+    '...RRRRRR...',
+    '...RRRRRR...',
+    '...RRR.RR...',
+    '..HHH..HH...',
+    '..HHH..HHH..',
+  ], MPAL);
+  const M_DEAD = makeSprite([
+    '...RRRRR....',
+    '..RRRRRRRR..',
+    '..HHXSSXS...',
+    '.HSHHSSSSS..',
+    '.HHSSSSSS...',
+    '...SSSSSS...',
+    'S.BBRRRRBB.S',
+    'SSBBRRRRBBSS',
+    '.BBBRRRRBBB.',
+    '..BRRRRRRB..',
+    '..RRRRRRRR..',
+    '..RRR..RRR..',
+    '.HHHH..HHHH.',
+  ], MPAL);
+
+  const DKPAL = { B:'#8a5a2b', D:'#5e3413', F:'#d9a066', W:'#ffffff', K:'#1c0e04', R:'#b3232c' };
+  const DK_UP = makeSprite([
+    '..BB..................BB..',
+    '.BBBB................BBBB.',
+    '.BBBB................BBBB.',
+    '..BB.....BBBBBB......BB...',
+    '..BB....BBBBBBBB.....BB...',
+    '..BB...BBDDBBDDBB....BB...',
+    '..BBB..BFFFBBFFFB....BBB..',
+    '..BBB..BFKFBBFKFB....BBB..',
+    '...BB..BFFFFFFFFB....BB...',
+    '...BBBBBFFDFFDFFBBBBBB....',
+    '....BBBFFFFFFFFFFBBB......',
+    '....BBFFRRRRRRRRFFBB......',
+    '....BBFFFFFFFFFFFFBB......',
+    '...BBBBFFFFFFFFFFBBBB.....',
+    '...BBBBBBFFFFFFBBBBBB.....',
+    '....BBBBBBBBBBBBBBBB......',
+    '.....BBBB......BBBB.......',
+    '....BBBBB......BBBBB......',
+  ], DKPAL);
+  const DK_CHEST = makeSprite([
+    '..........................',
+    '..........................',
+    '.........BBBBBB...........',
+    '........BBBBBBBB..........',
+    '.......BBDDBBDDBB.........',
+    '.......BFFFBBFFFB.........',
+    '.......BFKFBBFKFB.........',
+    '.......BFFFFFFFFB.........',
+    '.....BBBFFDFFDFFBBB.......',
+    '....BBBFFFFFFFFFFBBB......',
+    '...BBBFFRRRRRRRRFFBBB.....',
+    '..BBBBFFFFFFFFFFFFBBBB....',
+    '.BBBBBFFFFFFFFFFFFBBBBB...',
+    '.BBFFBBBFFFFFFFFFFBBFFBB..',
+    '.BBFFBBBBBFFFFFFBBBBBFFBB.',
+    '..BBBBBBBBBBBBBBBBBBBBBB..',
+    '.....BBBB......BBBB.......',
+    '....BBBBB......BBBBB......',
+  ], DKPAL);
+
+  const PPAL = { K:'#231024', S:'#ffc69b', W:'#ffffff', P:'#ff7ad9' };
+  const PAU_1 = makeSprite([
+    '..KKKKK...',
+    '.KKKKKKK..',
+    '.KSSWSSK..',
+    '.KSSSSSK..',
+    '..SSSSS...',
+    '..PPPPP...',
+    '.PPPPPPP..',
+    '.SPPPPPS..',
+    '.SPPPPPS..',
+    '..PPPPP...',
+    '..PPPPP...',
+    '.PPPPPPP..',
+    '..S...S...',
+    '..S...S...',
+  ], PPAL);
+  const PAU_2 = makeSprite([
+    'S.KKKKK..S',
+    'SKKKKKKK.S',
+    'SKSSWSSKS.',
+    '.KSSSSSK..',
+    '..SSSSS...',
+    '..PPPPP...',
+    '.PPPPPPP..',
+    '.SPPPPPS..',
+    '.SPPPPPS..',
+    '..PPPPP...',
+    '..PPPPP...',
+    '.PPPPPPP..',
+    '..S...S...',
+    '..S...S...',
+  ], PPAL);
+
+  // Barriles: lados generados por código con las duelas desplazadas (4 fases = animación de rodado).
+  const BPAL = { O:'#d97f2e', o:'#7a3c10', Y:'#f4b35e' };
+  function barrelMap(phase) {
+    const w = 12, h = 9, rows = [];
+    for (let y = 0; y < h; y++) {
+      let r = '';
+      for (let x = 0; x < w; x++) {
+        const edge = (x === 0 || x === w - 1);
+        if (y === 0 || y === h - 1)      r += edge ? '.' : 'o';
+        else if (y === 1 || y === h - 2) r += edge ? 'o' : 'O';
+        else {
+          const stave = ((x + phase) % 4) === 0;
+          r += edge ? 'o' : (stave ? 'o' : (y === 3 ? 'Y' : 'O'));
+        }
+      }
+      rows.push(r);
+    }
+    return rows;
+  }
+  const BARREL_FR = [0, 1, 2, 3].map(p => makeSprite(barrelMap(p), BPAL));
+  const BARREL_END = makeSprite([
+    '...oooo...',
+    '..oOOOOo..',
+    '.oOYYYYOo.',
+    'oOYOOOOYOo',
+    'oOYOooOYOo',
+    'oOYOooOYOo',
+    'oOYOOOOYOo',
+    '.oOYYYYOo.',
+    '..oOOOOo..',
+    '...oooo...',
+  ], BPAL);
+
+  const FPAL = { R:'#ff3b1f', O:'#ff8c1a', Y:'#ffd23f', W:'#ffffff', K:'#26140a' };
+  const FIRE_1 = makeSprite([
+    '....RR....',
+    '...RRRR...',
+    '..RRYYRR..',
+    '.RYYYYYYR.',
+    '.RYYYYYYR.',
+    'OYWWYYWWYO',
+    'OYWKYYWKYO',
+    '.OYYYYYYO.',
+    '..OYYYYO..',
+    '...OYYO...',
+    '....OO....',
+  ], FPAL);
+  const FIRE_2 = makeSprite([
+    '..R....R..',
+    '..RR..RR..',
+    '..RRYYRR..',
+    '.RYYYYYYR.',
+    '.RYYYYYYR.',
+    'OYWWYYWWYO',
+    'OYWKYYWKYO',
+    '.OYYYYYYO.',
+    '..OYYYYO..',
+    '...OYYO...',
+    '....OO....',
+  ], FPAL);
+  const FLAME_1 = makeSprite([
+    '...RR...',
+    '.R.RR...',
+    '.RRYYR..',
+    'RYYYYYR.',
+    'OYYYYYYO',
+    'OYYYYYYO',
+    '.OYYYYO.',
+    '..OYYO..',
+  ], FPAL);
+  const FLAME_2 = makeSprite([
+    '...RR.R.',
+    '...RRR..',
+    '..RYYRR.',
+    '.RYYYYYR',
+    'OYYYYYYO',
+    'OYYYYYYO',
+    '.OYYYYO.',
+    '..OYYO..',
+  ], FPAL);
+
+  const OIL_SPR = makeSprite([
+    'uUUUUUUUUUUu',
+    'uuuuuuuuuuuu',
+    'UUUUUUUUUUUU',
+    'UUUuUUUUuUUU',
+    'uuuuuuuuuuuu',
+    'UUUUUUUUUUUU',
+    'UUUuUUUUuUUU',
+    'UUUUUUUUUUUU',
+    'uuuuuuuuuuuu',
+    'UUUUUUUUUUUU',
+    'UUUUUUUUUUUU',
+    'uUUUUUUUUUUu',
+  ], { U:'#2e6df0', u:'#14367f' });
+
+  const HAMMER_SPR = makeSprite([
+    '.YYYYYY.',
+    '.YYYYYY.',
+    '.YYYYYY.',
+    '...NN...',
+    '...NN...',
+    '...NN...',
+    '...NN...',
+    '...NN...',
+  ], { Y:'#f6c945', N:'#8a5a2b' });
+
+  const HEART_SPR = makeSprite([
+    '.RR..RR.',
+    'RRRRRRRR',
+    'RRRRRRRR',
+    'RRRRRRRR',
+    '.RRRRRR.',
+    '..RRRR..',
+    '...RR...',
+  ], { R:'#ff3b57' });
+
+  // Tamaños (alto en fracciones de PF.h)
+  const MH = 0.052, BH = 0.030, DKH = 0.105, PAUH = 0.052, FBH = 0.034, OILH = 0.045, HAMH = 0.034;
+
+  // ════════════════ SONIDO (WebAudio mínimo, sin archivos) ════════════════
+  let AC = null;
+  function ac() {
+    if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = null; } }
+    if (AC && AC.state === 'suspended') AC.resume();
+    return AC;
+  }
+  function note(f0, f1, t0, dur, type, vol) {
+    const a = AC; if (!a) return;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type; o.frequency.setValueAtTime(f0, a.currentTime + t0);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, a.currentTime + t0 + dur);
+    g.gain.setValueAtTime(vol, a.currentTime + t0);
+    g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + t0 + dur);
+    o.connect(g); g.connect(a.destination);
+    o.start(a.currentTime + t0); o.stop(a.currentTime + t0 + dur + 0.02);
+  }
+  const sfx = {
+    jump()   { if (ac()) note(330, 540, 0, 0.16, 'square', 0.05); },
+    score()  { if (ac()) { note(880, 0, 0, 0.07, 'square', 0.05); note(1320, 0, 0.08, 0.10, 'square', 0.05); } },
+    hammer() { if (ac()) note(150, 60, 0, 0.16, 'sawtooth', 0.07); },
+    grab()   { if (ac()) { note(523, 0, 0, 0.08, 'square', 0.05); note(659, 0, 0.09, 0.08, 'square', 0.05); note(784, 0, 0.18, 0.12, 'square', 0.05); } },
+    death()  { if (ac()) note(420, 55, 0, 0.7, 'sawtooth', 0.07); },
+    win()    { if (ac()) { note(523, 0, 0, 0.10, 'square', 0.05); note(659, 0, 0.11, 0.10, 'square', 0.05); note(784, 0, 0.22, 0.10, 'square', 0.05); note(1047, 0, 0.33, 0.25, 'square', 0.06); } },
+    throw_() { if (ac()) note(95, 60, 0, 0.12, 'triangle', 0.06); },
+  };
+
+  // ════════════════ ESTADO ════════════════
+  const gh = {
+    screen: 'menu',           // 'menu' | 'game'
+    phase: 'play',            // 'intro' | 'play' | 'dying' | 'win' | 'over'
+    level: 1, score: 0, lives: 3,
+    hi: parseInt(localStorage.getItem('dk_hiscore') || '0', 10) || 0,
+    bonus: 5000, bonusT: 0,
+    phaseT: 0,                // tiempo dentro de la fase (intro/dying/win/over)
+    newHi: false,
+  };
+  let barrels = [], fireballs = [], popups = [];
+  let hammers = [];           // pickups {g, x, taken}
+  let oilLit = false, oilT = 0;
+
+  const lvlSpeed  = () => Math.min(1.7, 1 + 0.10 * (gh.level - 1));
+  const spawnGap  = () => Math.max(1.3, 3.0 - 0.25 * (gh.level - 1)) + rnd(0, 0.9);
+  const descProb  = () => { const base = Math.min(0.5, 0.22 + 0.04 * gh.level); return mario.g < curBarrelG ? Math.min(0.65, base + 0.18) : base; };
+  let curBarrelG = 5;         // hack: girder del barril que está decidiendo (para descProb)
+
+  function addScore(n, fx, fy, color) {
+    gh.score += n;
+    if (gh.score > gh.hi) { gh.hi = gh.score; gh.newHi = true; localStorage.setItem('dk_hiscore', String(gh.hi)); }
+    popups.push({ text: String(n), fx, fy, t: 0, color: color || '#ffd23f' });
+  }
+
+  // ════════════════ INPUT ════════════════
+  const keys = {};                                  // e.code → bool (teclado)
+  const vk = { left: false, right: false, up: false, down: false };   // botones de la barra
+  let jumpBuf = 0;                                  // buffer de salto (s) — toque o Space
+
+  function input() {
+    return {
+      left:  keys.ArrowLeft  || keys.KeyA || vk.left,
+      right: keys.ArrowRight || keys.KeyD || vk.right,
+      up:    keys.ArrowUp    || keys.KeyW || vk.up,
+      down:  keys.ArrowDown  || keys.KeyS || vk.down,
+    };
+  }
+
+  // ════════════════ MARIO ════════════════
+  const mario = {
+    fx: 0, fy: 0, g: 0, dir: 1,
+    state: 'ground',          // 'ground' | 'air' | 'climb'
+    vy: 0, airVx: 0, peakY: 0,
+    onLadder: null, hammerT: 0, hamSwing: 0,
+    animT: 0, deadT: 0,
+
+    reset() {
+      this.fx = MARIO_START; this.g = 0; this.fy = surfY(0, this.fx);
+      this.dir = 1; this.state = 'ground'; this.vy = 0; this.airVx = 0;
+      this.peakY = this.fy; this.onLadder = null; this.hammerT = 0; this.animT = 0; this.deadT = 0;
+    },
+
+    process(dt) {
+      const inp = input();
+      if (this.hammerT > 0) { this.hammerT -= dt; this.hamSwing += dt; }
+
+      if (this.state === 'ground') {
+        const mv = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
+        if (mv !== 0) { this.dir = mv; this.fx += mv * WALK * dt; this.animT += dt; }
+        else this.animT = 0;
+
+        const g = GIRDERS[this.g];
+        if (this.g === PAULINE_G) {
+          this.fx = clamp(this.fx, g.x0 + 0.02, g.x1 - 0.02);     // de la plataforma de Pauline no se cae
+          this.fy = surfY(this.g, this.fx);
+        } else if (this.fx < g.x0 + 0.004 || this.fx > g.x1 - 0.004) {
+          this.state = 'air'; this.vy = 0; this.airVx = mv * WALK * 0.6; this.peakY = this.fy;   // se cayó del borde
+        } else {
+          this.fx = clamp(this.fx, 0.012, 0.988);
+          this.fy = surfY(this.g, this.fx);
+        }
+
+        // saltar (toque en pantalla o Space) — con martillo no se salta (clásico)
+        if (this.state === 'ground' && jumpBuf > 0 && this.hammerT <= 0) {
+          jumpBuf = 0;
+          this.state = 'air'; this.vy = -JUMP_V; this.airVx = mv * WALK; this.peakY = this.fy;
+          sfx.jump();
+        }
+        // trepar — sin martillo
+        else if (this.state === 'ground' && this.hammerT <= 0) {
+          if (inp.up) {
+            const l = this.ladderFrom('up');
+            if (l) { this.startClimb(l); }
+          } else if (inp.down) {
+            const l = this.ladderFrom('down');
+            if (l) { this.startClimb(l); }
+          }
+        }
+      }
+      else if (this.state === 'air') {
+        const prevY = this.fy;
+        this.fy += this.vy * dt; this.vy += GRAV * dt;
+        this.fx += this.airVx * dt;
+        this.fx = clamp(this.fx, 0.012, 0.988);
+        if (this.fy < this.peakY) this.peakY = this.fy;
+        if (this.vy > 0) {
+          // aterrizar: cruzar la superficie de alguna viga (de arriba hacia abajo, x dentro del tramo)
+          let landG = -1, landY = 10;
+          for (let gi = 0; gi < GIRDERS.length; gi++) {
+            const g = GIRDERS[gi];
+            if (this.fx < g.x0 || this.fx > g.x1) continue;
+            const s = surfY(gi, this.fx);
+            if (prevY <= s + 0.002 && this.fy >= s && s < landY) { landG = gi; landY = s; }
+          }
+          if (landG >= 0) {
+            const fall = landY - this.peakY;
+            this.g = landG; this.fy = landY; this.state = 'ground'; this.vy = 0;
+            if (fall > FALL_DEATH) { die(); return; }
+          }
+        }
+        if (this.fy > 1.05) { die(); return; }                     // se fue del playfield
+      }
+      else if (this.state === 'climb') {
+        const dy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
+        const l = this.onLadder;
+        if (dy !== 0) {
+          this.fy += dy * CLIMB * dt; this.animT += dt;
+          const top = surfY(l.hi, l.x), foot = surfY(l.lo, l.x);
+          if (dy < 0 && this.fy <= top)  { this.fy = top;  this.g = l.hi; this.state = 'ground'; }
+          if (dy > 0 && this.fy >= foot) { this.fy = foot; this.g = l.lo; this.state = 'ground'; }
+        }
+      }
+
+      // martillo: agarrar el pickup saltando hasta él
+      for (const hm of hammers) {
+        if (hm.taken) continue;
+        const hx = ppx(hm.x), hy = ppy(surfY(hm.g, hm.x) - HAMMER_HOVER);
+        const mx = ppx(this.fx), my = ppy(this.fy - MH / 2);
+        if (Math.abs(hx - mx) < 0.022 * PF.w + 0.012 * PF.h && Math.abs(hy - my) < 0.032 * PF.h) {
+          hm.taken = true; this.hammerT = HAMMER_TIME; this.hamSwing = 0; sfx.grab();
+        }
+      }
+
+      // tocar a DK = muerte; llegar a Pauline = victoria
+      if (this.g === 5 && Math.abs(this.fx - DK_X) < 0.085 && this.state !== 'climb') { die(); return; }
+      if (this.g === PAULINE_G) { winLevel(); return; }
+    },
+
+    ladderFrom(dirn) {
+      for (const l of LADDERS) {
+        if (l.broken) continue;
+        if (dirn === 'up'   && l.lo !== this.g) continue;
+        if (dirn === 'down' && l.hi !== this.g) continue;
+        if (Math.abs(this.fx - l.x) < 0.022) return l;
+      }
+      return null;
+    },
+    startClimb(l) {
+      this.state = 'climb'; this.onLadder = l; this.fx = l.x;
+      this.animT = 0;
+    },
+
+    // hitbox del martillo (px) — alterna arriba / al frente
+    hammerBox() {
+      if (this.hammerT <= 0) return null;
+      const up = (Math.floor(this.hamSwing / 0.16) % 2) === 0;
+      const mh = MH * PF.h;
+      const mx = ppx(this.fx), my = ppy(this.fy) - mh / 2;
+      return up
+        ? { x: mx, y: my - mh * 1.05, r: mh * 0.52 }
+        : { x: mx + this.dir * mh * 0.72, y: my - mh * 0.18, r: mh * 0.52 };
+    },
+
+    draw() {
+      const mh = MH * PF.h;
+      const px = ppx(this.fx), py = ppy(this.fy) - mh / 2;
+      if (gh.phase === 'dying') {
+        // animación de muerte: congelado → giro → tendido
+        if (this.deadT < 0.4) drawSpr(M_IDLE, px, py, mh, this.dir < 0);
+        else if (this.deadT < 1.3) drawSpr(M_DEAD, px, py, mh, false, (this.deadT - 0.4) * 14);
+        else drawSpr(M_DEAD, px, py + mh * 0.18, mh, false, Math.PI / 2);
+        return;
+      }
+      let spr = M_IDLE, flip = this.dir < 0;
+      if (this.state === 'climb') {
+        spr = M_CLIMB; flip = (Math.floor(this.animT / 0.22) % 2) === 0;   // alterna manos espejando
+      } else if (this.state === 'air') {
+        spr = M_JUMP;
+      } else if (this.animT > 0) {
+        spr = (Math.floor(this.animT / 0.12) % 2) === 0 ? M_RUN : M_IDLE;
+      }
+      // parpadeo cuando el martillo está por terminar
+      const flash = this.hammerT > 0 && this.hammerT < 2 && (Math.floor(this.hammerT / 0.12) % 2) === 0;
+      drawSpr(spr, px, py, mh, flip, 0, flash ? 0.45 : 1);
+      // martillo en mano
+      if (this.hammerT > 0) {
+        const up = (Math.floor(this.hamSwing / 0.16) % 2) === 0;
+        const hh = HAMH * PF.h;
+        if (up) drawSpr(HAMMER_SPR, px, py - mh * 1.0, hh, false, 0);
+        else    drawSpr(HAMMER_SPR, px + this.dir * mh * 0.72, py - mh * 0.10, hh, false, this.dir * Math.PI / 2);
+      }
+    },
+  };
+
+  // colisión genérica Mario vs entidad (centros y semi-tamaños en px, con achique para perdonar)
+  function hitsMario(efx, efy, eh, ewRatio) {
+    const mh = MH * PF.h, mw = mh * (12 / 15);
+    const eph = eh * PF.h, epw = eph * ewRatio;
+    const dx = (efx - mario.fx) * PF.w;
+    const dy = (ppy(efy) - eph / 2) - (ppy(mario.fy) - mh / 2);
+    return Math.abs(dx) < (mw + epw) * 0.5 * 0.58 && Math.abs(dy) < (mh + eph) * 0.5 * 0.58;
+  }
+
+  // ════════════════ BARRILES ════════════════
+  class Barrel {
+    constructor() {
+      this.g = 5; this.fx = DK_X + 0.10; this.fy = surfY(5, this.fx);
+      this.dir = rollDir(5); this.spd = BARREL_SPD * lvlSpeed();
+      this.state = 'roll';    // 'roll' | 'ladder' | 'air'
+      this.vy = 0; this.vx = 0; this.rotT = 0; this.scored = false; this.dead = false;
+      this.l = null;
+    }
+    process(dt) {
+      if (this.state === 'roll') {
+        const prevX = this.fx;
+        this.fx += this.dir * this.spd * dt;
+        this.rotT += dt;
+        this.fy = surfY(this.g, this.fx);
+        // ¿bajar por una escalera? (sólo al cruzarla; más probable si Mario está abajo)
+        curBarrelG = this.g;
+        for (const l of LADDERS) {
+          if (l.hi !== this.g) continue;
+          if ((prevX - l.x) * (this.fx - l.x) <= 0 && prevX !== this.fx) {
+            if (Math.random() < descProb()) { this.state = 'ladder'; this.l = l; this.fx = l.x; }
+            break;
+          }
+        }
+        if (this.state === 'roll') {
+          const g = GIRDERS[this.g];
+          if ((this.dir > 0 && this.fx > g.x1 + 0.004) || (this.dir < 0 && this.fx < g.x0 - 0.004)) {
+            this.state = 'air'; this.vy = 0; this.vx = this.dir * 0.04;    // cae por el borde
+          }
+          // llegó al tambor de aceite → desaparece (y quizás sale una bola de fuego)
+          if (this.g === 0 && this.fx < OIL_X + 0.025) {
+            this.dead = true; oilLit = true;
+            const maxFb = gh.level >= 3 ? 2 : 1;
+            if (fireballs.length < maxFb && Math.random() < Math.min(0.6, 0.30 + 0.05 * gh.level)) {
+              fireballs.push(new Fireball());
+            }
+          }
+        }
+      }
+      else if (this.state === 'ladder') {
+        this.fy += BARREL_DESC * dt;
+        const foot = surfY(this.l.lo, this.l.x);
+        if (this.fy >= foot) { this.fy = foot; this.g = this.l.lo; this.dir = rollDir(this.g); this.state = 'roll'; }
+      }
+      else { // air
+        const prevY = this.fy;
+        this.fy += this.vy * dt; this.vy += GRAV * dt;
+        this.fx += this.vx * dt;
+        for (let gi = this.g - 1; gi >= 0; gi--) {
+          const g = GIRDERS[gi];
+          if (this.fx < g.x0 || this.fx > g.x1) continue;
+          const s = surfY(gi, this.fx);
+          if (prevY <= s + 0.002 && this.fy >= s) {
+            this.g = gi; this.fy = s; this.dir = rollDir(gi); this.state = 'roll';
+            break;
+          }
+        }
+        if (this.fy > 1.1) this.dead = true;
+      }
+
+      // puntos por saltarlo: Mario en el aire, bien arriba del barril
+      if (!this.scored && mario.state === 'air' &&
+          Math.abs(mario.fx - this.fx) < 0.045 &&
+          (this.fy - mario.fy) > 0.012 && (this.fy - mario.fy) < 0.11) {
+        this.scored = true; addScore(100, this.fx, this.fy - 0.05); sfx.score();
+      }
+      // martillazo
+      const hb = mario.hammerBox();
+      if (hb) {
+        const bx = ppx(this.fx), by = ppy(this.fy) - BH * PF.h / 2;
+        if (Math.hypot(bx - hb.x, by - hb.y) < hb.r + BH * PF.h * 0.5) {
+          this.dead = true; addScore(300, this.fx, this.fy - 0.05); sfx.hammer();
+          return;
+        }
+      }
+      // atropellar a Mario
+      if (hitsMario(this.fx, this.fy, BH, 12 / 9)) die();
+    }
+    draw() {
+      const bh = BH * PF.h;
+      const px = ppx(this.fx), py = ppy(this.fy) - bh / 2;
+      if (this.state === 'air') drawSpr(BARREL_END, px, py, bh * 1.15);
+      else {
+        const fr = Math.floor(this.rotT / 0.07) % 4;
+        drawSpr(BARREL_FR[this.dir > 0 ? fr : 3 - fr], px, py, bh);
+      }
+    }
+  }
+
+  // ════════════════ BOLA DE FUEGO ════════════════
+  class Fireball {
+    constructor() {
+      this.g = 0; this.fx = OIL_X; this.fy = surfY(0, this.fx);
+      this.dir = 1; this.state = 'walk';   // 'walk' | 'climb'
+      this.decideT = 0; this.animT = 0; this.dead = false;
+      this.l = null; this.climbDir = 0;
+    }
+    process(dt) {
+      this.animT += dt;
+      if (this.state === 'walk') {
+        this.decideT -= dt;
+        if (this.decideT <= 0) {
+          this.decideT = rnd(1.2, 2.8);
+          // sesgo hacia Mario (70%)
+          this.dir = (Math.random() < 0.7 ? Math.sign(mario.fx - this.fx) || 1 : (Math.random() < 0.5 ? -1 : 1));
+        }
+        const prevX = this.fx;
+        this.fx += this.dir * FIRE_SPD * dt;
+        const g = GIRDERS[this.g];
+        if (this.fx < g.x0 + 0.01 || this.fx > g.x1 - 0.01) { this.fx = clamp(this.fx, g.x0 + 0.01, g.x1 - 0.01); this.dir *= -1; }
+        this.fy = surfY(this.g, this.fx);
+        // trepar escaleras (también las rotas) buscando la viga de Mario
+        for (const l of LADDERS) {
+          const fromHere = (l.lo === this.g && mario.g > this.g) ? 'up' : (l.hi === this.g && mario.g < this.g) ? 'down' : null;
+          if (!fromHere) continue;
+          const lx = l.x;
+          if ((prevX - lx) * (this.fx - lx) <= 0 && prevX !== this.fx && Math.random() < 0.45) {
+            this.state = 'climb'; this.l = l; this.fx = lx;
+            this.climbDir = fromHere === 'up' ? -1 : 1;
+            break;
+          }
+        }
+      } else { // climb
+        this.fy += this.climbDir * FIRE_SPD * 1.4 * dt;
+        const top = surfY(this.l.hi, this.l.x), foot = surfY(this.l.lo, this.l.x);
+        if (this.climbDir < 0 && this.fy <= top)  { this.fy = top;  this.g = this.l.hi; this.state = 'walk'; }
+        if (this.climbDir > 0 && this.fy >= foot) { this.fy = foot; this.g = this.l.lo; this.state = 'walk'; }
+      }
+      // martillazo
+      const hb = mario.hammerBox();
+      if (hb) {
+        const fx = ppx(this.fx), fy = ppy(this.fy) - FBH * PF.h / 2;
+        if (Math.hypot(fx - hb.x, fy - hb.y) < hb.r + FBH * PF.h * 0.5) {
+          this.dead = true; addScore(500, this.fx, this.fy - 0.05, '#ff8c1a'); sfx.hammer();
+          return;
+        }
+      }
+      if (hitsMario(this.fx, this.fy, FBH, 10 / 11)) die();
+    }
+    draw() {
+      const fh = FBH * PF.h;
+      const fr = (Math.floor(this.animT / 0.12) % 2) === 0 ? FIRE_1 : FIRE_2;
+      drawSpr(fr, ppx(this.fx), ppy(this.fy) - fh / 2, fh, this.dir < 0);
+    }
+  }
+
+  // ════════════════ DONKEY KONG (el que tira barriles) ════════════════
+  const dk = {
+    t: 0, phase: 'beat', nextThrow: 1.2, thrown: false,
+    reset() { this.t = 0; this.phase = 'beat'; this.nextThrow = 1.2; this.thrown = false; },
+    process(dt) {
+      this.t += dt;
+      if (this.phase === 'beat') {
+        if (this.t >= this.nextThrow) { this.phase = 'grab'; this.t = 0; this.thrown = false; }
+      } else if (this.phase === 'grab') {
+        if (this.t >= 0.45) { this.phase = 'throw'; this.t = 0; }
+      } else { // throw
+        if (!this.thrown && this.t >= 0.18 && barrels.length < MAX_BARRELS) {
+          barrels.push(new Barrel()); this.thrown = true; sfx.throw_();
+        }
+        if (this.t >= 0.4) { this.phase = 'beat'; this.t = 0; this.nextThrow = spawnGap(); }
+      }
+    },
+    draw() {
+      const h = DKH * PF.h;
+      const px = ppx(DK_X), py = ppy(surfY(5, DK_X)) - h / 2;
+      if (this.phase === 'beat') {
+        const fr = Math.floor(this.t / 0.32) % 2;
+        drawSpr(fr === 0 ? DK_UP : DK_CHEST, px, py, h);
+      } else if (this.phase === 'grab') {
+        drawSpr(DK_CHEST, px, py, h);
+        drawSpr(BARREL_FR[0], px + h * 0.42, py + h * 0.18, BH * PF.h);     // barril en las manos
+      } else {
+        drawSpr(DK_UP, px, py, h);
+        drawSpr(BARREL_FR[1], px + h * 0.55, py - h * 0.05, BH * PF.h);
+      }
+    },
+  };
+
+  // ════════════════ PAULINE ════════════════
+  const pauline = {
+    t: 0,
+    process(dt) { this.t += dt; },
+    draw() {
+      const h = PAUH * PF.h;
+      const px = ppx(PAULINE_X), py = ppy(surfY(PAULINE_G, PAULINE_X)) - h / 2;
+      const fr = (Math.floor(this.t / 0.55) % 2) === 0 ? PAU_1 : PAU_2;
+      drawSpr(fr, px, py, h, mario.fx > PAULINE_X);
+      // grito de auxilio intermitente
+      if ((this.t % 4) < 1.4 && gh.phase === 'play') {
+        ptext('¡AYUDA!', PAULINE_X, surfY(PAULINE_G, PAULINE_X) - PAUH - 0.022, 0.013, '#ffffff');
+      }
+    },
+  };
+
+  // ════════════════ FLUJO DE PARTIDA ════════════════
+  function startGame() {
+    gh.level = 1; gh.score = 0; gh.lives = 3; gh.newHi = false;
+    gh.screen = 'game';
+    startLevel();
+  }
+  function startLevel() {
+    barrels = []; fireballs = []; popups = [];
+    hammers = HAMMER_SPOTS.map(s => ({ g: s.g, x: s.x, taken: false }));
+    oilLit = false; oilT = 0;
+    dk.reset(); mario.reset();
+    gh.bonus = Math.min(8000, 5000 + 500 * (gh.level - 1)); gh.bonusT = 0;
+    gh.phase = 'intro'; gh.phaseT = 0;
+    jumpBuf = 0;
+  }
+  function respawn() { startLevel(); }                       // como el arcade: el nivel se reinicia limpio
+  function die() {
+    if (gh.phase !== 'play') return;
+    gh.phase = 'dying'; gh.phaseT = 0; mario.deadT = 0;
+    sfx.death();
+  }
+  function winLevel() {
+    if (gh.phase !== 'play') return;
+    gh.phase = 'win'; gh.phaseT = 0;
+    addScore(gh.bonus, PAULINE_X, surfY(PAULINE_G, PAULINE_X) - 0.10, '#7fd4ff');
+    sfx.win();
+  }
+  function backToMenu() { gh.screen = 'menu'; }
+
+  // ════════════════ HORNEADO DEL NIVEL (vigas + escaleras + tambor) ════════════════
+  let levelCv = null, lctx = null;
+  function bakeLevel() {
+    levelCv = levelCv || document.createElement('canvas');
+    levelCv.width = canvas.width; levelCv.height = canvas.height;
+    lctx = levelCv.getContext('2d');
+    lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    lctx.clearRect(0, 0, W, H);
+
+    // escaleras primero (las vigas tapan la unión)
+    for (const l of LADDERS) {
+      const x = ppx(l.x);
+      const top = ppy(surfY(l.hi, l.x)), foot = ppy(surfY(l.lo, l.x));
+      const w = PF.w * 0.032, rail = Math.max(1.5, PF.w * 0.007);
+      lctx.strokeStyle = '#3fd4ff'; lctx.lineWidth = rail; lctx.lineCap = 'butt';
+      const gapTop = top + (foot - top) * 0.36, gapBot = top + (foot - top) * 0.66;
+      const rails = (yA, yB) => {
+        lctx.beginPath();
+        lctx.moveTo(x - w / 2, yA); lctx.lineTo(x - w / 2, yB);
+        lctx.moveTo(x + w / 2, yA); lctx.lineTo(x + w / 2, yB);
+        lctx.stroke();
+      };
+      if (l.broken) { rails(top, gapTop); rails(gapBot, foot); } else rails(top, foot);
+      lctx.lineWidth = Math.max(1, PF.w * 0.0045);
+      const step = PF.h * 0.016;
+      for (let y = top + step * 0.7; y < foot; y += step) {
+        if (l.broken && y > gapTop && y < gapBot) continue;
+        lctx.beginPath(); lctx.moveTo(x - w / 2, y); lctx.lineTo(x + w / 2, y); lctx.stroke();
+      }
+    }
+
+    // vigas estilo DK: bordes rosas + entramado diagonal
+    const th = PF.h * 0.020;
+    for (const g of GIRDERS) {
+      const x0 = ppx(g.x0), x1 = ppx(g.x1), y0 = ppy(g.yL), y1 = ppy(g.yR);
+      lctx.beginPath();
+      lctx.moveTo(x0, y0); lctx.lineTo(x1, y1); lctx.lineTo(x1, y1 + th); lctx.lineTo(x0, y0 + th);
+      lctx.closePath();
+      lctx.fillStyle = '#5c0f2c'; lctx.fill();
+      lctx.save(); lctx.clip();
+      lctx.strokeStyle = '#d63b78'; lctx.lineWidth = Math.max(1, PF.w * 0.005);
+      const step = PF.w * 0.024;
+      for (let x = x0 - th; x < x1 + th; x += step) {
+        const t = clamp((x - x0) / (x1 - x0 || 1), 0, 1);
+        const yy = y0 + (y1 - y0) * t;
+        lctx.beginPath(); lctx.moveTo(x, yy + th); lctx.lineTo(x + th, yy); lctx.stroke();
+      }
+      lctx.restore();
+      lctx.strokeStyle = '#ff5d92'; lctx.lineWidth = Math.max(1.5, PF.h * 0.0040);
+      lctx.beginPath(); lctx.moveTo(x0, y0); lctx.lineTo(x1, y1); lctx.stroke();
+      lctx.beginPath(); lctx.moveTo(x0, y0 + th); lctx.lineTo(x1, y1 + th); lctx.stroke();
+    }
+
+    // tambor de aceite (cuerpo; la llama va animada encima)
+    const oh = OILH * PF.h;
+    const ox = ppx(OIL_X), oy = ppy(surfY(0, OIL_X)) - oh / 2;
+    lctx.imageSmoothingEnabled = false;
+    lctx.drawImage(OIL_SPR.cv, ox - (oh * OIL_SPR.w / OIL_SPR.h) / 2, oy - oh / 2, oh * OIL_SPR.w / OIL_SPR.h, oh);
+  }
+
+  // ════════════════ RESIZE ════════════════
+  const barEl = document.getElementById('bar');
+  function resize() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const barH = barEl.offsetHeight;
+    W = Math.max(1, Math.floor(window.innerWidth));
+    H = Math.max(1, Math.floor(window.innerHeight - barH));
+    canvas.width = Math.floor(W * dpr);
+    canvas.height = Math.floor(H * dpr);
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // playfield portrait centrado (bandas tipo gabinete en desktop)
+    const pw = Math.min(W, H * ASPECT);
+    PF.w = pw; PF.h = pw / ASPECT;
+    PF.x = (W - PF.w) / 2; PF.y = (H - PF.h) / 2;
+    bakeLevel();
+    // Las posiciones viven en fracciones del playfield → el juego sigue donde estaba, sin reset.
+  }
+  window.addEventListener('resize', resize);
+
+  // ════════════════ DIBUJO ════════════════
+  function drawBezel() {
+    ctx.fillStyle = '#0a0b10';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#000';
+    ctx.fillRect(PF.x, PF.y, PF.w, PF.h);
+    ctx.strokeStyle = 'rgba(255,93,146,0.22)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(PF.x + 0.5, PF.y + 0.5, PF.w - 1, PF.h - 1);
+  }
+
+  function drawHUD() {
+    ptext('PUNTOS', 0.035, 0.022, 0.014, '#ff3b30', 'left');
+    ptext(pad(gh.score, 6), 0.035, 0.047, 0.015, '#ffffff', 'left');
+    ptext('RECORD', 0.5, 0.022, 0.014, '#ff3b30');
+    ptext(pad(gh.hi, 6), 0.5, 0.047, 0.015, gh.newHi ? '#ffd23f' : '#ffffff');
+    ptext('NIVEL ' + pad(gh.level, 2), 0.965, 0.022, 0.014, '#7fd4ff', 'right');
+    ptext('BONUS ' + pad(gh.bonus, 4), 0.965, 0.047, 0.013, '#ffd23f', 'right');
+    // vidas en reserva
+    const ih = 0.020 * PF.h;
+    for (let i = 0; i < gh.lives - 1; i++) {
+      drawSpr(M_IDLE, ppx(0.045 + i * 0.05), ppy(0.078), ih);
+    }
+  }
+
+  function drawOilFlame() {
+    if (!oilLit) return;
+    const fh = 0.034 * PF.h;
+    const fr = (Math.floor(oilT / 0.12) % 2) === 0 ? FLAME_1 : FLAME_2;
+    drawSpr(fr, ppx(OIL_X), ppy(surfY(0, OIL_X)) - OILH * PF.h - fh / 2 + PF.h * 0.004, fh);
+  }
+
+  function drawHammers() {
+    for (const hm of hammers) {
+      if (hm.taken) continue;
+      const hh = HAMH * PF.h;
+      drawSpr(HAMMER_SPR, ppx(hm.x), ppy(surfY(hm.g, hm.x) - HAMMER_HOVER), hh);
+    }
+  }
+
+  function drawPopups(dt) {
+    for (const p of popups) {
+      p.t += dt; p.fy -= 0.035 * dt;
+      ptext(p.text, p.fx, p.fy, 0.014, p.color);
+    }
+    popups = popups.filter(p => p.t < 0.9);
+  }
+
+  function drawGame(dt) {
+    drawBezel();
+    ctx.drawImage(levelCv, 0, 0, W, H);
+    drawOilFlame();
+    drawHammers();
+    pauline.draw();
+    dk.draw();
+    for (const b of barrels) b.draw();
+    for (const f of fireballs) f.draw();
+    mario.draw();
+    drawPopups(dt);
+    drawHUD();
+
+    if (gh.phase === 'intro') {
+      ptext('NIVEL ' + gh.level, 0.5, 0.50, 0.026, '#7fd4ff');
+      ptext('¿LISTO?', 0.5, 0.55, 0.018, '#ffffff');
+    } else if (gh.phase === 'win') {
+      const hh = 0.030 * PF.h * (1 + 0.12 * Math.sin(gh.phaseT * 6));
+      drawSpr(HEART_SPR, ppx((mario.fx + PAULINE_X) / 2), ppy(surfY(PAULINE_G, PAULINE_X) - PAUH - 0.045), hh);
+      ptext('¡NIVEL SUPERADO!', 0.5, 0.50, 0.020, '#ffd23f');
+    } else if (gh.phase === 'over') {
+      ctx.fillStyle = 'rgba(0,0,0,0.62)';
+      ctx.fillRect(PF.x, PF.y, PF.w, PF.h);
+      ptext('FIN DEL JUEGO', 0.5, 0.42, 0.026, '#ff3b30');
+      ptext(pad(gh.score, 6) + ' PUNTOS', 0.5, 0.50, 0.016, '#ffffff');
+      if (gh.newHi) ptext('¡NUEVO RECORD!', 0.5, 0.555, 0.015, '#ffd23f');
+      if (gh.phaseT % 1 < 0.6) ptext('TOCA PARA SEGUIR', 0.5, 0.63, 0.013, '#7fd4ff');
+    }
+  }
+
+  // ════════════════ MENÚ ════════════════
+  const MENU_PLAY_Y = 0.66;
+  let menuBarrelT = 0;
+  function drawMenu(dt) {
+    drawBezel();
+    ctx.save(); ctx.globalAlpha = 0.14;
+    ctx.drawImage(levelCv, 0, 0, W, H);             // el nivel de fondo, bien tenue
+    ctx.restore();
+
+    // título tipo marquesina: rojo con sombra y borde claro
+    const t = perfT;
+    const ts = 0.052;
+    const shake = Math.sin(t * 1.8) * 0.002;
+    for (const [line, fy] of [['DONKEY', 0.17], ['KONG', 0.245]]) {
+      ctx.font = Math.round(ts * PF.h) + 'px ' + FONT;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = '#7a0d0d';
+      ctx.fillText(line, ppx(0.5 + 0.006), ppy(fy + 0.006 + shake));
+      ctx.fillStyle = '#ff2e1f';
+      ctx.fillText(line, ppx(0.5), ppy(fy + shake));
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+      ctx.lineWidth = Math.max(1, PF.h * 0.0016);
+      ctx.strokeText(line, ppx(0.5), ppy(fy + shake));
+    }
+
+    // DK animado al centro + barriles rodando decorativos
+    menuBarrelT += dt;
+    const dkh = 0.13 * PF.h;
+    drawSpr((Math.floor(t / 0.4) % 2) === 0 ? DK_UP : DK_CHEST, ppx(0.5), ppy(0.42), dkh);
+    const bh = 0.030 * PF.h;
+    const bx = (menuBarrelT * 0.12) % 1.3 - 0.15;
+    drawSpr(BARREL_FR[Math.floor(menuBarrelT / 0.07) % 4], ppx(bx), ppy(0.545), bh);
+
+    ptext('RECORD ' + pad(gh.hi, 6), 0.5, 0.575, 0.015, '#7fd4ff');
+
+    // botón JUGAR: píldora roja pulsante (mismo gesto que el JUGAR de TronWeb)
+    const pulse = 0.6 + 0.4 * Math.sin(t * 4);
+    const fp = Math.round(0.024 * PF.h);
+    ctx.font = fp + 'px ' + FONT;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const label = '> JUGAR <';
+    const tw = ctx.measureText(label).width, padX = fp * 0.9, padY = fp * 0.65;
+    const bw = tw + padX * 2, bhh = fp + padY * 2;
+    const bxx = ppx(0.5) - bw / 2, byy = ppy(MENU_PLAY_Y) - bhh / 2;
+    ctx.fillStyle = 'rgba(232,59,42,' + (0.18 + 0.10 * pulse) + ')';
+    ctx.strokeStyle = '#e83b2a'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    const r = bhh / 2;
+    ctx.moveTo(bxx + r, byy); ctx.arcTo(bxx + bw, byy, bxx + bw, byy + bhh, r);
+    ctx.arcTo(bxx + bw, byy + bhh, bxx, byy + bhh, r); ctx.arcTo(bxx, byy + bhh, bxx, byy, r);
+    ctx.arcTo(bxx, byy, bxx + bw, byy, r); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.8 + 0.2 * pulse) + ')';
+    ctx.fillText(label, ppx(0.5), ppy(MENU_PLAY_Y));
+
+    ptext('< > CAMINAR · ARRIBA/ABAJO TREPAR', 0.5, 0.78, 0.011, 'rgba(200,205,215,0.75)');
+    ptext('TOCA LA PANTALLA PARA SALTAR', 0.5, 0.81, 0.011, 'rgba(200,205,215,0.75)');
+    if (t % 1.2 < 0.7) ptext('INSERTE UNA MONEDA', 0.5, 0.90, 0.013, '#ffd23f');
+  }
+
+  // ════════════════ INPUT (listeners) ════════════════
+  window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if (e.code === 'Space' || e.code === 'KeyX') jumpBuf = 0.12;
+    if (e.code === 'Enter') {
+      if (gh.screen === 'menu') startGame();
+      else if (gh.phase === 'over') backToMenu();
+    }
+    if (e.code === 'Escape' && gh.screen === 'game') backToMenu();
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter'].includes(e.code)) e.preventDefault();
+  });
+  window.addEventListener('keyup', e => { keys[e.code] = false; });
+
+  // Soltar TODO el input al perder foco: si alt-tabeás (o llega una notificación / gesto del SO) con
+  // una tecla apretada, el keyup nunca llega y Mario seguiría caminando solo al volver. NO se llama en
+  // startLevel(): ahí borraría una tecla genuinamente sostenida en el respawn (los botones de la barra
+  // ya se sueltan solos vía lostpointercapture; lo que no tenía red era el mapa `keys` del teclado).
+  const clearInput = () => {
+    for (const k in keys) keys[k] = false;
+    vk.left = vk.right = vk.up = vk.down = false;
+    document.querySelectorAll('#ui button.held').forEach(b => b.classList.remove('held'));
+    jumpBuf = 0;
+  };
+  window.addEventListener('blur', clearInput);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) clearInput(); });
+
+  canvas.addEventListener('pointerdown', e => {
+    ac();                                            // despierta el audio con el primer gesto
+    const r = canvas.getBoundingClientRect();
+    const ly = e.clientY - r.top;
+    if (gh.screen === 'menu') {
+      if (Math.abs(ly - ppy(MENU_PLAY_Y)) < PF.h * 0.07) startGame();
+      return;
+    }
+    if (gh.phase === 'over') { backToMenu(); return; }
+    jumpBuf = 0.12;                                  // en juego: tocar la pantalla = saltar
+  });
+
+  // Botones de la barra con HOLD: pointer capture para no perder el release (gotcha de nipplejs:
+  // los botones sueltos con capture aguantan multitouch sin colgarse).
+  function holdable(el, prop) {
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+      vk[prop] = true; el.classList.add('held');
+      ac();
+    });
+    const off = () => { vk[prop] = false; el.classList.remove('held'); };
+    el.addEventListener('pointerup', off);
+    el.addEventListener('pointercancel', off);
+    el.addEventListener('lostpointercapture', off);
+  }
+  holdable(document.getElementById('btnLeft'),  'left');
+  holdable(document.getElementById('btnRight'), 'right');
+  holdable(document.getElementById('btnUp'),    'up');
+  holdable(document.getElementById('btnDown'),  'down');
+
+  // ════════════════ LOOP ════════════════
+  // OJO mobile: medir SIEMPRE contra el mismo reloj (el now de rAF) y clampear dt — en algunos
+  // WebView performance.now() y el timestamp de rAF tienen épocas distintas (gotcha de TronWeb).
+  let lastT = null;
+  let perfT = 0;                                     // tiempo acumulado para pulsos de menú
+  function loop(now) {
+    if (typeof now !== 'number') now = performance.now();
+    if (lastT === null) lastT = now;
+    let dt = (now - lastT) / 1000;
+    lastT = now;
+    if (!(dt >= 0) || dt > 0.05) dt = 0.01;
+    perfT += dt;
+    if (jumpBuf > 0) jumpBuf -= dt;
+
+    if (gh.screen === 'menu') {
+      drawMenu(dt);
+    } else {
+      if (gh.phase === 'intro') {
+        gh.phaseT += dt;
+        if (gh.phaseT > 1.3) { gh.phase = 'play'; gh.phaseT = 0; }
+      } else if (gh.phase === 'play') {
+        dk.process(dt);
+        pauline.process(dt);
+        oilT += dt;
+        for (const b of barrels) { b.process(dt); if (gh.phase !== 'play') break; }
+        barrels = barrels.filter(b => !b.dead);
+        if (gh.phase === 'play') {
+          for (const f of fireballs) { f.process(dt); if (gh.phase !== 'play') break; }
+          fireballs = fireballs.filter(f => !f.dead);
+        }
+        if (gh.phase === 'play') mario.process(dt);
+        // bonus que baja — llegar a 0 mata (se acabó el tiempo)
+        if (gh.phase === 'play') {
+          gh.bonusT += dt;
+          if (gh.bonusT >= BONUS_TICK) {
+            gh.bonusT = 0; gh.bonus = Math.max(0, gh.bonus - 100);
+            if (gh.bonus === 0) die();
+          }
+        }
+      } else if (gh.phase === 'dying') {
+        gh.phaseT += dt; mario.deadT += dt;
+        if (gh.phaseT > 2.1) {
+          gh.lives--;
+          if (gh.lives > 0) respawn();
+          else { gh.phase = 'over'; gh.phaseT = 0; }
+        }
+      } else if (gh.phase === 'win') {
+        gh.phaseT += dt;
+        pauline.process(dt);
+        if (gh.phaseT > 2.8) { gh.level++; startLevel(); }
+      } else if (gh.phase === 'over') {
+        gh.phaseT += dt;
+      }
+      drawGame(dt);
+    }
+    requestAnimationFrame(loop);
+  }
+
+  // ── INIT ──
+  if (document.fonts && document.fonts.load) document.fonts.load('12px "Press Start 2P"');
+  resize();
+  loop();
+
+  const hint = document.getElementById('hint');
+  setTimeout(() => hint.style.opacity = '0', 6000);
+  canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
+  </script>
+
+  <!-- Shell del Arcade (exit + fullscreen + lock de orientación). data-orient: landscape/portrait/any. -->
+  <script src="../../Arcade/arcade-shell.js" data-orient="portrait"></script>
+
+  <div id="fpsOverlay">FPS: --</div>
+  <script>
+    (function() {
+      let frameCount = 0, lastT = performance.now();
+      const overlay = document.getElementById('fpsOverlay');
+      function loop() {
+        frameCount++;
+        const now = performance.now();
+        if (now - lastT >= 500) {
+          const fps = Math.round(frameCount * 1000 / (now - lastT));
+          if (overlay.style.display !== 'none') overlay.textContent = 'FPS: ' + fps;
+          frameCount = 0; lastT = now;
+        }
+        requestAnimationFrame(loop);
+      }
+      loop();
+      const btn = document.getElementById('btnInfo');
+      btn.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        // El overlay arranca con display:none POR CSS — comparamos con === 'block' (estado visible
+        // explícito) en vez de !== 'none' para no comerse el primer tap (gotcha de TronWeb).
+        const showing = overlay.style.display === 'block';
+        overlay.style.display = showing ? 'none' : 'block';
+        btn.classList.toggle('on', !showing);
+      });
+    })();
+  </script>
+
+</body>
+</html>

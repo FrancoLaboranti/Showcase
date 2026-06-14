@@ -28,16 +28,7 @@
      dependientes de SCREEN_X se comportan idénticos al juego de escritorio. */
   #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
 
-  #hint {
-    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    max-width: min(88vw, 480px);
-    background: rgba(10,12,18,0.78); border: 1px solid rgba(255,255,255,0.10);
-    padding: 12px 20px; border-radius: 14px;
-    text-align: center; color: rgba(255,255,255,0.92);
-    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
-    pointer-events: none; transition: opacity 0.8s; z-index: 5;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
-  }
+  #hint { display: none; }   /* cartelito de inicio oculto a propósito */
 
   /* ── Controles en pantalla (touch). En desktop el teclado sigue siendo el camino principal; estos
      botones quedan disponibles igual. Cada botón es un elemento independiente con su propio pointer
@@ -67,10 +58,20 @@
   #actBtns { position: fixed; right: calc(12px + env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 12px; }
   #actBtns .btn { width: 54px; height: 54px; position: relative; }
   #actBtns .btn svg { width: 22px; height: 22px; }
-  .btn.fireBtn  { background: rgba(255,90,60,0.18);  border-color: rgba(255,90,60,0.5); }
+  .btn.fireBtn  { background: rgba(255,90,60,0.18);  border-color: rgba(255,90,60,0.5); overflow: hidden; }
   .btn.fireBtn:active, .btn.fireBtn.on   { background: rgba(255,90,60,0.45);  border-color: rgba(255,120,90,0.8); box-shadow: 0 0 14px rgba(255,90,60,0.6); }
-  .btn.nitroBtn { background: rgba(80,220,255,0.16); border-color: rgba(80,220,255,0.5); color: #aef0ff; }
+  /* Carga del disparo: relleno rojo que sube; la bomba queda NEGRA (como el nitro/pickups) sobre la parte cargada y BLANCA mientras carga. */
+  #fireFill { position: absolute; inset: 0; pointer-events: none; }
+  #actBtns .btn svg.fbomb { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .fbLight { color: #fff; }
+  .fbDark  { color: #0a2337; }
+  .btn.nitroBtn { background: rgba(80,220,255,0.16); border-color: rgba(80,220,255,0.5); color: #aef0ff; overflow: hidden; }
   .btn.nitroBtn:active, .btn.nitroBtn.on { background: rgba(80,220,255,0.42); border-color: rgba(140,235,255,0.85); box-shadow: 0 0 14px rgba(80,220,255,0.6); }
+  /* Carga del nitro: relleno vertical que DIVIDE el botón. La llama queda NEGRA (como los pickups) sobre la parte cargada y celeste sobre la vacía. */
+  #nitroFill { position: absolute; inset: 0; pointer-events: none; }
+  #actBtns .btn svg.nflame { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .nfLight { color: #aef0ff; }
+  .nfDark  { color: #0a2337; }
   #nitroRing, #fireRing { position: absolute; inset: -3px; border-radius: 50%; pointer-events: none; }
   /* (Estilo del nub: ahora inline en createJoystick; estas reglas .nipple quedan sin uso pero inofensivas.) */
   .nipple .back {
@@ -85,11 +86,15 @@
     box-shadow: 0 3px 10px rgba(0,0,0,0.5), 0 0 16px rgba(120,200,255,0.6);
     opacity: 1 !important;
   }
-  /* Botones de menú (esquina sup-der): Enter / Esc */
-  /* Fullscreen + atrás: a la izquierda del cluster info/salir (que van pegados a la esquina). */
-  #padMenu { position: absolute; top: calc(8px + env(safe-area-inset-top)); right: calc(80px + env(safe-area-inset-right)); z-index: 4; display: flex; gap: 8px; }
-  #padMenu .btn { width: 30px; height: 30px; }
-  #padMenu .btn svg { width: 14px; height: 14px; }
+  /* Botones de esquina (fullscreen + atrás): posicionados individualmente para replicar el ORDEN y el
+     espaciado de Pong → de afuera hacia adentro: salir(8) · info(46) · pantalla(84) · atrás(122) · pausa(160). */
+  #btnFs, #btnBack {
+    position: absolute; top: calc(8px + env(safe-area-inset-top));
+    width: 30px; height: 30px; z-index: 4;
+  }
+  #btnFs   { right: calc(84px + env(safe-area-inset-right)); }
+  #btnBack { right: calc(122px + env(safe-area-inset-right)); }
+  #btnFs svg, #btnBack svg { width: 14px; height: 14px; }
   /* Ícono de pantalla completa: muestra "expandir" o "contraer" según el estado (body.fs-on) */
   #btnFs .ic-exit { display: none; }
   body.fs-on #btnFs .ic-enter { display: none; }
@@ -110,7 +115,7 @@
     position: absolute;
     right: calc(8px + env(safe-area-inset-right));
     top: calc(8px + env(safe-area-inset-top));
-    width: 28px; height: 28px; border-radius: 50%;
+    width: 30px; height: 30px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.16);
     background: rgba(255,255,255,0.04);
     color: rgba(255,255,255,0.85);
@@ -124,9 +129,9 @@
   /* Info (FPS) — arriba a la derecha, al lado del de salir (a su izquierda). */
   #btnInfo {
     position: absolute;
-    right: calc(44px + env(safe-area-inset-right));
+    right: calc(46px + env(safe-area-inset-right));
     top: calc(8px + env(safe-area-inset-top));
-    width: 28px; height: 28px; border-radius: 50%;
+    width: 30px; height: 30px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.16);
     background: rgba(255,255,255,0.04);
     color: rgba(255,255,255,0.85);
@@ -137,6 +142,23 @@
   }
   #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
   #btnInfo:active, #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+  /* Pausa — como en Pong: extremo IZQUIERDO del cluster de esquina (a la izquierda de fullscreen/atrás). Sólo en carrera (display lo maneja __setPauseUI). */
+  #btnPause {
+    position: absolute;
+    right: calc(160px + env(safe-area-inset-right));
+    top: calc(8px + env(safe-area-inset-top));
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.85);
+    display: none; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+    z-index: 10;
+  }
+  #btnPause svg { display: block; width: 13px; height: 13px; pointer-events: none; }
+  #btnPause:active { transform: scale(0.9); }
+  #btnPause.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
   /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
   #fpsOverlay {
     position: absolute;
@@ -167,12 +189,14 @@
        Íconos propios de CrazyTanks (no los de TankWARS: ni misil ni rayo). -->
   <div id="actBtns">
     <button class="btn nitroBtn" id="btnNitro" aria-label="nitro" title="Nitro">
-      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12.5 2c.6 3-1.4 4-1.4 6.3 0 1 .7 1.7 1.6 1.7 1.2 0 1.7-1 1.6-2.2 1.7 1.3 2.7 3.4 2.7 5.5a5.5 5.5 0 0 1-11 0c0-2.7 1.7-4.6 3-6.1C10.9 5.3 11.8 3.7 12.5 2z"/></svg>
-      <span id="nitroRing"></span>
+      <span id="nitroFill"></span>
+      <svg class="nflame nfLight" viewBox="0 0 54 54" fill="currentColor" stroke="none"><path transform="translate(10 11.5) scale(1.4)" d="M12.5 2c.6 3-1.4 4-1.4 6.3 0 1 .7 1.7 1.6 1.7 1.2 0 1.7-1 1.6-2.2 1.7 1.3 2.7 3.4 2.7 5.5a5.5 5.5 0 0 1-11 0c0-2.7 1.7-4.6 3-6.1C10.9 5.3 11.8 3.7 12.5 2z"/></svg>
+      <svg class="nflame nfDark" viewBox="0 0 54 54" fill="currentColor" stroke="none"><path transform="translate(10 11.5) scale(1.4)" d="M12.5 2c.6 3-1.4 4-1.4 6.3 0 1 .7 1.7 1.6 1.7 1.2 0 1.7-1 1.6-2.2 1.7 1.3 2.7 3.4 2.7 5.5a5.5 5.5 0 0 1-11 0c0-2.7 1.7-4.6 3-6.1C10.9 5.3 11.8 3.7 12.5 2z"/></svg>
     </button>
     <button class="btn fireBtn" id="btnFire" aria-label="disparar" title="Disparar">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" stroke="none"/><path d="M15 9.5 18 6.5" stroke-width="2"/><circle cx="18.8" cy="5.6" r="1.7" fill="currentColor" stroke="none"/><path d="M20.5 3.6 21.7 2.6M20.2 6.4 21.6 6.7M17.6 3.3 17.2 1.9" stroke-width="1.4"/></svg>
-      <span id="fireRing"></span>
+      <span id="fireFill"></span>
+      <svg class="fbomb fbLight" viewBox="0 0 54 54" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(8.8 10.9) scale(1.4)"><circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" stroke="none"/><path d="M15 9.5 18 6.5" stroke-width="2"/><circle cx="18.8" cy="5.6" r="1.7" fill="currentColor" stroke="none"/><path d="M20.5 3.6 21.7 2.6M20.2 6.4 21.6 6.7M17.6 3.3 17.2 1.9" stroke-width="1.4"/></g></svg>
+      <svg class="fbomb fbDark" viewBox="0 0 54 54" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(8.8 10.9) scale(1.4)"><circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" stroke="none"/><path d="M15 9.5 18 6.5" stroke-width="2"/><circle cx="18.8" cy="5.6" r="1.7" fill="currentColor" stroke="none"/><path d="M20.5 3.6 21.7 2.6M20.2 6.4 21.6 6.7M17.6 3.3 17.2 1.9" stroke-width="1.4"/></g></svg>
     </button>
   </div>
 
@@ -183,11 +207,10 @@
     <p>Girá el teléfono<br>CrazyTanks se juega en horizontal</p>
   </div>
 
-  <!-- Botones de esquina: pantalla completa + atrás/salir (el menú se opera tocando las opciones directamente) -->
-  <div id="padMenu">
-    <button class="btn" id="btnFs" aria-label="pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
-    <button class="btn" data-k="ESCAPE" aria-label="atrás"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg></button>
-  </div>
+  <!-- Botones de esquina (orden Pong, de afuera hacia adentro): salir · info · PANTALLA · ATRÁS · pausa.
+       Posicionados individualmente (no agrupados) para igualar tamaño y espaciado al cluster de Pong. -->
+  <button class="btn" id="btnFs" aria-label="pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
+  <button class="btn" id="btnBack" data-k="ESCAPE" aria-label="atrás"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg></button>
 
 <script src="matter.min.js"></script>
 <script>
@@ -273,10 +296,13 @@ const BIG_START = {};                                                 // largada
 const BIG_VERTICAL = {};                                              // meta vertical? por pista generada (default: horizontal)
 let dbgView = false;                                                  // overlay de DEBUG (botón info): cajas de colisión + waypoints
 window.__setDbg = v => { dbgView = v; };                              // puente desde el handler del botón info (script aparte, abajo del body)
+let uiPauseReq = false;                                               // pedido de pausa del botón de UI (estilo Pong); lo consume el AuxiliaryHandler
+window.__uiTogglePause = () => { uiPauseReq = true; };                // puente desde el handler del botón de pausa (script al final del body)
 // Torneo: 10 carreras con mapas autogenerados, temática GARANTIZADA en este orden (verde,desierto,nieve,tecno,lava ×2).
-const TOURNEY_THEMES = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4];
-const TOURNEY_RACES = TOURNEY_THEMES.length;                          // 10
-function themeOf(track) { return THEMES[track] !== undefined ? THEMES[track] : Math.floor(track / 2) % 5; }
+const TOURNEY_THEMES = [0, 1, 2, 3, 4, 5];                            // un bioma cada uno, EN ORDEN: parque · desierto · nieve · tecno · lava · parque-noche
+const TOURNEY_RACES = TOURNEY_THEMES.length;                          // 6
+const TABLE_STEP1 = 2.2;                                              // tabla del torneo: cuánto dura el PASO 1 (posición previa + "x + n") antes de pasar a los totales
+function themeOf(track) { return THEMES[track] !== undefined ? THEMES[track] : Math.floor(track / 2) % 6; }   // %6: ahora hay 6 temas (5 = parque de noche con lluvia)
 function worldW(track) { return (WORLDS[track] && WORLDS[track][0]) || SCREEN_X; }
 function worldH(track) { return (WORLDS[track] && WORLDS[track][1]) || SCREEN_Y; }
 function isBigWorld(track) { return worldW(track) > SCREEN_X || worldH(track) > SCREEN_Y; }
@@ -343,8 +369,8 @@ function createText(fontPx, content, colorText, colorRect, posx, posy, glow = 0)
 // ── PALETAS DE TEMA (estables; el original re-randomizaba los índices 3/4 cada frame = basura: un alloc
 //    de array + 2 randoms por pared por frame, y un parpadeo feo. Acá son fijas y el "brillo" tecno/lava
 //    sale de los motivos animados, no de ruido RGB). theme = track // 2.
-const THEME_WALL  = [[20,110,45], [205,184,120], [236,240,248], [46,78,140], [62,50,54]];
-const THEME_FLOOR = [[58,60,64],  [34,31,16],    [40,42,48],    [10,15,30],  [28,18,16]];  // [0]=ASFALTO (pedido)
+const THEME_WALL  = [[20,110,45], [205,184,120], [236,240,248], [46,78,140], [62,50,54], [22,52,32]];
+const THEME_FLOOR = [[58,60,64],  [64,52,28],    [66,75,96],    [10,15,30],  [54,22,15], [28,33,40]];  // [0]=asfalto · [1]=arena (cálido) · [2]=nieve (claro/azul) · [3]=tecno · [4]=lava (caliente/rojo) · [5]=parque noche (verde oscuro / asfalto húmedo)
 
 // ════════════════ DATOS DE PISTAS (literales inline, port mecánico) ════════════════
 // Paredes: rectángulos [x, y, w, h] por pista.
@@ -690,9 +716,9 @@ engine.gravity.x = 0; engine.gravity.y = 0;
 const world = engine.world;
 const PHYS_STEP = 1000 / 60;                 // paso fijo (las velocidades quedan en px/frame a 60fps)
 // — Tuning del manejo (px/frame y rad/frame a 60fps; subí/bajá a gusto) —
-const TANK_SPEED   = 12;                    // velocidad máx adelante. Ojo: muy alto = atraviesa paredes finas.
+const TANK_SPEED   = 13;                    // velocidad máx adelante (todos arrancan rápidos, tipo "tecno"). Ojo: muy alto = atraviesa paredes finas.
 const TANK_REVERSE = 5;                       // velocidad máx atrás
-const TANK_ACCEL   = 0.07;                   // suavizado hacia la velocidad objetivo (0..1): bajo = acelera/frena gradual (acumula)
+const TANK_ACCEL   = 0.09;                   // PICKUP hacia ADELANTE (0..1): qué tan rápido se alcanza la velocidad objetivo. Igual para todos → todos ágiles. (El DERRAPE es aparte, por bioma.)
 const TANK_AIRDRAG = 0.02;                   // fricción del aire del cuerpo: baja = mantiene/acumula velocidad
 const TANK_TURN    = 0.045;                  // giro del jugador a dirección máxima (rad/frame, ~2.7 rad/s) — menos ágil
 const AI_TURN_K    = 3.0;                    // qué tan fuerte la IA corrige el rumbo hacia el waypoint
@@ -701,6 +727,19 @@ const AI_LANE      = 58;                      // desvío lateral máximo (unidad
 const AI_STUCK_SPD = 2.4;                     // por debajo de esta velocidad (y acelerando) la IA se considera trabada
 const AI_STUCK_T   = 0.55;                    // s trabada antes de volver al centro del waypoint para destrabarse
 const AI_REVERSE_T = 1.3;                     // s trabada antes de meter marcha atrás para zafar
+// — Perfil de IA por DIFICULTAD (0..4). Cada fila = un "piloto": no sólo más rápido, también mejor en curva,
+//   más agresivo al disparar y más dispuesto a usar nitro. Antes la dificultad sólo escalaba velocidad+disparo
+//   (curvas y nitro eran iguales para todos) → los niveles se sentían casi iguales. Ahora se separan de verdad.
+//   acel = banda de acelerador en recta (×TANK_SPEED); turn = mult sobre AI_TURN_K (pericia en curva);
+//   shoot = N en ri(0,N) ⇒ prob. de disparo 1/(N+1) por decisión; nitro = umbral de carga para soltar boost
+//   (≥1 ⇒ NUNCA usa nitro). Very Easy: lento, curvas anchas, casi no dispara y no usa nitro → para principiantes.
+const AI_DIFF = [
+  { acel: [0.58, 0.66], turn: 0.80, shoot: 49, nitro: 2.00 },   // 0 Very Easy
+  { acel: [0.74, 0.82], turn: 0.90, shoot: 19, nitro: 0.86 },   // 1 Easy
+  { acel: [0.85, 0.92], turn: 1.00, shoot: 9,  nitro: 0.68 },   // 2 Normal (default)
+  { acel: [0.93, 0.98], turn: 1.06, shoot: 4,  nitro: 0.54 },   // 3 Hard
+  { acel: [0.97, 1.00], turn: 1.12, shoot: 3,  nitro: 0.44 },   // 4 Very Hard
+];
 const MOVE_STEER_K = 2.8;                    // palanca única: qué tan fuerte gira hacia el rumbo apuntado
 const SPIN_TIME = 0.6;                        // duración del trompo al recibir un disparo (s) — penaliza menos tiempo
 const SPIN_RATE = 0.34;                       // velocidad del trompo (rad/frame) — gira MÁS rápido visualmente
@@ -709,6 +748,25 @@ const NITRO_MULT  = 1.8;                     // multiplicador de velocidad mient
 const NITRO_DRAIN = 0.4;                     // carga/seg que consume el boost (1/0.4 ≈ 2.5s de boost a tope)
 const NITRO_PICK  = 0.25;                    // carga que da cada ítem (1/4 del tanque)
 const NITRO_MAX   = 1;
+// — Manejo por BIOMA: índice = themeOf(track). Columnas = [latGrip, spd, turn]. —
+// latGrip = AGARRE LATERAL (fracción de la velocidad de costado que se MATA por frame): ALTO = agarra (NO derrapa), BAJO = DERRAPA.
+// spd = multiplicador de TANK_SPEED (velocidad máx); turn = multiplicador de TANK_TURN. El PICKUP adelante es TANK_ACCEL (igual para todos).
+const THEME_HANDLING = [
+  // latGrip, spd,  turn
+  [0.09,  1.00,  1.00],   // 0 pasto/parque — neutro, derrape leve
+  [0.40,  1.00,  0.96],   // 1 desierto/arena — AGARRA fuerte (casi no derrapa), ya NO es lento
+  [0.01,  1.05,  1.08],   // 2 nieve — DERRAPA MUCHO: la nariz gira pero el cuerpo sigue de largo
+  [0.20,  1.10,  1.15],   // 3 tecno/azul — slot-car: agarrado, rápido y preciso
+  [0.06,  1.15,  1.20],   // 4 lava/rojo — suelto y nervioso, el más rápido
+  [0.15,  1.40,  1.00],   // 5 parque de noche — IDÉNTICO al pasto (se maneja igual que el parque verde)
+];
+const TANK_MAX_VEL = TANK_SPEED * 4;         // techo duro anti-tunneling (px/frame): muy por encima de lava+nitro (~24) y debajo del grosor de pared (~90) → sólo frena casos patológicos, NO toca el nitro normal
+// — Colisión de BORDE EXACTO (polígono dinámico): rects finos ROTADOS que calcan la curva dibujada del corredor —
+const WALL_CHAIN  = true;                    // true = colisión de BORDE EXACTO (cadena de rects rotados que calcan la curva), también en portal. false = scanline (revert instantáneo).
+const CHAIN_THICK = 40;                       // grosor de pared de la cadena (anti-tunneling: 30 + radio tanque ~20 > paso máx ~26)
+const CHAIN_DEV   = 2;                         // fidelidad: la colisión queda a ≤ este nº de px de la curva dibujada. BAJO = curvas finas (más cuerpos, sólo donde hay curvatura) / ALTO = curvas que cortan (menos cuerpos). Las rectas se fusionan igual.
+const CHAIN_SEGMAX = 170;                      // tope de LARGO de cada rect de la cadena (mundo). Matter 0.19 usa Detector = sweep-and-prune en X: un rect LARGO (recta/diagonal) tiene un AABB enorme que el sweep no puede saltear → degenera a O(n²) y mata los FPS. Cortar las rectas largas mantiene cada AABB chico (el sweep saltea bien) sin perder el borde exacto. BAJO = más cuerpos chicos / ALTO = menos cuerpos pero AABB grande (caro).
+const CHAIN_JOIN  = 0.5;                       // cuánto se EXTIENDE cada rect más allá de su tramo (en unidades de thick) para solapar al vecino y no dejar huecos. En curvas MUY cerradas los tramos son cortos y este sobrante hacía que las paredes SOBRESALIERAN del borde dibujado (abanico). 0.5 = la mitad → menos protrusión; los tramos cortos igual se solapan. Más bajo = menos sobresale pero arriesga huecos en esquinas.
 const PICKUP_COUNT = 6;                      // ítems de nitro presentes en la pista a la vez
 const PICKUP_FADE  = 0.35;                   // duración (s) de la animación de aparecer/desaparecer
 const PICKUP_FLASH = 0.55;                   // duración (s) del destello celeste sobre el tanque al agarrar nitro
@@ -724,8 +782,11 @@ class Tank {
     this.vel = 0; this.ang_vel = 0; this.psteer = 0; this.spin_timer = 0; this.spin_dir = 1; this.pickup_flash = 0;
     this.shoot_cooling = 0;
     this.nitro = this.id === 0 ? NITRO_MAX * 0.5 : 0;                 // el jugador arranca con MEDIO boost; la IA en 0 (se junta con ítems de la pista)
-    this.nitro_thresh = rnd(0.45, 0.85);                              // IA: cuánta carga junta antes de usarlo (personalidad)
+    const _D = AI_DIFF[difficulty] || AI_DIFF[2];                     // perfil de IA de esta carrera (clamp defensivo a Normal)
+    this.nitro_thresh = _D.nitro >= 1 ? 2 : clampN(_D.nitro + rnd(-0.12, 0.12), 0.2, 0.95);  // umbral de nitro con variación de "personalidad"; ≥1 ⇒ no usa nitro
+    this.ai_turnmul = _D.turn;                                        // pericia en curva (mult sobre AI_TURN_K): bajo = corrige flojo, abre las curvas
     this.nitro_engaged = false;                                        // IA: ¿está soltando el nitro ahora? (histéresis)
+    this.boosting = false;                                             // ¿bosteando este frame? (para el jet azul de nitro)
     this.lap_progress = 0; this.pre_lap_progress = 0;
     this.lap_checkpoint = 0; this.laps = 0;
     this.track = track; this.rank = 0; this.racetime = 0;
@@ -792,9 +853,9 @@ class Tank {
     } else {
       this.ai_cooling += deltaT;
       if (this.ai_cooling > this.ai_timer) {
-        const d = this.ai_difficulty;
-        this.ai_acel  = d === 0 ? rnd(0.8,0.85) : d === 1 ? rnd(0.85,0.92) : d === 2 ? rnd(0.92,0.97) : rnd(0.97,1);
-        this.ai_shoot = d === 0 ? ri(0,19) : d === 1 ? ri(0,9) : d === 2 ? ri(0,4) : ri(0,1);
+        const D = AI_DIFF[this.ai_difficulty] || AI_DIFF[2];
+        this.ai_acel  = rnd(D.acel[0], D.acel[1]);                    // banda de acelerador en recta (escala la velocidad punta)
+        this.ai_shoot = ri(0, D.shoot);                              // 0 ⇒ dispara este ciclo; prob. = 1/(shoot+1)
         this.ai_lat_target = rnd(-1, 1);                              // nueva "línea": a veces abre, a veces se cierra
         this.ai_cooling = 0;
       }
@@ -822,13 +883,13 @@ class Tank {
 
       if (closest_point) {
         this.tp_idx = closest_point.id;
-        if (closest_point.show) closest_point.color = modifyColorPerc(this.color, 1.5);
+        if (dbgView) closest_point.color = modifyColorPerc(this.color, 1.5);   // tinte del waypoint de debug (sólo con el overlay activo)
         this.lap_progress = closest_point.id * 100 / trackpoints.length;
 
         if (this.ai) {
           const n = trackpoints.length;
           const target_point = trackpoints[(closest_point.id + AI_LOOKAHEAD) % n];
-          if (target_point.show) target_point.color = [0, 150, 0];
+          if (dbgView) target_point.color = [0, 150, 0];               // waypoint objetivo de la IA en verde (debug)
 
           // Línea de carrera variable: apunta a un punto DESVIADO del centro (perpendicular al tramo), suavizado.
           this.ai_lat += (this.ai_lat_target - this.ai_lat) * Math.min(1, deltaT * 1.5);
@@ -864,7 +925,7 @@ class Tank {
           let diff = point_ang - this.ang;
           while (diff >  Math.PI) diff -= Math.PI * 2;
           while (diff < -Math.PI) diff += Math.PI * 2;
-          steer    = clampN(diff * AI_TURN_K, -1, 1);                  // gira proporcional al error de rumbo
+          steer    = clampN(diff * AI_TURN_K * this.ai_turnmul, -1, 1); // gira proporcional al error de rumbo (× pericia de la dificultad)
           if (reversing) { throttle = -0.6; steer = -steer; }          // retrocede girando al revés para zafar de la pared
           else throttle = (Math.abs(diff) < Math.PI / 8 ? 1 : 0.55) * this.ai_acel * (this.finished ? 0.6 : 1);
           if (this.ai_shoot === 0 && this.shoot_cooling === 0 && !this.finished) {
@@ -877,6 +938,7 @@ class Tank {
 
     // ── Aplicar al cuerpo Matter ──
     const b = this.body;
+    this.boosting = false;                                             // se prende abajo sólo si bostea (apagado durante el trompo)
     if (this.spin_timer > 0) {
       // TROMPO por impacto de bomba: gira sin control y frena, ignorando el input por un rato.
       this.spin_timer -= deltaT;
@@ -894,8 +956,9 @@ class Tank {
         Body.setAngularVelocity(b, 0);
       }
     } else {
+      const H = THEME_HANDLING[themeOf(this.track)];                  // manejo del bioma [grip, spd, turn]; fijo por carrera, lookup barato
       // Dirección: velocidad angular directa cuando hay input (feel responsivo, sin inercia); si no, amortiguar.
-      if (Math.abs(steer) > 0.001) Body.setAngularVelocity(b, steer * TANK_TURN);
+      if (Math.abs(steer) > 0.001) Body.setAngularVelocity(b, steer * TANK_TURN * H[2]);  // turn del bioma (afecta jugador e IA: cornering coherente por pista)
       else                          Body.setAngularVelocity(b, b.angularVelocity * 0.85);
       // NITRO: boost de velocidad hacia adelante mientras se usa y haya carga.
       // La IA NO lo usa apenas lo junta: acumula hasta su umbral y recién lo suelta en RECTA (poco giro);
@@ -911,12 +974,20 @@ class Tank {
       }
       let boostMult = 1;
       if (wantBoost && this.nitro > 0 && throttle > 0) { boostMult = NITRO_MULT; this.nitro = Math.max(0, this.nitro - NITRO_DRAIN * deltaT); }
+      this.boosting = boostMult > 1;                                    // prende el jet azul de nitro (efecto visual)
       // Motor: velocidad objetivo a lo largo del heading; suavizado hacia ella.
-      const target = (throttle > 0 ? TANK_SPEED * throttle : throttle < 0 ? -TANK_REVERSE * (-throttle) : 0) * boostMult;
+      const target = (throttle > 0 ? TANK_SPEED * H[1] * throttle : throttle < 0 ? -TANK_REVERSE * (-throttle) : 0) * boostMult;  // spd del bioma (sólo adelante; reversa intacta para destrabar)
       const fx = Math.cos(b.angle), fy = Math.sin(b.angle);
-      _vScratch.x = b.velocity.x + (fx * target - b.velocity.x) * TANK_ACCEL;
-      _vScratch.y = b.velocity.y + (fy * target - b.velocity.y) * TANK_ACCEL;
-      Body.setVelocity(b, _vScratch);
+      // Motor con DERRAPE DESACOPLADO: la componente ADELANTE (sobre el heading) se acerca al target a TANK_ACCEL
+      // (rápido = todos ágiles); la LATERAL (perpendicular) sólo decae por latGrip (H[0]) → bajo = sigue deslizando = DERRAPE.
+      const vfwd = b.velocity.x * fx + b.velocity.y * fy;                                // proyección de la velocidad sobre el heading
+      const vlatx = b.velocity.x - vfwd * fx, vlaty = b.velocity.y - vfwd * fy;          // resto = velocidad lateral
+      const nf = vfwd + (target - vfwd) * TANK_ACCEL, latSurv = 1 - H[0];                // adelante → target; la lateral sobrevive (1 − latGrip)
+      _vScratch.x = fx * nf + vlatx * latSurv;
+      _vScratch.y = fy * nf + vlaty * latSurv;
+      const sp2 = _vScratch.x * _vScratch.x + _vScratch.y * _vScratch.y;                 // techo de velocidad (anti-tunneling); en juego normal NO se activa
+      if (sp2 > TANK_MAX_VEL * TANK_MAX_VEL) { const k = TANK_MAX_VEL / Math.sqrt(sp2); _vScratch.x *= k; _vScratch.y *= k; }
+      Body.setVelocity(b, _vScratch);                                                    // una sola escritura (clampeado si hizo falta)
     }
 
     if (this.lap_progress > 0 && this.lap_progress < 5) this.lap_checkpoint = 1;
@@ -950,6 +1021,20 @@ class Tank {
       ctx.globalAlpha = 0.45 * f; drawCircle(this.x, this.y, r*1.7, [120, 230, 255]);
       ctx.globalAlpha = 0.25 * f; drawCircle(this.x, this.y, r*2.4, [120, 230, 255]);
       ctx.restore();
+    }
+
+    // NITRO en uso: jet azul DETRÁS del tanque (barato: sólo formas inmediatas, sin partículas ni allocs; sólo mientras bostea).
+    if (this.boosting) {
+      const fl = 0.78 + 0.22 * Math.sin(T * 32 + this.id * 1.7);       // parpadeo (desfasado por tanque)
+      const back = -r * 1.2;                                           // cola del tanque (eje local -x)
+      ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.ang);
+      ctx.globalAlpha = 0.28 * fl; drawCircle(back - r*0.7, 0, r*1.5, [70, 150, 255]);    // glow exterior azul
+      ctx.globalAlpha = 0.55 * fl; drawCircle(back - r*0.3, 0, r*0.95, [150, 225, 255]);  // glow interior celeste
+      ctx.globalAlpha = 0.9; ctx.fillStyle = 'rgba(70,150,255,0.9)';                      // llama externa (azul)
+      ctx.beginPath(); ctx.moveTo(back, -r*0.55); ctx.lineTo(back - r*2.1*fl, 0); ctx.lineTo(back, r*0.55); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = 'rgba(185,242,255,0.95)';                                            // núcleo (celeste claro)
+      ctx.beginPath(); ctx.moveTo(back, -r*0.28); ctx.lineTo(back - r*1.2*fl, 0); ctx.lineTo(back, r*0.28); ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1; ctx.restore();
     }
 
     // Cuerpo via sprite cacheado (rápido): solo translate+rotate+drawImage.
@@ -1021,12 +1106,9 @@ class Bomb {
       }
     }
     const tr = sprites[0] ? sprites[0].track : 0, WW = worldW(tr), HH = worldH(tr);
-    if (TRACK_WRAP[tr]) {                                              // pista con portal: la bomba cruza al otro lado (X e Y)
-      if (this.x > WW + this.radius) this.x -= WW + this.radius * 2;
-      else if (this.x < -this.radius) this.x += WW + this.radius * 2;
-      if (this.y > HH + this.radius) this.y -= HH + this.radius * 2;
-      else if (this.y < -this.radius) this.y += HH + this.radius * 2;
-    } else if (this.x > WW+this.radius || this.x < 0-this.radius || this.y > HH+this.radius || this.y < 0-this.radius) {
+    // La bomba se ELIMINA al salir del mundo — también en pistas con PORTAL (ya NO se envuelve). Antes la
+    // envolvíamos y podía quedar cruzando el portal en loop infinito (lo que parecía "la IA sigue disparando").
+    if (this.x > WW + this.radius || this.x < -this.radius || this.y > HH + this.radius || this.y < -this.radius) {
       removeFromList(bombs, this); removeFromList(sprites, this);
     }
   }
@@ -1085,7 +1167,7 @@ class NitroPickup {
     drawCircle(this.x, this.y, r * 0.86, [90, 220, 255]);            // disco cian
     // glifo: la MISMA llama del botón de nitro (Path2D del SVG), centrada en el disco
     ctx.translate(this.x, this.y);
-    const gsc = r * 1.5 / 18;                                          // alto de la llama (~18u en el viewBox) → entra en el disco
+    const gsc = r * 1.3 / 18;                                          // alto de la llama (~18u en el viewBox) → entra en el disco (un toque más chica)
     ctx.scale(gsc, gsc);
     ctx.translate(-12, -11);                                           // centro del viewBox 24×24 (la llama va de y≈2 a y≈20)
     ctx.fillStyle = rgb([10, 35, 55]);
@@ -1093,7 +1175,15 @@ class NitroPickup {
     ctx.restore();
   }
 }
-function pointInWall(x, y) { for (const w of walls) if (x > w.x && x < w.x + w.width && y > w.y && y < w.y + w.height) return true; return false; }
+function pointInWall(x, y) {
+  for (const w of walls) {
+    if (w.angle !== undefined) {                                       // pared ROTADA (cadena): testear en su marco local
+      const cx = w.x + w.width / 2, cy = w.y + w.height / 2, dx = x - cx, dy = y - cy, ca = Math.cos(-w.angle), sa = Math.sin(-w.angle);
+      if (Math.abs(dx*ca - dy*sa) < w.width / 2 && Math.abs(dx*sa + dy*ca) < w.height / 2) return true;
+    } else if (x > w.x && x < w.x + w.width && y > w.y && y < w.y + w.height) return true;
+  }
+  return false;
+}
 // Mantiene PICKUP_COUNT ítems: cerca de un waypoint pero con offset (no sobre la raya), sin pisar paredes
 // ni encimarse. Al expirar/recogerse, el loop respawnea otro en otro lado → los ítems "rotan" por la pista.
 function ensureNitroPickups() {
@@ -1115,15 +1205,23 @@ function ensureNitroPickups() {
 class Wall {
   constructor(i, track, color) {
     this.id = i; this.track = track; this.color = color;
-    [this.x, this.y, this.width, this.height] = WALL_MAPS[this.track][this.id];
+    const e = WALL_MAPS[this.track][this.id];
     // Cuerpo estático: la colisión contra tanques la resuelve Matter (deslizan, no se traban).
-    this.body = Bodies.rectangle(this.x + this.width / 2, this.y + this.height / 2, this.width, this.height,
-      { isStatic: true, friction: 0.02, label: 'wall' });
+    if (e.length === 5) {                                              // [cx,cy,w,h,ang] = pared ROTADA (cadena de borde exacto)
+      const [cx, cy, w, h, ang] = e;
+      this.x = cx - w / 2; this.y = cy - h / 2; this.width = w; this.height = h; this.angle = ang;
+      this.body = Bodies.rectangle(cx, cy, w, h, { isStatic: true, friction: 0.02, label: 'wall', angle: ang });
+    } else {                                                           // [x,y,w,h] = AABB (scanline, legacy + bordes del mundo)
+      [this.x, this.y, this.width, this.height] = e;
+      this.body = Bodies.rectangle(this.x + this.width / 2, this.y + this.height / 2, this.width, this.height,
+        { isStatic: true, friction: 0.02, label: 'wall' });
+    }
     Composite.add(world, this.body);
     walls.push(this);
   }
   process() {}                                                          // la física la maneja Matter
   draw() {
+    if (this.angle !== undefined) return;                              // paredes rotadas (cadena) NUNCA se dibujan: la pista se dibuja con el carve suave
     if (bgReady) return;                                               // ya está en el fondo horneado
     const col = THEME_WALL[this.color];
     const x = this.x, y = this.y, w = this.width, h = this.height;
@@ -1241,6 +1339,13 @@ function _isSimple(poly) {
     }
   }
   return true;
+}
+// ¿Se cruzan DOS polígonos cerrados? Para detectar banda INVERTIDA (outer cruza inner = el corredor se pliega).
+function _polyCross(A, B) {
+  const na = A.length, nb = B.length;
+  for (let i = 0; i < na; i++) { const a = A[i], b = A[(i+1)%na];
+    for (let j = 0; j < nb; j++) if (_segInt(a, b, B[j], B[(j+1)%nb])) return true; }
+  return false;
 }
 // Mínima separación entre puntos NO adyacentes del centro (circular) → dos tramos paralelos pegados = topología rota.
 function _minSelfSep(wps, gap) {
@@ -1392,6 +1497,66 @@ function _ringWallsMulti(copies, W, H, bands) {
   }
   return _mergeWallRects(rects);                                       // PERF: fusiona tiras verticales → menos cuerpos Matter
 }
+// ── COLISIÓN DE BORDE EXACTO: la polilínea suavizada (la MISMA que se dibuja) → cadena de rects ROTADOS que la
+// calcan. Fusiona tramos casi-rectos (los puntos intermedios quedan a ≤ dev de la cuerda) en UN rect largo → en
+// las rectas baja muchísimo el conteo de cuerpos; sólo las curvas gastan varios. Cada rect mide chord+thick →
+// solapa al vecino (sin huecos en las uniones/esquinas). Formato del rect: [cx, cy, w, h, ang].
+function _pointInPoly(poly, x, y) {                                  // ray-cast: ¿(x,y) DENTRO del polígono? (para saber de qué lado del borde va la pared)
+  const xs = _cross(poly, y); let c = 0; for (const xc of xs) if (xc < x) c++; return (c & 1) === 1;
+}
+function _chainWalls(poly, thick, dev, isOuter) {
+  const n = poly.length; if (n < 2) return [];
+  // Lado de la PARED (lejos del corredor): EXTERIOR para el anillo outer, INTERIOR para el inner. La pared se desplaza
+  // thick/2 hacia ese lado → su cara interna queda SOBRE el borde dibujado (NO angosta el corredor). Winding consistente
+  // (anillo simple por el guard); el signo se fija por VOTO de varios puntos-en-polígono (robusto a casos borde).
+  let votes = 0; const stepV = Math.max(1, Math.floor(n / 7));
+  for (let t = 0; t < n; t += stepV) {
+    const a = poly[t], b = poly[(t+1)%n], dx = b[0]-a[0], dy = b[1]-a[1], L = Math.hypot(dx, dy);
+    if (L < 1) continue;
+    const mx = (a[0]+b[0])/2, my = (a[1]+b[1])/2, nx = -dy/L, ny = dx/L;
+    const inside = _pointInPoly(poly, mx + nx*2, my + ny*2);          // ¿el lado +perp está DENTRO del anillo?
+    votes += (isOuter ? (inside ? -1 : 1) : (inside ? 1 : -1));       // outer: pared = afuera del anillo; inner: pared = adentro
+  }
+  const sign = votes >= 0 ? 1 : -1;
+  const out = [];
+  const emit = (A, B) => {
+    const dx = B[0]-A[0], dy = B[1]-A[1], L = Math.hypot(dx, dy);
+    if (L < 0.5 || L > 1200) return;                                  // L>1200 = costura de portal → no se amura
+    const ox = (-dy/L) * sign * thick/2, oy = (dx/L) * sign * thick/2;   // desplazar al lado de la pared → cara interna sobre el borde dibujado
+    out.push([(A[0]+B[0])/2 + ox, (A[1]+B[1])/2 + oy, L + thick * CHAIN_JOIN, thick, Math.atan2(dy, dx)]);   // sobrante CHAIN_JOIN·thick (no thick entero) → menos abanico/protrusión en curvas finas
+  };
+  let s = 0;
+  while (s < n - 1) {
+    const A = poly[s];
+    let best = s + 1;                                                  // siempre se incluye al menos el vecino
+    for (let e = s + 2; e <= n - 1; e++) {                            // extender mientras los intermedios queden a ≤ dev perpendicular Y proyectando en [0,L] (sin backtrack)
+      const C = poly[e], dx = C[0]-A[0], dy = C[1]-A[1], L = Math.hypot(dx, dy) || 1;
+      if (L > 1200) break;                                            // costura de portal → cortar el run
+      if (L > CHAIN_SEGMAX) break;                                    // tope de largo → AABB chico → el sweep-and-prune de Matter (eje X) no degenera a O(n²) (ver CHAIN_SEGMAX)
+      const ux = dx/L, uy = dy/L; let ok = true;
+      for (let k = s + 1; k < e; k++) { const px = poly[k][0]-A[0], py = poly[k][1]-A[1], proj = px*ux + py*uy;
+        if (Math.abs(-uy*px + ux*py) > dev || proj < -1 || proj > L + 1) { ok = false; break; } }
+      if (!ok) break;
+      best = e;
+    }
+    emit(A, poly[best]); s = best;
+  }
+  emit(poly[n-1], poly[0]);                                           // cierre del loop
+  return out;
+}
+function _ringWallsChain(copies, W, H, thick, wrapAx = -1) {          // borde exacto: outer amurado por AFUERA, inner por ADENTRO + bordes del mundo. wrapAx 0/1 = pista con portal en ese eje.
+  let segs = [];
+  for (const c of copies) { segs.push(..._chainWalls(c.outer, thick, CHAIN_DEV, true), ..._chainWalls(c.inner, thick, CHAIN_DEV, false)); }
+  // Portal: las copias tilean ±W/±H → quedan segmentos LEJOS del mundo que el tanque nunca toca (teletransporta en ±r).
+  // Tiramos SÓLO los que están ENTERAMENTE lejos; medimos la extensión REAL del rect rotado (no el centro: un tramo
+  // recto largo cruzando la costura tiene el centro afuera pero su parte in-world SÍ hay que amurarla → si no, hueco).
+  if (wrapAx === 0) segs = segs.filter(s => { const ex = Math.abs(s[2]/2*Math.cos(s[4])) + Math.abs(s[3]/2*Math.sin(s[4])); return s[0]+ex > -50 && s[0]-ex < W+50; });
+  else if (wrapAx === 1) segs = segs.filter(s => { const ey = Math.abs(s[2]/2*Math.sin(s[4])) + Math.abs(s[3]/2*Math.cos(s[4])); return s[1]+ey > -50 && s[1]-ey < H+50; });
+  const T = 60;                                                        // paredes de borde del mundo (por si un tanque clipea); OMITIR el eje del portal (si no, bloquean el cruce)
+  if (wrapAx !== 0) segs.push([0, 0, T, H], [W - T, 0, T, H]);         // izq/der (sólo si NO hay wrap en X)
+  if (wrapAx !== 1) segs.push([0, 0, W, T], [0, H - T, W, T]);         // arriba/abajo (sólo si NO hay wrap en Y)
+  return segs;
+}
 // Chamfer de un loop CERRADO: cada esquina → dos puntos sobre sus lados (curva 45° al suavizar).
 function _chamferLoop(pts, c) {
   const n = pts.length, out = [];
@@ -1504,7 +1669,16 @@ function buildAutoTrack(idx, W, H, theme) {
   } else {
     copies = [{ outer: smoothSample(outer, 22), inner: smoothSample(inner, 22) }];
   }
-  const walls = _ringWallsMulti(copies, W, H, Math.round(H / 32));
+  // GUARD: revalidar la curva SUAVIZADA (la que se DIBUJA y se usa para colisión), no la recta. El bezier de
+  // smoothSample puede ABULTAR y cruzarse donde el polígono recto pasó _isSimple (L1508) → el corredor se ve
+  // cruzándose en X y la colisión (tiras scanline) deja un hueco ahí. Si la banda suavizada se auto-cruza o se
+  // INVIERTE (outer cruza inner), reintentar (regenAutoTrack reintenta hasta 30× → casi nunca cae al fallback).
+  {
+    const c0 = copies[0];                                            // tile canónico (para wrap, el in-world); la topología es invariante a la traslación
+    if (!_isSimple(c0.outer) || !_isSimple(c0.inner) || _polyCross(c0.outer, c0.inner)) return false;
+  }
+  const walls = WALL_CHAIN ? _ringWallsChain(copies, W, H, CHAIN_THICK, wrap ? wrapAx : -1)   // borde EXACTO (también en portal: amura ambos lados de la costura, omite bordes del eje del wrap)
+                           : _ringWallsMulti(copies, W, H, Math.round(H / 32));               // scanline si el flag está off
   let wp = smoothSample(sBase, 70);
   if (wrap) wp = wp.map(p => wrapAx === 0 ? [((p[0] % W) + W) % W, p[1]] : [p[0], ((p[1] % H) + H) % H]);   // envolver el centro al mundo
   // — largada en un tramo RECTO (baja curvatura), nunca sobre la costura del portal —
@@ -1515,8 +1689,17 @@ function buildAutoTrack(idx, W, H, theme) {
     if (la > 1200 || lb > 1200) return 9;                            // costura del portal: no es candidato a largada
     return Math.abs(ax2/la*by/lb - ay/la*bx/lb);
   };
-  const cands = []; for (let i = 0; i < nw; i++) if (turn(i) < 0.1 && turn((i+1)%nw) < 0.1) cands.push(i);
-  const stt = cands.length ? cands[ri(0, cands.length-1)] : 0;
+  // Curvatura en VENTANA (±2 waypoints): la largada debe ser recta a ambos lados, así la raya perpendicular cubre
+  // la calle y NO cae en la PUNTA de una curva cerrada. Si no hay recto, se usa el punto MENOS curvo (nunca el 0/esquina ni cerca de la costura).
+  const curvWin = i => { let m = 0; for (let k = -2; k <= 2; k++) m = Math.max(m, turn(((i+k)%nw+nw)%nw)); return m; };
+  const cands = []; let bestI = 0, bestC = Infinity;
+  for (let i = 0; i < nw; i++) {
+    const cw = curvWin(i);
+    if (cw >= 9) continue;                                            // la ventana toca la costura del portal → descartar
+    if (cw < bestC) { bestC = cw; bestI = i; }
+    if (cw < 0.1) cands.push(i);
+  }
+  const stt = cands.length ? cands[ri(0, cands.length-1)] : bestI;
   wp = wp.slice(stt).concat(wp.slice(0, stt));
   // META: alcance perpendicular a CADA pared en la largada (raycast) → la raya cubre TODA la calle aún en curva/ancho variable.
   const nwp = wp.length; let ftx = 0, fty = 0;
@@ -1572,7 +1755,7 @@ function buildCircuit(idx, W, H, half, base, theme, bandDiv = 30) {
 const AUTO_TRACK = TRACK_NAMES.length;                                // slot reservado para el mapa autogenerado
 TRACK_NAMES.push('Aleatorio');
 function regenAutoTrack(forcedTheme) {                                // re-genera el mapa del slot AUTO (carrera libre: tema al azar; torneo: tema fijado)
-  const theme = forcedTheme !== undefined ? forcedTheme : ri(0, 4);
+  const theme = forcedTheme !== undefined ? forcedTheme : ri(0, 5);   // 0..5 (incluye parque de noche con lluvia)
   THEMES[AUTO_TRACK] = theme;
   let ok = false;
   for (let att = 0; att < 30 && !ok; att++) {
@@ -1591,13 +1774,14 @@ regenAutoTrack();                                                     // inicial
 class MainHandler {
   constructor() {
     this.menu = true; this.menulevel = 0; this.option = 0;
-    this.laps = 1; this.difficulty = 1; this.track = 0;
+    this.laps = 1; this.difficulty = 2; this.track = 0;          // dificultad default = Normal (idx 2; ahora hay 5: Very Easy..Very Hard)
+    this.biome = 0;                                              // bioma del mapa autogenerado: 0=Aleatorio, 1..6 = temas 0..5 (Parque/Desierto/Nieve/Tecno/Lava/Noche). Persiste como laps/difficulty.
     this.choose_option = [0,1,2];
-    this.keypressed = false; this.f1_pressed = false; this.f2_pressed = false;
+    this.keypressed = false;
     this.tournament = false;
     this.confirmQuit = false;                                          // pide confirmación antes de salir al menú
     this.tank_points = Array(TANK_COUNT).fill(0); this.tank_times = Array(TANK_COUNT).fill(0);   // torneo: 16 tanques
-    this.tourneyRace = 0;                                              // carrera actual del torneo (0..9)
+    this.tourneyRace = 0;                                              // carrera actual del torneo (0..5)
     this.tourneySkins = null;                                          // skins/colores FIJOS toda la copa (persisten entre carreras)
   }
 
@@ -1623,15 +1807,16 @@ class MainHandler {
         if (keys.LEFT) {
           if (this.menulevel === 1) {
             if (this.option === 1) this.laps = (this.laps - 1 + 3) % 3;
-            if (this.option === 2) this.difficulty = (this.difficulty - 1 + 4) % 4;
-            // opt 3 (mapa) ya no cicla: la carrera libre genera un circuito nuevo cada vez.
+            if (this.option === 2) this.difficulty = (this.difficulty - 1 + 5) % 5;
+            if (this.option === 3) this.biome = (this.biome - 1 + 7) % 7;   // bioma del autogenerado (Aleatorio + 6 temas)
           }
           this.keypressed = true;
         }
         if (keys.RIGHT) {
           if (this.menulevel === 1) {
             if (this.option === 1) this.laps = (this.laps + 1) % 3;
-            if (this.option === 2) this.difficulty = (this.difficulty + 1) % 4;
+            if (this.option === 2) this.difficulty = (this.difficulty + 1) % 5;
+            if (this.option === 3) this.biome = (this.biome + 1) % 7;
           }
           this.keypressed = true;
         }
@@ -1643,7 +1828,7 @@ class MainHandler {
         if (keys.ESCAPE) {
           if (this.menulevel === 1) {
             this.menulevel = 0; this.option = this.tournament ? 1 : 0;
-            this.laps = 1; this.difficulty = 1; this.track = 0;
+            this.track = 0;                                            // laps/difficulty PERSISTEN (como el tanque elegido) al volver al menú
             this.keypressed = true;
           }
           // menulevel 0 ESC = quit (no-op en web)
@@ -1662,10 +1847,6 @@ class MainHandler {
           this.keypressed = true;
         }
       }
-      if (!this.f1_pressed && keys.F1) { for (const t of tanks) t.showhitbox = !t.showhitbox; this.f1_pressed = true; }
-      if (!this.f2_pressed && keys.F2) { for (const p of trackpoints) p.show = !p.show; this.f2_pressed = true; }
-      if (!keys.F1) this.f1_pressed = false;
-      if (!keys.F2) this.f2_pressed = false;
       if (!keys.ESCAPE && !keys.RETURN) this.keypressed = false;
     }
   }
@@ -1677,13 +1858,13 @@ class MainHandler {
     if (opt === 1) { this.menulevel = 1; this.tournament = true;  this.option = this.menuOpts()[0]; }
   }
   startRace() {                                                        // menulevel 1: arrancar la carrera
-    if (this.tournament) {                                             // TORNEO: 10 carreras, mapas autogenerados con temática garantizada, colores fijos
+    if (this.tournament) {                                             // TORNEO: 6 carreras (un bioma c/u en orden), mapas autogenerados, colores fijos
       this.tourneyRace = 0;
       this.tank_points = Array(TANK_COUNT).fill(0); this.tank_times = Array(TANK_COUNT).fill(0);
       assignRaceSkins(TANK_COUNT); this.tourneySkins = raceSkins.slice();   // 16 colores fijados para toda la copa
       regenAutoTrack(TOURNEY_THEMES[0]); this.track = AUTO_TRACK;
-    } else {                                                           // carrera libre: mapa nuevo autogenerado cada vez (tema al azar)
-      regenAutoTrack(); this.track = AUTO_TRACK;
+    } else {                                                           // carrera libre: mapa nuevo autogenerado cada vez (bioma elegido, o al azar si Aleatorio)
+      regenAutoTrack(this.biome === 0 ? undefined : this.biome - 1); this.track = AUTO_TRACK;
     }
     raceFinishCount = 0;                                               // reinicia el orden de llegada
     clearPhysics();                                                    // mundo limpio antes de crear los cuerpos
@@ -1701,7 +1882,7 @@ class MainHandler {
     for (const s of sprites.slice()) if (s !== this) removeFromList(sprites, s);
     clearPhysics(); trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0; pickups.length = 0;
     if (sprites.length === 1) {
-      this.menulevel = 0; this.option = 0; this.laps = 1; this.difficulty = 1; this.track = 0;
+      this.menulevel = 0; this.option = 0; this.track = 0;             // laps/difficulty PERSISTEN (como el tanque) al salir de la carrera al menú
       this.menu = true; this.confirmQuit = false;
       this.tank_points = Array(TANK_COUNT).fill(0); this.tank_times = Array(TANK_COUNT).fill(0); this.tourneyRace = 0;
     }
@@ -1736,17 +1917,17 @@ class MainHandler {
         if (!near(y)) continue;
         this.option = opt;
         if (opt === 1)      this.laps       = (this.laps + dir + 3) % 3;
-        else if (opt === 2) this.difficulty = (this.difficulty + dir + 4) % 4;
-        // opt 3 (mapa): no cicla — carrera libre = circuito autogenerado por carrera.
+        else if (opt === 2) this.difficulty = (this.difficulty + dir + 5) % 5;
+        else if (opt === 3) this.biome      = (this.biome + dir + 7) % 7;   // bioma del autogenerado
         else if (opt === 4) this.menulevel = 2;                        // abrir selector de tanque
         return;
       }
-      if (near(0.88)) this.startRace();                                // botón JUGAR
+      if (near(0.85)) this.startRace();                                // botón JUGAR
     }
   }
 
-  // Opciones del setup (menulevel 1): vueltas / dificultad / tanque. (La fila "mapa/torneo" se sacó: el mapa es siempre autogenerado.)
-  menuOpts() { return [1, 2, 4]; }
+  // Opciones del setup (menulevel 1). Carrera libre: vueltas / dificultad / BIOMA / tanque. Torneo: sin bioma (juega TODOS).
+  menuOpts() { return this.tournament ? [1, 2, 4] : [1, 2, 3, 4]; }
   // Filas del setup con su posición Y, centradas verticalmente según cuántas haya.
   menuRowDefs() {
     const opts = this.menuOpts(), span = 0.095, mid = 0.56, y0 = mid - span*(opts.length - 1)/2;
@@ -1827,21 +2008,28 @@ class MainHandler {
         createText(M_font, 'Tournament', sel(this.option === 1), null, xper(0.5), yper(0.6), gl(this.option === 1));
       }
       if (this.menulevel === 1) {
-        const diffNames = ['Easy','Normal','Hard','Very Hard'];
+        const diffNames = ['Very Easy','Easy','Normal','Hard','Very Hard'];
+        const biomeNames = ['Random','Park','Desert','Snow','Techno','Lava','Night Rain'];   // 0=Aleatorio, 1..6 = temas 0..5
         const lapsName = this.laps === 0 ? 'Short (3 laps)' : this.laps === 1 ? 'Normal (5 laps)' : 'Long (10 laps)';
         const wrap = (on, s) => on ? `< ${s} >` : s;
         const labelFor = opt => opt === 1 ? lapsName
                               : opt === 2 ? `Difficulty: ${diffNames[this.difficulty]}`
-                              : `Tank: ${SKINS[playerSkinIdx].name} ▸`;
+                              : opt === 3 ? `Biome: ${biomeNames[this.biome]}`
+                              : `Tank: ${SKINS[playerSkinIdx].name}`;
         createText(B_font, this.tournament ? 'Tournament' : 'New Race', menucolor, null, xper(0.5), yper(0.2), 28);
         for (const { opt, y } of this.menuRowDefs()) {
           const on = this.option === opt;
           createText(M_font, wrap(on, labelFor(opt)), sel(on), null, xper(0.5), yper(y), gl(on));
-          if (opt === 4) paintTank(xper(0.78), yper(y), 0, xper(0.018), SKINS[playerSkinIdx].color, 1, false, SKINS[playerSkinIdx]);
+          if (opt === 4) {                                              // tanque elegido dibujado JUSTO al lado del texto (mido el ancho del label centrado)
+            const label = wrap(on, labelFor(opt));
+            ctx.save(); ctx.font = `700 ${M_font}px ${FONT_FAMILY}`; ctx.letterSpacing = (M_font*0.04).toFixed(1) + 'px';
+            const tw = ctx.measureText(label).width; ctx.restore();
+            paintTank(xper(0.5) + tw/2 + xper(0.035), yper(y), 0, xper(0.02), SKINS[playerSkinIdx].color, 1, false, SKINS[playerSkinIdx]);
+          }
         }
         // botón PLAY (tocá/click para arrancar) — pulsa, y se ilumina al hover
-        const hj = rowHover(0.88), playPulse = 0.6 + 0.4*Math.sin(T*4);
-        createText(M_font, '▶ PLAY', [120 + 120*playPulse, 230, 150], modifyColorPerc(menucolor, hj ? 0.32 : 0.12), xper(0.5), yper(0.88), hj ? 30 : 16);
+        const hj = rowHover(0.85), playPulse = 0.6 + 0.4*Math.sin(T*4);
+        createText(M_font, '▶ PLAY', [120 + 120*playPulse, 230, 150], null, xper(0.5), yper(0.85), hj ? 30 : 16);
       }
       if (this.menulevel === 2) this.drawPicker(menucolor);
     }
@@ -1862,6 +2050,7 @@ class AuxiliaryHandler {
     this.tank_points = tankpoints; this.tank_times = tanktimes;
     this.table_timer = 3; this.table_cooldown = 0;
     this.pointsaccounted = false; this.tournamentfinished = false;
+    this.prevPoints = null; this.prevTimes = null; this.gained = null;   // snapshot ANTES de sumar (paso 1: "x + n" y la posición que venía)
   }
   // puntos por puesto: 1° = N, último = 1 (N = cantidad de tanques)
   pointsForRank(rank) { return Math.max(1, tanks.length - (rank - 1)); }
@@ -1886,13 +2075,16 @@ class AuxiliaryHandler {
       }
 
       if (this.racestart_cooling > this.racestart_timer) {
-        if (!this.p_pressed && keys.P) {
+        let toggle = false;
+        if (!this.p_pressed && keys.P) { toggle = true; this.p_pressed = true; }   // tecla P (desktop)
+        if (!keys.P) this.p_pressed = false;
+        if (uiPauseReq) { toggle = true; uiPauseReq = false; }                      // botón de pausa (UI, estilo Pong)
+        if (toggle) {
           for (const tank of tanks) tank.pause = !tank.pause;
           for (const bomb of bombs) bomb.pause = !bomb.pause;
-          this.pause = !this.pause; this.p_pressed = true;
+          this.pause = !this.pause;
         }
-        if (!keys.P) this.p_pressed = false;
-      }
+      } else uiPauseReq = false;                                                    // descartar pedido durante la cuenta regresiva
 
     } else {
       if (!this.tournament) {
@@ -1902,16 +2094,25 @@ class AuxiliaryHandler {
         this.table_cooldown += deltaT;
         // tras el cartel "Gana X" se anotan los puntos UNA vez y se muestra la tabla de posiciones (16 tanques).
         if (this.table_cooldown > this.table_timer && !this.pointsaccounted) {
+          this.prevPoints = this.tank_points.slice();                   // totales ANTES de esta carrera (paso 1: "x + n" y la posición que venía)
+          this.prevTimes = this.tank_times.slice();
+          this.gained = Array(TANK_COUNT).fill(0);
           for (const tank of tanks) {
-            this.tank_points[tank.id] += this.pointsForRank(tank.rank);
+            const g = this.pointsForRank(tank.rank);
+            this.gained[tank.id] = g;
+            this.tank_points[tank.id] += g;
             this.tank_times[tank.id] += tank.racetime + tank.racetime * 0.01 * (tank.rank - 1);
           }
           this.pointsaccounted = true; this.enter_pressed = true;
           if (this.raceIdx >= TOURNEY_RACES - 1) this.tournamentfinished = true;
         }
         if (this.pointsaccounted) {
-          this.post_race_option = 0;                                    // único botón: Next race (salir = X de la esquina)
-          if (!this.enter_pressed && keys.RETURN && !this.tournamentfinished) this._tournamentNext();
+          this.post_race_option = 0;
+          const inStep2 = this.table_cooldown > this.table_timer + TABLE_STEP1;   // recién tras mostrar el PASO 1 se puede avanzar
+          if (!this.enter_pressed && keys.RETURN && inStep2) {
+            if (!this.tournamentfinished) this._tournamentNext();
+            else if (this.table_cooldown > this.table_timer + TABLE_STEP1 + 1.2) this._backToMenu(true);   // Back to Menu con delay anti-tap
+          }
           if (!keys.RETURN) this.enter_pressed = false;
         }
       }
@@ -1921,7 +2122,7 @@ class AuxiliaryHandler {
   // Rematch (carrera simple): limpia todo salvo MainHandler+self, re-crea, se remueve.
   _rebuildRace() {                                                    // revancha de carrera LIBRE (el torneo usa _tournamentNext)
     const main = sprites[0];
-    regenAutoTrack(); this.track = AUTO_TRACK; [this.nWalls, this.nTrackpoints] = MAP_COUNTS[this.track];   // revancha = mapa nuevo
+    regenAutoTrack(main.biome === 0 ? undefined : main.biome - 1); this.track = AUTO_TRACK; [this.nWalls, this.nTrackpoints] = MAP_COUNTS[this.track];   // revancha = mapa nuevo (mismo bioma elegido)
     raceFinishCount = 0;
     for (const s of sprites.slice()) if (s !== main && s !== this) removeFromList(sprites, s);
     clearPhysics(); trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0; pickups.length = 0;
@@ -1940,7 +2141,7 @@ class AuxiliaryHandler {
     for (const s of sprites.slice()) if (s !== main && s !== this) removeFromList(sprites, s);
     clearPhysics(); trackpoints.length = 0; walls.length = 0; tanks.length = 0; bombs.length = 0; pickups.length = 0;
     if (sprites.length === 2) {
-      main.menulevel = 0; main.option = 0; main.laps = 1; main.difficulty = 1; main.track = 0;
+      main.menulevel = 0; main.option = 0; main.track = 0;            // laps/difficulty PERSISTEN (como el tanque) al volver al menú
       main.menu = true; main.keypressed = true;
       if (tournament) { main.tank_points = Array(TANK_COUNT).fill(0); main.tank_times = Array(TANK_COUNT).fill(0); main.tourneyRace = 0; }
       removeFromList(sprites, this);
@@ -1975,8 +2176,9 @@ class AuxiliaryHandler {
     const near = (frac) => Math.abs(ly - yper(frac)) < yper(0.05);
     if (!this.tournament) {
       if (near(0.55)) this._rebuildRace();                             // ↻ Rematch
-    } else if (this.pointsaccounted && !this.tournamentfinished) {     // los puntos se anotan solos al aparecer la tabla
-      if (near(0.84)) this._tournamentNext();                          // ▶ Next race
+    } else if (this.pointsaccounted && this.table_cooldown > this.table_timer + TABLE_STEP1) {   // recién en el PASO 2 (totales contados) se puede avanzar
+      if (this.tournamentfinished) { if (this.table_cooldown > this.table_timer + TABLE_STEP1 + 1.2 && near(0.86)) this._backToMenu(true); }   // Back to Menu con delay
+      else if (near(0.84)) this._tournamentNext();                     // ▶ Next race
     }
   }
 
@@ -2011,18 +2213,24 @@ class AuxiliaryHandler {
           for (const tank of tanks) if (tank.rank === 1)
             createText(B_font, `¡${tankName(tank)} Wins!`, modifyColor(tank.color,75), null, xper(0.5), yper(0.5), 30);
         } else {
-          // ── TABLA DE POSICIONES del torneo (16 tanques en 2 columnas de 8, ordenada por puntos) ──
+          // ── TABLA DE POSICIONES del torneo (16 tanques en 2 columnas de 8) — DOS PASOS:
+          //    PASO 1 (~TABLE_STEP1 s): la posición que VENÍAS, cada uno con "x + n" (puntos previos + los de esta carrera).
+          //    PASO 2: totales ya contados, reordenado (la tabla de siempre). ──
+          const step1 = this.prevPoints && this.table_cooldown < this.table_timer + TABLE_STEP1;
+          const pts = step1 ? this.prevPoints : this.tank_points;        // ordena por la tabla del paso correspondiente
+          const tms = step1 ? (this.prevTimes || this.tank_times) : this.tank_times;
+
           ctx.save(); ctx.globalAlpha = 0.88;
           roundRectPath(xper(0.06), yper(0.05), xper(0.88), yper(0.9), 18); ctx.fillStyle = rgb([10,10,18]); ctx.fill();
           ctx.restore();
           roundRectPath(xper(0.06), yper(0.05), xper(0.88), yper(0.9), 18); ctx.strokeStyle = rgb([255,255,255]); ctx.lineWidth = 2.5; ctx.stroke();
 
-          const order = tanks.slice().sort((a, b) => this.tank_points[b.id] - this.tank_points[a.id] || this.tank_times[a.id] - this.tank_times[b.id]);
+          const order = tanks.slice().sort((a, b) => pts[b.id] - pts[a.id] || tms[a.id] - tms[b.id]);
           const champ = order[0];
-          if (this.tournamentfinished)
+          if (this.tournamentfinished && !step1)
             createText(M_font, `${tankName(champ)} — CHAMPION!`, modifyColor(champ.color, 85), null, xper(0.5), yper(0.115), 20);
           else
-            createText(Math.round(M_font*0.78), `Race ${this.raceIdx + 1} / ${TOURNEY_RACES} · Standings`, [225,230,240], null, xper(0.5), yper(0.115), 4);
+            createText(Math.round(M_font*0.78), `Race ${this.raceIdx + 1} / ${TOURNEY_RACES} · ${step1 ? 'Round points' : 'Standings'}`, [225,230,240], null, xper(0.5), yper(0.115), 4);
 
           const rf = Math.round(S_font * 0.92);
           for (let i = 0; i < order.length; i++) {
@@ -2032,11 +2240,16 @@ class AuxiliaryHandler {
             createText(rf, `${i + 1}°`, isPlayer ? [255,255,255] : [205,210,225], null, xr, y, isPlayer ? 5 : 0);
             const spr = tankSpriteFor(tank.skin, tank.radius, false), sz = spr.half * 2 * 0.78;   // sprite CACHEADO (no paintTank ×16/frame → no baja FPS)
             ctx.drawImage(spr.cv, xi - sz/2, y - sz/2, sz, sz);
-            createText(rf, `${this.tank_points[tank.id]} pts`, modifyColor(tank.color, 78), null, xp, y, 0);
+            const ptsText = step1 ? `${this.prevPoints[tank.id]} + ${this.gained[tank.id]}` : `${this.tank_points[tank.id]} pts`;
+            createText(rf, ptsText, modifyColor(tank.color, 78), null, xp, y, 0);
           }
 
-          if (!this.tournamentfinished)                                  // copa terminada → sólo la tabla (para salir: la X de la esquina)
-            createText(Math.round(M_font*0.92), '▶ Next race', [255,255,255], null, xper(0.5), yper(0.84), selGlow(true));
+          if (!step1) {                                                  // el botón para avanzar recién aparece en el PASO 2
+            if (!this.tournamentfinished)
+              createText(Math.round(M_font*0.92), '▶ Next race', [255,255,255], null, xper(0.5), yper(0.84), selGlow(true));
+            else if (this.table_cooldown > this.table_timer + TABLE_STEP1 + 1.2)   // copa terminada: "Back to Menu" con delay para no salir sin querer
+              createText(M_font, 'Back to Menu', [255,255,255], null, xper(0.5), yper(0.86), selGlow(true));
+          }
         }
       }
     }
@@ -2245,7 +2458,7 @@ function drawPosCard(rank, total, color, laps, racelength, livery = null) {
   // divisor entre POSICIÓN y VUELTA
   const midx = x + w * 0.54;
   ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1.5;
-  ctx.beginPath(); ctx.moveTo(midx, y + h * 0.24); ctx.lineTo(midx, y + h * 0.84); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(midx, y + h * 0.24); ctx.lineTo(midx, y + h * 0.70); ctx.stroke();   // hasta 0.70 → deja libre la fila inferior para nombre + mini-tanque
 
   ctx.textAlign = 'left';
   // ── POSICIÓN ──
@@ -2275,8 +2488,21 @@ function drawPosCard(rank, total, color, laps, racelength, livery = null) {
   ctx.fillStyle = '#eef1f7';
   ctx.fillText(Math.min(laps + 1, racelength) + '/' + racelength, midx + w * 0.06, y + h * 0.66);
 
-  // mini-tanque del color del jugador (esquina inferior derecha)
-  paintTank(x + w * 0.9, y + h * 0.82, 0, h * 0.12, color, 1, false, livery);   // mini-tanque con la librea del jugador
+  // ── NOMBRE del tanque + mini-tanque (abajo-derecha, agrupados). TODO clippeado al rectángulo → nada se sale. ──
+  ctx.save();
+  roundRectPath(x, y, w, h, rad); ctx.clip();
+  const tcx = x + w - h * 0.24, tcy = y + h * 0.82, tsz = h * 0.10;             // mini-tanque BIEN adentro (antes sobresalía por el borde derecho)
+  if (livery && livery.name) {                                                 // nombre del tanque: más grande y LLAMATIVO (Russo One + glow del color), CENTRADO al lado del tanque
+    const nameR = tcx - h * 0.30, nameL = x + w * 0.06, ncx = (nameL + nameR) / 2;
+    ctx.font = `${Math.round(h * 0.185)}px 'Russo One', sans-serif`;
+    ctx.fillStyle = rgb(modifyColor(color, 95));
+    ctx.shadowColor = rgb(color); ctx.shadowBlur = 9;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(livery.name, ncx, tcy);
+    ctx.shadowBlur = 0; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  }
+  paintTank(tcx, tcy, 0, tsz, color, 1, false, livery);                        // mini-tanque con la librea del jugador
+  ctx.restore();
   ctx.restore();
 }
 
@@ -2284,7 +2510,7 @@ function drawPosCard(rank, total, color, laps, racelength, livery = null) {
 // Generada UNA vez por pista con un PRNG sembrado → posiciones estables (no parpadea entre frames).
 // El "tema" (track//2) define el flavor: pasto, arena, nieve, tecno, lava.
 const TAU = Math.PI * 2;
-const BASE_THEME = [[70,72,78], [200,185,110], [235,235,245], [60,110,190], [180,70,30]];  // [0]=gris asfalto
+const BASE_THEME = [[70,72,78], [200,185,110], [235,235,245], [60,110,190], [180,70,30], [26,40,44]];  // [0]=gris asfalto · [5]=noche
 const decoCache = {};
 function mulberry32(a) {
   return function () {
@@ -2307,7 +2533,7 @@ function getDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
   for (let i = 0; i < N; i++) {
     const x = rng() * ww, y = rng() * hh, s = 0.5 + rng();
     let shape, col, alpha, r, extra = 0;
-    if (theme === 0) {                                                // ASFALTO: grava clara, grietas oscuras, manchas de aceite (nada de pasto)
+    if (theme === 0 || theme === 5) {                                 // ASFALTO: grava clara, grietas oscuras, manchas de aceite (parque y parque-noche)
       const k = rng();
       if (k < 0.5)       { shape = 'gravel'; col = [105+rng()*55, 108+rng()*55, 116+rng()*55]; alpha = 0.18 + rng()*0.16; r = xper(0.0032)*s; }
       else if (k < 0.82) { shape = 'crack';  col = [16+rng()*14, 17+rng()*14, 21+rng()*14];    alpha = 0.34 + rng()*0.24; r = xper(0.02)*s;  extra = rng()*TAU; }
@@ -2315,7 +2541,7 @@ function getDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
     }
     else if (theme === 1) { shape = 'dot';   col = modifyColor([150,132,72], -Math.floor(rng()*40)); alpha = 0.30 + rng()*0.20; r = xper(0.0045)*s; }
     else if (theme === 2) { shape = 'cross'; col = [150+rng()*40, 168+rng()*40, 200+rng()*35];        alpha = 0.22 + rng()*0.16; r = xper(0.0045)*s; }
-    else if (theme === 3) { shape = 'ring';  col = [60+rng()*70, 150+rng()*70, 230];                  alpha = 0.24 + rng()*0.20; r = xper(0.0075)*s; }
+    else if (theme === 3) { shape = 'wires'; col = [70+rng()*60, 160+rng()*60, 235];                  alpha = 0.22 + rng()*0.18; r = xper(0.013)*s;  extra = rng()*TAU; }
     else                  { shape = 'ember'; col = [225+rng()*30, 95+rng()*60, 25+rng()*35];          alpha = 0.26 + rng()*0.20; r = xper(0.0045)*s; }
     items.push({ x, y, r, shape, col, alpha, extra });
   }
@@ -2324,15 +2550,7 @@ function getDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
 }
 function drawDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
   const { theme, items } = getDeco(track, ww, hh);
-  // grilla tenue para dar sensación de "arena"
-  const g = BASE_THEME[theme];
-  ctx.globalAlpha = 0.08;
-  ctx.strokeStyle = rgb(theme === 2 ? [120,120,140] : modifyColorPerc(g, 1.6));
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let gx = 0; gx <= ww; gx += xper(0.0625)) { ctx.moveTo(gx, 0); ctx.lineTo(gx, hh); }
-  for (let gy = 0; gy <= hh; gy += yper(0.111)) { ctx.moveTo(0, gy); ctx.lineTo(ww, gy); }
-  ctx.stroke();
+  // (la grilla de fondo se SACÓ — quedaba dibujada siempre)
   // scatter temático
   for (const it of items) {
     ctx.globalAlpha = it.alpha;
@@ -2355,9 +2573,13 @@ function drawDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
     } else if (it.shape === 'cross') {
       ctx.strokeStyle = rgb(it.col); ctx.lineWidth = Math.max(1, it.r*0.4); ctx.lineCap = 'round';
       ctx.beginPath(); ctx.moveTo(it.x-it.r, it.y); ctx.lineTo(it.x+it.r, it.y); ctx.moveTo(it.x, it.y-it.r); ctx.lineTo(it.x, it.y+it.r); ctx.stroke();
-    } else if (it.shape === 'ring') {
-      ctx.strokeStyle = rgb(it.col); ctx.lineWidth = Math.max(1, it.r*0.32);
-      ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, TAU); ctx.stroke();
+    } else if (it.shape === 'wires') {                                // tecno: conjunto de rayas paralelas = cableado (no círculos)
+      ctx.strokeStyle = rgb(it.col); ctx.lineWidth = Math.max(1, it.r*0.16); ctx.lineCap = 'round';
+      const a = it.extra, dx = Math.cos(a)*it.r, dy = Math.sin(a)*it.r, px = -Math.sin(a), py = Math.cos(a);
+      ctx.beginPath();
+      for (let k = -1; k <= 1; k++) { const ox = px*k*it.r*0.3, oy = py*k*it.r*0.3; ctx.moveTo(it.x - dx + ox, it.y - dy + oy); ctx.lineTo(it.x + dx + ox, it.y + dy + oy); }
+      ctx.stroke();
+      drawCircle(it.x - dx, it.y - dy, Math.max(1, it.r*0.13), it.col); drawCircle(it.x + dx, it.y + dy, Math.max(1, it.r*0.13), it.col);   // conectores
     } else {
       drawCircle(it.x, it.y, it.r*1.9, it.col);
       drawCircle(it.x, it.y, it.r*0.6, modifyColorPerc(it.col, 1.5));
@@ -2376,7 +2598,7 @@ function drawDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
 // nieve (muñecos/piedras), tecno (edificios/cables), lava (lagos/ríos/brasas). Se dibuja en la CAPA de PARED
 // (el infield) ANTES de calar el corredor → lo que cae sobre la pista lo borra el carve, la calle queda limpia.
 // Se hornea UNA vez por mapa: costo por frame = 0 (se blitea con el resto del fondo).
-const SCENERY_DENSITY = [13, 9, 9, 4.5, 6];                           // items por pantalla-equivalente, por tema
+const SCENERY_DENSITY = [17, 12, 12, 6.5, 8, 17];                     // items por pantalla-equivalente, por tema (subido = más detalle) · [5]=parque noche (igual que parque)
 const sceneryCache = {};
 function getScenery(track, ww, hh) {
   const seed = decoSeedFor(track);
@@ -2398,25 +2620,29 @@ function getScenery(track, ww, hh) {
 }
 // sombra proyectada (offset abajo-derecha) → ilusión de altura en vista cenital
 function shadowBlob(x, y, r, a) { ctx.globalAlpha = a; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(x + r*0.18, y + r*0.22, r*1.02, r*0.92, 0, 0, TAU); ctx.fill(); ctx.globalAlpha = 1; }
+// Tinte NOCTURNO: el tema 5 (parque de noche) REUSA los props del parque oscurecidos. En vez de duplicar cada helper
+// con un flag (CLAUDE.md: globales > parámetros), los helpers atenúan sus colores por `_pc()` cuando `_propNight` está on.
+let _propNight = false;
+function _pc(c) { return _propNight ? [c[0]*0.42, c[1]*0.50, c[2]*0.54] : c; }   // color de prop atenuado (leve tinte frío/azulado de luna)
 function drawTree(x, y, s) {                                          // copa oscura + rim claro → contrasta sobre el pasto
   const r = 20 + s*16;
   shadowBlob(x, y, r, 0.24);
-  drawCircle(x, y, r, [12, 45, 22]);                                 // contorno oscuro
-  drawCircle(x + r*0.46, y + r*0.2, r*0.5, [20, 64, 32]);
-  drawCircle(x - r*0.36, y + r*0.42, r*0.46, [24, 72, 36]);
-  drawCircle(x - r*0.1, y - r*0.1, r*0.74, [30, 88, 42]);
-  drawCircle(x - r*0.28, y - r*0.28, r*0.42, [74, 152, 86]);         // lado iluminado
+  drawCircle(x, y, r, _pc([12, 45, 22]));                            // contorno oscuro
+  drawCircle(x + r*0.46, y + r*0.2, r*0.5, _pc([20, 64, 32]));
+  drawCircle(x - r*0.36, y + r*0.42, r*0.46, _pc([24, 72, 36]));
+  drawCircle(x - r*0.1, y - r*0.1, r*0.74, _pc([30, 88, 42]));
+  drawCircle(x - r*0.28, y - r*0.28, r*0.42, _pc([74, 152, 86]));    // lado iluminado
 }
 function drawBush(x, y, s) {
   const r = 11 + s*9;
   shadowBlob(x, y, r, 0.2);
-  drawCircle(x - r*0.5, y, r*0.7, [18, 60, 28]);
-  drawCircle(x + r*0.5, y, r*0.7, [18, 60, 28]);
-  drawCircle(x, y - r*0.22, r*0.85, [34, 100, 46]);
-  drawCircle(x - r*0.2, y - r*0.4, r*0.36, [82, 154, 92]);
+  drawCircle(x - r*0.5, y, r*0.7, _pc([18, 60, 28]));
+  drawCircle(x + r*0.5, y, r*0.7, _pc([18, 60, 28]));
+  drawCircle(x, y - r*0.22, r*0.85, _pc([34, 100, 46]));
+  drawCircle(x - r*0.2, y - r*0.4, r*0.36, _pc([82, 154, 92]));
 }
 function drawFlowers(x, y, s, rot) {
-  const r = 9 + s*7, cols = [[235,90,110], [245,210,80], [245,245,250], [200,120,235]];
+  const r = 9 + s*7, cols = (_propNight ? [[150,60,72], [150,128,52], [150,150,156], [120,76,140]] : [[235,90,110], [245,210,80], [245,245,250], [200,120,235]]);
   ctx.globalAlpha = 0.92;
   for (let i = 0; i < 5; i++) { const a = rot + i*1.2566, d = r*0.55*((i%2)+0.6); drawCircle(x + Math.cos(a)*d, y + Math.sin(a)*d, Math.max(1.6, r*0.17), cols[(i + ((rot*7)|0)) % 4]); }
   ctx.globalAlpha = 1;
@@ -2515,29 +2741,472 @@ function sceneryBase(theme, ww, hh, rng) {
     for (let i = 0; i < Math.round(12*af); i++) { const x = rng()*ww, y = rng()*hh, r = 180 + rng()*360; ctx.fillStyle = rgb([180,196,226]); ctx.beginPath(); ctx.ellipse(x, y, r, r*0.6, rng()*TAU, 0, TAU); ctx.fill(); }
     ctx.globalAlpha = 0.55; ctx.fillStyle = rgb([255,255,255]);
     for (let i = 0; i < Math.round(26*af); i++) ctx.fillRect(rng()*ww, rng()*hh, 2, 2);
-  } else if (theme === 3) {                                            // tecno: grilla de calles tenue
-    ctx.globalAlpha = 0.10; ctx.strokeStyle = rgb([90,150,220]); ctx.lineWidth = 2; ctx.beginPath();
-    for (let gx = 0; gx <= ww; gx += 240) { ctx.moveTo(gx, 0); ctx.lineTo(gx, hh); }
-    for (let gy = 0; gy <= hh; gy += 240) { ctx.moveTo(0, gy); ctx.lineTo(ww, gy); }
-    ctx.stroke();
+  } else if (theme === 3) {                                            // tecno: manchas azules suaves (SIN grilla)
+    ctx.globalAlpha = 0.08;
+    for (let i = 0; i < Math.round(14*af); i++) { const x = rng()*ww, y = rng()*hh, r = 160 + rng()*340; ctx.fillStyle = rgb(rng() < 0.5 ? [20,40,80] : [60,90,150]); ctx.beginPath(); ctx.ellipse(x, y, r, r*0.7, rng()*TAU, 0, TAU); ctx.fill(); }
+  } else if (theme === 5) {                                            // parque de NOCHE: parches de verde muy oscuro (mismo gesto que el parque, apagado)
+    ctx.globalAlpha = 0.07;
+    for (let i = 0; i < Math.round(14*af); i++) { const x = rng()*ww, y = rng()*hh, r = 200 + rng()*420; ctx.fillStyle = rgb(rng() < 0.5 ? [10,28,15] : [26,52,32]); ctx.beginPath(); ctx.ellipse(x, y, r, r*0.7, rng()*TAU, 0, TAU); ctx.fill(); }
   } else {                                                             // lava: mottling de roca oscura
     ctx.globalAlpha = 0.10;
     for (let i = 0; i < Math.round(16*af); i++) { const x = rng()*ww, y = rng()*hh, r = 140 + rng()*340; ctx.fillStyle = rgb(rng() < 0.5 ? [20,14,14] : [82,42,30]); ctx.beginPath(); ctx.ellipse(x, y, r, r*0.7, rng()*TAU, 0, TAU); ctx.fill(); }
   }
   ctx.globalAlpha = 1;
 }
+function drawGrassTuft(x, y, s) {                                     // parque: matas de pasto (pinceladas) — verde OSCURO para contrastar con el pasto del fondo
+  const h = 8 + s*8;
+  ctx.strokeStyle = rgb(_pc([14, 58, 26])); ctx.lineWidth = Math.max(1.8, s*2.2); ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let i = -2; i <= 2; i++) { const bx = x + i*s*2.4; ctx.moveTo(bx, y); ctx.lineTo(bx + i*s*1.3, y - h*(0.6 + Math.abs(i)*0.1)); }
+  ctx.stroke();
+}
+function drawDeadShrub(x, y, s) {                                     // desierto: matorral seco
+  const r = 8 + s*8;
+  ctx.strokeStyle = rgb([122, 98, 60]); ctx.lineWidth = Math.max(1.2, s*1.4); ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) { const a = i/8*TAU + s; ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a)*r, y + Math.sin(a)*r*0.7); }
+  ctx.stroke();
+}
+function drawPineSnow(x, y, s) {                                      // nieve: pino nevado (capas con nieve encima)
+  const r = 12 + s*12;
+  shadowBlob(x, y, r*0.7, 0.18);
+  for (let k = 0; k < 3; k++) {
+    const yy = y + r*0.45 - k*r*0.5, wd = r*(0.92 - k*0.22);
+    ctx.fillStyle = rgb([30, 72, 48]); ctx.beginPath(); ctx.moveTo(x, yy - r*0.6); ctx.lineTo(x - wd, yy); ctx.lineTo(x + wd, yy); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = rgb([236, 243, 252]); ctx.beginPath(); ctx.moveTo(x, yy - r*0.6); ctx.lineTo(x - wd*0.5, yy - r*0.26); ctx.lineTo(x + wd*0.5, yy - r*0.26); ctx.closePath(); ctx.fill();
+  }
+}
+function drawGlowNode(x, y, s) {                                      // tecno: nodo de datos brillante (anillo + glow)
+  const r = 5 + s*5;
+  const gg = ctx.createRadialGradient(x, y, 0, x, y, r*3);
+  gg.addColorStop(0, 'rgba(90,210,255,0.6)'); gg.addColorStop(1, 'rgba(40,120,220,0)');
+  ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(x, y, r*3, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(120,220,255,0.8)'; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+  drawCircle(x, y, r*0.4, [205, 245, 255]);
+}
+function drawLavaCrack(x, y, s, rot) {                               // lava: grieta brillante (línea quebrada con núcleo claro)
+  const r = 16 + s*20, c = Math.cos(rot), sn = Math.sin(rot), px = -sn, py = c, pts = [];
+  for (let i = 0; i <= 4; i++) { const t = i/4 - 0.5, j = (((i*37) % 9)/9 - 0.5) * r * 0.5; pts.push([x + c*r*2*t + px*j, y + sn*r*2*t + py*j]); }
+  const path = () => { ctx.beginPath(); for (let i = 0; i < pts.length; i++) i ? ctx.lineTo(pts[i][0], pts[i][1]) : ctx.moveTo(pts[i][0], pts[i][1]); ctx.stroke(); };
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(255,130,35,0.8)'; ctx.lineWidth = 3 + s*2; path();
+  ctx.strokeStyle = 'rgba(255,232,130,0.75)'; ctx.lineWidth = Math.max(1, s*1.2); path();
+}
 function drawScenery(track, ww, hh) {
   const { theme, items, lines } = getScenery(track, ww, hh);
   sceneryBase(theme, ww, hh, mulberry32((decoSeedFor(track) ^ 0x27d4eb2f) >>> 0));
   if (theme === 3) drawCables(lines);
+  _propNight = (theme === 5);                                          // tema 5: mismos props del parque, atenuados (vía _pc en cada helper)
   for (const it of items) {
-    if (theme === 0)      { if (it.v < 0.62) drawTree(it.x, it.y, it.s); else if (it.v < 0.86) drawBush(it.x, it.y, it.s); else drawFlowers(it.x, it.y, it.s, it.rot); }
-    else if (theme === 1) { if (it.v < 0.06) drawPyramid(it.x, it.y, it.s, it.rot); else if (it.v < 0.5) drawCactus(it.x, it.y, it.s); else drawRock(it.x, it.y, it.s, it.rot, [150,120,78]); }
-    else if (theme === 2) { if (it.v < 0.4) drawSnowman(it.x, it.y, it.s, it.w); else drawSnowRock(it.x, it.y, it.s, it.rot); }
-    else if (theme === 3) drawBuilding(it.x, it.y, it.s, it.rot, it.w);
-    else                  { if (it.v < 0.34) drawLavaPool(it.x, it.y, it.s, it.rot); else if (it.v < 0.64) drawRock(it.x, it.y, it.s, it.rot, [30,24,26]); else drawEmber(it.x, it.y, it.s); }
+    if (theme === 0 || theme === 5) { if (it.v < 0.5) drawTree(it.x, it.y, it.s); else if (it.v < 0.7) drawBush(it.x, it.y, it.s); else if (it.v < 0.85) drawFlowers(it.x, it.y, it.s, it.rot); else drawGrassTuft(it.x, it.y, it.s); }
+    else if (theme === 1) { if (it.v < 0.05) drawPyramid(it.x, it.y, it.s, it.rot); else if (it.v < 0.4) drawCactus(it.x, it.y, it.s); else if (it.v < 0.7) drawRock(it.x, it.y, it.s, it.rot, [150,120,78]); else drawDeadShrub(it.x, it.y, it.s); }
+    else if (theme === 2) { if (it.v < 0.3) drawSnowman(it.x, it.y, it.s, it.w); else if (it.v < 0.6) drawPineSnow(it.x, it.y, it.s); else drawSnowRock(it.x, it.y, it.s, it.rot); }
+    else if (theme === 3) { if (it.v < 0.62) drawBuilding(it.x, it.y, it.s, it.rot, it.w); else drawGlowNode(it.x, it.y, it.s); }
+    else                  { if (it.v < 0.3) drawLavaPool(it.x, it.y, it.s, it.rot); else if (it.v < 0.5) drawRock(it.x, it.y, it.s, it.rot, [30,24,26]); else if (it.v < 0.72) drawLavaCrack(it.x, it.y, it.s, it.rot); else drawEmber(it.x, it.y, it.s); }
   }
+  _propNight = false;
   ctx.globalAlpha = 1; ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+}
+
+// ════════════════ EFECTOS AMBIENTE ANIMADOS por TEMA (baratos: pools chicos, posiciones sembradas, culling) ════════════════
+// Capa POR-FRAME en coords del MUNDO (se dibuja después de los tanques, con la cámara aplicada). Todo acotado y
+// culleado a la ventana visible [camX,camY]..[+SCREEN]. Las posiciones se siembran UNA vez por mapa (mulberry32 +
+// decoSeedFor) y se rearman al regenerar (cambia TRACK_DECO_SEED / al volver al menú). Hojas/arena/bichos viven en
+// coords del MUNDO (viento GLOBAL: NO acompañan al jugador) — hay un poco más de partículas pero se cullean a cámara.
+const FX_LEAF_DENS = 22, FX_SAND_DENS = 30, FX_BUG_DENS = 5, FX_FIRE_DENS = 42, FX_RAIN_DENS = 64;   // densidad por pantalla-equivalente (escala con el mundo, acotada). Lluvia (agua) = la más densa
+const SNOW_THROW_RANGE = 640;                                          // distancia (mundo) a la que un muñeco te tira
+const SNOWBALL_SPD = 680;                                              // velocidad de la bola (u/s)
+const SNOWBALL_R   = 13;                                               // radio visual/colisión de la bola
+const SNOWBALL_KNOCK = TANK_SPEED * 0.6;                               // empujón al impactar (px/frame) → derrape (en nieve persiste)
+const LEAF_WX = 46, LEAF_WY = 30;                                     // viento GLOBAL de las hojas (u/s, mundo) — NO sigue al jugador
+const SAND_WX = 680, SAND_WY = 80;                                    // viento GLOBAL de la arena (u/s) — bastante rápido (ráfagas)
+const FIRE_WX = -55, FIRE_WY = -120;                                  // deriva GLOBAL de las cenizas prendidas (u/s) — FLOTAN / suben lento con brisa hacia la izquierda
+const RAIN_WX = -150, RAIN_WY = 1050;                                 // viento GLOBAL de la lluvia (u/s) — cae RÁPIDO, casi vertical con leve sesgo por viento
+const _RAIN_L = Math.hypot(RAIN_WX, RAIN_WY), RAIN_DX = RAIN_WX / _RAIN_L, RAIN_DY = RAIN_WY / _RAIN_L;   // dirección de caída de la gota (cola hacia atrás)
+let fxTrack = -2, fxSeed = -2, fxData = null;                          // cache por mapa (partículas incluidas, mundo-espaciadas)
+const fxSnowballs = [];                                                // bolas en vuelo (pool dinámico chico)
+
+// Punto OFF-ROAD al costado de la pista. Desplaza perpendicular desde un waypoint, pero VALIDA que el punto
+// quede a ≥ `clear` de TODOS los waypoints — así nunca cae sobre el asfalto, ni siquiera cuando el offset
+// perpendicular sobre-dispara hacia adentro de una curva cerrada (que es lo que metía las cosas en el medio).
+// `clear` debe ser ≥ medio-ancho máx de la pista (~235) + el tamaño del objeto. Reintenta; si no encuentra, null.
+function fxAlongTrack(rng, clear) {
+  const n = trackpoints.length; if (n < 3) return null;
+  const c2 = clear * clear;
+  for (let tries = 0; tries < 12; tries++) {
+    const i = 1 + Math.floor(rng() * (n - 1));
+    const a = trackpoints[i], b = trackpoints[(i + 1) % n];
+    const dx = b.x - a.x, dy = b.y - a.y, L = Math.hypot(dx, dy) || 1;
+    if (L > 1200) continue;                                            // costura de portal → saltear (dirección basura)
+    const ux = dx / L, uy = dy / L, side = rng() < 0.5 ? 1 : -1;
+    const off = (clear + 15 + rng() * 170) * side;
+    const x = a.x - uy * off, y = a.y + ux * off;
+    let ok = true;                                                     // ¿lejos de TODA la pista? (si está cerca de algún waypoint → está sobre/al lado del asfalto)
+    for (let k = 0; k < n; k++) { const tx = trackpoints[k].x - x, ty = trackpoints[k].y - y; if (tx * tx + ty * ty < c2) { ok = false; break; } }
+    if (ok) return { x, y, ux, uy, side };
+  }
+  return null;
+}
+function ensureFx(track) {
+  const seed = decoSeedFor(track);
+  if (track === fxTrack && seed === fxSeed && fxData) return fxData;
+  fxTrack = track; fxSeed = seed; fxSnowballs.length = 0;
+  const theme = themeOf(track), rng = mulberry32((seed ^ 0xa17e5f) >>> 0);
+  const ww = worldW(track), hh = worldH(track), af = (ww * hh) / (1280 * 720);
+  const cap = base => Math.max(3, Math.min(Math.round(base * Math.sqrt(af)), Math.round(base * 2.4)));
+  const d = { theme, ww, hh, leaves: [], sand: [], bugs: [], lights: [], devils: [], stands: [], snowmen: [], fire: [], rain: [] };
+  if (theme === 0) {                                                   // PARQUE: hojas a la deriva, viento GLOBAL (mundo)
+    for (let i = 0, n = cap(FX_LEAF_DENS); i < n; i++) d.leaves.push({ x: rng() * ww, y: rng() * hh, ph: rng() * TAU, rot: rng() * TAU, fs: 1.2 + rng() * 1.4, fa: 10 + rng() * 20, sz: 5 + rng() * 5, hue: rng() });
+  } else if (theme === 1) {                                            // DESIERTO: arena volando (mundo) + bichos
+    for (let i = 0, n = cap(FX_SAND_DENS); i < n; i++) d.sand.push({ x: rng() * ww, y: rng() * hh, len: 10 + rng() * 16, a: 0.12 + rng() * 0.16, fa: 4 + rng() * 10, ph: rng() * TAU });   // rayas CORTAS
+    for (let i = 0, n = cap(FX_BUG_DENS); i < n; i++) { const p = fxAlongTrack(rng, 258); if (!p) continue; const kind = Math.floor(rng() * 3); d.bugs.push({ x: p.x, y: p.y, ph: rng() * TAU, sp: 0.8 + rng() * 0.8, face: rng() < 0.5 ? 1 : -1, sz: kind === 2 ? 5.5 + rng() * 3.5 : 4 + rng() * 2.5, kind, rng: 1.5 + rng() * 3 }); }   // MUY chiquitos (los tanques son grandes); rng=vaivén también chico   // kind 0 escarabajo, 1 escorpión, 2 serpiente; casi quietos (rng chico, sp lento) y face FIJO → no cruzan la pantalla
+  } else if (theme === 4) {                                            // LAVA: lluvia de fuego (mundo, global) + luces parpadeantes al borde + diablitos EN GRUPO (con patas)
+    for (let i = 0, nf = cap(FX_FIRE_DENS); i < nf; i++) d.fire.push({ x: rng() * ww, y: rng() * hh, r: 1.5 + rng() * 2.4, a: 0.30 + rng() * 0.30, sx: 7 + rng() * 18, sy: 6 + rng() * 14, ws: 0.6 + rng() * 1.1, vy: 20 + rng() * 90, ph: rng() * TAU, ph2: rng() * TAU, fk: 4 + rng() * 8 });   // cenizas prendidas: tamaño/alpha/vaivén XY/velocidad-vaivén/ascenso propio/titileo variados
+    for (let i = 0, nl = cap(9); i < nl; i++) { const p = fxAlongTrack(rng, 248); if (p) d.lights.push({ x: p.x, y: p.y, ph: rng() * TAU, sp: 6 + rng() * 11, sz: 8 + rng() * 8 }); }   // off-road (no en el medio de la pista), bordeando
+    for (let g = 0, ng = Math.max(2, Math.min(cap(3), 6)); g < ng; g++) {
+      const c = fxAlongTrack(rng, 262); if (!c) continue;
+      for (let k = 0, nk = 2 + Math.floor(rng() * 3); k < nk; k++)      // 2-4 diablitos amontonados
+        d.devils.push({ x: c.x + (rng() - 0.5) * 80, y: c.y + (rng() - 0.5) * 60, ph: rng() * TAU, sp: 3.2 + rng() * 2.4, face: rng() < 0.5 ? 1 : -1, sz: 14 + rng() * 8 });
+    }
+  } else if (theme === 3) {                                            // TECNO: tribunas chicas al costado (BIEN off-road, no en la pista)
+    for (let i = 0, ns = cap(6); i < ns; i++) { const p = fxAlongTrack(rng, 300); if (!p) continue; if (d.stands.some(st => Math.hypot(st.x - p.x, st.y - p.y) < 150)) continue; d.stands.push({ x: p.x, y: p.y, ph: rng() * TAU, w: 88, rows: 4 }); }   // TODAS del mismo tamaño; ≥150 entre sí → NO se enciman
+  } else if (theme === 2) {                                            // NIEVE: muñecos que tiran bolas (al borde, off-road incluso en pistas anchas)
+    for (let i = 0, nm = cap(7); i < nm; i++) { const p = fxAlongTrack(rng, 262); if (p) d.snowmen.push({ x: p.x, y: p.y, cd: 1.0 + rng() * 2.6, ph: rng() * TAU, sz: 17 + rng() * 7, thr: 0 }); }   // off-road validado (no dentro de la pista)
+  } else if (theme === 5) {                                            // PARQUE DE NOCHE: lluvia (mundo, global) — mismas partículas que el fuego pero como agua
+    for (let i = 0, n = cap(FX_RAIN_DENS); i < n; i++) d.rain.push({ x: rng() * ww, y: rng() * hh, len: 16 + rng() * 26, w: 1 + rng() * 1.4, a: 0.10 + rng() * 0.16, ph: rng() * TAU });
+  }
+  fxData = d; return d;
+}
+
+// ── GAMEPLAY (sólo nieve): muñecos tiran bolas; las bolas vuelan y al pegarle al jugador lo hacen derrapar + trompo corto ──
+function fxSnowballHit(t, s) {
+  const b = t.body, L = Math.hypot(s.vx, s.vy) || 1;
+  _vScratch.x = b.velocity.x * 0.6 + (s.vx / L) * SNOWBALL_KNOCK;       // knockback en la dirección de la bola (parte queda lateral → derrape)
+  _vScratch.y = b.velocity.y * 0.6 + (s.vy / L) * SNOWBALL_KNOCK;
+  Body.setVelocity(b, _vScratch);
+  t.spin_timer = Math.max(t.spin_timer, SPIN_TIME * 0.55);             // trompo corto (más leve que el disparo)
+  t.spin_dir = ri(0, 1) === 0 ? -1 : 1;
+}
+function updateAmbientFx(track) {
+  ensureFx(track);
+  const d = fxData; if (!d) return;
+  const p = tanks[0];                                                  // los muñecos apuntan SÓLO al jugador (lo pedido: "que te tiren bolas"), no a la IA
+  if (d.theme === 2 && d.snowmen.length && p && p.start && !p.finished) {   // p.start: recién con la carrera EMPEZADA (no durante la cuenta regresiva)
+    for (const m of d.snowmen) {
+      if (m.thr > 0) m.thr -= deltaT;
+      m.cd -= deltaT;
+      if (m.cd <= 0) {
+        const sx = m.x - camX, sy = m.y - camY;                        // sólo tira si está (casi) en pantalla y a tiro (justo)
+        const onScreen = sx > -100 && sx < SCREEN_X + 100 && sy > -100 && sy < SCREEN_Y + 100;
+        const dist = Math.hypot(m.x - p.x, m.y - p.y);
+        if (onScreen && dist < SNOW_THROW_RANGE && dist > 70) {
+          const lead = dist / SNOWBALL_SPD;                            // apunta un poco adelante del jugador
+          const tx = p.x + p.body.velocity.x * 60 * lead * 0.65, ty = p.y + p.body.velocity.y * 60 * lead * 0.65;
+          let dx = tx - m.x, dy = ty - m.y; const L = Math.hypot(dx, dy) || 1;
+          fxSnowballs.push({ x: m.x, y: m.y - m.sz * 0.6, vx: dx / L * SNOWBALL_SPD, vy: dy / L * SNOWBALL_SPD, life: 2.4 });
+          m.thr = 0.35; m.cd = rnd(2.0, 4.2);
+        } else m.cd = rnd(0.4, 1.0);                                   // no estaba a tiro → reintentar pronto
+      }
+    }
+  }
+  if (fxSnowballs.length) {                                            // mover bolas + colisión (corre siempre; el pool sólo existe en nieve)
+    const ww = worldW(track), hh = worldH(track);
+    for (let i = fxSnowballs.length - 1; i >= 0; i--) {
+      const s = fxSnowballs[i];
+      s.x += s.vx * deltaT; s.y += s.vy * deltaT; s.life -= deltaT;
+      if (p && !p.finished && Math.hypot(s.x - p.x, s.y - p.y) < p.radius * 1.2) { fxSnowballHit(p, s); fxSnowballs.splice(i, 1); continue; }
+      if (s.life <= 0 || s.x < -50 || s.x > ww + 50 || s.y < -50 || s.y > hh + 50) fxSnowballs.splice(i, 1);
+    }
+  }
+}
+
+// ── DIBUJO (todo culleado; hojas/arena/bichos en coords del MUNDO → viento global, no acompañan al jugador) ──
+function drawAmbientFx(track) {
+  const d = ensureFx(track), theme = d.theme;
+  ctx.save();
+  if (theme === 0) fxDrawLeaves(d);
+  else if (theme === 1) { fxDrawSand(d); for (const bg of d.bugs) fxDrawBug(bg); }
+  else if (theme === 4) { fxLavaGlow(); for (const l of d.lights) fxDrawLavaLight(l); for (const dv of d.devils) fxDrawDevil(dv); fxDrawFire(d); }
+  else if (theme === 3) { for (const st of d.stands) fxDrawStand(st); }
+  else if (theme === 2) { for (const m of d.snowmen) fxDrawSnowman(m); for (const s of fxSnowballs) fxDrawSnowball(s); }
+  else if (theme === 5) {                                              // PARQUE DE NOCHE: oscurecido azulado constante + relámpagos blancos + lluvia (mismos flashes que tenía la lava)
+    ctx.fillStyle = 'rgb(6,10,26)'; ctx.globalAlpha = 0.20; ctx.fillRect(camX - 2, camY - 2, SCREEN_X + 4, SCREEN_Y + 4); ctx.globalAlpha = 1;   // velo de NOCHE
+    fxLightning('rgb(228,236,255)');                                   // relámpago frío (lo levanta de golpe)
+    fxDrawRain(d);                                                     // lluvia encima de todo
+  }
+  ctx.globalAlpha = 1; ctx.lineCap = 'butt';
+  ctx.restore();
+}
+// RELÁMPAGOS dramáticos (lo que antes hacía la lava): destellos secos, IRREGULARES y espaciados (~4-7s),
+// con dobles ocasionales en los fuertes. `col` = color del flash (blanco/azulado para la tormenta). Pinta toda la escena.
+function fxLightning(col) {
+  const clock = T * 0.19 + 0.40 * Math.sin(T * 0.11) + 0.25 * Math.sin(T * 0.067 + 1.3);   // reloj de velocidad variable → intervalos irregulares
+  const k = Math.floor(clock), frac = clock - k;
+  const hr = Math.sin(k * 91.37) * 43758.5453, rnd = hr - Math.floor(hr);           // fuerza POR flash (estable, sin Math.random por-frame)
+  const hr2 = Math.sin(k * 53.21 + 2.4) * 24634.6345, rnd2 = hr2 - Math.floor(hr2); // ¿doble? + separación del 2º
+  const peak = 0.10 + rnd * 0.16;
+  let flash = Math.exp(-frac * (52 + rnd * 22)) * peak;               // ataque seco + caída MUY rápida (chispazo)
+  if (rnd > 0.62) { const f2 = frac - (0.010 + rnd2 * 0.022); if (f2 > 0) flash = Math.max(flash, Math.exp(-f2 * 56) * peak * (0.6 + rnd2 * 0.35)); }   // dobles sólo en los fuertes
+  if (flash > 0.002) { ctx.fillStyle = col; ctx.globalAlpha = Math.min(0.34, flash); ctx.fillRect(camX - 2, camY - 2, SCREEN_X + 4, SCREEN_Y + 4); }
+  ctx.globalAlpha = 1;                                                 // reset incondicional (es función reusable)
+}
+// LAVA: resplandor NARANJA sutil y CONSTANTE — titileo intermitente de fondo (brasa), nunca apagado, sin relámpagos dramáticos.
+function fxLavaGlow() {
+  const flick = 0.5 + 0.5 * Math.sin(T * 2.1) * Math.sin(T * 0.83 + 1.1);   // pulso lento e IRREGULAR (producto de sinusoides → no periódico obvio)
+  const jit = 0.5 + 0.5 * Math.sin(T * 8.5 + 0.6);                          // parpadeo rápido de brasa
+  const a = 0.035 + 0.055 * flick + 0.022 * jit;                           // ~0.035 .. 0.11 — SIEMPRE presente, sube y baja (intermitente sutil)
+  ctx.fillStyle = 'rgb(255,104,30)'; ctx.globalAlpha = Math.min(0.12, a);  // más ANARANJADO (antes rojo) y constante
+  ctx.fillRect(camX - 2, camY - 2, SCREEN_X + 4, SCREEN_Y + 4);
+  ctx.globalAlpha = 1;
+}
+function fxDrawLeaves(d) {                                             // hojas a la deriva — viento GLOBAL en el mundo (wrap a bordes del mundo), culleadas
+  const ww = d.ww, hh = d.hh;
+  for (const lf of d.leaves) {
+    const wob = Math.sin(T * lf.fs + lf.ph);
+    const wx = ((lf.x + LEAF_WX * T) % ww + ww) % ww + wob * lf.fa;
+    const wy = ((lf.y + LEAF_WY * T) % hh + hh) % hh + Math.cos(T * lf.fs * 0.8 + lf.ph) * lf.fa;
+    const sx = wx - camX, sy = wy - camY;
+    if (sx < -30 || sx > SCREEN_X + 30 || sy < -30 || sy > SCREEN_Y + 30) continue;
+    const col = lf.hue < 0.5 ? [50 + lf.hue * 110, 115 + lf.hue * 70, 38] : [165, 120 - (lf.hue - 0.5) * 120, 42];
+    ctx.save(); ctx.translate(wx, wy); ctx.rotate(lf.rot + T * 0.6 + wob * 0.5);
+    ctx.globalAlpha = 0.55; ctx.fillStyle = rgb(col);
+    ctx.beginPath(); ctx.ellipse(0, 0, lf.sz, lf.sz * 0.5, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = rgb(modifyColorPerc(col, 0.55)); ctx.lineWidth = Math.max(0.6, lf.sz * 0.13);   // nervadura + pecíolo (detalle de hoja)
+    ctx.beginPath(); ctx.moveTo(-lf.sz * 0.85, 0); ctx.lineTo(lf.sz * 1.25, lf.sz * 0.12); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+function fxDrawSand(d) {                                               // arena volando — viento GLOBAL en el mundo (wrap), culleada
+  const ww = d.ww, hh = d.hh;
+  ctx.lineCap = 'butt'; ctx.strokeStyle = 'rgb(120,92,50)'; ctx.lineWidth = 3;   // polvo OSCURO, rayas CORTAS y GRUESAS, extremos rectos (sin punta/grano)
+  for (const s of d.sand) {
+    const wx = ((s.x + SAND_WX * T) % ww + ww) % ww;
+    const wy = ((s.y + SAND_WY * T) % hh + hh) % hh + Math.sin(T * 2 + s.ph) * s.fa;
+    const sx = wx - camX, sy = wy - camY;
+    if (sx < -80 || sx > SCREEN_X + 30 || sy < -30 || sy > SCREEN_Y + 30) continue;
+    ctx.globalAlpha = s.a;
+    ctx.beginPath(); ctx.moveTo(wx, wy); ctx.lineTo(wx - s.len, wy + 1); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+function fxDrawFire(d) {                                               // LAVA: CENIZAS PRENDIDAS volando — brasas que flotan/suben lento (mundo, global, wrap), se mecen y TITILAN, culleadas
+  const ww = d.ww, hh = d.hh;
+  ctx.globalCompositeOperation = 'lighter';                            // brillo ADITIVO → las brasas suman luz (glow), no tapan
+  for (const f of d.fire) {
+    // deriva global lenta + vaivén por-partícula en X e Y (vuelo errático) + ascenso propio (vy)
+    const wx = ((f.x + FIRE_WX * T) % ww + ww) % ww + Math.sin(T * f.ws + f.ph) * f.sx;
+    const wy = ((f.y + (FIRE_WY - f.vy) * T) % hh + hh) % hh + Math.cos(T * f.ws * 0.8 + f.ph2) * f.sy;
+    const sx = wx - camX, sy = wy - camY;
+    if (sx < -20 || sx > SCREEN_X + 20 || sy < -20 || sy > SCREEN_Y + 20) continue;
+    const fl = 0.32 + 0.68 * Math.abs(Math.sin(T * f.fk + f.ph));      // titileo FUERTE (a veces casi se apaga → brasa "prendida")
+    const a = f.a * fl;
+    ctx.globalAlpha = a * 0.5; ctx.fillStyle = 'rgb(255,108,16)'; ctx.beginPath(); ctx.arc(wx, wy, f.r * 2.2, 0, TAU); ctx.fill();   // halo naranja (resplandor)
+    ctx.globalAlpha = a;       ctx.fillStyle = 'rgb(255,226,150)'; ctx.beginPath(); ctx.arc(wx, wy, f.r * 0.9, 0, TAU); ctx.fill();   // núcleo amarillo (punto brillante)
+  }
+  ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+}
+function fxDrawRain(d) {                                               // LLUVIA — gotas cayendo, viento GLOBAL en el mundo (wrap), culleada. Misma base que el fuego pero AGUA (raya fría, sin glow)
+  const ww = d.ww, hh = d.hh;
+  ctx.lineCap = 'butt'; ctx.strokeStyle = 'rgb(150,178,214)';
+  for (const r of d.rain) {
+    const wx = ((r.x + RAIN_WX * T) % ww + ww) % ww;
+    const wy = ((r.y + RAIN_WY * T) % hh + hh) % hh;
+    const sx = wx - camX, sy = wy - camY;
+    if (sx < -30 || sx > SCREEN_X + 30 || sy < -40 || sy > SCREEN_Y + 30) continue;
+    ctx.globalAlpha = r.a; ctx.lineWidth = r.w;
+    ctx.beginPath(); ctx.moveTo(wx, wy); ctx.lineTo(wx - RAIN_DX * r.len, wy - RAIN_DY * r.len); ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
+function fxDrawBug(bg) {                                               // bicho del desierto (escarabajo / escorpión / serpiente). Face FIJO + vaivén chico → no cruza la pantalla.
+  const bx = bg.x + Math.sin(T * bg.sp + bg.ph) * bg.rng, by = bg.y + Math.cos(T * bg.sp * 0.8 + bg.ph) * bg.rng * 0.5;
+  const sx = bx - camX, sy = by - camY;
+  if (sx < -40 || sx > SCREEN_X + 40 || sy < -40 || sy > SCREEN_Y + 40) return;
+  const s = bg.sz;
+  ctx.save(); ctx.translate(bx, by); ctx.scale(bg.face, 1);
+  if (bg.kind === 2) fxBugSnake(s, bg);
+  else if (bg.kind === 1) fxBugScorpion(s, bg);
+  else fxBugBeetle(s, bg);
+  ctx.restore(); ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
+}
+function fxBugBeetle(s, bg) {                                          // escarabajo: 6 patas, élitros con surco, pronoto, antenas, reflejo
+  const lw = Math.sin(T * bg.sp * 5 + bg.ph) * s * 0.13;
+  ctx.strokeStyle = 'rgb(38,28,18)'; ctx.lineWidth = Math.max(1, s * 0.09); ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let i = -1; i <= 1; i++) { const px = i * s * 0.3; ctx.moveTo(px, -s * 0.16); ctx.lineTo(px - s * 0.26 + lw, -s * 0.46); ctx.moveTo(px, s * 0.16); ctx.lineTo(px - s * 0.26 - lw, s * 0.46); }
+  ctx.moveTo(s * 0.42, -s * 0.08); ctx.lineTo(s * 0.72, -s * 0.3); ctx.moveTo(s * 0.42, s * 0.08); ctx.lineTo(s * 0.72, s * 0.3);   // antenas
+  ctx.stroke();
+  ctx.fillStyle = 'rgb(34,28,22)'; ctx.beginPath(); ctx.ellipse(0, 0, s * 0.52, s * 0.36, 0, 0, TAU); ctx.fill();   // élitros
+  ctx.fillStyle = 'rgb(24,20,16)'; ctx.beginPath(); ctx.ellipse(s * 0.4, 0, s * 0.2, s * 0.22, 0, 0, TAU); ctx.fill();   // pronoto/cabeza
+  ctx.strokeStyle = 'rgb(74,60,40)'; ctx.lineWidth = Math.max(1, s * 0.05);                  // surco central de los élitros
+  ctx.beginPath(); ctx.moveTo(s * 0.26, 0); ctx.lineTo(-s * 0.48, 0); ctx.stroke();
+  ctx.fillStyle = 'rgba(170,150,110,0.5)'; ctx.beginPath(); ctx.ellipse(-s * 0.14, -s * 0.13, s * 0.13, s * 0.06, -0.5, 0, TAU); ctx.fill();   // reflejo
+}
+function fxBugScorpion(s, bg) {                                        // escorpión: 8 patas, pinzas, cuerpo segmentado, cola curva con aguijón
+  const lw = Math.sin(T * bg.sp * 5 + bg.ph) * s * 0.11, tw = Math.sin(T * bg.sp * 1.6 + bg.ph) * s * 0.12;
+  ctx.strokeStyle = 'rgb(86,62,32)'; ctx.lineWidth = Math.max(1, s * 0.08); ctx.lineCap = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < 4; i++) { const px = -s * 0.16 + i * s * 0.2; ctx.moveTo(px, -s * 0.12); ctx.lineTo(px - s * 0.2 + lw, -s * 0.4); ctx.moveTo(px, s * 0.12); ctx.lineTo(px - s * 0.2 - lw, s * 0.4); }
+  ctx.moveTo(s * 0.34, -s * 0.1); ctx.lineTo(s * 0.6, -s * 0.26); ctx.moveTo(s * 0.34, s * 0.1); ctx.lineTo(s * 0.6, s * 0.26);   // brazos de las pinzas
+  ctx.stroke();
+  ctx.fillStyle = 'rgb(104,76,40)';
+  ctx.beginPath(); ctx.ellipse(s * 0.66, -s * 0.28, s * 0.13, s * 0.08, 0.5, 0, TAU); ctx.ellipse(s * 0.66, s * 0.28, s * 0.13, s * 0.08, -0.5, 0, TAU); ctx.fill();   // pinzas
+  ctx.beginPath(); ctx.ellipse(0, 0, s * 0.4, s * 0.25, 0, 0, TAU); ctx.ellipse(s * 0.3, 0, s * 0.18, s * 0.17, 0, 0, TAU); ctx.fill();   // cuerpo + cabeza
+  ctx.strokeStyle = 'rgb(104,76,40)'; ctx.lineWidth = Math.max(2, s * 0.15); ctx.lineCap = 'round';   // cola curvada
+  ctx.beginPath(); ctx.moveTo(-s * 0.38, 0); ctx.quadraticCurveTo(-s * 0.95, -s * 0.05, -s * 0.7 + tw, -s * 0.62); ctx.stroke();
+  ctx.fillStyle = 'rgb(132,98,50)'; ctx.beginPath(); ctx.arc(-s * 0.7 + tw, -s * 0.68, s * 0.1, 0, TAU); ctx.fill();   // aguijón
+}
+function fxBugSnake(s, bg) {                                           // serpiente: cuerpo ondulante (la cola culebrea, la cabeza casi quieta), lengua bífida
+  const N = 8, body = s * 1.55, amp = s * 0.42;                        // CENTRADA en su punto (no se estira hacia la pista)
+  let hx = 0, hy = 0;
+  ctx.strokeStyle = 'rgb(150,120,58)'; ctx.lineWidth = Math.max(2, s * 0.42); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let i = 0; i < N; i++) { const t = i / (N - 1), x = (0.5 - t) * body, y = Math.sin(T * bg.sp * 1.8 + bg.ph + i * 0.85) * amp * t; if (i === 0) { ctx.moveTo(x, y); hx = x; hy = y; } else ctx.lineTo(x, y); }
+  ctx.stroke();
+  ctx.strokeStyle = 'rgb(196,168,96)'; ctx.lineWidth = Math.max(1, s * 0.12); ctx.setLineDash([s * 0.3, s * 0.3]);   // patrón dorsal
+  ctx.beginPath();
+  for (let i = 0; i < N; i++) { const t = i / (N - 1), x = (0.5 - t) * body, y = Math.sin(T * bg.sp * 1.8 + bg.ph + i * 0.85) * amp * t; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }
+  ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = 'rgb(162,132,66)'; ctx.beginPath(); ctx.ellipse(hx, hy, s * 0.32, s * 0.24, 0, 0, TAU); ctx.fill();   // cabeza
+  ctx.fillStyle = '#1a1410'; ctx.beginPath(); ctx.arc(hx + s * 0.12, hy - s * 0.08, s * 0.045, 0, TAU); ctx.arc(hx + s * 0.12, hy + s * 0.08, s * 0.045, 0, TAU); ctx.fill();   // ojos
+  if (Math.sin(T * 3.3 + bg.ph) > 0.55) { ctx.strokeStyle = 'rgb(200,40,40)'; ctx.lineWidth = Math.max(1, s * 0.05); ctx.lineCap = 'round';   // lengua bífida (flick)
+    ctx.beginPath(); ctx.moveTo(hx + s * 0.3, hy); ctx.lineTo(hx + s * 0.52, hy - s * 0.05); ctx.moveTo(hx + s * 0.44, hy); ctx.lineTo(hx + s * 0.52, hy + s * 0.06); ctx.stroke(); }
+}
+function fxDrawLavaLight(l) {                                          // luz parpadeante (parpadeo irregular)
+  const sx = l.x - camX, sy = l.y - camY;
+  if (sx < -40 || sx > SCREEN_X + 40 || sy < -40 || sy > SCREEN_Y + 40) return;
+  const fl = 0.45 + 0.55 * Math.abs(Math.sin(T * l.sp + l.ph)) * (0.7 + 0.3 * Math.sin(T * l.sp * 2.3 + l.ph));
+  ctx.globalAlpha = 0.16 * fl; drawCircle(l.x, l.y, l.sz * 4.2, [255, 90, 25]);   // halo grande
+  ctx.globalAlpha = 0.45 * fl; drawCircle(l.x, l.y, l.sz * 2.4, [255, 135, 38]);
+  ctx.globalAlpha = 0.95 * fl; drawCircle(l.x, l.y, l.sz, [255, 220, 130]);       // núcleo
+  ctx.globalAlpha = fl;        drawCircle(l.x, l.y, l.sz * 0.45, [255, 250, 220]);// brasa blanca
+  const er = (T * 22 + l.ph * 40) % (l.sz * 4);                                   // chispa que sube y reaparece
+  ctx.globalAlpha = 0.6 * fl * (1 - er / (l.sz * 4)); drawCircle(l.x + Math.sin(T * 3 + l.ph) * l.sz * 0.5, l.y - er, l.sz * 0.16, [255, 180, 90]);
+  ctx.globalAlpha = 1;
+}
+function fxDrawDevil(dv) {                                             // diablito saltando con tridente, arengando — CON PATAS y torso arriba
+  const sx = dv.x - camX, sy = dv.y - camY;
+  if (sx < -40 || sx > SCREEN_X + 40 || sy < -40 || sy > SCREEN_Y + 40) return;
+  const hop = Math.abs(Math.sin(T * dv.sp + dv.ph)), z = hop * dv.sz * 0.8, s = dv.sz, f = dv.face;
+  const kick = Math.sin(T * dv.sp * 2 + dv.ph) * s * 0.12;            // pataleo
+  ctx.save(); ctx.translate(dv.x, dv.y - z);
+  ctx.globalAlpha = 0.16 * (1 - 0.4 * hop); ctx.fillStyle = '#000';  // sombra (se achica al saltar)
+  ctx.beginPath(); ctx.ellipse(0, z, s * 0.5 * (1 - 0.3 * hop), s * 0.15, 0, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = 'rgb(168,30,30)'; ctx.lineWidth = Math.max(2, s * 0.13); ctx.lineCap = 'round';   // PATAS (salen del torso)
+  ctx.beginPath(); ctx.moveTo(-s * 0.13, -s * 0.3); ctx.lineTo(-s * 0.18 - kick, -s * 0.02); ctx.moveTo(s * 0.13, -s * 0.3); ctx.lineTo(s * 0.18 + kick, -s * 0.02); ctx.stroke();
+  ctx.fillStyle = 'rgb(200,42,42)';
+  ctx.beginPath(); ctx.ellipse(0, -s * 0.6, s * 0.3, s * 0.34, 0, 0, TAU); ctx.fill();    // TORSO (arriba)
+  ctx.strokeStyle = 'rgb(200,42,42)'; ctx.lineWidth = Math.max(1.5, s * 0.08);            // cola
+  ctx.beginPath(); ctx.moveTo(-f * s * 0.26, -s * 0.46); ctx.quadraticCurveTo(-f * s * 0.52, -s * 0.36, -f * s * 0.44, -s * 0.62); ctx.stroke();
+  ctx.fillStyle = 'rgb(200,42,42)'; ctx.beginPath();                                       // punta de la cola (flecha)
+  ctx.moveTo(-f * s * 0.44, -s * 0.62); ctx.lineTo(-f * s * 0.62, -s * 0.56); ctx.lineTo(-f * s * 0.5, -s * 0.74); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.arc(0, -s * 1.02, s * 0.23, 0, TAU); ctx.fill();                    // CABEZA
+  ctx.beginPath();                                                                         // cuernos
+  ctx.moveTo(-s * 0.15, -s * 1.16); ctx.lineTo(-s * 0.24, -s * 1.4); ctx.lineTo(-s * 0.04, -s * 1.2); ctx.closePath();
+  ctx.moveTo(s * 0.15, -s * 1.16);  ctx.lineTo(s * 0.24, -s * 1.4);  ctx.lineTo(s * 0.04, -s * 1.2); ctx.closePath(); ctx.fill();
+  const wav = Math.sin(T * dv.sp * 1.6 + dv.ph) * 0.45;
+  ctx.strokeStyle = '#ffd24a'; ctx.lineWidth = Math.max(1.5, s * 0.09); ctx.lineCap = 'round';   // TRIDENTE en alto (areng.)
+  ctx.save(); ctx.translate(f * s * 0.28, -s * 0.76); ctx.rotate(f * (-0.5 + wav));
+  ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(0, -s * 0.7);
+  ctx.moveTo(-s * 0.12, -s * 0.7); ctx.lineTo(-s * 0.12, -s * 0.9); ctx.moveTo(0, -s * 0.7); ctx.lineTo(0, -s * 0.95); ctx.moveTo(s * 0.12, -s * 0.7); ctx.lineTo(s * 0.12, -s * 0.9); ctx.stroke();
+  ctx.restore();
+  ctx.fillStyle = '#ff0'; ctx.beginPath(); ctx.arc(-s * 0.08, -s * 1.02, s * 0.045, 0, TAU); ctx.arc(s * 0.08, -s * 1.02, s * 0.045, 0, TAU); ctx.fill();
+  ctx.strokeStyle = '#3a0000'; ctx.lineWidth = Math.max(1, s * 0.05); ctx.lineCap = 'round';   // sonrisa malvada
+  ctx.beginPath(); ctx.arc(0, -s * 0.95, s * 0.1, 0.2, Math.PI - 0.2); ctx.stroke();
+  ctx.restore(); ctx.lineCap = 'butt';
+}
+function fxDrawStand(st) {                                             // tribuna chica con público que titila
+  const sx = st.x - camX, sy = st.y - camY;
+  if (sx < -120 || sx > SCREEN_X + 120 || sy < -120 || sy > SCREEN_Y + 120) return;
+  const w = st.w, h = w * 0.5;
+  ctx.save(); ctx.translate(st.x, st.y);
+  ctx.strokeStyle = 'rgb(30,44,66)'; ctx.lineWidth = Math.max(2, w * 0.045);            // patas/soportes bajo la grada
+  ctx.beginPath(); ctx.moveTo(-w * 0.4, h * 0.5); ctx.lineTo(-w * 0.4, h * 0.66); ctx.moveTo(w * 0.4, h * 0.5); ctx.lineTo(w * 0.4, h * 0.66); ctx.stroke();
+  ctx.fillStyle = 'rgb(40,58,86)';                                     // estructura (trapecio, acero azulado)
+  ctx.beginPath(); ctx.moveTo(-w * 0.5, h * 0.5); ctx.lineTo(w * 0.5, h * 0.5); ctx.lineTo(w * 0.38, -h * 0.5); ctx.lineTo(-w * 0.38, -h * 0.5); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = 'rgb(56,78,112)'; ctx.beginPath();                                    // techo/voladizo
+  ctx.moveTo(-w * 0.46, -h * 0.5); ctx.lineTo(w * 0.46, -h * 0.5); ctx.lineTo(w * 0.4, -h * 0.64); ctx.lineTo(-w * 0.4, -h * 0.64); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgb(72,98,134)'; ctx.lineWidth = 2;
+  for (let r = 0; r < st.rows; r++) { const yy = h * 0.5 - (r + 1) * (h / (st.rows + 1)), ww2 = w * (0.5 - 0.12 * (r + 1) / st.rows); ctx.beginPath(); ctx.moveTo(-ww2, yy); ctx.lineTo(ww2, yy); ctx.stroke(); }
+  // público con forma de PERSONITAS (torso + cabeza + BRAZOS ALZADOS que bombean en ola), titila por fila — 1 fill por fila (barato)
+  ctx.fillStyle = 'rgb(150,212,255)';
+  for (let r = 0; r < st.rows; r++) {
+    const yy = h * 0.5 - (r + 0.55) * (h / (st.rows + 1)), tw = 0.45 + 0.55 * Math.abs(Math.sin(T * 3 + st.ph + r * 1.3)), ps = w * 0.052;
+    ctx.globalAlpha = tw; ctx.beginPath();
+    for (let c = 0; c < 4; c++) { const xx = -w * 0.30 + c * (w * 0.6 / 3);
+      const sh = yy - ps * 0.3, rz = 0.5 + 0.5 * Math.sin(T * 4.5 + st.ph + c * 0.9 + r * 0.6), ah = ps * (0.85 + rz * 0.75), aw = ps * 0.2;   // hombro, ola de brazos, alto, semi-ancho
+      ctx.moveTo(xx - ps * 0.5, yy + ps * 0.9); ctx.lineTo(xx + ps * 0.5, yy + ps * 0.9); ctx.lineTo(xx + ps * 0.4, sh); ctx.lineTo(xx - ps * 0.4, sh); ctx.closePath();   // torso
+      ctx.moveTo(xx + ps * 0.5, yy - ps * 0.72); ctx.arc(xx, yy - ps * 0.72, ps * 0.5, 0, TAU);   // cabeza
+      ctx.moveTo(xx - ps * 0.4 - aw, sh); ctx.lineTo(xx - ps * 0.4 + aw, sh); ctx.lineTo(xx - ps * 0.72 + aw, sh - ah); ctx.lineTo(xx - ps * 0.72 - aw, sh - ah); ctx.closePath();   // brazo izq (alzado)
+      ctx.moveTo(xx + ps * 0.4 - aw, sh); ctx.lineTo(xx + ps * 0.4 + aw, sh); ctx.lineTo(xx + ps * 0.72 + aw, sh - ah); ctx.lineTo(xx + ps * 0.72 - aw, sh - ah); ctx.closePath();   // brazo der (alzado)
+    }
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+  const fw = Math.sin(T * 4 + st.ph) * w * 0.05;                                       // banderín que flamea sobre el techo
+  ctx.strokeStyle = 'rgb(150,212,255)'; ctx.lineWidth = Math.max(1.5, w * 0.02);
+  ctx.beginPath(); ctx.moveTo(-w * 0.34, -h * 0.64); ctx.lineTo(-w * 0.34, -h * 0.92); ctx.stroke();
+  ctx.fillStyle = 'rgb(90,180,255)'; ctx.beginPath(); ctx.moveTo(-w * 0.34, -h * 0.9); ctx.lineTo(-w * 0.16 + fw, -h * 0.83); ctx.lineTo(-w * 0.34, -h * 0.76); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+function fxDrawSnowman(m) {
+  const sx = m.x - camX, sy = m.y - camY;
+  if (sx < -40 || sx > SCREEN_X + 40 || sy < -40 || sy > SCREEN_Y + 40) return;
+  const s = m.sz, throwing = m.thr > 0;
+  ctx.save(); ctx.translate(m.x, m.y);
+  ctx.globalAlpha = 0.18; ctx.fillStyle = '#000'; ctx.beginPath(); ctx.ellipse(0, s * 0.05, s * 0.6, s * 0.18, 0, 0, TAU); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.strokeStyle = '#15233a'; ctx.lineWidth = Math.max(1.4, s * 0.09);                   // BORDE oscuro FINO y DEBAJO del cuerpo: el fill blanco tapa su mitad interna → sólo asoma el borde exterior, no tapa ojos/nariz/botones/bufanda
+  ctx.beginPath(); ctx.arc(0, -s * 0.2, s * 0.5, 0, TAU); ctx.stroke();
+  ctx.beginPath(); ctx.arc(0, -s * 0.85, s * 0.34, 0, TAU); ctx.stroke();
+  ctx.fillStyle = 'rgb(238,244,252)';
+  ctx.beginPath(); ctx.arc(0, -s * 0.2, s * 0.5, 0, TAU); ctx.fill();                      // panza
+  ctx.beginPath(); ctx.arc(0, -s * 0.85, s * 0.34, 0, TAU); ctx.fill();                    // cabeza
+  ctx.globalAlpha = 0.5; ctx.fillStyle = 'rgb(186,206,232)'; ctx.beginPath(); ctx.arc(s * 0.16, -s * 0.2, s * 0.5, -0.6, 1.2); ctx.fill(); ctx.globalAlpha = 1;
+  ctx.fillStyle = '#222'; ctx.beginPath(); ctx.arc(-s * 0.1, -s * 0.9, s * 0.05, 0, TAU); ctx.arc(s * 0.1, -s * 0.9, s * 0.05, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgb(240,140,40)'; ctx.beginPath(); ctx.moveTo(0, -s * 0.82); ctx.lineTo(s * 0.28, -s * 0.78); ctx.lineTo(0, -s * 0.74); ctx.closePath(); ctx.fill();   // nariz zanahoria
+  ctx.fillStyle = '#333'; ctx.beginPath(); ctx.arc(0, -s * 0.16, s * 0.05, 0, TAU); ctx.arc(0, -s * 0.34, s * 0.05, 0, TAU); ctx.fill();   // botones de carbón
+  const sf = Math.sin(T * 3 + m.ph) * s * 0.12;                                          // bufanda roja que flamea
+  ctx.fillStyle = 'rgb(206,66,66)'; ctx.fillRect(-s * 0.3, -s * 0.64, s * 0.6, s * 0.13);
+  ctx.beginPath(); ctx.moveTo(s * 0.16, -s * 0.6); ctx.lineTo(s * 0.32 + sf, -s * 0.28); ctx.lineTo(s * 0.1 + sf, -s * 0.26); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgb(120,84,50)'; ctx.lineWidth = Math.max(1.5, s * 0.07); ctx.lineCap = 'round';
+  const up = throwing ? -s * 0.75 : -s * 0.25;
+  ctx.beginPath(); ctx.moveTo(-s * 0.4, -s * 0.3); ctx.lineTo(-s * 0.7, -s * 0.45); ctx.moveTo(s * 0.4, -s * 0.3); ctx.lineTo(s * 0.7, up); ctx.stroke();
+  ctx.beginPath();                                                                       // deditos de rama en las puntas
+  ctx.moveTo(-s * 0.7, -s * 0.45); ctx.lineTo(-s * 0.82, -s * 0.56); ctx.moveTo(-s * 0.7, -s * 0.45); ctx.lineTo(-s * 0.84, -s * 0.42);
+  ctx.moveTo(s * 0.7, up); ctx.lineTo(s * 0.82, up - s * 0.12); ctx.moveTo(s * 0.7, up); ctx.lineTo(s * 0.85, up + s * 0.02); ctx.stroke();
+  ctx.restore(); ctx.lineCap = 'butt';
+}
+function fxDrawSnowball(s) {
+  const sx = s.x - camX, sy = s.y - camY;
+  if (sx < -30 || sx > SCREEN_X + 30 || sy < -30 || sy > SCREEN_Y + 30) return;
+  const L = Math.hypot(s.vx, s.vy) || 1, ux = s.vx / L, uy = s.vy / L;
+  ctx.globalAlpha = 0.25; drawCircle(s.x - ux * SNOWBALL_R * 1.6, s.y - uy * SNOWBALL_R * 1.6, SNOWBALL_R * 0.7, [200, 225, 255]);
+  ctx.globalAlpha = 0.85; drawCircle(s.x, s.y, SNOWBALL_R, [240, 248, 255]);
+  ctx.globalAlpha = 1;    drawCircle(s.x, s.y, SNOWBALL_R * 0.6, [255, 255, 255]);
+}
+
+// Línea PUNTEADA por el centro de la pista (sobre los waypoints): blanca en parque, azul en tecno. Horneada en el
+// piso ANTES de calar el corredor → se ve sólo sobre la calle. Corta en la costura del portal (saltos > 1200).
+function drawCenterMarks(track) {
+  const theme = themeOf(track);
+  if (theme !== 0 && theme !== 3 && theme !== 5) return;
+  const wp = TRACKPOINT_MAPS[track]; if (!wp || wp.length < 2) return;
+  ctx.save();
+  ctx.strokeStyle = (theme === 0 || theme === 5) ? 'rgba(255,255,255,0.5)' : 'rgba(70,170,255,0.6)';
+  ctx.lineWidth = 3; ctx.lineCap = 'butt'; ctx.setLineDash([26, 32]);
+  ctx.beginPath();
+  let started = false;
+  for (let i = 0; i < wp.length; i++) {
+    const a = wp[i], b = wp[(i + 1) % wp.length];
+    if (Math.hypot(b[0] - a[0], b[1] - a[1]) > 1200) { started = false; continue; }   // costura del portal → cortar la línea
+    if (!started) { ctx.moveTo(a[0], a[1]); started = true; }
+    ctx.lineTo(b[0], b[1]);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]); ctx.restore();
 }
 
 // ════════════════ MOTIVOS SOBRE LOS OBSTÁCULOS (temática por bioma) ════════════════
@@ -2567,15 +3236,17 @@ function getWallMotifs(w) {
 }
 function drawWallMotif(m, theme) {
   const r = m.r;
-  if (theme === 0) {                                                   // PARQUE: árboles y arbustos
-    drawCircle(m.x + r*0.18, m.y + r*0.2, r*1.05, [12,45,22]);
+  if (theme === 0 || theme === 5) {                                    // PARQUE (y parque de NOCHE, atenuado vía _pc): árboles y arbustos
+    _propNight = (theme === 5);
+    drawCircle(m.x + r*0.18, m.y + r*0.2, r*1.05, _pc([12,45,22]));
     if (m.k < 0.55) {
-      drawCircle(m.x, m.y, r, [30,88,42]);
-      drawCircle(m.x - r*0.28, m.y - r*0.28, r*0.52, [70,150,82]);
-      drawCircle(m.x, m.y, r*0.16, [80,55,35]);
+      drawCircle(m.x, m.y, r, _pc([30,88,42]));
+      drawCircle(m.x - r*0.28, m.y - r*0.28, r*0.52, _pc([70,150,82]));
+      drawCircle(m.x, m.y, r*0.16, _pc([80,55,35]));
     } else {
-      for (let i = 0; i < 4; i++) { const a = i*1.7 + m.ph; drawCircle(m.x + Math.cos(a)*r*0.45, m.y + Math.sin(a)*r*0.45, r*0.5, i%2 ? [40,110,55] : [55,135,68]); }
+      for (let i = 0; i < 4; i++) { const a = i*1.7 + m.ph; drawCircle(m.x + Math.cos(a)*r*0.45, m.y + Math.sin(a)*r*0.45, r*0.5, _pc(i%2 ? [40,110,55] : [55,135,68])); }
     }
+    _propNight = false;
   } else if (theme === 1) {                                            // DESIERTO: pirámides, cactus, dunas
     if (m.k < 0.4) {
       ctx.fillStyle = rgb([205,175,115]); ctx.beginPath(); ctx.moveTo(m.x-r, m.y+r); ctx.lineTo(m.x+r, m.y+r); ctx.lineTo(m.x, m.y-r); ctx.closePath(); ctx.fill();
@@ -2682,18 +3353,39 @@ holdBtn('btnNitro', 'nitro');
 function createJoystick(zoneEl, opts) {
   opts = opts || {};
   const BASE_R = opts.baseR || 52, KNOB_R = opts.knobR || 30, DEAD = opts.dead || 7, aDead = opts.activeDead || 0;
-  const rgb = opts.rgb || '120,200,255', kRgb = opts.knobRgb || '160,220,255', kbRgb = opts.knobBorderRgb || '180,228,255';
+  const REST = opts.restMargin || 150;                               // posición de REPOSO: REST px desde la esq inf-izq
   const out = opts.target || { active: false, x: 0, y: 0, ang: 0, mag: 0 };
   const base = document.createElement('div'), knob = document.createElement('div');
-  base.style.cssText = 'position:fixed;border-radius:50%;pointer-events:none;z-index:6;display:none;width:'+(BASE_R*2)+'px;height:'+(BASE_R*2)+'px;margin:'+(-BASE_R)+'px 0 0 '+(-BASE_R)+'px;background:radial-gradient(circle at 50% 38%,rgba('+rgb+',0.10),rgba('+rgb+',0.03) 70%);border:1px solid rgba('+rgb+',0.35);box-shadow:inset 0 2px 14px rgba(0,0,0,0.5),0 0 16px rgba('+rgb+',0.25);';
-  knob.style.cssText = 'position:fixed;border-radius:50%;pointer-events:none;z-index:7;display:none;width:'+(KNOB_R*2)+'px;height:'+(KNOB_R*2)+'px;margin:'+(-KNOB_R)+'px 0 0 '+(-KNOB_R)+'px;background:radial-gradient(circle at 50% 35%,rgba('+kRgb+',0.95),rgba('+rgb+',0.55) 70%);border:1px solid rgba('+kbRgb+',0.8);box-shadow:0 3px 10px rgba(0,0,0,0.5),0 0 16px rgba('+rgb+',0.6);';
+  base.style.cssText = 'position:fixed;border-radius:50%;pointer-events:none;z-index:6;display:none;width:'+(BASE_R*2)+'px;height:'+(BASE_R*2)+'px;margin:'+(-BASE_R)+'px 0 0 '+(-BASE_R)+'px;';
+  knob.style.cssText = 'position:fixed;border-radius:50%;pointer-events:none;z-index:7;display:none;width:'+(KNOB_R*2)+'px;height:'+(KNOB_R*2)+'px;margin:'+(-KNOB_R)+'px 0 0 '+(-KNOB_R)+'px;';
   document.body.appendChild(base); document.body.appendChild(knob);
-  let id = null, ox = 0, oy = 0;
+  // COLOR DINÁMICO (= color del tanque del jugador, vía opts.colorFn): fondo/borde/glow de base y nub
+  const applyColor = col => {
+    const c = col || [120,200,255], b3 = c.map(v => Math.round(v)).join(','), k3 = modifyColor(c, 55).join(','), kb3 = modifyColor(c, 95).join(',');
+    base.style.background = 'radial-gradient(circle at 50% 38%,rgba('+b3+',0.13),rgba('+b3+',0.03) 70%)';
+    base.style.border = '1px solid rgba('+b3+',0.42)';
+    base.style.boxShadow = 'inset 0 2px 14px rgba(0,0,0,0.5),0 0 16px rgba('+b3+',0.3)';
+    knob.style.background = 'radial-gradient(circle at 50% 35%,rgba('+k3+',0.95),rgba('+b3+',0.6) 70%)';
+    knob.style.border = '1px solid rgba('+kb3+',0.85)';
+    knob.style.boxShadow = '0 3px 10px rgba(0,0,0,0.5),0 0 16px rgba('+b3+',0.6)';
+  };
+  let lastColKey = '';
+  const applyColorIfNeeded = () => { const col = opts.colorFn ? opts.colorFn() : null; const key = col ? col.join(',') : 'def'; if (key !== lastColKey) { applyColor(col); lastColKey = key; } };
+  applyColor(null);
+  let id = null, ox = 0, oy = 0, idleWanted = false;
+  const showRest = () => { const dx0 = REST, dy0 = window.innerHeight - REST; base.style.left = dx0+'px'; base.style.top = dy0+'px'; knob.style.left = dx0+'px'; knob.style.top = dy0+'px'; base.style.display = 'block'; knob.style.display = 'block'; };
+  const hideAll = () => { base.style.display = 'none'; knob.style.display = 'none'; };
+  out.idle = show => {                                                // el loop la llama: muestra la palanca EN REPOSO (default, esq inf-izq) cuando hay carrera y no se la está tocando
+    idleWanted = show;
+    if (id !== null) return;                                          // tocando → manda el dedo, no piso la posición
+    if (show) { applyColorIfNeeded(); showRest(); } else hideAll();
+  };
   zoneEl.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' || id !== null) return;
     e.preventDefault();
     id = e.pointerId; ox = e.clientX; oy = e.clientY;
     try { zoneEl.setPointerCapture(id); } catch {}
+    applyColorIfNeeded();
     base.style.left = ox+'px'; base.style.top = oy+'px'; base.style.display = 'block';
     knob.style.left = ox+'px'; knob.style.top = oy+'px'; knob.style.display = 'block';
     out.active = aDead <= 0; out.x = 0; out.y = 0; out.mag = 0;
@@ -2712,7 +3404,7 @@ function createJoystick(zoneEl, opts) {
   const end = e => {
     if (e.pointerId !== id) return;
     id = null; out.active = false; out.x = 0; out.y = 0; out.mag = 0;
-    base.style.display = 'none'; knob.style.display = 'none';
+    if (idleWanted) showRest(); else hideAll();                       // VOLVER al reposo (default) en vez de ocultar
     if (opts.onEnd) opts.onEnd();
   };
   zoneEl.addEventListener('pointerup', end);
@@ -2725,7 +3417,7 @@ function createJoystick(zoneEl, opts) {
 // Una sola palanca omnidireccional: su vector marca el RUMBO deseado (ang) y la intensidad (mag = acelerador).
 const moveStick = { active: false, ang: 0, mag: 0, x: 0, y: 0 };
 if (IS_TOUCH) createJoystick(document.getElementById('jMove'),
-  { target: moveStick, activeDead: 0.15, rgb: '120,200,255', knobRgb: '160,220,255', knobBorderRgb: '180,228,255' });
+  { target: moveStick, activeDead: 0.15, restMargin: 150, colorFn: () => (tanks[0] ? tanks[0].color : null) });   // color del tanque del jugador; reposo a 150px de la esq inf-izq
 function setupJoysticks() {}   // compat: la palanca hand-rolled se crea una vez y se posiciona sola (nada que recrear al rotar)
 
 // ── PANTALLA COMPLETA. En mobile saca la barra del navegador. iOS Safari NO soporta la Fullscreen API
@@ -2872,14 +3564,20 @@ function bakeBackground(track) {
   const bc = bgCanvas.getContext('2d');
   bc.setTransform(scaleX * dpr * bgK, 0, 0, scaleY * dpr * bgK, 0, 0);
   ctx = bc;
-  fillRect(0, 0, ww, hh, THEME_FLOOR[themeOf(track)]);
-  drawDeco(track, ww, hh);
-  for (const tp of trackpoints) tp.draw();                             // meta + grilla de largada (debajo)
-  if (poly && poly.copies) drawCorridorCarve(poly, ww, hh, track);     // mapa autogenerado (con o sin portales)
-  else if (poly) drawSmoothCorridor(poly, ww, hh);                     // 5 circuitos curados: paredes SUAVES (curvas)
-  else for (const w of walls) w.draw();                                // pistas originales: paredes con motivos
-  ctx = mainCtx;
-  bgTrack = track; bgReady = true;
+  // try/finally: pase lo que pase, ctx VUELVE al canvas principal. Si un draw tira excepción y ctx queda
+  // apuntando al offscreen, todo el render posterior iría al buffer → pantalla negra permanente.
+  try {
+    fillRect(0, 0, ww, hh, THEME_FLOOR[themeOf(track)]);
+    drawDeco(track, ww, hh);
+    drawCenterMarks(track);                                            // línea punteada del centro (parque blanco / tecno azul) — DEBAJO de la meta
+    for (const tp of trackpoints) tp.draw();                           // meta + grilla de largada — POR ENCIMA de la punteada
+    if (poly && poly.copies) drawCorridorCarve(poly, ww, hh, track);   // mapa autogenerado (con o sin portales)
+    else if (poly) drawSmoothCorridor(poly, ww, hh);                   // 5 circuitos curados: paredes SUAVES (curvas)
+    else for (const w of walls) w.draw();                             // pistas originales: paredes con motivos
+    bgTrack = track; bgReady = true;
+  } finally {
+    ctx = mainCtx;
+  }
 }
 
 // Ranking con HISTÉRESIS: mantiene un orden estable y solo intercambia dos tanques cuando el de atrás
@@ -2901,24 +3599,51 @@ function updateRanks() {
 
 // ════════════════ LOOP PRINCIPAL ════════════════
 let lastT = performance.now();
-let showFPS = false, fKeyPrev = false, dtSmoothed = 1/60;              // overlay de FPS (tecla F)
 let T = 0;                                                             // tiempo acumulado para animaciones (menú, cuenta regresiva)
 const jMoveZone = document.getElementById('jMove');
-const actBtns = document.getElementById('actBtns'), nitroRing = document.getElementById('nitroRing'), fireRing = document.getElementById('fireRing');
+const actBtns = document.getElementById('actBtns'), nitroFill = document.getElementById('nitroFill'), fireFill = document.getElementById('fireFill');
+const nfDark = document.querySelector('#btnNitro .nfDark'), fbDark = document.querySelector('#btnFire .fbDark');
 const btnFireEl = document.getElementById('btnFire'), btnNitroEl = document.getElementById('btnNitro');
 let padsShown = false, btnsShown = false;   // arrancan ocultos (en el menú)
 
 // Paredes del minimapa horneadas a un canvas chico (silueta del mundo). Se reconstruye solo al cambiar de pista.
 function minimapWallsImg(tr, mmW, mmH, sc, accent) {
-  const key = tr + '|' + Math.round(mmW * 10) + '|' + walls.length;
+  const key = tr + '|' + Math.round(mmW * 10) + '|' + walls.length + '|' + decoSeedFor(tr);   // re-hornea al cambiar de pista o al REGENERAR (cambia el seed → cambian escenografía/props)
   if (mmCanvas && mmKey === key) return mmCanvas;
   const SS = 2, cw = Math.max(1, Math.ceil(mmW * SS)), ch = Math.max(1, Math.ceil(mmH * SS));
   if (!mmCanvas) mmCanvas = document.createElement('canvas');
   mmCanvas.width = cw; mmCanvas.height = ch;
   const c = mmCanvas.getContext('2d');
   c.clearRect(0, 0, cw, ch);
-  c.fillStyle = rgb(modifyColorPerc(accent, 0.7)); c.globalAlpha = 0.55;
-  for (const w of walls) c.fillRect(w.x * sc * SS, w.y * sc * SS, Math.max(0.6 * SS, w.width * sc * SS), Math.max(0.6 * SS, w.height * sc * SS));
+  const theme = themeOf(tr), wallC = THEME_WALL[theme] || [120,120,120], floorC = THEME_FLOOR[theme] || [40,42,48];
+  const poly = TRACK_POLY[tr], ww = worldW(tr), hh = worldH(tr);
+  const prev = ctx; ctx = c;                                          // OJO: swap de ctx al canvas del minimapa → restaurar SIEMPRE (try/finally)
+  try {
+    ctx.save();
+    ctx.setTransform(sc * SS, 0, 0, sc * SS, 0, 0);                   // mundo → mini (dibujo en coords del MUNDO)
+    if (poly) {                                                        // auto/curado: refleja la PALETA real del bioma + escenografía + props
+      const rings = poly.copies || [{ outer: poly.outer, inner: poly.inner }];
+      ctx.globalAlpha = 0.85; ctx.fillStyle = rgb(wallC); ctx.fillRect(0, 0, ww, hh);   // INFIELD/OUTFIELD = color de PARED del bioma
+      const scn = getScenery(tr, ww, hh);                              // ESCENOGRAFÍA: puntitos (textura del infield); los que pisen la calle los tapa el piso (como el carve real)
+      ctx.globalAlpha = 0.5; ctx.fillStyle = rgb(modifyColorPerc(wallC, 0.5));
+      for (const it of scn.items) { ctx.beginPath(); ctx.arc(it.x, it.y, 13 + it.s * 12, 0, TAU); ctx.fill(); }
+      ctx.globalAlpha = 0.95; ctx.fillStyle = rgb(floorC);             // CALLE = color de PISO del bioma (banda outer\inner)
+      for (const r of rings) { ctx.beginPath(); smoothPath(r.outer); smoothPath(r.inner); ctx.fill('evenodd'); }
+      const fd = ensureFx(tr);                                         // PROPS visibles al costado de la pista (lo que se ve)
+      if (fd) {
+        ctx.globalAlpha = 0.92;
+        const dots = (arr, col, rW) => { if (!arr.length) return; ctx.fillStyle = rgb(col); for (const o of arr) { ctx.beginPath(); ctx.arc(o.x, o.y, rW, 0, TAU); ctx.fill(); } };
+        dots(fd.lights, [255, 150, 60], 15);                           // luces de lava (naranja)
+        dots(fd.devils, [220, 60, 50], 13);                            // diablitos (rojo)
+        dots(fd.snowmen, [236, 242, 250], 17);                         // muñecos (blanco)
+        ctx.fillStyle = 'rgb(150,200,255)'; for (const o of fd.stands) ctx.fillRect(o.x - 17, o.y - 12, 34, 24);   // tribunas (cuadradito azul)
+      }
+    } else {                                                          // originales 0-9 (sin TRACK_POLY): relleno por rects de pared (legacy)
+      ctx.globalAlpha = 0.6; ctx.fillStyle = rgb(wallC);
+      for (const w of walls) { if (w.angle !== undefined) continue; ctx.fillRect(w.x, w.y, Math.max(8, w.width), Math.max(8, w.height)); }
+    }
+    ctx.restore();
+  } finally { ctx = prev; }
   mmKey = key;
   return mmCanvas;
 }
@@ -2934,7 +3659,7 @@ function drawMinimap() {
   let ms = mmStatic;
   if (!ms || ms.tr !== tr) {
     const mmW = xper(0.17), mmH = mmW * (hh / ww);                     // mismo aspecto que el mundo
-    const mmX = SCREEN_X - mmW - xper(0.012), mmY = yper(0.15);        // arriba-derecha, debajo de los botones
+    const mmX = SCREEN_X - mmW - xper(0.012), mmY = yper(0.10);        // arriba-derecha, arrimado a los botones de la esquina
     const sc = mmW / ww, rad = yper(0.018);
     const mx = wx => mmX + wx * sc, my = wy => mmY + wy * sc;
     const accent = modifyColor(THEME_WALL[themeOf(tr)] || [120,120,120], 55);
@@ -2963,15 +3688,13 @@ function drawMinimap() {
   // recuadro de la cámara (lo que ves) — sutil
   ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.2;
   ctx.strokeRect(mx(camX), my(camY), SCREEN_X*sc, SCREEN_Y*sc);
-  // LÍNEA DE META/LARGADA (referencia): perpendicular a la pista en el waypoint 0, damero (blanco + guiones negros).
+  // LÍNEA DE META/LARGADA (referencia): perpendicular a la pista en el waypoint 0, BLANCA sólida.
   if (ms.fin) {
     const ax = ms.fin.ax, ay = ms.fin.ay, bx = ms.fin.bx, by = ms.fin.by;
     ctx.lineCap = 'round';
-    ctx.setLineDash([]); ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 3.2;
+    ctx.setLineDash([]); ctx.strokeStyle = 'rgba(255,255,255,0.98)'; ctx.lineWidth = 3.6;
     ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-    ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(0,0,0,0.9)';
-    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
-    ctx.setLineDash([]); ctx.lineCap = 'butt';
+    ctx.lineCap = 'butt';
   }
   // ítems de nitro (celestes con glow)
   for (const p of pickups) {
@@ -3014,18 +3737,21 @@ function drawTankOverlays() {
   }
 }
 
-function loop(now) {
+function frame(now) {
+  ctx = mainCtx;                                                       // DEFENSIVO: si un horneado anterior dejó ctx apuntando al canvas offscreen (excepción a mitad de bakeBackground), reseteá. Sin esto TODO el render iría al buffer → pantalla negra permanente.
   if (typeof now !== 'number') now = performance.now();
   deltaT = Math.min((now - lastT) / 1000, 0.05);                       // clamp 50ms, igual que el original
   lastT = now;
   T += deltaT;
-  dtSmoothed = dtSmoothed * 0.9 + deltaT * 0.1;
-  if (keys.F && !fKeyPrev) showFPS = !showFPS;                         // toggle por flanco
-  fKeyPrev = !!keys.F;
 
   // Auto-resize: algunos navegadores móviles no disparan 'resize' al rotar y el aviso "girá el teléfono"
   // quedaba pegado. Re-evaluar acá lo arregla de forma robusta (también ajusta address-bar, etc).
   if (window.innerWidth !== lastVW || window.innerHeight !== lastVH) resize();
+
+  // Canvas oculto (iframe del Arcade en display:none al entrar/salir de otros juegos) → tamaño 0. Saltar el
+  // frame (no hornear un fondo 0×0) e invalidar el horneado para rehacerlo al volver. Sin esto el re-ingreso
+  // podía quedar trabado con la pantalla en negro.
+  if (!canvas.width || !canvas.height || !cssW || !cssH) { bgReady = false; return; }
 
   // Limpiar a negro
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -3045,6 +3771,7 @@ function loop(now) {
     ctx.drawImage(bgCanvas, sx, sy, canvas.width * bgK, canvas.height * bgK, 0, 0, canvas.width, canvas.height);
   } else {
     bgReady = false; camX = 0; camY = 0;                              // en menú: invalidar para re-hornear al volver a carrera
+    fxTrack = -2; fxSnowballs.length = 0;                             // invalidar FX: rematch en la MISMA pista re-arma muñecos/cooldowns y limpia bolas viejas
   }
 
   // Transform a coords del MUNDO, con la cámara restada (para pistas chicas camX=camY=0 → idéntico a antes)
@@ -3053,21 +3780,25 @@ function loop(now) {
   // process + draw por sprite (paredes/waypoints YA NO están acá: viven horneados en el fondo).
   // El AuxiliaryHandler NO dibuja acá: su overlay (cuenta regresiva / tabla de torneo / pausa) va al FINAL,
   // por ENCIMA del minimapa y los punteros (antes la tabla quedaba tapada por ellos).
-  for (const sprite of sprites.slice()) { sprite.process(); if (!(sprite instanceof AuxiliaryHandler)) sprite.draw(); }
+  for (const sprite of sprites.slice()) { sprite.process(); if (!(sprite instanceof AuxiliaryHandler) && !(sprite instanceof Bomb)) sprite.draw(); }   // las bombas NO acá: se dibujan al final, por ENCIMA de todo lo in-game
   if (tanks.length) drawTankOverlays();                               // puntero + posición final POR ENCIMA de los tanques
   if (dbgView && tanks.length) {                                      // DEBUG (botón info): cajas de colisión del MAPA + waypoints
     ctx.strokeStyle = 'rgba(0,235,255,0.5)'; ctx.lineWidth = 1.5;
-    for (const w of walls) { const sx = w.x - camX, sy = w.y - camY; if (sx < SCREEN_X && sx + w.width > 0 && sy < SCREEN_Y && sy + w.height > 0) ctx.strokeRect(w.x, w.y, w.width, w.height); }
-    ctx.fillStyle = 'rgba(255,220,40,0.85)';
-    for (const tp of trackpoints) { const sx = tp.x - camX, sy = tp.y - camY; if (sx > -10 && sx < SCREEN_X+10 && sy > -10 && sy < SCREEN_Y+10) { ctx.beginPath(); ctx.arc(tp.x, tp.y, 3.5, 0, TAU); ctx.fill(); } }
+    for (const w of walls) { const cx = w.x + w.width/2, cy = w.y + w.height/2; if (cx-camX < -60 || cx-camX > SCREEN_X+60 || cy-camY < -60 || cy-camY > SCREEN_Y+60) continue;
+      if (w.angle !== undefined) { ctx.save(); ctx.translate(cx, cy); ctx.rotate(w.angle); ctx.strokeRect(-w.width/2, -w.height/2, w.width, w.height); ctx.restore(); }
+      else ctx.strokeRect(w.x, w.y, w.width, w.height); }
+    for (const tp of trackpoints) tp.debugDraw();                     // waypoints: misma lógica que el viejo F2 (circulito que se tiñe con la línea de carrera)
   }
-  if (trackpoints.length && trackpoints[0].show)                      // F2: waypoints de debug
-    for (const tp of trackpoints) tp.debugDraw();
+
+  if (main0 && !main0.menu) drawAmbientFx(main0.track);                // EFECTOS AMBIENTE animados por tema (baratos, culleados) — POR ENCIMA de los tanques
+  for (const b of bombs) b.draw();                                     // DISPAROS por ENCIMA de todo lo in-game (ambiente, tanques, escenografía); el overlay del HUD/pausa va después
 
   // ── Paso de física (Matter) ── Los process() de arriba ya aplicaron las velocidades a los cuerpos;
   // acá se integran y se espeja el resultado a this.x/y/ang (lo que lee toda la lógica de juego y el draw).
   // Paso fijo (60fps de referencia, así las velocidades quedan en px/frame). No corre en menú ni en pausa.
   const racing = tanks.length > 0;
+  const pauseShow = racing && main0 && !main0.menu;                    // hay carrera en curso (no menú)
+  if (window.__setPauseUI) window.__setPauseUI(pauseShow, pauseShow && tanks[0].pause);   // muestra el botón de pausa sólo en carrera (estilo Pong)
   if (racing && main0 && !main0.menu && !tanks[0].pause) {
     Engine.update(engine, PHYS_STEP);
     const ww = worldW(main0.track), hh = worldH(main0.track);
@@ -3084,12 +3815,13 @@ function loop(now) {
     }
     ensureNitroPickups();                                             // mantiene los ítems de nitro en la pista
     updateRanks();                                                    // posiciones estables (con histéresis)
+    updateAmbientFx(main0.track);                                     // gameplay de efectos (nieve: muñecos tiran bolas → derrape/trompo) + mover bolas
   }
 
   // HUD del loop (minimapa + FPS): fijo a pantalla → translate(cam) neutraliza el scroll de la cámara.
   ctx.save(); ctx.translate(camX, camY);
   drawMinimap();
-  if (showFPS) createText(S_font, 'FPS: ' + Math.round(1 / Math.max(1e-3, dtSmoothed)), [255,255,0], null, xper(0.93), yper(0.03));
+  // (FPS + cantidad de paredes 'W' van en el cartel de la IZQUIERDA, que toggea el botón info — debug unificado)
   ctx.restore();
 
   // Overlay del AuxiliaryHandler (cuenta regresiva / TABLA del torneo / pausa) — POR ENCIMA del HUD y todo lo demás.
@@ -3102,43 +3834,60 @@ function loop(now) {
     const overSi = hover.on && Math.abs(hover.y - yper(0.56)) < yper(0.08) && hover.x < xper(0.5);
     const overNo = hover.on && Math.abs(hover.y - yper(0.56)) < yper(0.08) && hover.x >= xper(0.5);
     createText(M_font, 'Back to menu?', [255,255,255], null, xper(0.5), yper(0.4), 18);
-    createText(M_font, 'YES', [255,150,140], modifyColorPerc([255,90,60], overSi ? 0.5 : 0.25), xper(0.38), yper(0.56), overSi ? 26 : 14);
-    createText(M_font, 'NO', [150,210,255], modifyColorPerc([120,200,255], overNo ? 0.45 : 0.22), xper(0.62), yper(0.56), overNo ? 26 : 14);
+    createText(M_font, 'YES', [255,255,255], null, xper(0.38), yper(0.56), overSi ? 26 : 14);
+    createText(M_font, 'NO', [255,255,255], null, xper(0.62), yper(0.56), overNo ? 26 : 14);
     ctx.restore();
   }
 
   // Los joysticks solo en táctil (en desktop se juega con teclado). En carrera se muestran; en el menú no.
   const inRace = !!sprites[0] && !sprites[0].menu && !sprites[0].confirmQuit;
-  // La PALANCA de movimiento sólo en táctil (en desktop se maneja con teclado).
-  const showJoy = IS_TOUCH && inRace;
+  // La PALANCA de movimiento sólo en táctil (en desktop se maneja con teclado). Al TERMINAR la carrera (el
+  // tanque del jugador ya cruzó / quedó finished) se apaga: el tanque pasa a IA y no quiero que la palanca
+  // se siga dibujando como si todavía estuviera manejando. El display:none suelta el dedo (lostpointercapture).
+  const showJoy = IS_TOUCH && inRace && !(tanks[0] && tanks[0].finished);
   if (showJoy !== padsShown) {
     padsShown = showJoy;
     jMoveZone.style.display = showJoy ? 'block' : 'none';
     if (showJoy) setupJoysticks();   // no-op (la palanca hand-rolled ya existe); se mantiene por compatibilidad
   }
+  if (moveStick.idle) moveStick.idle(showJoy);                        // palanca dibujada EN REPOSO por default (esq inf-izq) cuando hay carrera; reposiciona en resize
   // Los BOTONES de disparo/nitro se muestran SIEMPRE en carrera (también en desktop) como indicadores de
   // cooldown/carga; en desktop se usan con teclado pero se ven igual.
   if (inRace !== btnsShown) { btnsShown = inRace; actBtns.style.display = inRace ? 'flex' : 'none'; }
   // Medidores del jugador en los botones: cooldown del disparo (rojo) y carga de nitro (celeste).
-  const p = tanks[0], pl = (p && !p.ai) ? p : null;
-  if (fireRing) {
-    const cd = pl ? pl.shoot_cooling / 2 : 0;                          // 1..0 restante (cooldown = 2s)
-    fireRing.style.background = cd > 0.001
-      ? `conic-gradient(rgba(0,0,0,0.55) ${cd*360}deg, rgba(255,90,60,0.55) 0deg)`
+  // Usamos el tanque 0 SIEMPRE (aunque al terminar la carrera pase a ai): así los botones no se "apagan" de golpe
+  // al finalizar — mantienen su estado real (siguen cargando si venían en cd, o quedan como están).
+  const p = tanks[0], pl = p || null;
+  if (fireFill) {
+    const ch = pl ? Math.max(0, 1 - pl.shoot_cooling / 2) : 0;         // carga del disparo: 0 (recién disparó) → 1 (listo). cooldown = 2s
+    fireFill.style.background = ch > 0.001                             // relleno rojo de abajo hacia arriba, corte DURO en el nivel de carga
+      ? `linear-gradient(to top, rgba(255,90,60,0.92) ${ch*100}%, transparent ${ch*100}%)`
       : 'transparent';
-    // Mismo criterio para los dos botones: ENCENDIDO cuando la acción está disponible, APAGADO cuando no.
-    if (btnFireEl) btnFireEl.style.opacity = (pl && pl.shoot_cooling <= 0.001) ? '1' : '0.4';   // listo para disparar
+    if (fbDark) fbDark.style.clipPath = `inset(${(1 - ch) * 100}% 0 0 0)`;   // bomba NEGRA sólo sobre la parte cargada (blanca mientras carga)
+    if (btnFireEl) btnFireEl.style.opacity = (ch > 0.001) ? '1' : '0.4';     // visible cargando/listo, tenue apenas disparó
   }
-  if (nitroRing) {
+  if (nitroFill) {
     const n = pl ? pl.nitro : 0;
-    nitroRing.style.background = n > 0.001
-      ? `conic-gradient(rgba(90,220,255,0.95) ${n*360}deg, rgba(255,255,255,0.10) 0deg)`
+    nitroFill.style.background = n > 0.001                                                        // relleno cyan de abajo hacia arriba, corte DURO en el nivel de carga
+      ? `linear-gradient(to top, rgba(80,220,255,0.92) ${n*100}%, transparent ${n*100}%)`
       : 'transparent';
-    if (btnNitroEl) btnNitroEl.style.opacity = (n > 0.001) ? '1' : '0.4';                        // hay carga de boost
+    if (nfDark) nfDark.style.clipPath = `inset(${(1 - n) * 100}% 0 0 0)`;                          // llama oscura SÓLO sobre la parte cargada (de abajo)
+    if (btnNitroEl) btnNitroEl.style.opacity = '1';                                                // sin estado "apagado": vacío y con carga se ven igual (sólo cambia el relleno)
   }
 
+}
+// Loop resiliente: si frame() tira una excepción (transición de tamaño, estado raro al re-entrar desde el
+// Arcade, etc.) NO debe matar el rAF — si no, el loop muere y la pantalla queda congelada/negra con los
+// botones DOM vivos. El catch loguea una vez por mensaje y SIEMPRE re-agenda el próximo frame.
+function loop(now) {
+  try { frame(now); }
+  catch (e) { if (window.__loopErr !== '' + e) { console.error('CrazyTanks frame error:', e); window.__loopErr = '' + e; } }
   requestAnimationFrame(loop);
 }
+
+// Al volver a esta pestaña/iframe (re-ingreso desde el Arcade): re-medir y forzar re-horneado del fondo.
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { resize(); bgReady = false; } });
+window.addEventListener('pageshow', () => { resize(); bgReady = false; });
 
 // ── INIT ──
 resize();
@@ -3169,6 +3918,21 @@ window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true 
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
   </button>
   <div id="fpsOverlay">FPS: --</div>
+  <button id="btnPause" aria-label="pausa" title="Pausa">
+    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+  </button>
+  <script>
+    // Botón de pausa (estilo Pong): toggle vía puente; visible sólo en carrera; .on mientras está pausado.
+    (function() {
+      const btn = document.getElementById('btnPause');
+      let shown = false;
+      window.__setPauseUI = (racing, paused) => {
+        if (racing !== shown) { btn.style.display = racing ? 'flex' : 'none'; shown = racing; }
+        btn.classList.toggle('on', !!paused);
+      };
+      btn.addEventListener('pointerdown', e => { e.preventDefault(); if (window.__uiTogglePause) window.__uiTogglePause(); });
+    })();
+  </script>
   <script>
     (function() {
       let frameCount = 0, lastT = performance.now();
@@ -3178,7 +3942,7 @@ window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true 
         const now = performance.now();
         if (now - lastT >= 500) {
           const fps = Math.round(frameCount * 1000 / (now - lastT));
-          if (overlay.style.display !== 'none') overlay.textContent = 'FPS: ' + fps;
+          if (overlay.style.display !== 'none') { const w = (typeof walls !== 'undefined') ? walls.length : 0; overlay.textContent = 'FPS: ' + fps + '  W: ' + w; }
           frameCount = 0; lastT = now;
         }
         requestAnimationFrame(loop);

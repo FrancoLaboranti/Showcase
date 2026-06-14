@@ -202,6 +202,9 @@
   const INSET_K    = 1.9;         // voladizo del marco más allá de la bola del extremo, en radios
   const BASE_THK_K = 1.3;         // grosor de la base negra, en radios
   const STRING_K   = 9.0;         // largo del hilo, en radios (hilos largos ⇒ bolas más chicas, como la foto)
+  // MACETÓN (compartido por drawPlant y por el cálculo de tableLeft en layout, para no desincronizar)
+  const PLANT_CX    = 0.086;      // centro del pote, fracción de W (corrido a la izq: deja gap con la mesa al tener 10 bolas)
+  const PLANT_POTHW = 0.094;      // semiancho del pote, fracción de W (grande ⇒ macetón)
   function layout() {
     centerX = W / 2;
     // Plano de cerca: la base del péndulo se apoya sobre el CANTO de la mesa (a ~74% del alto). Arriba
@@ -228,9 +231,13 @@
     // la mesa empieza pasado el borde izquierdo de pantalla y sale por la derecha: la cuna queda
     // cerca del borde IZQUIERDO de la mesa. Pero SIEMPRE con separación visible respecto de la maceta:
     // nunca arranca a la izquierda del borde derecho del pote + un gap.
-    const potRight = W * 0.078 + W * 0.060 * 1.04;                                  // borde der del labio de la maceta (ver drawPlant)
+    const potRight = W * PLANT_CX + W * PLANT_POTHW * 1.04;                         // borde der del labio del macetón (ver drawPlant)
     const gap = Math.min(W, H) * 0.045;
-    tableLeft = Math.max(potRight + gap, frameLeft - radio * 2.5);
+    const cradleLeft = frameLeft - radio * 2.5;                                     // borde izq de la cuna (la base llega a frameLeft − 2.4·radio)
+    // La mesa SIEMPRE contiene la cuna: su borde no puede quedar a la derecha del pie. Si hay lugar,
+    // además deja un gap respecto del macetón; si la cuna es muy ancha (muchas bolas) gana la contención
+    // y el pote se mete apenas detrás del canto de la mesa.
+    tableLeft = Math.min(cradleLeft, potRight + gap);
     for (const b of balls) setPos(b);
   }
 
@@ -661,9 +668,9 @@
     }
 
     // ---- composicion (toda la planta dentro del ~22% izquierdo) ----
-    const px = W * 0.078;          // centro del pote (un pelo mas a la izquierda)
-    const lipY = H * 0.875;        // borde superior del pote
-    const pot = W * 0.060;         // semiancho del pote
+    const px = W * PLANT_CX;       // centro del pote
+    const lipY = H * 0.85;         // borde superior del pote (más arriba ⇒ cuerpo del macetón más visible)
+    const pot = W * PLANT_POTHW;   // semiancho del pote (macetón)
 
     // Sin recorte duro: la cuna se dibuja ENCIMA de la planta (en draw()), así que las hojas que se
     // estiran hacia la derecha quedan tapadas por la cuna de forma natural, sin el corte vertical feo.
@@ -906,12 +913,20 @@
         swordLeaf(cxr, cyr, ang, len, w, arch, lr > 0, (i * 29 + 7) | 0);
       }
 
-      // unos pocos brotes nuevos centrales, erguidos y cortos
-      for (let i = 0; i < 4; i++) {
-        const ang = -Math.PI / 2 + (i - 1.5) * 0.16 + (rng() - 0.5) * 0.08;
-        const len = scale * (0.46 + rng() * 0.2);
-        const w = scale * (0.04 + rng() * 0.035);
-        swordLeaf(cxr, cyr, ang, len, w, 0.28 + rng() * 0.3, false, (i * 17 + 9) | 0);
+      // ---- CORONA: hojas erguidas que LLENAN toda la copa (sin hueco arriba) ----
+      // arco superior amplio (arriba-izq → arriba-der pasando por la vertical), largo comparable a las
+      // laterales y arqueo BAJO para que se queden paradas en vez de caer hacia los costados.
+      const crownN = 9;
+      for (let i = 0; i < crownN; i++) {
+        const t = i / (crownN - 1);
+        let ang = -Math.PI * 0.84 + t * Math.PI * 0.68;                             // de arriba-izq a arriba-der
+        ang += sideBias * 0.10;
+        ang += (rng() - 0.5) * 0.10;
+        const horiz = Math.abs(Math.cos(ang));
+        const len = scale * (0.84 + horiz * 0.4) * (0.9 + rng() * 0.16);            // a la altura de las laterales
+        const w = scale * (0.05 + rng() * 0.07);                                    // ancho variado
+        const arch = 0.26 + horiz * 0.55 + rng() * 0.18;                            // arqueo bajo ⇒ erguidas, llenan la copa
+        swordLeaf(cxr, cyr, ang, len, w, arch, false, (i * 17 + 9) | 0);
       }
     }
 
@@ -923,9 +938,9 @@
     // invadir la derecha (ademas del clip duro de seguridad).
     const canes = [
       // cx,                  topY,        wBase,        leafScale, sideBias
-      [px - pot * 0.34, H * 0.52, pot * 0.21, H * 0.165, -0.7], // izq, media
-      [px + pot * 0.36, H * 0.62, pot * 0.18, H * 0.135, -0.2], // der, baja
-      [px - pot * 0.02, H * 0.32, pot * 0.26, H * 0.190, -0.35] // central, alta
+      [px - pot * 0.34, H * 0.50, pot * 0.21, H * 0.185, -0.7], // izq, media
+      [px + pot * 0.36, H * 0.59, pot * 0.18, H * 0.150, -0.2], // der, baja
+      [px - pot * 0.02, H * 0.30, pot * 0.26, H * 0.210, -0.35] // central, alta
     ];
 
     // dibujo de atras hacia adelante (la alta tapa abajo)

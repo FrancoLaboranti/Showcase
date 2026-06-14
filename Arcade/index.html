@@ -10,12 +10,57 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="icon.svg">
   <link rel="apple-touch-icon" href="icon.svg">
+  <!-- Orbitron: misma fuente que Tron/CrazyTanks, así la marca queda cohesiva. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;700;900&display=swap" rel="stylesheet">
   <title>Arcade</title>
   <style>
     * { box-sizing: border-box; }
+    /* @property + animación de :root → TODA la app comparte un único --accent que va cambiando en
+       las mismas 6 paradas del logo (rosa→amarillo→mint→cyan→violeta). Cualquier elemento que use
+       var(--accent) (cintas, glows, captions) cambia en bloque, perfectamente en fase. */
+    @property --accent {
+      syntax: '<color>';
+      inherits: true;
+      initial-value: #67e8f9;
+    }
+    :root {
+      --accent: #67e8f9;
+      animation: accentCycle 11s linear infinite;
+    }
+    @keyframes accentCycle {
+      0%   { --accent: #ff5a8a; }
+      20%  { --accent: #ffd23f; }
+      40%  { --accent: #6ee7b7; }
+      60%  { --accent: #67e8f9; }
+      80%  { --accent: #c084fc; }
+      100% { --accent: #ff5a8a; }
+    }
+    /* Mientras un juego está corriendo (iframe a pantalla completa encima), CONGELAMOS las
+       animaciones infinitas del menú y escondemos el DOM de fondo. Si no, el browser sigue
+       interpolando --accent (que vía var() invalida estilos de TODO lo que lo referencia) y eso
+       baja FPS dentro del juego, aunque visualmente no se vea nada. */
+    html.gameOpen,
+    html.gameOpen h1,
+    html.gameOpen .barAccent,
+    html.gameOpen #enter .et,
+    html.gameOpen #enter .es {
+      animation-play-state: paused;
+    }
+    html.gameOpen header,
+    html.gameOpen main,
+    html.gameOpen footer,
+    html.gameOpen #enter { visibility: hidden; }
     html, body {
       margin: 0; padding: 0; height: 100%; width: 100%;
-      background: #0d0e14;
+      /* Atmósfera: 3 manchas de color sutiles en las esquinas + base muy oscura. Le da profundidad sin
+         tapar nada (todas con alpha bajo). */
+      background:
+        radial-gradient(ellipse 70% 50% at 50% 0%,   rgba(80,120,220,0.22) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 0% 100%,  rgba(220,70,120,0.16) 0%, transparent 65%),
+        radial-gradient(ellipse 60% 50% at 100% 100%,rgba(70,200,180,0.14) 0%, transparent 65%),
+        #08090f;
       color: #e6e9ef;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
       overflow: hidden;
@@ -31,17 +76,40 @@
       padding-left: env(safe-area-inset-left);
     }
     header {
-      padding: 28px 20px 12px;
+      padding: 32px 20px 14px;
       text-align: center;
     }
+    /* Título "ARCADE": color SOLID = var(--accent), que es el mismo color que tiene CADA tile
+       en este mismo instante (el cycle vive en :root y todos lo heredan). Glow doble en el accent
+       para que pulse con cuerpo. Antes el título tenía un rainbow propio que iba por su lado y
+       desencajaba visualmente con la grilla. */
     h1 {
       margin: 0;
-      font-size: 32px; font-weight: 700; letter-spacing: 0.22em;
-      color: #ffffff;
+      font-family: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
+      font-size: 40px; font-weight: 900; letter-spacing: 0.28em;
+      /* letter-spacing agrega ese mismo espacio DESPUÉS de la última letra, así que con text-align:
+         center el bloque queda visualmente corrido a la izquierda. text-indent del mismo valor lo
+         empuja a la derecha y compensa: la palabra queda ópticamente centrada. */
+      text-indent: 0.28em;
+      color: var(--accent);
+      text-shadow:
+        0 0 2px color-mix(in srgb, var(--accent) 90%, white),
+        0 0 18px color-mix(in srgb, var(--accent) 60%, transparent),
+        0 0 38px color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+    /* Línea fina debajo del título — mismo accent que el título y los tiles. */
+    h1 + .barAccent {
+      width: 64px; height: 2px; margin: 10px auto 0;
+      background: var(--accent);
+      box-shadow: 0 0 16px var(--accent);
+      border-radius: 999px;
+      opacity: 0.85;
     }
     .subtitle {
-      margin-top: 6px;
-      font-size: 12px; letter-spacing: 0.2em;
+      margin-top: 12px;
+      font-family: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
+      font-size: 11px; font-weight: 600; letter-spacing: 0.34em;
+      text-indent: 0.34em;   /* mismo fix: compensa el espacio trailing del letter-spacing */
       color: #7d8493;
     }
     main {
@@ -51,36 +119,88 @@
     .grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-      gap: 14px;
+      gap: 18px 14px;                       /* algo más de aire entre filas porque el nombre vive bajo el tile */
       max-width: 720px; margin: 0 auto;
     }
+    /* Cell: el item de grilla. Contiene el .tile (square con la imagen) y el label debajo.
+       La animación de entrada (stagger) la lleva la cell para que se mueva todo junto.
+       NO seteamos --accent acá: lo HEREDA de :root (animado en bloque). */
+    .cell {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      animation: tileIn 0.45s cubic-bezier(0.16,1,0.3,1) both;
+      animation-delay: calc(var(--i, 0) * 35ms);
+    }
+    @keyframes tileIn { from { opacity: 0; transform: translateY(14px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
+
+    /* Tile: la TARJETA cuadrada que muestra la imagen del juego. SIEMPRE 1:1 → todas iguales. */
     .tile {
+      width: 100%;
       aspect-ratio: 1 / 1;
       border-radius: 18px;
-      background: linear-gradient(160deg, #1a1d28, #11131b);
+      background: linear-gradient(160deg, #1c1f2a, #11131b);
       border: 1px solid #262a36;
-      display: flex; flex-direction: column;
-      align-items: center; justify-content: center;
-      padding: 14px;
+      display: block;
       text-decoration: none;
       color: inherit;
-      transition: transform 0.1s ease, border-color 0.2s, background 0.2s;
+      transition: transform 0.12s ease, border-color 0.25s, box-shadow 0.25s;
       position: relative;
       overflow: hidden;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 22px rgba(0,0,0,0.32);
     }
-    .tile:active {
-      transform: scale(0.96);
-      border-color: #4a536b;
-      background: linear-gradient(160deg, #20232f, #14161f);
-    }
-    .tile-art {
-      width: 64%; height: auto; margin-bottom: 10px;
+    /* La imagen rellena la tarjeta sin deformarse: cover = se mantiene la proporción y se recorta
+       lo que sobre. Así se ve la MAYOR cantidad posible de imagen, todas las tarjetas uniformes. */
+    .tile img {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: cover;
       display: block;
+      -webkit-user-drag: none;             /* no hay forma estándar; sólo el prefijo de WebKit */
+      pointer-events: none;
     }
-    .tile .emoji { font-size: 44px; line-height: 1; margin-bottom: 8px; }
+    /* Cinta de color arriba (la firma visual de cada juego) — z-index 2 para quedar por encima de la imagen. */
+    .tile::before {
+      content: ''; position: absolute; top: 0; left: 18%; right: 18%; height: 2px; z-index: 2;
+      background: var(--accent);
+      box-shadow: 0 0 14px var(--accent);
+      opacity: 0.75;
+      border-radius: 0 0 999px 999px;
+    }
+    /* Sheen sutil top-left (suaviza el corte de la imagen contra el borde). */
+    .tile::after {
+      content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+      background: radial-gradient(ellipse 80% 60% at 28% 0%, rgba(255,255,255,0.05), transparent 60%);
+    }
+    .cell:hover .tile {
+      border-color: color-mix(in srgb, var(--accent) 45%, #262a36);
+      box-shadow:
+        0 1px 0 rgba(255,255,255,0.06) inset,
+        0 14px 36px rgba(0,0,0,0.5),
+        0 0 30px color-mix(in srgb, var(--accent) 22%, transparent);
+    }
+    .cell:active .tile {
+      transform: scale(0.95);
+      border-color: var(--accent);
+    }
+    /* Nombre del juego: caption DEBAJO de la tarjeta. Orbitron + glow doble en el accent global
+       (que está ciclando con el logo). Posición: chip sutilmente delineado con plate detrás. */
     .tile-name {
-      font-size: 14px; font-weight: 700; letter-spacing: 0.1em;
+      font-family: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
+      font-size: 13.5px; font-weight: 700; letter-spacing: 0.16em;
       color: #ffffff; text-align: center;
+      text-transform: uppercase;
+      padding: 4px 2px;
+      /* Glow doble: halo blando ancho + acento finito pegado a las letras → resalta sin ensuciar */
+      text-shadow:
+        0 0 1px color-mix(in srgb, var(--accent) 80%, white),
+        0 0 14px color-mix(in srgb, var(--accent) 55%, transparent),
+        0 0 28px color-mix(in srgb, var(--accent) 30%, transparent);
+      transition: text-shadow 0.2s;
+    }
+    .cell:hover .tile-name {
+      text-shadow:
+        0 0 1px color-mix(in srgb, var(--accent) 90%, white),
+        0 0 18px color-mix(in srgb, var(--accent) 70%, transparent),
+        0 0 34px color-mix(in srgb, var(--accent) 45%, transparent);
     }
     .tile-tag {
       font-size: 10px; color: #6a7185; margin-top: 4px; letter-spacing: 0.12em;
@@ -99,22 +219,31 @@
       padding: 24px 0;
     }
     footer {
-      padding: 8px 20px 14px; text-align: center;
-      font-size: 11px; color: #4a525f; letter-spacing: 0.1em;
+      padding: 14px 20px 18px; text-align: center;
+    }
+    /* Versión + copyright: Orbitron uppercase, finita, color bajo. Línea única; la sobreescribe
+       showLockErr si hay un fallo de orientación en mobile. */
+    footer #footerVer {
+      font-family: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
+      font-size: 10px; font-weight: 600; letter-spacing: 0.22em;
+      color: #5b6276; text-transform: uppercase;
     }
     footer a { color: #6a7185; text-decoration: none; }
     #installBtn {
       display: none;
-      margin: 12px auto 0;
-      padding: 10px 22px;
-      border: 1px solid #4a536b;
+      margin: 16px auto 0;
+      padding: 11px 24px;
+      border: 1px solid rgba(255,217,90,0.45);
       border-radius: 999px;
-      background: linear-gradient(160deg, #1a1d28, #11131b);
+      background: linear-gradient(160deg, rgba(255,217,90,0.12), rgba(255,217,90,0.04));
       color: #ffd95a;
-      font-size: 13px; font-weight: 700; letter-spacing: 0.16em;
+      font-size: 12px; font-weight: 800; letter-spacing: 0.18em;
       cursor: pointer;
       -webkit-tap-highlight-color: transparent;
+      box-shadow: 0 0 26px rgba(255,217,90,0.18), 0 6px 18px rgba(0,0,0,0.35);
+      transition: transform 0.08s ease, border-color 0.2s, box-shadow 0.2s;
     }
+    #installBtn:hover  { box-shadow: 0 0 32px rgba(255,217,90,0.28), 0 6px 22px rgba(0,0,0,0.4); border-color: rgba(255,217,90,0.75); }
     #installBtn:active { transform: scale(0.96); border-color: #ffd95a; }
     #installBtn.show { display: inline-block; }
 
@@ -137,10 +266,12 @@
       }
     }
 
-    /* Botón "salir de la app" (cierra la PWA). Sólo visible cuando estamos en PWA instalada
-       (display-mode: standalone/fullscreen). En pestaña del browser window.close() está
-       bloqueado por Chrome, así que el botón no tendría función — se oculta para evitar
-       confusión. El usuario cierra la pestaña con la ✕ del browser como cualquier otra web. */
+    /* Botón "salir de la app" (cierra la PWA). Sólo visible cuando es PWA INSTALADA
+       (display-mode: standalone/minimal-ui). NO incluimos display-mode: fullscreen — la shell
+       del Arcade entra en fullscreen al lanzar un juego y eso encendía el botón aunque estuvieras
+       en pestaña común. En pestaña del browser window.close() está bloqueado por Chrome, así que
+       el botón no tendría función — se oculta para evitar confusión. iOS Safari home-screen
+       (navigator.standalone === true) se prende vía body.pwa-ios más abajo. */
     #exitApp {
       position: fixed; z-index: 50;
       top: calc(env(safe-area-inset-top) + 10px);
@@ -151,23 +282,73 @@
       -webkit-tap-highlight-color: transparent;
       transition: transform 0.08s, border-color 0.15s, color 0.15s;
     }
-    @media (display-mode: standalone), (display-mode: fullscreen), (display-mode: minimal-ui) {
+    @media (display-mode: standalone), (display-mode: minimal-ui) {
       #exitApp { display: flex; }
     }
+    body.pwa-ios #exitApp { display: flex; }
     #exitApp:active { transform: scale(0.92); border-color: #ff8a8e; color: #ff8a8e; }
     #exitApp svg { width: 18px; height: 18px; display: block; }
+
+    /* Botón ⛶ del Arcade: SÓLO en pestaña del navegador (cuando NO sos PWA). En la PWA instalada
+       el botón redundante sería el de "salir de la app" (#exitApp), así que ahí se oculta. Sirve para
+       que el usuario que entró por el browser pueda salir de la fullscreen que la shell pidió al lanzar
+       un juego, o ENTRAR a fullscreen manualmente desde el menú. */
+    #fsApp {
+      position: fixed; z-index: 50;
+      top: calc(env(safe-area-inset-top) + 10px);
+      right: calc(env(safe-area-inset-right) + 12px);
+      width: 36px; height: 36px; border-radius: 50%; padding: 0;
+      border: 1px solid #3a4154; background: rgba(20,22,30,0.82); color: #9aa3b6;
+      display: flex; align-items: center; justify-content: center; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+      transition: transform 0.08s, border-color 0.15s, color 0.15s;
+    }
+    /* En PWA instalada (standalone / minimal-ui / iOS home-screen) se oculta — ya está #exitApp. */
+    @media (display-mode: standalone), (display-mode: minimal-ui) { #fsApp { display: none; } }
+    body.pwa-ios #fsApp { display: none; }
+    #fsApp:hover  { border-color: #6ee7b7; color: #6ee7b7; }
+    #fsApp:active { transform: scale(0.92); border-color: #6ee7b7; color: #6ee7b7; }
+    #fsApp svg { width: 18px; height: 18px; display: block; }
+    /* Toggle del ícono enter/exit según body.fs-on (lo seteamos en fullscreenchange). */
+    #fsApp .ic-exit { display: none; }
+    body.fs-on #fsApp .ic-enter { display: none; }
+    body.fs-on #fsApp .ic-exit  { display: block; }
 
     /* Pantalla de entrada: el toque acá es el gesto que activa fullscreen al abrir la app
        (un gesto NO se puede simular por código — isTrusted/activation lo impiden). */
     #enter {
       position: fixed; inset: 0; z-index: 500; cursor: pointer;
-      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-      background: #0d0e14; color: #e6e9ef; text-align: center; padding: 24px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+      background:
+        radial-gradient(ellipse 70% 60% at 50% 50%, rgba(80,120,220,0.18) 0%, transparent 60%),
+        #08090f;
+      color: #e6e9ef; text-align: center; padding: 24px;
     }
     #enter.hide { display: none; }
-    #enter .et { font-size: 30px; font-weight: 700; letter-spacing: 0.24em; color: #fff; }
-    #enter .es { font-size: 13px; letter-spacing: 0.24em; color: #7d8493; animation: blink 1.4s steps(2, start) infinite; }
-    #enter .ev { margin-top: 20px; font-size: 11px; letter-spacing: 0.22em; color: #4a525f; }
+    /* Mismo gradiente arcade que el header (sincronizado) */
+    /* Mismo tratamiento que el h1 del menú: color = var(--accent) global. Cuando el splash desaparece
+       y aparece el menú, el ARCADE de uno y otro están EXACTAMENTE en el mismo color (cero salto). */
+    #enter .et {
+      font-family: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
+      font-size: 40px; font-weight: 900; letter-spacing: 0.28em;
+      text-indent: 0.28em;
+      color: var(--accent);
+      text-shadow:
+        0 0 2px color-mix(in srgb, var(--accent) 90%, white),
+        0 0 22px color-mix(in srgb, var(--accent) 65%, transparent),
+        0 0 44px color-mix(in srgb, var(--accent) 35%, transparent);
+    }
+    /* "TOCÁ PARA ENTRAR" como chip — más button-y, igual flashea suave */
+    #enter .es {
+      font-size: 12px; letter-spacing: 0.28em; color: #cbd5e1;
+      padding: 10px 20px; border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.04);
+      box-shadow: 0 0 24px rgba(120,200,255,0.10) inset, 0 6px 18px rgba(0,0,0,0.4);
+      animation: chipPulse 1.8s ease-in-out infinite;
+    }
+    @keyframes chipPulse { 0%, 100% { box-shadow: 0 0 24px rgba(120,200,255,0.10) inset, 0 6px 18px rgba(0,0,0,0.4); opacity: 1; } 50% { box-shadow: 0 0 36px rgba(120,200,255,0.22) inset, 0 6px 22px rgba(0,0,0,0.4); opacity: 0.92; } }
+    #enter .ev { margin-top: 22px; font-size: 11px; letter-spacing: 0.22em; color: #4a525f; }
     @keyframes blink { 50% { opacity: 0.25; } }
   </style>
 </head>
@@ -182,9 +363,14 @@
   <button id="exitApp" aria-label="salir de la app" title="Salir de la app">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/></svg>
   </button>
+  <!-- Botón ⛶ del Arcade — sólo en navegador (no PWA). Toggla fullscreen al nivel de la shell. -->
+  <button id="fsApp" aria-label="pantalla completa" title="Pantalla completa">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+  </button>
 
   <header>
     <h1>ARCADE</h1>
+    <div class="barAccent"></div>
     <div class="subtitle">PROTOTIPOS</div>
     <button id="installBtn">⬇ INSTALAR APP</button>
   </header>
@@ -193,7 +379,9 @@
     <div class="grid" id="grid"><!-- tiles generadas por JS (ver GAMES) --></div>
   </main>
 
-  <footer id="footerVer"></footer>
+  <footer>
+    <div id="footerVer"></div>
+  </footer>
 
   <!-- Reproductor: el juego vive acá adentro (iframe creado por JS), sin navegar -->
   <div id="player"></div>
@@ -201,43 +389,63 @@
   <script>
     // Versión visible (splash + footer). SUBIR este número en cada update → permite confirmar
     // de un vistazo si la PWA tomó el último deploy (Android cachea fuerte).
-    const VERSION = 'v1.0';
+    const VERSION = 'v1.5';
     { const sv = document.getElementById('splashVer'); if (sv) sv.textContent = VERSION;
-      const fv = document.getElementById('footerVer'); if (fv) fv.textContent = VERSION + ' · prototipo'; }
+      const fv = document.getElementById('footerVer'); if (fv) fv.textContent = VERSION + ' · © 2026 Franco Laboranti'; }
 
-    // Catálogo de juegos: [emoji, nombre, ruta (relativa a /Arcade/), orientación].
+    // iOS Safari "Add to Home Screen": en versiones viejas no matchea (display-mode: standalone),
+    // así que detectamos por navigator.standalone y agregamos body.pwa-ios → el CSS de #exitApp lo prende.
+    if (window.navigator.standalone === true) document.body.classList.add('pwa-ios');
+
+    // Catálogo de juegos: [thumb (archivo en thumbnails/), nombre, ruta, orientación].
     // 'landscape' rota el iframe por CSS (sostenés el celu de costado); 'portrait' = normal.
+    // El color de cada tarjeta ya NO se setea por juego: lo hereda del --accent GLOBAL que cicla
+    // sincronizado con el shine del logo (ver @property + @keyframes accentCycle al inicio del CSS).
+    // El 5° campo (hue) queda como dato histórico, lo ignora el factory.
     const GAMES = [
-      ['🔮', 'Canicas',      'Balls/BallsWeb/',                 'portrait'],
-      ['♟️', 'Ajedrez',       'Chess/ChessWeb/',                 'portrait'],
-      ['🕐', 'Reloj',         'Clock/ClockWeb/',                 'portrait'],
-      ['🚜', 'Crazy Tanks',   'CrazyTanks/CrazyTanksWeb/',       'landscape'],
-      ['🎆', 'Fuegos',        'Fireworks/FireworksWeb/',         'portrait'],
-      ['🎇', 'Fuegos V2',     'FireworksV2/FireworksV2Web/',     'landscape'],
-      ['🔤', 'Ahorcado',      'Hangman/HangmanWeb/',             'portrait'],
-      ['💣', 'Buscaminas',    'MineSweeperGPT/MineSweeperWeb/',  'portrait'],
-      ['⚪', 'Mini Canicas',  'MiniBalls/MiniBallsWeb/',         'portrait'],
-      ['🌀', 'Péndulo',       "Newton's Cradle/NewtonsCradleWeb/", 'landscape'],
-      ['🃏', 'Póker',         'Poker/PokerWeb/',                 'landscape'],
-      ['🏓', 'Pong',          'Pong/PongWeb/',                   'landscape'],
-      ['🎵', 'Simón Dice',    'SimonSays/SimonSaysWeb/',         'portrait'],
-      ['🐍', 'Snake',         'Snake/SnakeWeb/',                 'portrait'],
-      ['💥', 'Tank Wars',     'TankWARS/TankWARSWeb/',           'landscape'],
-      ['❌', 'Ta-Te-Ti',      'Tateti/TatetiWeb/',               'portrait'],
-      ['🏍️', 'Tron',          'Tron/TronWeb/',                   'portrait'],
-      ['🏍️', 'Tron V2',       'TronV2/TronV2Web/',               'landscape'],
+      ['Snake.png',          'Snake',         'Snake/SnakeWeb/',                   'portrait',  '#84cc16'],
+      ['TankWars.png',       'Tank Wars',     'TankWARS/TankWARSWeb/',             'landscape', '#f59e0b'],
+      ['CrazyTanks.png',     'Crazy Tanks',   'CrazyTanks/CrazyTanksWeb/',         'landscape', '#fb923c'],
+      ['Pong.png',           'Sleepy Pong',   'Pong/PongWeb/',                     'landscape', '#6ee7b7'],
+      ['Balls.png',          'Canicas',       'Balls/BallsWeb/',                   'portrait',  '#c084fc'],
+      ['MiniBalls.png',      'Mini Canicas',  'MiniBalls/MiniBallsWeb/',           'portrait',  '#67e8f9'],
+      ['Fireworks.png',      'Fuegos',        'Fireworks/FireworksWeb/',           'portrait',  '#f472b6'],
+      ['FireworksV2.png',    'Fuegos V2',     'FireworksV2/FireworksV2Web/',       'landscape', '#22d3ee'],
+      ['Tron.png',           'Tron',          'Tron/TronWeb/',                     'portrait',  '#38bdf8'],
+      ['TronV2.png',         'Tron V2',       'TronV2/TronV2Web/',                 'landscape', '#fb7185'],
+      ['DonkeyKong.png',     'Donkey Kong',   'DonkeyKong/DonkeyKongWeb/',         'portrait',  '#e83b2a'],
+      ['Pacman.png',         'Pac-Man',       'Pacman/PacmanWeb/',                 'portrait',  '#ffe300'],
+      ['Chess.png',          'Ajedrez',       'Chess/ChessWeb/',                   'portrait',  '#fbbf24'],
+      ['Clock.png',          'Reloj',         'Clock/ClockWeb/',                   'portrait',  '#94a3b8'],
+      ['MineSweeper.png',    'Buscaminas',    'MineSweeperGPT/MineSweeperWeb/',    'portrait',  '#ef4444'],
+      ['Hangman.png',        'Ahorcado',      'Hangman/HangmanWeb/',               'portrait',  '#a3e635'],
+      ['NewtonsCradle.png',  'Péndulo',       "Newton's Cradle/NewtonsCradleWeb/", 'landscape', '#5eead4'],
+      ['Poker.png',          'Póker',         'Poker/PokerWeb/',                   'landscape', '#dc2626'],
+      ['Simon.png',          'Simón Dice',    'SimonSays/SimonSaysWeb/',           'portrait',  '#e879f9'],
+      ['Tateti.png',         'Ta-Te-Ti',      'Tateti/TatetiWeb/',                 'portrait',  '#60a5fa'],
     ];
     {
       const grid = document.getElementById('grid');
-      for (const [ico, name, path, orient] of GAMES) {
+      let idx = 0;
+      for (const [thumb, name, path, orient] of GAMES) {
         const src = encodeURI('../' + path);   // codifica el espacio de "Newton's Cradle"
+        // cell = item de grilla. Sólo lleva el stagger; el --accent es GLOBAL y cicla con el logo.
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.style.setProperty('--i', idx++);
         const a = document.createElement('a');
         a.className = 'tile';
         a.href = src;                            // fallback si se abre suelto (sin la shell)
         a.dataset.src = src;
         a.dataset.orient = orient;
-        a.innerHTML = '<span class="emoji">' + ico + '</span><span class="tile-name">' + name + '</span>';
-        grid.appendChild(a);
+        a.setAttribute('aria-label', name);
+        a.innerHTML = '<img src="thumbnails/' + thumb + '" alt="">';
+        const label = document.createElement('div');
+        label.className = 'tile-name';
+        label.textContent = name;
+        cell.appendChild(a);
+        cell.appendChild(label);
+        grid.appendChild(cell);
       }
     }
 
@@ -276,6 +484,21 @@
       try { window.close(); } catch (e) {}
     });
 
+    // Botón ⛶ del Arcade (sólo navegador, no PWA): toggla fullscreen al nivel de la shell. El click ES
+    // un gesto de usuario, así que requestFullscreen no se rechaza por falta de activación.
+    document.getElementById('fsApp').addEventListener('click', () => {
+      const doc = document, root = doc.documentElement;
+      if (doc.fullscreenElement || doc.webkitFullscreenElement) {
+        try { (doc.exitFullscreen || doc.webkitExitFullscreen).call(doc); } catch (e) {}
+      } else {
+        try {
+          const req = root.requestFullscreen || root.webkitRequestFullscreen;
+          const p = req && req.call(root);
+          if (p && p.catch) p.catch(() => {});
+        } catch (e) {}
+      }
+    });
+
     // ── ORIENTACIÓN + REPRODUCTOR (shell) ─────────────────────────────────────
     const player = document.getElementById('player');
     const root   = document.documentElement;
@@ -303,6 +526,10 @@
       });
     }
     function showLockErr(msg) {
+      // En desktop screen.orientation.lock NUNCA está soportado → tira NotSupportedError siempre.
+      // Mostrarlo en el footer era un falso positivo (no es bug del Arcade), así que lo silenciamos.
+      // Cualquier OTRO error (típicamente de Android: "SecurityError", "AbortError") sigue mostrándose.
+      if (msg === 'NotSupportedError') return;
       const fv = document.getElementById('footerVer');
       if (fv) fv.textContent = VERSION + ' · lock✗ ' + msg;
     }
@@ -350,6 +577,9 @@
     // cierra la app (para volver al menú se usa la ✕ del juego).
     function launch(src, orient) {
       requestFs().catch(() => {});   // fullscreen para el notch; el aparato NO rota (portrait fijo)
+      // html.gameOpen → CSS pausa todas las animaciones infinitas del menú y oculta el DOM de fondo.
+      // Sin esto, --accent ciclando en :root invalidaba estilos del documento padre cada frame → FPS↓.
+      document.documentElement.classList.add('gameOpen');
       frame = document.createElement('iframe');
       frame.id = 'frame';
       frame.allow = 'fullscreen; accelerometer; gyroscope; autoplay';
@@ -364,7 +594,18 @@
     function closeGame() {
       if (!player.classList.contains('show')) return;   // evita doble cierre
       player.classList.remove('show');
-      if (frame) { frame.remove(); frame = null; }       // destruye el juego
+      document.documentElement.classList.remove('gameOpen');   // reanuda animaciones del menú
+      if (frame) {
+        // about:blank ANTES de remove(): fuerza al renderer a TIRAR YA el documento del juego
+        // (canvases, buffers de GPU, AudioContext, mundos de Matter, loops de requestAnimationFrame).
+        // Un remove() pelado deja esa memoria "colgada" un rato en mobile —iOS Safari tiene un budget
+        // de canvas POR PESTAÑA, y todos los iframes la comparten—. Tras varios juegos el renderer
+        // quedaba cerca del techo y el siguiente que alocaba mucho al cargar (Pong hornea fondo +
+        // sprites de ladrillo) fallaba: negro y después el ícono de "imagen rota" (subframe crasheado).
+        // Navegar a blank descarga el documento en el acto; recién ahí lo removemos.
+        try { frame.src = 'about:blank'; } catch (e) {}
+        frame.remove(); frame = null;
+      }
       lockOrient('portrait');                            // menú vertical
     }
 
@@ -390,10 +631,13 @@
     });
     // Al (re)entrar a fullscreen, re-fijar portrait (el lock sólo agarra confiable en fullscreen,
     // y un toggle pudo soltarlo). Además avisamos al juego el estado para que sincronice el ícono.
+    // body.fs-on alimenta el toggle ⛶↔⊞ del #fsApp.
     document.addEventListener('fullscreenchange', () => {
-      if (document.fullscreenElement) lockPortrait();
+      const on = !!document.fullscreenElement;
+      document.body.classList.toggle('fs-on', on);
+      if (on) lockPortrait();
       if (frame && frame.contentWindow) {
-        try { frame.contentWindow.postMessage({ type: 'arcade:fs-state', on: !!document.fullscreenElement }, '*'); } catch (x) {}
+        try { frame.contentWindow.postMessage({ type: 'arcade:fs-state', on }, '*'); } catch (x) {}
       }
     });
   </script>

@@ -6,7 +6,7 @@
 <title>Chess</title>
 <link rel="stylesheet" href="../../Arcade/arcade-shell.css">
 <style>
-  :root { --bar-height: 48px; }
+  :root { --bar-height: 48px; --safe-top: env(safe-area-inset-top, 0px); }
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     width: 100%; height: 100%;
@@ -79,40 +79,154 @@
     font-weight: 500;
   }
 
-  /* Barra de controles inferior — glassmorphism */
+  /* Pantalla de selección de dificultad (segundo paso después de elegir modo) */
+  #diffMenu {
+    position: absolute; inset: 0; z-index: 5;
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    padding: 24px;
+    background:
+      radial-gradient(ellipse at 50% 30%, rgba(60,55,80,0.5) 0%, transparent 55%),
+      linear-gradient(180deg, #18161e 0%, #0e0d12 100%);
+    animation: fadeIn 0.3s ease;
+  }
+  #diffMenu.show { display: flex; }
+  #diffMenu h2 {
+    font-size: clamp(20px, 4vw, 28px);
+    font-weight: 300; letter-spacing: 0.18em;
+    color: #e8e8f0; margin-bottom: 30px; text-transform: uppercase;
+  }
+  #diffMenu .diff-section { width: 100%; max-width: 380px; margin: 8px 0; }
+  #diffMenu .diff-label {
+    font-size: 11px; color: rgba(200,200,220,0.55);
+    letter-spacing: 0.18em; text-transform: uppercase;
+    margin-bottom: 10px; text-align: center; font-weight: 500;
+  }
+  #diffMenu .diff-row {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px;
+  }
+  #diffMenu .diff-btn {
+    padding: 12px 4px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.015) 100%);
+    border: 1px solid rgba(255,255,255,0.10); border-radius: 10px;
+    color: #ccd;
+    font-family: inherit; font-size: 12px; font-weight: 500;
+    cursor: pointer; touch-action: manipulation;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    transition: all 0.14s ease;
+  }
+  #diffMenu .diff-btn .elo {
+    font-size: 9px; color: rgba(200,200,220,0.42);
+    letter-spacing: 0.08em; font-weight: 400;
+  }
+  #diffMenu .diff-btn.on {
+    background: linear-gradient(180deg, rgba(140,200,140,0.30) 0%, rgba(80,140,80,0.12) 100%);
+    border-color: rgba(180,220,180,0.55);
+    color: #fff;
+  }
+  #diffMenu .diff-btn.on .elo { color: rgba(220,235,220,0.65); }
+  #diffMenu .diff-btn:active { transform: scale(0.96); }
+  #diffMenu #diffStart {
+    margin-top: 28px; padding: 14px 42px; max-width: 380px; width: 100%;
+    background: linear-gradient(180deg, rgba(140,200,140,0.22) 0%, rgba(80,140,80,0.10) 100%);
+    border: 1px solid rgba(180,220,180,0.40);
+    color: #f4f4f8; border-radius: 12px;
+    font-family: inherit; font-size: 15px; font-weight: 500; letter-spacing: 0.06em;
+    cursor: pointer; touch-action: manipulation;
+    transition: all 0.18s ease;
+  }
+  #diffMenu #diffStart:active { transform: scale(0.985); }
+  #diffMenu #diffStart:disabled { opacity: 0.35; pointer-events: none; }
+
+  /* ── Píldora flotante de navegación de historial (abajo-centro) ── */
+  /* Sólo los 4 botones de scrub viven acá. El resto (pausa/atrás/fs/info/exit)
+     vive en el cluster .cbtn arriba-derecha. */
   #bar {
-    position: absolute; left: 0; right: 0; bottom: 0;
-    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
-    padding: 0 12px env(safe-area-inset-bottom);
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(10,10,16,0.72);
-    backdrop-filter: blur(18px) saturate(140%);
-    -webkit-backdrop-filter: blur(18px) saturate(140%);
-    border-top: 1px solid rgba(255,255,255,0.06);
-    box-shadow: 0 -1px 0 rgba(255,255,255,0.03) inset, 0 -8px 24px rgba(0,0,0,0.2);
+    position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom) + 10px);
+    transform: translateX(-50%);
+    display: flex; align-items: center; gap: 4px;
+    padding: 5px 7px; border-radius: 999px;
+    background: rgba(22,18,14,0.74);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid rgba(240,225,195,0.18);
+    box-shadow: 0 6px 22px rgba(0,0,0,0.4), 0 1px 0 rgba(240,225,195,0.05) inset;
     z-index: 3;
-    gap: 12px;
   }
   #bar button {
-    height: 34px; min-width: 38px; padding: 0 11px;
-    border-radius: 8px;
-    border: 1px solid rgba(255,255,255,0.10);
-    background: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
-    color: #f0f0f4; font-family: inherit; font-size: 12px; font-weight: 500;
+    width: 34px; height: 34px; padding: 0;
+    border-radius: 50%;
+    border: 1px solid rgba(240,225,195,0.16);
+    background: rgba(0,0,0,0.25);
+    color: rgba(240,225,195,0.85);
     display: flex; align-items: center; justify-content: center;
     cursor: pointer; touch-action: manipulation;
-    transition: all 0.14s ease;
-    box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset;
+    transition: background 0.12s, border-color 0.14s, transform 0.08s;
   }
-  #bar button:hover {
-    background: linear-gradient(180deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0.05) 100%);
-    border-color: rgba(255,255,255,0.20);
-  }
-  #bar button:active { background: rgba(255,255,255,0.22); transform: scale(0.94); }
-  #bar button.icon { padding: 0 9px; }
-  #btnMenu { padding: 0 10px; min-width: 0; }
+  #bar button:hover { background: rgba(240,225,195,0.10); border-color: rgba(240,225,195,0.32); }
+  #bar button:active { background: rgba(255,184,58,0.30); border-color: rgba(255,184,58,0.55); transform: scale(0.92); }
   #bar button svg { display: block; width: 15px; height: 15px; pointer-events: none; }
-  #bar .sep { width: 1px; height: 22px; background: rgba(255,255,255,0.10); margin: 0 4px; }
+
+  /* ── Cluster de botones de esquina (estilo Pong/CrazyTanks) ── */
+  /* Cinco botones chicos camuflados arriba-derecha. Cada uno tiene un offset
+     específico (calc desde derecha) que los apila en línea. La paleta es la de
+     Chess (cream/ámbar) en vez del cian/magenta de Pong. */
+  .cbtn {
+    position: absolute; top: calc(8px + env(safe-area-inset-top));
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 1px solid rgba(240,225,195,0.22);
+    background: rgba(22,18,14,0.55);
+    color: rgba(230,220,200,0.60);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0; z-index: 10;
+    transition: background 0.1s, transform 0.08s, border-color 0.12s, color 0.12s;
+  }
+  .cbtn svg { display: block; width: 15px; height: 15px; pointer-events: none; }
+  .cbtn:focus { outline: none; }
+  @media (hover: hover) { .cbtn:hover { color: #fff; border-color: rgba(255,184,58,0.50); } }
+  .cbtn:active { transform: scale(0.9); background: rgba(255,184,58,0.28); border-color: rgba(255,184,58,0.55); color: #fff; }
+  .cbtn.on { background: rgba(255,184,58,0.28); border-color: rgba(255,184,58,0.55); color: #fff; }
+  /* Cluster derecho, de afuera hacia adentro: ✕ salir · ⓘ info · ⛶ pantalla · ⮌ atrás · ⏸ pausa */
+  /* Los offsets de right son específicos por id; los colores los normalizamos al
+     style de .cbtn (arcade-shell.css tenía sus propias reglas ID-level que pisaban
+     mi .cbtn, generando 2 paletas distintas en el cluster). */
+  #btnExit, #btnInfo, #btnFs, #btnBack, #btnPause {
+    width: 30px; height: 30px; border-radius: 50%;
+    border: 1px solid rgba(240,225,195,0.22);
+    background: rgba(22,18,14,0.55);
+    color: rgba(230,220,200,0.60);
+    align-self: auto; margin-bottom: 0;
+  }
+  #btnExit, #btnInfo, #btnFs, #btnBack, #btnPause { display: flex; align-items: center; justify-content: center; }
+  #btnExit  svg, #btnInfo svg, #btnFs svg, #btnBack svg, #btnPause svg {
+    width: 15px; height: 15px;
+  }
+  #btnExit  { right: calc(8px + env(safe-area-inset-right)); }
+  #btnInfo  { right: calc(46px + env(safe-area-inset-right)); }
+  #btnFs    { right: calc(84px + env(safe-area-inset-right)); }
+  #btnBack  { right: calc(122px + env(safe-area-inset-right)); }
+  #btnPause { right: calc(160px + env(safe-area-inset-right)); }
+  #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; }
+  /* atrás visible en menú de dificultad y en partida; pausa SÓLO en partida */
+  #btnBack, #btnPause { display: none; }
+  body.canback  #btnBack  { display: flex; }
+  body.playing  #btnPause { display: flex; }
+  /* icono fullscreen: cambia según body.fs-on */
+  #btnFs .ic-exit { display: none; }
+  body.fs-on #btnFs .ic-enter { display: none; }
+  body.fs-on #btnFs .ic-exit  { display: block; }
+  /* Override arcade-shell.css: incluso embedded, mostramos el toggle (la shell padre
+     no tiene su propio botón, este sí postMessage-ea el toggle hacia arriba). */
+  body.embedded #btnFs { display: flex; }
+
+  /* FPS overlay (toggleado por btnInfo) */
+  #fpsOverlay {
+    position: absolute; left: calc(8px + env(safe-area-inset-left));
+    top: calc(8px + env(safe-area-inset-top));
+    font-family: monospace; font-size: 12px;
+    color: rgba(255,255,255,0.85);
+    background: rgba(0,0,0,0.55); padding: 3px 8px; border-radius: 6px;
+    display: none; pointer-events: none; z-index: 9;
+  }
 
   #hint {
     position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -143,29 +257,51 @@
     <div class="engine-line" id="engineLine">Cargando Stockfish…</div>
   </div>
 
-  <div id="bar" style="display:none">
-  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+  <div id="diffMenu">
+    <h2 id="diffTitle">Dificultad</h2>
+    <div class="diff-section" id="diffSectionW">
+      <div class="diff-label" id="diffLabelW">Dificultad de la IA</div>
+      <div class="diff-row" id="diffRowW"></div>
+    </div>
+    <div class="diff-section" id="diffSectionB" style="display:none">
+      <div class="diff-label">Dificultad de las negras</div>
+      <div class="diff-row" id="diffRowB"></div>
+    </div>
+    <button id="diffStart" style="display:none">Empezar</button>
+  </div>
+
+  <!-- Cluster de esquina (patrón Pong): pausa · atrás · pantalla · info · salir.
+       Pausa sólo aparece en partida; atrás aparece en setup de dificultad o en partida. -->
+  <button class="cbtn" id="btnExit" aria-label="salir" title="Salir del Arcade">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
-<button id="btnFirst" class="icon" title="Posición inicial" aria-label="inicio">
+  <button class="cbtn" id="btnInfo" aria-label="info" title="Info (FPS)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+  </button>
+  <button class="cbtn" id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+  </button>
+  <button class="cbtn" id="btnBack" aria-label="atrás" title="Atrás / volver al menú">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg>
+  </button>
+  <button class="cbtn" id="btnPause" aria-label="pausa" title="Pausa">
+    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+  </button>
+  <div id="fpsOverlay">FPS: --</div>
+
+  <!-- Barra inferior: SÓLO los 4 botones de scrub del historial (estilo píldora). -->
+  <div id="bar" style="display:none">
+    <button id="btnFirst" title="Posición inicial" aria-label="inicio">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 6l-6 6 6 6M19 6l-6 6 6 6"/></svg>
     </button>
-    <button id="btnPrev" class="icon" title="Anterior" aria-label="anterior">
+    <button id="btnPrev" title="Anterior" aria-label="anterior">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
     </button>
-    <button id="btnNext" class="icon" title="Siguiente" aria-label="siguiente">
+    <button id="btnNext" title="Siguiente" aria-label="siguiente">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
     </button>
-    <button id="btnLast" class="icon" title="Posición actual" aria-label="ultimo">
+    <button id="btnLast" title="Posición actual" aria-label="ultimo">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 6l6 6-6 6M5 6l6 6-6 6"/></svg>
-    </button>
-    <div class="sep"></div>
-    <button id="btnReset" class="icon" title="Reiniciar partida" aria-label="reiniciar">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/></svg>
-    </button>
-    <button id="btnMenu"  title="Volver al menú">Menú</button>
-    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
   </div>
 
@@ -713,13 +849,18 @@
     tryNext();
   }
 
-  function askStockfish(fen, timeMs) {
+  function askStockfish(fen, timeMs, skillLevel) {
     return new Promise((resolve) => {
       if (!stockfishReady || !stockfishWorker) { resolve(null); return; }
       if (stockfishPending) {            // defensivo — no debería pasar
         stockfishPending.resolve(null);
       }
       stockfishPending = { resolve, depth: 0, seldepth: 0 };
+      // Setear Skill Level (0–20) por jugada — la opción es global pero cambia
+      // entre llamadas, así que en IA vs IA puede ser distinto por turno.
+      if (typeof skillLevel === 'number') {
+        stockfishWorker.postMessage('setoption name Skill Level value ' + skillLevel);
+      }
       stockfishWorker.postMessage('position fen ' + fen);
       stockfishWorker.postMessage('go movetime ' + timeMs);
     });
@@ -800,6 +941,9 @@
     aiColor: null,          // 'w' | 'b' | null
     humanColor: null,
     aiBoth: false,
+    aiSkillW: 4,            // id de AI_LEVELS (0..4) para las blancas (si juegan IA)
+    aiSkillB: 4,            // id de AI_LEVELS (0..4) para las negras (si juegan IA)
+    paused: false,          // pausa global — tickClock + triggerAI + handlePress se gatillan en false
     flip: false,
     grid: initialGrid(),
     turn: 'w',
@@ -847,14 +991,20 @@
     const now = performance.now();
     if (game.state === 'play' && !game.gameOver
         && !isViewingHistory() && game.clockLastTick > 0) {
-      const dt = now - game.clockLastTick;
-      if (game.turn === 'w') game.clockW = Math.max(0, game.clockW - dt);
-      else                   game.clockB = Math.max(0, game.clockB - dt);
-      if (game.clockW <= 0 || game.clockB <= 0) {
-        game.status = 'timeout';
-        game.gameOver = true;
-        play('end');
-        if (game.aiWorker) { game.aiWorker.terminate(); game.aiWorker = null; }
+      // El reloj corre en general SALVO en pausa — EXCEPTO si es turno de la IA
+      // y está pensando: ahí le seguimos cobrando su tiempo aunque la pausa esté
+      // activa (sino se exploitea pausando justo cuando la IA arranca a pensar).
+      const aiBilling = game.paused && currentPlayerIsAI() && game.aiThinking;
+      if (!game.paused || aiBilling) {
+        const dt = now - game.clockLastTick;
+        if (game.turn === 'w') game.clockW = Math.max(0, game.clockW - dt);
+        else                   game.clockB = Math.max(0, game.clockB - dt);
+        if (game.clockW <= 0 || game.clockB <= 0) {
+          game.status = 'timeout';
+          game.gameOver = true;
+          play('end');
+          if (game.aiWorker) { game.aiWorker.terminate(); game.aiWorker = null; }
+        }
       }
     }
     game.clockLastTick = now;
@@ -918,27 +1068,61 @@
     pushHistory();
   }
 
-  function startGame(mode) {
+  // Niveles de dificultad — Skill Level es la opción UCI estándar de Stockfish.
+  // Para el motor interno usamos depthCap como techo de iterative deepening.
+  // ELO es aproximado (lo que muestra la UI).
+  const AI_LEVELS = [
+    { id: 0, label: 'Principiante', elo: '~800',  skill: 0,  depthCap: 2, time: 400  },
+    { id: 1, label: 'Casual',       elo: '~1200', skill: 5,  depthCap: 4, time: 700  },
+    { id: 2, label: 'Medio',        elo: '~1600', skill: 10, depthCap: 6, time: 1200 },
+    { id: 3, label: 'Fuerte',       elo: '~2000', skill: 15, depthCap: 8, time: 2200 },
+    { id: 4, label: 'Máximo',       elo: '~2500', skill: 20, depthCap: 10, time: 3000 },
+  ];
+  const DEFAULT_LEVEL = 4;
+
+  // startGame(mode, skillW, skillB) — los skill son ids de AI_LEVELS.
+  // Para pvp ambos son null. Para vs IA solo el lado IA se setea.
+  function startGame(mode, skillW, skillB) {
     game.mode = mode;
     game.aiBoth = (mode === 'aiva');
     if (mode === 'pvp')      { game.aiColor = null; game.humanColor = null; game.flip = false; }
     else if (mode === 'w')   { game.aiColor = 'b';  game.humanColor = 'w';  game.flip = false; }
     else if (mode === 'b')   { game.aiColor = 'w';  game.humanColor = 'b';  game.flip = true;  }
     else                     { game.aiColor = null; game.humanColor = null; game.flip = false; }
+    game.aiSkillW = (skillW != null) ? skillW : DEFAULT_LEVEL;
+    game.aiSkillB = (skillB != null) ? skillB : DEFAULT_LEVEL;
     resetBoard();
     game.state = 'play';
     game.clockLastTick = performance.now();   // ahora arranca el reloj de white (turn inicial)
     document.getElementById('menu').style.display = 'none';
+    document.getElementById('diffMenu').classList.remove('show');
     document.getElementById('bar').style.display  = 'flex';
     document.getElementById('hint').style.opacity = '0';
+    game.paused = false;
     ensureAudio();
+    syncUI();
+    resize();  // visibilidad cambió → recalculamos el canvas
   }
 
   function backToMenu() {
     game.state = 'menu';
+    game.paused = false;
     resetBoard();
     document.getElementById('menu').style.display = 'flex';
+    document.getElementById('diffMenu').classList.remove('show');
     document.getElementById('bar').style.display  = 'none';
+    syncUI();
+    resize();
+  }
+
+  // Toggles body classes que el CSS usa para mostrar/ocultar #btnBack y #btnPause.
+  //  - canback: hay algo a lo que volver (menú de dificultad o partida en curso)
+  //  - playing: estamos en partida (state === 'play')
+  function syncUI() {
+    const b = document.body.classList;
+    const inDiff = document.getElementById('diffMenu').classList.contains('show');
+    b.toggle('playing', game.state === 'play');
+    b.toggle('canback', inDiff || game.state === 'play');
   }
 
   function makeMove(fc, fr, tc, tr, extra, animate=true) {
@@ -1059,9 +1243,15 @@
     const colorSnap = game.turn;
     const genSnap = game.gen;
 
-    // ¿Posición táctica? → le damos el doble de tiempo para pensar.
+    // Dificultad por color: en IA vs IA cada lado puede tener un nivel distinto.
+    const levelId = (colorSnap === 'w' ? game.aiSkillW : game.aiSkillB);
+    const level   = AI_LEVELS[(levelId != null ? levelId : DEFAULT_LEVEL)];
+
+    // ¿Posición táctica? → le damos el doble de tiempo para pensar (solo en máximo).
+    // En niveles más bajos no doblamos: queremos que se sientan inferiores.
     const tactical = isTacticalPosition(game.grid, colorSnap, epSnap);
-    const budgetMs = tactical ? AI_TIME_BUDGET_MS * AI_TACTICAL_MULT : AI_TIME_BUDGET_MS;
+    const baseTime = level.time;
+    const budgetMs = (tactical && level.id === DEFAULT_LEVEL) ? baseTime * AI_TACTICAL_MULT : baseTime;
     game.aiTactical = tactical;
 
     const applyResult = (move, depth, seldepth, engineName) => {
@@ -1069,7 +1259,11 @@
       game.aiWorking = false;
       if (genSnap !== game.gen || !currentPlayerIsAI() || game.gameOver || !move) return;
       game.aiEngineName = engineName;
-      if (game.animation) {
+      // Si hay animación EN CURSO o el juego está PAUSADO, encolamos el
+      // resultado — el main loop lo aplica cuando se reanude. El reloj de la IA
+      // ya consumió su tiempo durante el cómputo (tickClock sigue corriendo
+      // mientras aiThinking=true, aunque la pausa esté activa).
+      if (game.animation || game.paused) {
         game.pendingAI = { move, depth, seldepth, engineName };
       } else {
         game.aiLastDepth = depth;
@@ -1083,7 +1277,7 @@
     if (stockfishReady && stockfishWorker) {
       try {
         const fen = buildFen(game.grid, colorSnap, epSnap);
-        const sfResult = await askStockfish(fen, budgetMs);
+        const sfResult = await askStockfish(fen, budgetMs, level.skill);
         if (sfResult && sfResult.uci) {
           const move = parseUciMove(sfResult.uci, game.grid, epSnap);
           applyResult(move, sfResult.depth || 0, sfResult.seldepth || 0, 'Stockfish');
@@ -1125,7 +1319,7 @@
         grid: game.grid,
         color: colorSnap,
         ep: epSnap,
-        maxDepth: AI_MAX_DEPTH,
+        maxDepth: Math.min(AI_MAX_DEPTH, level.depthCap),
         timeBudgetMs: budgetMs,
       });
     } catch (err) {
@@ -1157,9 +1351,17 @@
     // visualViewport es más confiable en mobile Safari (compensa la toolbar
     // dinámica y el safe-area). Caemos a innerHeight si no existe.
     const viewportH = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-    const barH = document.getElementById('bar').offsetHeight || 0;
+    // El bar ahora es una píldora flotante en el medio-abajo. Usamos getBoundingClientRect
+    // para saber dónde EMPIEZA — la cuenta vieja de offsetHeight subestimaba el espacio
+    // reservado (no contaba el margen inferior + safe-area).
+    const bar = document.getElementById('bar');
+    let reservedBottom = 0;
+    if (bar && bar.style.display !== 'none' && bar.offsetHeight > 0) {
+      const rect = bar.getBoundingClientRect();
+      reservedBottom = Math.max(0, viewportH - rect.top + 6);   // +6px de respiro arriba del bar
+    }
     W = window.innerWidth;
-    H = Math.max(160, viewportH - barH);
+    H = Math.max(160, viewportH - reservedBottom);
     canvas.width  = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width  = W + 'px';
@@ -1170,15 +1372,18 @@
 
     // Layout: status arriba, strip horizontal (relojes + capturas) sobre el tablero,
     // labels abajo. Sin paneles laterales — todo se agrupa arriba.
-    // Proporciones mínimas garantizan que entren 2 filas de capturas + reloj.
-    // En viewports angostos empujamos todo hacia abajo para dejar aire del
-    // notch / safe-area-inset-top, y para que el texto no quede pegado al borde.
-    topInset            = W < 600 ? 18 : 0;
+    // En mobile: empujamos todo hacia abajo del notch usando safe-area-inset-top
+    // del browser (más preciso que un valor fijo, cubre desde iPhone X hasta Pro 15+).
+    const safeTopRaw = getComputedStyle(document.documentElement).getPropertyValue('--safe-top');
+    let safeTopPx = parseFloat(safeTopRaw) || 0;
+    // Fallback: si no existe la variable, derivamos de env() vía un elemento.
+    if (!safeTopPx && W < 600) safeTopPx = 44;  // valor típico iPhone
+    topInset            = W < 600 ? Math.max(28, safeTopPx + 10) : 0;
     const statusReserve = 52 + topInset;   // status text (y≈22) + depth info (y≈48) + margen mobile
     const stripReserve  = 72;    // alto FIJO del strip (2 filas de piezas + reloj)
     const stripGap      = 18;    // aire entre strip y borde del tablero
     const topReserve    = statusReserve + stripReserve + stripGap;
-    const bottomReserve = 72;    // labels a-h + aire EXTRA contra la barra inferior
+    const bottomReserve = 36;    // labels a-h + aire (la barra ahora es flotante con margen externo, no se come tablero)
     const sideReserve   = 24;    // margen lateral mínimo
     const availH = Math.max(160, H - topReserve - bottomReserve);
     const availW = Math.max(160, W - sideReserve * 2);
@@ -1681,6 +1886,10 @@
       ctx.fillStyle = '#ff6464';
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
       ctx.fillText('TIEMPO AGOTADO — Ganan ' + winner, W / 2, 28 + topInset);
+    } else if (game.paused) {
+      ctx.fillStyle = '#ffb83a';
+      ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
+      ctx.fillText('PAUSADO', W / 2, 28 + topInset);
     } else {
       let txt = view.turn === 'w' ? 'Turno: Blancas' : 'Turno: Negras';
       let color = '#ececf0';
@@ -1699,30 +1908,8 @@
     }
     ctx.restore();
 
-    // Modo a la derecha — chip estilo pill
-    if (W > 500) {
-      let mode;
-      if (game.aiBoth)              mode = 'IA vs IA';
-      else if (!game.aiColor)       mode = '2 Jugadores';
-      else                          mode = 'vs IA · ' + (game.humanColor === 'w' ? 'Blancas' : 'Negras');
-      ctx.font = `500 ${Math.max(11, Math.min(13, Math.floor(W * 0.013)))}px "Segoe UI", sans-serif`;
-      ctx.textBaseline = 'middle';
-      ctx.textAlign = 'right';
-      const padX = 10, padY = 4;
-      const txtW = ctx.measureText(mode).width;
-      const chipW = txtW + padX*2, chipH = 22;
-      const chipX = W - 12 - chipW, chipY = (16 + topInset) - chipH/2;
-      ctx.fillStyle = 'rgba(255,255,255,0.06)';
-      ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(chipX, chipY, chipW, chipH, 11);
-      else ctx.rect(chipX, chipY, chipW, chipH);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255,255,255,0.10)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.fillStyle = 'rgba(220,220,235,0.85)';
-      ctx.fillText(mode, W - 12 - padX, 16 + topInset);
-    }
+    // (El chip de modo fue removido — su espacio lo ocupa el cluster .cbtn arriba-derecha.
+    //  La dificultad de la IA se sigue viendo en la línea de depth como "(Medio)".)
 
     // Depth secundario + nombre del motor
     // depth   = profundidad nominal de iterative deepening
@@ -1732,26 +1919,28 @@
       ctx.font = `400 ${Math.max(10, Math.min(13, Math.floor(W * 0.012)))}px "Segoe UI", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
+      // Difi del lado a mover (en aiva cambia con el turno).
+      const sideSkillId = (view.turn === 'w' ? game.aiSkillW : game.aiSkillB);
+      const sideSkill   = (sideSkillId != null && AI_LEVELS[sideSkillId]) ? AI_LEVELS[sideSkillId].label : null;
+      const showSkill   = sideSkill && (game.aiBoth || game.aiColor === view.turn);
       if (game.aiThinking) {
-        // Línea en vivo: motor + depth (si ya lo reportó) o "pensando..."
-        // Stockfish stream-ea depth via UCI; el motor interno sólo reporta al final,
-        // entonces durante su primera pensada mostramos solo el indicador animado.
         const motorLive = game.aiEngineName || (stockfishReady ? 'Stockfish' : 'Interno');
         const dots = '.'.repeat(1 + Math.floor((performance.now() / 400) % 3));
+        const motorTag = showSkill ? motorLive + ' (' + sideSkill + ')' : motorLive;
         let line;
         if (game.aiLastDepth > 0) {
-          line = motorLive + ' · depth ' + fmtDepth(game.aiLastDepth, game.aiLastSeldepth);
+          line = motorTag + ' · depth ' + fmtDepth(game.aiLastDepth, game.aiLastSeldepth);
         } else {
-          line = motorLive + ' · pensando' + dots;
+          line = motorTag + ' · pensando' + dots;
         }
         if (game.aiTactical) line += ' · táctica';
         ctx.fillStyle = 'rgba(180,200,240,0.7)';
         ctx.fillText(line, W / 2, 48 + topInset);
       } else if (game.aiLastDepth > 0) {
-        // Última jugada de la IA — depth final de la búsqueda
         const motor = game.aiEngineName || 'IA';
+        const motorTag = showSkill ? motor + ' (' + sideSkill + ')' : motor;
         ctx.fillStyle = 'rgba(160,180,210,0.65)';
-        ctx.fillText('Última jugada · ' + motor + ' · depth ' + fmtDepth(game.aiLastDepth, game.aiLastSeldepth), W / 2, 48 + topInset);
+        ctx.fillText('Última jugada · ' + motorTag + ' · depth ' + fmtDepth(game.aiLastDepth, game.aiLastSeldepth), W / 2, 48 + topInset);
       }
     }
   }
@@ -1786,7 +1975,7 @@
   canvas.addEventListener('pointercancel', () => { pointerDown = false; game.dragging = false; game.dragFrom = null; });
 
   function handlePress() {
-    if (game.gameOver || isViewingHistory() || game.aiThinking || game.animation) return;
+    if (game.gameOver || game.paused || isViewingHistory() || game.aiThinking || game.animation) return;
     if (currentPlayerIsAI()) return;
     const sq = pixelToSquare(pointerX, pointerY);
     if (!sq) { game.selected = null; game.legal = []; game.dragging = false; return; }
@@ -1845,6 +2034,7 @@
     else if (e.key === 'End')        historyLast();
     else if (e.key === 'r' || e.key === 'R') resetBoard();
     else if (e.key === 'n' || e.key === 'N') backToMenu();
+    else if (e.key === 'p' || e.key === 'P' || e.key === ' ') togglePause();
   });
 
   function historyBack()    { if (game.historyIndex > 0) { game.historyIndex--; clearSelection(); } }
@@ -1853,14 +2043,117 @@
   function historyLast()    { game.historyIndex = game.history.length - 1; clearSelection(); }
   function clearSelection() { game.selected = null; game.legal = []; game.dragging = false; game.dragFrom = null; }
 
-  // Botones del menú
+  // ──────────────────────────────────────────────────────────────────────
+  //  Menú de modo → menú de dificultad → startGame()
+  // ──────────────────────────────────────────────────────────────────────
+  //  pvp: arranca directo (sin IA, sin dificultad).
+  //  w/b: muestra UNA fila → un click empieza el juego.
+  //  aiva: muestra DOS filas (Blancas/Negras) + botón "Empezar".
+  let diffPicker = { mode: null, w: DEFAULT_LEVEL, b: DEFAULT_LEVEL };
+
+  function openDiffMenu(mode) {
+    diffPicker = { mode, w: DEFAULT_LEVEL, b: DEFAULT_LEVEL };
+    const isAiva = (mode === 'aiva');
+    document.getElementById('diffTitle').textContent = isAiva ? 'IA vs IA' : 'Dificultad';
+    document.getElementById('diffLabelW').textContent = isAiva ? 'Dificultad de las blancas' : 'Dificultad de la IA';
+    document.getElementById('diffSectionB').style.display = isAiva ? 'block' : 'none';
+    document.getElementById('diffStart').style.display = isAiva ? 'block' : 'none';
+    renderDiffRow('diffRowW', 'w');
+    renderDiffRow('diffRowB', 'b');
+    document.getElementById('menu').style.display = 'none';
+    document.getElementById('diffMenu').classList.add('show');
+    syncUI();
+  }
+
+  function renderDiffRow(rowId, side /* 'w' | 'b' */) {
+    const row = document.getElementById(rowId);
+    row.innerHTML = '';
+    for (const lvl of AI_LEVELS) {
+      const b = document.createElement('button');
+      b.className = 'diff-btn' + (diffPicker[side] === lvl.id ? ' on' : '');
+      b.innerHTML = `<span>${lvl.label}</span><span class="elo">${lvl.elo}</span>`;
+      b.addEventListener('click', () => {
+        diffPicker[side] = lvl.id;
+        if (diffPicker.mode === 'aiva') {
+          // Toggle visual y esperar al Empezar
+          renderDiffRow(rowId, side);
+        } else {
+          // vs IA: el click ya arranca el juego con esa dificultad
+          const aiSide = (diffPicker.mode === 'w') ? 'b' : 'w';
+          startGame(diffPicker.mode,
+                    aiSide === 'w' ? lvl.id : DEFAULT_LEVEL,
+                    aiSide === 'b' ? lvl.id : DEFAULT_LEVEL);
+        }
+      });
+      row.appendChild(b);
+    }
+  }
+
   document.querySelectorAll('#menu button').forEach(b => {
-    b.addEventListener('click', () => startGame(b.dataset.mode));
+    b.addEventListener('click', () => {
+      const mode = b.dataset.mode;
+      if (mode === 'pvp') startGame(mode);
+      else                openDiffMenu(mode);
+    });
+  });
+  // btnBack del cluster: si estamos en setup de dificultad → vuelve al menú de modo.
+  // Si estamos en partida → vuelve al menú de modo (resetea la partida).
+  function onBack() {
+    const inDiff = document.getElementById('diffMenu').classList.contains('show');
+    if (inDiff) {
+      document.getElementById('diffMenu').classList.remove('show');
+      document.getElementById('menu').style.display = 'flex';
+      syncUI();
+    } else if (game.state === 'play') {
+      backToMenu();
+    }
+  }
+  document.getElementById('btnBack').addEventListener('pointerdown', e => { e.preventDefault(); onBack(); });
+
+  // btnPause: toggle pause (sólo activo en partida). Pausa también el reloj y la IA.
+  function togglePause() {
+    if (game.state !== 'play') return;
+    game.paused = !game.paused;
+    document.getElementById('btnPause').classList.toggle('on', game.paused);
+    // La IA NO se cancela al pausar. Sigue pensando en su worker. tickClock le
+    // cobra ese tiempo a su reloj (ver lógica abajo). Cuando termina, el resultado
+    // queda en pendingAI y se aplica al despausar. Esto evita 2 exploits:
+    //   · spamear pausa para evitar que la IA mueva (no se reinicia su cálculo)
+    //   · pausar para regalarle tiempo gratis a la IA (su reloj corre igual)
+    if (!game.paused) {
+      game.clockLastTick = performance.now();   // evita drop de tiempo grande al reanudar
+    }
+  }
+  document.getElementById('btnPause').addEventListener('pointerdown', e => { e.preventDefault(); togglePause(); });
+
+  // btnInfo: toggle FPS overlay
+  let showFps = false;
+  const fpsOverlay = document.getElementById('fpsOverlay');
+  document.getElementById('btnInfo').addEventListener('pointerdown', e => {
+    e.preventDefault();
+    showFps = !showFps;
+    fpsOverlay.style.display = showFps ? 'block' : 'none';
+    document.getElementById('btnInfo').classList.toggle('on', showFps);
+  });
+  // Contador de FPS — barato, no draw a menos que esté visible
+  let _fpsFrames = 0, _fpsLastT = performance.now();
+  function _fpsTick() {
+    _fpsFrames++;
+    const now = performance.now();
+    if (now - _fpsLastT >= 500) {
+      if (showFps) fpsOverlay.textContent = 'FPS: ' + Math.round(_fpsFrames * 1000 / (now - _fpsLastT));
+      _fpsFrames = 0; _fpsLastT = now;
+    }
+    requestAnimationFrame(_fpsTick);
+  }
+  _fpsTick();
+  document.getElementById('diffStart').addEventListener('click', () => {
+    startGame('aiva', diffPicker.w, diffPicker.b);
   });
   document.getElementById('btnFirst').addEventListener('click', historyFirst);
   document.getElementById('btnLast').addEventListener('click', historyLast);
-  document.getElementById('btnReset').addEventListener('click', resetBoard);
-  document.getElementById('btnMenu').addEventListener('click', backToMenu);
+  // (btnReset/btnMenu se eliminaron — Reset queda accesible solo desde el menú
+  // tras volver con btnBack del cluster. La tecla R sigue funcionando para reset.)
 
   // Auto-repeat para los botones de avance/retroceso de a 1: dispara una vez
   // al press, después de 400ms empieza a repetir cada 70ms mientras se mantenga
@@ -1898,7 +2191,7 @@
         game.animation = null;
       }
       // Aplica jugada de IA pendiente cuando termina la animación
-      if (!game.animation && game.pendingAI) {
+      if (!game.animation && !game.paused && game.pendingAI) {
         const r = game.pendingAI; game.pendingAI = null;
         if (currentPlayerIsAI() && !game.gameOver && r.move) {
           game.aiLastDepth = r.depth;
@@ -1909,7 +2202,7 @@
         }
       }
       // Disparar IA cuando le toca
-      if (game.state === 'play' && currentPlayerIsAI() && !game.aiThinking && !game.aiWorking
+      if (game.state === 'play' && !game.paused && currentPlayerIsAI() && !game.aiThinking && !game.aiWorking
           && !game.gameOver && !game.animation && !game.pendingAI) {
         triggerAI();
       }
@@ -1925,6 +2218,7 @@
   }
 
   resize();
+  syncUI();
   loop();
 
   // Ocultar hint después de 5s o al primer toque

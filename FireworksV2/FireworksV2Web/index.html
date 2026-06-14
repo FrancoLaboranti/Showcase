@@ -18,9 +18,13 @@
   }
   /* Canvas occupies only the space ABOVE the bar — same layout as BallsWeb so the action buttons
      never sit on top of the playfield. Dimensions are set explicitly from JS each resize. */
+  #sky {
+    display: block; position: absolute;
+    top: 0; left: 0; z-index: 0;
+  }
   #c {
     display: block; position: absolute;
-    top: 0; left: 0;
+    top: 0; left: 0; z-index: 1;
   }
 
   #hint {
@@ -67,6 +71,7 @@
 </style>
 </head>
 <body>
+  <canvas id="sky"></canvas>
   <canvas id="c"></canvas>
   <div id="hint">tocá y arrastrá para lanzar un fuego · los botones suman más explosiones</div>
   <div id="bar">
@@ -149,6 +154,8 @@
   // ── CANVAS ──
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
+  const skyCanvas = document.getElementById('sky');                               // canvas de fondo: cielo de noche
+  const sky = skyCanvas.getContext('2d');
   let W = 0, H = 0, dpr = 1;
 
   const xper = p => p * W;
@@ -166,6 +173,46 @@
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    drawSky();                                                                   // redibuja el cielo de fondo al cambiar el tamaño
+  }
+
+  // Cielo de noche: dibujado UNA vez por resize en el canvas de fondo (#sky), detrás del juego.
+  // Gradiente vertical + nebulosas tenues + estrellas (densidad por área, algunas con glow y tinte).
+  function drawSky() {
+    skyCanvas.width  = Math.floor(W * dpr);
+    skyCanvas.height = Math.floor(H * dpr);
+    skyCanvas.style.width  = W + 'px';
+    skyCanvas.style.height = H + 'px';
+    sky.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const grad = sky.createLinearGradient(0, 0, 0, H);                            // arriba casi negro, abajo azul noche
+    grad.addColorStop(0,    '#04060e');
+    grad.addColorStop(0.55, '#070b1c');
+    grad.addColorStop(1,    '#0e1733');
+    sky.fillStyle = grad; sky.fillRect(0, 0, W, H);
+
+    const R = Math.max(W, H) * 0.55;                                             // nebulosas: 2 manchas radiales muy suaves
+    for (const neb of [[0.26, 0.32, '120,90,200'], [0.8, 0.6, '40,120,210']]) {
+      const g2 = sky.createRadialGradient(W*neb[0], H*neb[1], 0, W*neb[0], H*neb[1], R);
+      g2.addColorStop(0, `rgba(${neb[2]},0.06)`); g2.addColorStop(1, `rgba(${neb[2]},0)`);
+      sky.fillStyle = g2; sky.fillRect(0, 0, W, H);
+    }
+
+    const n = Math.round(W * H / 2600);                                          // estrellas: ~1 cada 2600 px²
+    for (let i = 0; i < n; i++) {
+      const x = Math.random() * W, y = Math.random() * H, br = Math.random();
+      const bright = br > 0.95;
+      const r = bright ? rnd(1.1, 1.9) : rnd(0.4, 1.0);
+      const a = bright ? rnd(0.75, 1) : rnd(0.18, 0.6);
+      const tint = br < 0.5 ? '255,255,255' : (br < 0.78 ? '200,220,255' : '255,238,214');  // blanco / frío / cálido
+      if (bright) {                                                              // glow para las pocas brillantes
+        const gg = sky.createRadialGradient(x, y, 0, x, y, r*4);
+        gg.addColorStop(0, `rgba(${tint},${a*0.45})`); gg.addColorStop(1, `rgba(${tint},0)`);
+        sky.fillStyle = gg; sky.beginPath(); sky.arc(x, y, r*4, 0, TAU); sky.fill();
+      }
+      sky.fillStyle = `rgba(${tint},${a})`;
+      sky.beginPath(); sky.arc(x, y, r, 0, TAU); sky.fill();
+    }
   }
   window.addEventListener('resize', resize);
 
@@ -674,9 +721,8 @@
     explosions = explosions.filter(e => !e.dead);
     embers = embers.filter(em => em.life > 0);
 
-    // render — V2 limpia a negro cada frame (sin motion-blur), luego dibuja aditivo ('lighter').
-    ctx.fillStyle = '#000';
-    ctx.fillRect(0, 0, W, H);
+    // render — V2 limpia a TRANSPARENTE cada frame (se ve el cielo de fondo), luego dibuja aditivo.
+    ctx.clearRect(0, 0, W, H);
     ctx.globalCompositeOperation = 'lighter';
     drawEmbers();
     for (const fw of fireworks) drawFirework(fw);

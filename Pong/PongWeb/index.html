@@ -26,17 +26,7 @@
      al estilo CrazyTanks. */
   #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
 
-  #hint {
-    position: absolute; bottom: calc(10px + env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%);
-    max-width: min(88vw, 480px);
-    background: rgba(10,12,18,0.78); border: 1px solid rgba(255,255,255,0.10);
-    padding: 12px 20px; border-radius: 14px;
-    text-align: center; color: rgba(255,255,255,0.92);
-    font-family: 'Segoe UI', system-ui, sans-serif;   /* sans legible para la frase larga */
-    font-size: 13px; letter-spacing: 0.04em; line-height: 1.45;
-    pointer-events: none; transition: opacity 0.8s; z-index: 2;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
-  }
+  #hint { display: none; }   /* cartelito de inicio oculto a propósito */
 
   /* ── UI de esquina (estilo CrazyTanks): sin barra inferior; botones chicos camuflados arriba a la
      derecha. El menú y el setup se operan en el canvas. ── */
@@ -85,7 +75,7 @@
   body.touch.playing #padR      { display: flex; }   /* jugador 1 siempre */
   body.touch.playing.two #padL  { display: flex; }   /* jugador 2 sólo en 2P */
   .ctl {
-    width: 124px; height: 50px; border-radius: 16px;
+    width: 124px; height: 70px; border-radius: 16px;
     border: 1px solid rgba(255,255,255,0.2);
     background: rgba(255,255,255,0.07); color: rgba(255,255,255,0.85);
     display: flex; align-items: center; justify-content: center;
@@ -249,6 +239,16 @@
   const ctx = canvas.getContext('2d');
   let bgCanvas = null;             // fondo estático (gradiente + grilla) horneado una vez por resize y blitteado
   let W = 0, H = 0, dpr = 1;
+  // Recuperación ante pérdida de contexto: bajo presión de memoria el browser puede "perder" el
+  // contexto 2D (lo soporta Chrome 119+). Sin manejarlo, el canvas queda en negro PARA SIEMPRE.
+  // Con preventDefault() le decimos que vamos a recuperar; al restaurarse re-horneamos todo.
+  let ctxLost = false;
+  canvas.addEventListener('contextlost', (e) => { e.preventDefault(); ctxLost = true; });
+  canvas.addEventListener('contextrestored', () => {
+    ctxLost = false;
+    bgCanvas = null; brickSprites = null; brickKey = '';   // invalidar bakes (sus buffers se fueron con el contexto)
+    resize();                         // re-hornea el fondo y re-aplica la transform dpr al ctx
+  });
   let portrait = false;   // true = pantalla vertical → se muestra el aviso y se congela el juego (Pong va en horizontal)
 
   // settings
@@ -267,6 +267,7 @@
   let state = 'menu';              // 'menu' | 'play' | 'paused' | 'over'
   let menulevel = 0;               // 0 = elegir modo · 1 = setup (rival/puntos/fuego)
   let menuOption = 0;              // fila seleccionada dentro del nivel actual
+  let pendingBricks = false;       // true = el setup (nivel 1) está configurando el modo ladrillos
   let confirmQuit = false;         // overlay "¿salir al menú?" durante el partido
   let winner = 0;                  // 1 = jug.1 (der), 2 = jug.2 (izq)
   let j1score = 0, j2score = 0;
@@ -555,9 +556,9 @@
   }
 
   // ════════════ MODO LADRILLOS ════════════
-  // Varias bolas + un clúster de ladrillos en el centro. Romper un ladrillo suma 1 punto al ÚLTIMO que
-  // tocó esa bola y le da un power al azar. Gana por puntos totales (a 10), no por goles: las bolas que
-  // se van por un lado reaparecen sin sumar. 1 jugador (der) contra la CPU (izq).
+  // Varias bolas + una pared de ladrillos sobre la red. Los ladrillos NO suman puntos: los de color
+  // sueltan un token de power (hay que atraparlo). Los puntos son por GOLES y gana el que llega al
+  // total elegido en el setup. 1 jugador (der) contra el rival elegido (izq), con su IA y su siesta.
   function makeBall(dir, x0) {
     const r = ballR();
     const x = x0 == null ? W / 2 : x0, y = rnd(r, H - r);
@@ -600,8 +601,9 @@
     }
   }
   function startBricks() {
-    bricksMode = true; challenge = false; twoPlayers = false; ptsIdx = 1;   // a 10 puntos
-    oppIdx = 0; applyOpponent();
+    bricksMode = true; challenge = false; twoPlayers = false; pendingBricks = false;
+    applyOpponent();                                   // rival elegido en el setup (su color e IA aplican acá)
+    aiSleeping = false; aiSleepCD = rnd(A.AWAKE_MIN, A.AWAKE_MAX);   // arranca despierta
     j1score = 0; j2score = 0;
     right.cy = left.cy = H / 2; right.vel = left.vel = 0;
     right.onFire = left.onFire = false;
@@ -609,9 +611,9 @@
     fireball = false; fireTop = fireBot = fireNet = false;
     setupBricks();
     balls = [];
-    for (const dir of [1, -1]) {                   // una bola LENTA hacia cada jugador, fuera de la pared
+    for (const dir of [1, -1]) {                   // una bola hacia cada jugador, fuera de la pared
       const b = makeBall(dir, W / 2 + dir * W * 0.18);
-      b.vx *= 0.7; b.vy *= 0.7;
+      b.vx *= 0.9; b.vy *= 0.9;                     // arranca un toque más rápida (antes 0.7)
       b.hold = SERVE_DELAY * 1.5;                  // anticipación al arranque de la ronda (saque, como el modo normal)
       balls.push(b);
     }
@@ -621,18 +623,43 @@
     syncUI();
   }
   // CPU: persigue la bola entrante más cercana (reusa el "chase" de updatePaddle vía aiTarget).
-  function bricksAI() {
-    aiSleeping = false; aiFlickVel = 0; aiSpeedScale = 1;
+  // Hereda la personalidad del rival elegido: error de puntería, umbral de reacción y SIESTA.
+  function bricksAI(dt) {
+    aiFlickVel = 0; aiSpeedScale = 1;
+    // siesta: misma mecánica que el modo normal (updatePaddle frena la paleta mientras duerme)
+    aiSleepCD -= dt;
+    if (aiSleepCD <= 0) {
+      aiSleeping = !aiSleeping;
+      aiSleepCD = aiSleeping ? rnd(A.SLEEP_MIN, A.SLEEP_MAX) : rnd(A.AWAKE_MIN, A.AWAKE_MAX);
+    }
+    const plane = leftX() + paddleW();                 // cara de la paleta de la CPU
     let best = null, bestX = Infinity;
-    for (const b of balls) if (b.vx < 0 && b.x < bestX) { bestX = b.x; best = b; }
-    aiTarget = best ? best.y + rnd(-1, 1) * A.ERROR_FRAC * Math.min(W, H) * 0.5 : H / 2;
+    for (const b of balls) if (b.vx < 0 && b.hold <= 0 && b.x < bestX) { bestX = b.x; best = b; }
+    // token de mejora que cae hacia SU lado (side 2): la CPU intenta agarrarlo. El más cercano a su cara.
+    let drop = null, dropX = Infinity;
+    for (const d of drops) if (d.side === 2 && d.windup <= 0 && d.x < dropX) { dropX = d.x; drop = d; }
+    const ballNear = best && bestX < W * A.REACT_FRAC;
+    // Va por el token si: no hay bola amenazante, o el token va a llegar a su cara antes que la bola.
+    if (drop && (!ballNear || (dropX - plane) < (bestX - plane))) {
+      brickChasing = false;
+      aiTarget = drop.y;                               // sin error de puntería: querés atraparlo
+    } else if (ballNear) {
+      // recién reacciona cuando la bola cruza su umbral (rivales flojos reaccionan tarde). El error de
+      // puntería se sortea UNA vez por acercamiento (re-sortearlo por paso hacía vibrar la paleta).
+      if (!brickChasing) { brickAimErr = rnd(-1, 1) * A.ERROR_FRAC * Math.min(W, H) * 0.5; brickChasing = true; }
+      aiTarget = best.y + brickAimErr;
+    } else {
+      brickChasing = false;
+      aiTarget = H / 2 + idleSway();                   // sin amenaza ni token: respira en el centro
+    }
   }
+  let brickAimErr = 0, brickChasing = false;   // sesgo de puntería del acercamiento en curso (modo ladrillos)
   function stepBricks(dt) {
     for (const p of [right, left]) {
       if (p.boostT > 0) p.boostT -= dt;
       if (p.powerFireT > 0) { p.powerFireT -= dt; p.onFire = p.powerFireT > 0; }
     }
-    bricksAI();
+    bricksAI(dt);
     updatePaddle(right, dt, false, true);
     updatePaddle(left, dt, true, false);
     for (let i = balls.length - 1; i >= 0; i--) {    // al revés: las extra que salen se eliminan acá
@@ -644,13 +671,10 @@
   function stepBall(b, dt) {
     const r = ballR();
     if (b.hold > 0) { b.hold -= dt; b.px = b.x; b.py = b.y; return; }   // congelada en el saque
-    if (b.entry > 0) {                                   // dash diagonal de entrada (rápido); al terminar normaliza
-      b.entry -= dt;
-      if (b.entry <= 0) {
-        const target = VX0_FRAC * W * BRICK_SPEED, sp = Math.hypot(b.vx, b.vy) || 1;
-        b.vx *= target / sp; b.vy *= target / sp;        // misma dirección, velocidad del modo
-      }
-    }
+    // dash diagonal de entrada: durante `entry` no se aplica el clamp de vy (más abajo), así la diagonal
+    // fuerte sobrevive el envión inicial. Al terminar NO se normaliza hacia abajo (eso le sacaba la
+    // velocidad de golpe); sólo el clamp normal recorta el exceso, conservando el envión.
+    if (b.entry > 0) b.entry -= dt;
     b.x += b.vx * dt; b.y += b.vy * dt;
     b.trail.push({ x: b.x, y: b.y }); if (b.trail.length > 16) b.trail.shift();
     if (b.y > H - r) { b.y = H - r; b.vy = -Math.abs(b.vy) * WALL_ACCEL; }
@@ -739,10 +763,10 @@
     const nb = makeBall(dir);
     nb.x = side === 1 ? rightX() - r * 2 : leftX() + paddleW() + r * 2;
     nb.y = self.cy;
-    const fast = VX0_FRAC * W * 2.0 * BRICK_SPEED;          // dash: ~2× la velocidad normal
+    const fast = VX0_FRAC * W * 1.9 * BRICK_SPEED;          // sale fuerte y conserva el envión (no se normaliza)
     nb.vx = dir * fast;
-    nb.vy = (Math.random() < 0.5 ? -1 : 1) * fast * 0.85;   // fuerte componente vertical → diagonal + rebote
-    nb.last = side; nb.entry = 0.34;                        // dura el dash; al terminar se normaliza
+    nb.vy = (Math.random() < 0.5 ? -1 : 1) * fast * 0.8;    // fuerte componente vertical → diagonal + rebote
+    nb.last = side; nb.entry = 0.34;                        // ventana sin clamp de vy (la diagonal sobrevive)
     nb.extra = true;                                        // bola de power-up: una sola vida
     nb.px = nb.x; nb.py = nb.y; nb.rx = nb.x; nb.ry = nb.y;
     balls.push(nb);
@@ -782,6 +806,7 @@
       cv.width = Math.max(1, Math.ceil((bw + pad * 2) * dpr));
       cv.height = Math.max(1, Math.ceil((bh + pad * 2) * dpr));
       const g = cv.getContext('2d');
+      if (!g) { brickSprites = null; brickKey = ''; return; }   // sin memoria → reintenta el bake el próximo frame
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       const rr = Math.min(bw, bh) * 0.3;
       const grad = g.createLinearGradient(0, pad, 0, pad + bh);
@@ -804,10 +829,12 @@
     if (!bricks.length) return;
     const bw = bricks[0].w, bh = bricks[0].h;
     const key = (bw | 0) + 'x' + (bh | 0) + '@' + dpr;     // re-hornea sólo si cambió el tamaño (resize)
-    if (key !== brickKey) { bakeBrickSprites(bw, bh); brickKey = key; }
+    if (key !== brickKey) { bakeBrickSprites(bw, bh); if (brickSprites) brickKey = key; }
+    if (!brickSprites) return;                             // bake falló (sin memoria): reintenta el próximo frame
     const t = performance.now() / 1000;
     for (const k of bricks) {
       const sp = brickSprites[k.power || 'norm'];
+      if (!sp) continue;
       ctx.drawImage(sp.cv, k.x - sp.pad, k.y - sp.pad, k.w + sp.pad * 2, k.h + sp.pad * 2);
       if (k.power) {                                       // único elemento vivo: núcleo pulsante
         const pul = 0.6 + 0.4 * Math.sin(t * 5 + k.y * 0.03);
@@ -1000,16 +1027,17 @@
   // Filas del nivel 0 (modo), con su Y en fracción de H.
   function menuLevel0() {
     return [
-      { key: '1p',        label: 'Un Jugador',    y: 0.40 },
-      { key: '2p',        label: 'Dos Jugadores', y: 0.49 },
-      { key: 'challenge', label: 'Desafío',       y: 0.58 },
-      { key: 'bricks',    label: 'Ladrillos',     y: 0.67 },
-      { key: 'exit',      label: 'Salir',         y: 0.76 },
+      { key: '1p',        label: 'Un Jugador',    y: 0.44 },
+      { key: '2p',        label: 'Dos Jugadores', y: 0.54 },
+      { key: 'challenge', label: 'Desafío',       y: 0.64 },
+      { key: 'bricks',    label: 'Ladrillos',     y: 0.74 },
     ];
   }
-  // Filas del setup (nivel 1): en 2P se omite "Rival". Centradas verticalmente según cuántas haya.
+  // Filas del setup (nivel 1): en 2P se omite "Rival"; en ladrillos no hay "Fuego" (sale de los
+  // power-ups). Centradas verticalmente según cuántas haya.
   function menuSetupRows() {
-    const keys = twoPlayers ? ['puntos', 'fuego'] : ['rival', 'puntos', 'fuego'];
+    const keys = pendingBricks ? ['rival', 'puntos']
+               : twoPlayers ? ['puntos', 'fuego'] : ['rival', 'puntos', 'fuego'];
     const span = 0.12, mid = 0.55, y0 = mid - span * (keys.length - 1) / 2;
     return keys.map((key, i) => ({ key, y: y0 + i * span }));
   }
@@ -1038,11 +1066,10 @@
   function menuConfirm() {
     if (menulevel === 0) {
       const r = menuLevel0()[menuOption];
-      if (r.key === '1p')           { twoPlayers = false; gotoSetup(); }
-      else if (r.key === '2p')      { twoPlayers = true;  gotoSetup(); }
+      if (r.key === '1p')           { twoPlayers = false; pendingBricks = false; gotoSetup(); }
+      else if (r.key === '2p')      { twoPlayers = true;  pendingBricks = false; gotoSetup(); }
       else if (r.key === 'challenge') startChallenge();
-      else if (r.key === 'bricks')    startBricks();
-      else                            exitToArcade();
+      else if (r.key === 'bricks')    { twoPlayers = false; pendingBricks = true; gotoSetup(); }
     } else startGame();
   }
   function gotoSetup() { menulevel = 1; menuOption = 0; applyOpponent(); syncUI(); }
@@ -1065,7 +1092,10 @@
   }
 
   // ── TRANSICIONES DE ESTADO ──
-  function startGame()  { challenge = false; bricksMode = false; applyOpponent(); newMatch(); confirmQuit = false; syncUI(); }   // newMatch pone state='play'
+  function startGame()  {
+    if (pendingBricks) { startBricks(); return; }      // el setup estaba configurando ladrillos
+    challenge = false; bricksMode = false; applyOpponent(); newMatch(); confirmQuit = false; syncUI();   // newMatch pone state='play'
+  }
   function rematch()    { if (bricksMode) { startBricks(); return; } newMatch(); confirmQuit = false; syncUI(); }
   function startChallenge() {
     challenge = true; bricksMode = false; challengeIdx = 0;
@@ -1086,19 +1116,21 @@
     }
   }
   function backToMenu() {
-    state = 'menu'; menulevel = 0; menuOption = twoPlayers ? 1 : 0; confirmQuit = false; challenge = false; bricksMode = false;
+    state = 'menu'; menulevel = 0; menuOption = bricksMode ? 3 : twoPlayers ? 1 : 0;
+    confirmQuit = false; challenge = false; bricksMode = false; pendingBricks = false;
     embers.length = 0; sparks.length = 0; ballTrail.length = 0; balls = []; bricks = []; drops = [];
     syncUI();
   }
   function onBack() {
-    if (state === 'menu') { if (menulevel === 1) { menulevel = 0; menuOption = twoPlayers ? 1 : 0; syncUI(); } return; }
+    if (state === 'menu') {
+      if (menulevel === 1) {
+        menulevel = 0; menuOption = pendingBricks ? 3 : twoPlayers ? 1 : 0;   // vuelve resaltando el modo
+        pendingBricks = false; syncUI();
+      }
+      return;
+    }
     if (state === 'over') { backToMenu(); return; }
     confirmQuit = !confirmQuit;                         // en partido: abre/cierra "¿salir al menú?"
-  }
-  function exitToArcade() {
-    if (window.self !== window.top) { try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {} return; }
-    try { screen.orientation && screen.orientation.unlock && screen.orientation.unlock(); } catch {}
-    location.href = '../../Arcade/';
   }
   // clases del body que prenden/apagan botones de esquina y pads
   function syncUI() {
@@ -1243,6 +1275,7 @@
     if (!bgCanvas) bgCanvas = document.createElement('canvas');
     bgCanvas.width = canvas.width; bgCanvas.height = canvas.height;
     const g = bgCanvas.getContext('2d');
+    if (!g) { bgCanvas = null; return; }   // sin memoria para el offscreen → se dibuja sin fondo horneado, no se crashea
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     const grad = g.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.05, W / 2, H / 2, Math.max(W, H) * 0.72);
     grad.addColorStop(0, '#0d1830'); grad.addColorStop(0.6, '#070b18'); grad.addColorStop(1, '#020308');
@@ -1503,7 +1536,7 @@
   }
 
   function drawScores() {
-    if (WIN_POINTS[ptsIdx] == null) return;   // práctica: sin marcador
+    if (WIN_POINTS[ptsIdx] == null && !bricksMode) return;   // práctica: sin marcador (en ladrillos SÍ se muestra)
     const fs0 = Math.round(Math.min(60, H * 0.082));
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
@@ -1678,7 +1711,8 @@
     ctx.shadowColor = rgba(leftGlow(), 0.6); ctx.shadowBlur = s * 0.02;
     ctx.font = `700 ${Math.round(s * 0.05)}px ${FONT}`;
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-    ctx.fillText('Zzz', leftX() + paddleW() + s * 0.02, left.cy - paddleH() / 2 - s * 0.015);
+    ctx.fillText('Zzz', leftX() + paddleW() + s * 0.02,
+      Math.max(left.cy - paddleH() / 2 - s * 0.015, s * 0.055));   // clamp: visible aunque duerma pegada al techo
     ctx.restore();
   }
 
@@ -1713,6 +1747,9 @@
   let prevBx = 0, prevBy = 0, rbx = 0, rby = 0;        // pos. anterior/interpolada de la pelota (render)
   function loop(now) {
     if (typeof now !== 'number') now = performance.now();
+    // Contexto perdido (presión de memoria): no dibujamos sobre un contexto inválido, pero
+    // mantenemos viva la cadena de RAF para reanudar apenas se restaure (ver contextrestored).
+    if (ctxLost) { lastT = now; requestAnimationFrame(loop); return; }
     const dt = Math.min(0.1, (now - lastT) / 1000);    // hasta 0.1s de catch-up tras un hipo
     lastT = now;
     dtSmoothed = dtSmoothed * 0.9 + dt * 0.1;
@@ -1768,6 +1805,7 @@
       drawBricks();
       drawPaddle(left, false);
       drawPaddle(right, true);
+      drawAISleep();
       drawEmbers();
       drawSparks();
       drawDrops();

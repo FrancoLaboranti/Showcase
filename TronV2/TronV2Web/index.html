@@ -39,7 +39,7 @@
     display: flex; gap: 8px;
   }
   #corner button { align-self: center; margin: 0; }                              /* normaliza el align-self/margin del shell */
-  #btnReset {
+  #btnPause, #btnMenu {
     width: 30px; height: 30px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.16);
     background: rgba(255,255,255,0.04);
@@ -48,8 +48,11 @@
     cursor: pointer; touch-action: none; padding: 0;
     transition: background 0.1s, transform 0.08s;
   }
-  #btnReset svg { display: block; width: 15px; height: 15px; pointer-events: none; }
-  #btnReset:active { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.6); color: #fff; transform: scale(0.9); }
+  #btnPause svg, #btnMenu svg { display: block; width: 15px; height: 15px; pointer-events: none; }
+  #btnPause:active, #btnMenu:active { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.6); color: #fff; transform: scale(0.9); }
+  #btnPause.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.6); color: #fff; }
+  /* pausa + menu sólo en juego (no en el menú) */
+  body:not(.playing) #btnPause, body:not(.playing) #btnMenu { display: none; }
   #fpsOverlay {
     position: absolute;
     left: calc(8px + env(safe-area-inset-left));
@@ -63,15 +66,19 @@
 <body>
   <canvas id="c"></canvas>
   <div id="hint">en juego: tocá la mitad izq/der de la pantalla para doblar · la cámara te sigue</div>
+  <!-- Orden como Pong: ⏸ pausa · ⌫ menu · ⛶ pantalla · ⓘ info · ✕ salir -->
   <div id="corner">
-    <button id="btnReset" aria-label="reiniciar" title="Reiniciar partida">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+    <button id="btnPause" aria-label="pausa" title="Pausa">
+      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
     </button>
-    <button id="btnInfo" aria-label="info" title="Info / FPS">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+    <button id="btnMenu" aria-label="volver al menú" title="Volver al menú">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg>
     </button>
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+    </button>
+    <button id="btnInfo" aria-label="info" title="Info / FPS">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
     <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -547,6 +554,7 @@
     currentPlayers: 0,          // +2 → 2..4
     currentMode: 0,             // 0 = single, 1 = multi
     keypressed: false,
+    paused: false,
   };
   let players = [];
 
@@ -560,6 +568,7 @@
     for (let i = 0; i < n; i++) players.push(new Player(i, n, gh.currentMode));
     bindControls();
     gh.menu = false;
+    gh.paused = false;
     updateCamera();
   }
   function restart() { startGame(); }
@@ -567,7 +576,14 @@
     clearField();
     players = [];
     gh.menu = true;
+    gh.paused = false;
     gh.keypressed = true;
+    const bp = document.getElementById('btnPause'); if (bp) bp.classList.remove('on');
+  }
+  function togglePause() {
+    if (gh.menu || gameOver()) return;
+    gh.paused = !gh.paused;
+    document.getElementById('btnPause').classList.toggle('on', gh.paused);
   }
 
   const CONTROLS = [ ['ArrowLeft','ArrowDown'], ['KeyQ','KeyW'], ['KeyO','KeyP'], ['KeyV','KeyB'] ];
@@ -575,15 +591,24 @@
 
   // ── MENÚ estilo v1 (filas tocables + ‹ › + glow + título neón que cicla + botón JUGAR) ──
   // Sólo se juega contra la IA → una sola opción (cantidad de colores) + JUGAR.
-  const MENU_ROWS = { colors: 0.5, play: 0.78 };
-  function nearY(ly, frac) { return Math.abs(ly - H * frac) < H * 0.06; }
   let hoverY = -1;
-  function hoverRow(frac) { return hoverY >= 0 && nearY(hoverY, frac); }
+  // Layout COMPACTO centrado: tamaños y separaciones en px proporcionales a min(W,H) — NO a la altura
+  // total. Así no se desparrama en pantallas altas (mobile) y entra bien en cualquier orientación.
+  function menuLayout() {
+    const S = Math.min(W, H), cy = H * 0.47;
+    return {
+      titleY: cy - S * 0.135, titlePx: S * 0.17,
+      divY:   cy - S * 0.045,
+      optY:   cy + S * 0.035, optPx: S * 0.052,
+      playY:  cy + S * 0.150, playPx: S * 0.052,
+      tol:    S * 0.06,
+    };
+  }
   function menuChangeValue(delta) { gh.currentPlayers = (gh.currentPlayers + delta + 3) % 3; }
   function tapMenu(lx, ly) {
-    const dir = lx < W * 0.5 ? -1 : 1;
-    if (nearY(ly, MENU_ROWS.colors))    gh.currentPlayers = (gh.currentPlayers + dir + 3) % 3;
-    else if (nearY(ly, MENU_ROWS.play)) startGame();
+    const L = menuLayout(), dir = lx < W * 0.5 ? -1 : 1;
+    if (Math.abs(ly - L.optY) < L.tol)       gh.currentPlayers = (gh.currentPlayers + dir + 3) % 3;
+    else if (Math.abs(ly - L.playY) < L.tol) startGame();
   }
   function processMenu() {
     if (!gh.keypressed) {
@@ -594,13 +619,6 @@
     if (!keys.ArrowLeft && !keys.ArrowRight) gh.keypressed = false;
   }
 
-  function accentNow() {
-    const n = PLAYER_COLORS.length;
-    const t = (typeof T === 'number' && isFinite(T)) ? T : 0;
-    const pos = (((t / 3.4) % n) + n) % n;
-    const i = Math.floor(pos), f = pos - i;
-    return lerpC(PLAYER_COLORS[i], PLAYER_COLORS[(i + 1) % n], f * f * (3 - 2 * f));
-  }
   function drawMenuBg() {
     ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
     const step = Math.max(28, Math.round(Math.min(W, H) / 18));
@@ -609,34 +627,72 @@
     for (let y = 0; y <= H; y += step) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
     ctx.stroke();
   }
-  function drawTitle(text, fx, fy, col) {
-    const fp = Math.round(220 * scl), px = W * fx, py = H * fy;
-    const breathe = 0.5 + 0.5 * Math.sin(T * 1.6);
+  // Título MULTICOLOR (la onda propia de V2): cada letra de TRON en un color de jugador, con bloom.
+  function drawTitle(yPx, fp) {
+    fp = Math.round(fp);
+    const py = yPx, breathe = 0.5 + 0.5 * Math.sin(T * 1.6);
+    const letters = 'TRON'.split('');
     ctx.save();
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `900 ${fp}px ${FONT}`;
-    ctx.letterSpacing = (fp * 0.10).toFixed(1) + 'px';
-    const haloR = fp * 1.7;
-    const g = ctx.createRadialGradient(px, py, 0, px, py, haloR);
-    g.addColorStop(0, rgba(col, 0.16 + 0.12 * breathe)); g.addColorStop(1, rgba(col, 0));
-    ctx.fillStyle = g; ctx.fillRect(px - haloR, py - haloR, haloR * 2, haloR * 2);
-    ctx.shadowColor = rgb(col); ctx.fillStyle = rgb(col);
-    for (const blur of [40, 22, 0]) { ctx.shadowBlur = blur * (0.7 + 0.3 * breathe); ctx.fillText(text, px, py); }
-    ctx.shadowBlur = 12; ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.3 * breathe})`; ctx.fillText(text, px, py);
-    ctx.restore(); ctx.letterSpacing = '0px';
+    ctx.font = `900 ${fp}px ${FONT}`; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    const sp = fp * 0.12;
+    const widths = letters.map(ch => ctx.measureText(ch).width);
+    const total = widths.reduce((a, b) => a + b, 0) + sp * (letters.length - 1);
+    let x = W * 0.5 - total / 2;
+    for (let i = 0; i < letters.length; i++) {
+      const col = PLAYER_COLORS[i % PLAYER_COLORS.length];
+      ctx.shadowColor = rgb(col); ctx.fillStyle = rgb(col);
+      for (const blur of [36, 18, 0]) { ctx.shadowBlur = blur * (0.7 + 0.3 * breathe); ctx.fillText(letters[i], x, py); }
+      ctx.shadowBlur = 10; ctx.fillStyle = `rgba(255,255,255,${0.4 + 0.3 * breathe})`; ctx.fillText(letters[i], x, py);
+      x += widths[i] + sp;
+    }
+    ctx.restore();
   }
-  function drawOption(label, fy, selected, col) {
-    if (selected) createText(50, '‹  ' + label + '  ›', rgb(col), 0.5, fy, 18);
-    else          createText(46, label, 'rgb(120,128,142)', 0.5, fy, 0);
+
+  // Light-cycles fantasma deambulando de fondo (ambiente Tron), dejando estela neón. Sólo en el menú.
+  let menuCycles = null;
+  function drawMenuCycles(dt) {
+    if (!menuCycles) {
+      menuCycles = [];
+      for (let i = 0; i < 4; i++) menuCycles.push({ x: rnd(W * 0.15, W * 0.85), y: rnd(H * 0.2, H * 0.85), dir: ri(0, 3), col: PLAYER_COLORS[i], trail: [], turnT: rnd(0.4, 1.2), t: 0 });
+    }
+    const SP = Math.min(W, H) * 0.22, MAXT = 46, far = Math.min(W, H) * 0.5;
+    for (const c of menuCycles) {
+      c.t += dt;
+      if (c.t > c.turnT) { c.t = 0; c.turnT = rnd(0.4, 1.3); c.dir = (c.dir + (Math.random() < 0.5 ? 1 : 3)) % 4; }
+      const vx = [0, 1, 0, -1][c.dir], vy = [-1, 0, 1, 0][c.dir];
+      c.x += vx * SP * dt; c.y += vy * SP * dt;
+      if (c.x < 0) c.x = W; else if (c.x > W) c.x = 0;
+      if (c.y < 0) c.y = H; else if (c.y > H) c.y = 0;
+      c.trail.push({ x: c.x, y: c.y });
+      if (c.trail.length > MAXT) c.trail.shift();
+      ctx.strokeStyle = rgba(c.col, 0.38); ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.shadowColor = rgb(c.col); ctx.shadowBlur = 8;
+      ctx.beginPath(); let started = false;
+      for (let k = 0; k < c.trail.length; k++) {
+        const p = c.trail[k];
+        if (k > 0 && Math.hypot(p.x - c.trail[k - 1].x, p.y - c.trail[k - 1].y) > far) { ctx.stroke(); ctx.beginPath(); started = false; }   // corta en el wrap
+        if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y);
+      }
+      ctx.stroke(); ctx.shadowBlur = 0;
+      ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(c.x, c.y, 2.5, 0, TAU); ctx.fill();
+    }
   }
-  function drawPlay(fy, col) {
-    const hj = hoverRow(fy), pulse = 0.6 + 0.4 * Math.sin(T * 4);
-    const fp = Math.round(46 * scl), px = W * 0.5, py = H * fy, text = '▶ JUGAR';
+  function drawOption(label, yPx, selected, col, fp) {
+    fp = Math.round(fp);
+    const txt = selected ? '‹  ' + label + '  ›' : label;
+    ctx.font = `600 ${fp}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (selected) { ctx.shadowColor = rgb(col); ctx.shadowBlur = 18; ctx.fillStyle = rgb(col); }
+    else { ctx.fillStyle = 'rgb(120,128,142)'; }
+    ctx.fillText(txt, W * 0.5, yPx); ctx.shadowBlur = 0;
+  }
+  function drawPlay(yPx, col, fp) {
+    fp = Math.round(fp);
+    const hj = hoverY >= 0 && Math.abs(hoverY - yPx) < fp * 1.1, pulse = 0.6 + 0.4 * Math.sin(T * 4);
+    const px = W * 0.5, text = '▶ JUGAR';
     ctx.save();
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `700 ${fp}px ${FONT}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = `700 ${fp}px ${FONT}`;
     const w = ctx.measureText(text).width, padX = fp * 0.7, padY = fp * 0.42;
-    const bw = w + padX * 2, bh = fp + padY * 2, bx = px - bw / 2, by = py - bh / 2;
+    const bw = w + padX * 2, bh = fp + padY * 2, bx = px - bw / 2, by = yPx - bh / 2;
     ctx.shadowColor = rgb(col); ctx.shadowBlur = hj ? 28 : 15;
     ctx.lineWidth = 2; ctx.strokeStyle = rgba(col, hj ? 0.95 : 0.7);
     roundRectPath(ctx, bx, by, bw, bh, bh * 0.5);
@@ -644,21 +700,21 @@
     ctx.fill(); ctx.stroke();
     ctx.shadowBlur = hj ? 18 : 10;
     ctx.fillStyle = `rgba(255,255,255,${0.82 + 0.18 * pulse})`;
-    ctx.fillText(text, px, py);
+    ctx.fillText(text, px, yPx);
     ctx.restore();
   }
-  function drawMenu() {
+  function drawMenu(dt) {
     drawMenuBg();
-    const col = accentNow();
-    drawTitle('TRON', 0.5, 0.2, col);
-    const dy = H * 0.35, dw = Math.min(W * 0.62, 520);
+    drawMenuCycles(dt);                                                            // ambiente: cycles fantasma de fondo
+    const L = menuLayout(), col = PLAYER_COLORS[0];                                // acento fijo cyan (V1 cicla; V2 no → se diferencian)
+    drawTitle(L.titleY, L.titlePx);                                               // título multicolor
+    const dw = Math.min(W * 0.55, 420);
     ctx.save();
-    ctx.strokeStyle = rgba(col, 0.55); ctx.shadowColor = rgb(col); ctx.shadowBlur = 12; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(W / 2 - dw / 2, dy); ctx.lineTo(W / 2 + dw / 2, dy); ctx.stroke();
+    ctx.strokeStyle = rgba(col, 0.5); ctx.shadowColor = rgb(col); ctx.shadowBlur = 10; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(W / 2 - dw / 2, L.divY); ctx.lineTo(W / 2 + dw / 2, L.divY); ctx.stroke();
     ctx.restore();
-    drawOption((gh.currentPlayers + 2) + ' Colors', MENU_ROWS.colors, true, col);
-    drawPlay(MENU_ROWS.play, col);
-    createText(20, 'tocá la cantidad para cambiarla · vs IA', 'rgba(150,160,175,0.7)', 0.5, 0.9);
+    drawOption((gh.currentPlayers + 2) + ' Colors', L.optY, true, col, L.optPx);
+    drawPlay(L.playY, col, L.playPx);
   }
 
   function drawWinner() {
@@ -694,6 +750,7 @@
     const lx = e.clientX - r.left, ly = e.clientY - r.top;
     if (gh.menu) tapMenu(lx, ly);
     else if (gameOver()) restart();
+    else if (gh.paused) return;                                                    // en pausa, ignorar el giro por toque
     else { const p0 = players.find(p => p.id === 0 && p.alive); if (p0) (lx < W * 0.5 ? p0.turnLeft() : p0.turnRight()); }
   });
   canvas.addEventListener('mousemove', e => {
@@ -703,7 +760,8 @@
   canvas.addEventListener('mouseleave', () => { hoverY = -1; });
 
   function tappable(el, fn) { el && el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
-  tappable(document.getElementById('btnReset'), () => { if (!gh.menu) restart(); });
+  tappable(document.getElementById('btnPause'), togglePause);
+  tappable(document.getElementById('btnMenu'),  () => { if (!gh.menu) backToMenu(); });
 
   // ════════════════ LOOP ════════════════
   // dt medido contra el MISMO reloj (el now que entra) y clampeado — evita el crash de mobile por
@@ -718,11 +776,13 @@
     if (!(dt >= 0) || dt > 0.05) dt = 0.01;
     T += dt;
 
+    document.body.classList.toggle('playing', !gh.menu);                          // muestra pausa/menu sólo en juego
+
     if (gh.menu) {
       processMenu();
-      drawMenu();
+      drawMenu(dt);
     } else {
-      for (const p of players) { if (!p.alive) continue; p.process(dt); if (p.alive) p.draw(); }
+      if (!gh.paused) { for (const p of players) { if (!p.alive) continue; p.process(dt); if (p.alive) p.draw(); } }
       updateCamera();
 
       // fondo del mundo visible
@@ -744,14 +804,18 @@
       // estela nítida
       ctx.drawImage(trailCv, camX, camY, Math.min(W, WORLD_W), Math.min(H, WORLD_H), 0, 0, Math.min(W, WORLD_W), Math.min(H, WORLD_H));
 
-      // cabezas brillantes (en coords de mundo → offset de cámara)
+      // cabezas brillantes (en coords de mundo → offset de cámara). dt=0 si está pausado: no envejecen.
       ctx.save(); ctx.translate(-camX, -camY);
-      for (const p of players) p.drawHead(dt);
+      for (const p of players) p.drawHead(gh.paused ? 0 : dt);
       ctx.restore();
 
       drawMinimap();
 
       if (gameOver()) { for (const p of players) p.stop = true; drawWinner(); }
+      else if (gh.paused) {
+        createText(80, 'PAUSA', 'rgb(235,235,235)', 0.5, 0.45, 20, 'rgba(0,0,0,0.5)');
+        createText(34, 'tocá ⏸ para seguir', 'rgb(200,200,200)', 0.5, 0.56, 0, 'rgba(0,0,0,0.5)');
+      }
     }
     requestAnimationFrame(loop);
   }
