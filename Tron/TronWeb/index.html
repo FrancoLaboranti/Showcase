@@ -296,6 +296,9 @@
   // ── COLORES neón estilo Tron (más saturados/contrastados que el original para que "brillen" sobre el
   // fondo): cyan + naranja (el dúo canónico de Tron) + verde + magenta. ──
   const PLAYER_COLORS = [ [0,240,255], [255,120,0], [120,255,30], [255,40,200] ];
+  const PLAYER_NAMES  = [ 'TÚ', 'RINZLER', 'SARK', 'CLU' ];                        // id 0 = humano; el resto, IAs con nombre
+  const CPU_COLOR     = [ 235, 80, 90 ];                                           // color del "campo" (CPU) en el marcador
+  const BEST_OF       = [ 1, 3, 5, 7 ];                                            // 1 = partida única; resto = torneo TÚ vs CPU
   const rgb  = c => `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
   const rgba = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
   const lerpC = (a, b, t) => [ a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t ];
@@ -366,6 +369,7 @@
       };
       this.colorArr = PLAYER_COLORS[id];
       this.color = rgb(this.colorArr);
+      this.name = PLAYER_NAMES[id] || ('P' + (id + 1));
       this.x = xper(startpos[id][0]);
       this.y = yper(startpos[id][1]);
       this.head = [];                                                             // cola reciente {x, y, age} para el degradé de brillo
@@ -477,24 +481,52 @@
   // ════════════════ DRIVER (menú + estado) ════════════════
   const gh = {
     menu: true,
-    option: 0,            // fila seleccionada: 0 = N Players, 1 = modo (estilo CrazyTanks)
+    option: 0,            // fila seleccionada: 0 = N Players, 1 = best-of
     players: 0,           // +2 → 2..4
-    mode: 0,              // 0 = Player vs AI, 1 = Player vs Player
+    mode: 0,              // 0 = Player vs AI (siempre: sólo vs IA)
+    bestOfIdx: 1,         // índice en BEST_OF (default 3)
     keypressed: false,
+    // ── TORNEO (TÚ vs CPU): ganás la ronda si sobrevivís último; la perdés si morís ──
+    youWins: 0, cpuWins: 0, targetWins: 1,
+    roundScored: false,
+    lastWinner: 'you', lastWinnerName: null,
   };
   let players = [];
 
   function aliveCount() { let n = 0; for (const p of players) if (p.alive) n++; return n; }
+  function setOver() { return gh.youWins >= gh.targetWins || gh.cpuWins >= gh.targetWins; }
 
-  function startGame() {
+  function startRound() {                                                          // una ronda (no toca marcador)
     const n = gh.players + 2;
     clearField();
     players = [];
     for (let i = 0; i < n; i++) players.push(new Player(i, n, gh.mode));
     bindControls();
     gh.menu = false;
+    gh.roundScored = false;
   }
+  function startGame() {                                                           // set nuevo (resetea marcador)
+    const bo = BEST_OF[gh.bestOfIdx];
+    gh.targetWins = Math.ceil(bo / 2);
+    gh.youWins = 0; gh.cpuWins = 0;
+    startRound();
+  }
+  function nextRound() { startRound(); }
   function restart() { startGame(); }
+  function scoreRound() {                                                          // asigna el punto UNA vez
+    if (gh.roundScored) return;
+    gh.roundScored = true;
+    const p0 = players.find(p => p.id === 0);
+    const youW = !!(p0 && p0.alive);
+    gh.lastWinner = youW ? 'you' : 'cpu';
+    if (youW) { gh.youWins++; gh.lastWinnerName = null; }
+    else {
+      gh.cpuWins++;
+      const aiAlive = players.filter(p => p.alive && p.id !== 0);
+      gh.lastWinnerName = aiAlive.length === 1 ? aiAlive[0].name : null;
+    }
+  }
+  function advance() { setOver() ? startGame() : nextRound(); }                    // tap/Enter en fin de ronda
   function backToMenu() {
     clearField();
     players = [];
@@ -521,29 +553,36 @@
   // total) — así no se desparrama en mobile y entra bien en cualquier orientación.
   let hoverY = -1;                                                                // y del mouse sobre el canvas (CSS px); -1 = sin hover
   function menuLayout() {
-    const S = Math.min(W, H), cy = H * 0.47;
+    const S = Math.min(W, H), cy = H * 0.46;
     return {
-      titleY: cy - S * 0.135, titlePx: S * 0.17,
-      divY:   cy - S * 0.045,
-      optY:   cy + S * 0.035, optPx: S * 0.052,
-      playY:  cy + S * 0.150, playPx: S * 0.052,
-      tol:    S * 0.06,
+      titleY: cy - S * 0.185, titlePx: S * 0.15,
+      divY:   cy - S * 0.085,
+      opt1Y:  cy - S * 0.005, opt2Y: cy + S * 0.075, optPx: S * 0.05,
+      playY:  cy + S * 0.185, playPx: S * 0.05,
+      tol:    S * 0.045,
     };
   }
-  function menuChangeValue(delta) { gh.players = (gh.players + delta + 3) % 3; }
+  function menuChangeValue(delta) {
+    if (gh.option === 0) gh.players = (gh.players + delta + 3) % 3;
+    else gh.bestOfIdx = (gh.bestOfIdx + delta + BEST_OF.length) % BEST_OF.length;
+  }
+  function bestOfLabel() { const bo = BEST_OF[gh.bestOfIdx]; return bo === 1 ? 'Partida única' : 'Best of ' + bo; }
   function tapMenu(lx, ly) {                                                       // toque/click sobre el menú (coords del canvas)
     const L = menuLayout(), dir = lx < W * 0.5 ? -1 : 1;                          // mitad izq/der = anterior/siguiente
-    if (Math.abs(ly - L.optY) < L.tol)       gh.players = (gh.players + dir + 3) % 3;
+    if (Math.abs(ly - L.opt1Y) < L.tol)      { gh.option = 0; menuChangeValue(dir); }
+    else if (Math.abs(ly - L.opt2Y) < L.tol) { gh.option = 1; menuChangeValue(dir); }
     else if (Math.abs(ly - L.playY) < L.tol) startGame();
   }
 
   function processMenu() {
     if (!gh.keypressed) {
+      if (keys.ArrowUp)    { gh.option = (gh.option - 1 + 2) % 2; gh.keypressed = true; }
+      if (keys.ArrowDown)  { gh.option = (gh.option + 1) % 2;     gh.keypressed = true; }
       if (keys.ArrowLeft)  { menuChangeValue(-1); gh.keypressed = true; }
       if (keys.ArrowRight) { menuChangeValue(+1); gh.keypressed = true; }
       if (keys.Enter) startGame();
     }
-    if (!keys.ArrowLeft && !keys.ArrowRight) gh.keypressed = false;
+    if (!keys.ArrowLeft && !keys.ArrowRight && !keys.ArrowUp && !keys.ArrowDown) gh.keypressed = false;
   }
 
   // Color de acento del menú: cicla SUAVE por la paleta neón con crossfade continuo (mejora del título de
@@ -635,18 +674,43 @@
     ctx.beginPath(); ctx.moveTo(W / 2 - dw / 2, L.divY); ctx.lineTo(W / 2 + dw / 2, L.divY); ctx.stroke();
     ctx.restore();
 
-    drawOption((gh.players + 2) + ' Players', L.optY, true, col, L.optPx);
+    drawOption((gh.players + 2) + ' Players', L.opt1Y, gh.option === 0, col, L.optPx);
+    drawOption(bestOfLabel(), L.opt2Y, gh.option === 1, col, L.optPx);
     drawPlay(L.playY, col, L.playPx);
   }
 
+  // Marcador TÚ vs CPU: pips a izq (vos) y der (CPU), centrados. Sólo si hay torneo (targetWins > 1).
+  function drawScoreboard(yFrac, scale) {
+    const cx = W * 0.5, y = H * yFrac, n = gh.targetWins;
+    const pipR = 6 * scale, step = 18 * scale, mid = 28 * scale, fp = Math.round(20 * scale);
+    ctx.save();
+    ctx.font = `700 ${fp}px ${FONT}`; ctx.textBaseline = 'middle';
+    const pip = (x, on, col) => {
+      ctx.beginPath(); ctx.arc(x, y, pipR, 0, TAU);
+      if (on) { ctx.shadowColor = rgb(col); ctx.shadowBlur = 8; ctx.fillStyle = rgb(col); }
+      else { ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(120,128,142,0.35)'; }
+      ctx.fill(); ctx.shadowBlur = 0;
+    };
+    for (let i = 0; i < n; i++) pip(cx - mid - i * step, i < gh.youWins, PLAYER_COLORS[0]);
+    for (let i = 0; i < n; i++) pip(cx + mid + i * step, i < gh.cpuWins, CPU_COLOR);
+    ctx.fillStyle = rgb(PLAYER_COLORS[0]); ctx.textAlign = 'right';
+    ctx.fillText('TÚ', cx - mid - (n - 1) * step - pipR - 8 * scale, y);
+    ctx.fillStyle = rgb(CPU_COLOR); ctx.textAlign = 'left';
+    ctx.fillText('CPU', cx + mid + (n - 1) * step + pipR + 8 * scale, y);
+    ctx.restore();
+  }
+
   function drawWinner() {
-    const w = players.find(p => p.alive);
-    if (!w) return;
-    const name = 'Player ' + (w.id + 1);
-    // Ahora el fondo se repinta cada frame (no se acumula), así que el glow es seguro. Caja translúcida
-    // para que se lea sobre las estelas brillantes de atrás.
-    createText(90, name + ' Wins!', w.color, 0.5, 0.45, 22, 'rgba(0,0,0,0.55)');
-    createText(40, 'tocá o Enter para reiniciar', 'rgb(220,220,220)', 0.5, 0.58, 0, 'rgba(0,0,0,0.55)');
+    const youCol = PLAYER_COLORS[0], youW = gh.lastWinner === 'you';
+    if (gh.targetWins > 1) drawScoreboard(0.28, 1.05);
+    if (setOver()) {
+      createText(90, youW ? '¡GANASTE!' : 'CPU GANA', youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 22, 'rgba(0,0,0,0.55)');
+      createText(36, 'tocá o Enter para revancha', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
+    } else {
+      const msg = youW ? '¡Ronda tuya!' : ('Ronda para ' + (gh.lastWinnerName || 'CPU'));
+      createText(72, msg, youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 18, 'rgba(0,0,0,0.55)');
+      createText(36, 'tocá o Enter: siguiente ronda', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
+    }
   }
 
   // ════════════════ INPUT ════════════════
@@ -657,7 +721,7 @@
     keys[e.code] = true;
     if (!gh.menu) {
       if (e.code === 'Escape') backToMenu();
-      else if (e.code === 'Enter' && gameOver()) restart();
+      else if (e.code === 'Enter' && gameOver()) advance();
     }
     if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Enter'].includes(e.code)) e.preventDefault();
   });
@@ -671,7 +735,7 @@
     if (gh.menu) {
       tapMenu(lx, ly);
     } else if (gameOver()) {
-      restart();
+      advance();
     } else {
       const p0 = players.find(p => p.id === 0 && p.alive);
       if (p0) (lx < W * 0.5 ? p0.turnLeft() : p0.turnRight());
@@ -735,9 +799,12 @@
       }
       ctx.drawImage(trailCv, 0, 0, W, H);                                          // estela nítida encima del halo
       for (const p of players) p.drawHead(dt);
-      if (aliveCount() <= 1) {                                                     // game over: frenar a todos y mostrar ganador
+      if (gameOver()) {                                                            // fin de ronda: frenar, puntuar (1 vez) y mostrar
         for (const p of players) p.stop = true;
+        scoreRound();
         drawWinner();
+      } else if (gh.targetWins > 1) {
+        drawScoreboard(0.06, 0.8);                                                 // marcador chico arriba durante la ronda
       }
     }
     requestAnimationFrame(loop);

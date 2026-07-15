@@ -98,20 +98,22 @@
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
 
-  // ── COLORES + CONSTANTES ──
-  const COL_BG       = '#0e1016';
-  const COL_BOARD    = '#181a22';
-  const COL_GRID     = '#464b5a';
-  const COL_X        = [240, 90, 95];    // rojo
-  const COL_O        = [90, 170, 240];   // azul
-  const COL_TEXT     = '#ebebf5';
+  // ── COLORES ──
+  const COL_BG_INNER = '#1a1f2e';        // vignette: centro
+  const COL_BG_OUTER = '#080a10';        // vignette: borde
+  const COL_BOARD_T  = '#1d2130';        // tablero gradiente top
+  const COL_BOARD_B  = '#13161e';        // tablero gradiente bottom
+  const COL_GRID     = '#2c3144';
+  const COL_X        = [240, 90, 95];
+  const COL_O        = [90, 170, 240];
+  const COL_DRAW     = [200, 205, 220];
   const COL_DIM      = '#9094a4';
-  const COL_FAINT    = '#6e7280';
-  const COL_DRAW     = '#c8cddc';
 
   const PLACE_ANIM_T = 0.25;
   const WIN_ANIM_T   = 0.5;
   const CPU_THINK_T  = 0.35;
+  const SCORE_BUMP_T = 0.5;
+  const RESTART_DELAY= 0.15;             // deadband tras game-over para evitar restart accidental
 
   // ── STATE ──
   const canvas = document.getElementById('c');
@@ -119,35 +121,32 @@
   const barEl = document.getElementById('bar');
   let W = 0, H = 0, dpr = 1;
 
-  // 0 vacío, 1 X, 2 O
-  let cells = [0,0,0,0,0,0,0,0,0];
+  let cells = [0,0,0,0,0,0,0,0,0];       // 0 vacío · 1 X · 2 O
   let turn = 1;
-  let winner = 0;            // 0 = sigue / sin terminar, 1 = X, 2 = O, -1 = empate
-  let winLine = null;        // [a, b, c]
+  let winner = 0;                        // 0 sigue · 1 X · 2 O · -1 empate
+  let winLine = null;
   let winAnim = 0;
+  let postWinT = 0;                      // tiempo acumulado tras game-over (gating de restart)
   let placeAnim = [0,0,0,0,0,0,0,0,0];
   let cpuThinkCD = 0;
   let hoverIdx = -1;
   let startingTurn = 1;
-
-  // mode: 'pvp' | 'cpuO' (you X, cpu O) | 'cpuX' (you O, cpu X)
-  let mode = 'pvp';
+  let mode = 'pvp';                      // 'pvp' | 'cpuO' (CPU es O) | 'cpuX' (CPU es X)
   const MODE_CYCLE = ['pvp', 'cpuO', 'cpuX'];
-
   let scoreX = 0, scoreO = 0, scoreD = 0;
+  let scoreBump = { x: 0, o: 0, d: 0 };
   let showInfo = false;
 
   // ── LAYOUT ──
   function boardRect() {
-    const topReserved = H * 0.14;
-    const bottomReserved = H * 0.18;
-    const usableH = H - topReserved - bottomReserved;
-    const size = Math.min(W * 0.85, usableH);
+    const topReserved = Math.max(56, H * 0.13);
+    const bottomReserved = Math.max(80, H * 0.20);
+    const usableH = Math.max(60, H - topReserved - bottomReserved);
+    const size = Math.max(60, Math.min(W * 0.86, usableH));
     const cx = W / 2;
     const cy = topReserved + usableH / 2;
     return { bx: cx - size/2, by: cy - size/2, size };
   }
-
   function cellAt(mx, my) {
     const { bx, by, size } = boardRect();
     if (mx < bx || my < by || mx > bx + size || my > by + size) return -1;
@@ -155,7 +154,6 @@
     const row = Math.max(0, Math.min(2, Math.floor((my - by) / (size/3))));
     return row*3 + col;
   }
-
   function cellCenter(idx) {
     const { bx, by, size } = boardRect();
     const cs = size/3;
@@ -187,9 +185,10 @@
       winner = r.w;
       winLine = r.line;
       winAnim = WIN_ANIM_T;
-      if (r.w === 1) scoreX++;
-      else if (r.w === 2) scoreO++;
-      else scoreD++;
+      postWinT = 0;
+      if (r.w === 1) { scoreX++; scoreBump.x = SCORE_BUMP_T; }
+      else if (r.w === 2) { scoreO++; scoreBump.o = SCORE_BUMP_T; }
+      else { scoreD++; scoreBump.d = SCORE_BUMP_T; }
     } else {
       turn = (turn === 1 ? 2 : 1);
     }
@@ -201,20 +200,20 @@
     if (mode === 'cpuX') return 1;
     return 0;
   }
-  function youMark() {
-    if (mode === 'cpuO') return 1;
-    if (mode === 'cpuX') return 2;
-    return 0;
-  }
 
-  // Minimax negamax con alfa-beta. 3x3 es trivial (~ms).
+  // Negamax con poda α/β. SCORE RELATIVO AL SIDE-TO-MOVE (mark) — el código
+  // previo devolvía la puntuación desde la perspectiva del root, lo cual con
+  // negación en cada nivel cruzaba los signos y la CPU podía dejar de jugar
+  // movimientos ganadores inmediatos. En esta versión, terminal devuelve +1/−1
+  // visto desde `mark`, y como `mark` recién va a mover (terminal = el rival
+  // acaba de ganar/empatar), `r.w === mark` casi siempre es false → −1.
   function bestMove(b, mark) {
     let best = -10, picks = [];
     const other = mark === 1 ? 2 : 1;
     for (let i = 0; i < 9; i++) {
       if (b[i] === 0) {
         b[i] = mark;
-        const s = -negamax(b, other, -10, 10, mark);
+        const s = -negamax(b, other, -10, 10);
         b[i] = 0;
         if (s > best) { best = s; picks = [i]; }
         else if (s === best) picks.push(i);
@@ -223,18 +222,18 @@
     return picks.length ? picks[Math.floor(Math.random()*picks.length)] : -1;
   }
 
-  function negamax(b, mark, alpha, beta, root) {
+  function negamax(b, mark, alpha, beta) {
     const r = checkWinner(b);
     if (r) {
       if (r.w === -1) return 0;
-      return r.w === root ? 1 : -1;
+      return r.w === mark ? 1 : -1;
     }
     const other = mark === 1 ? 2 : 1;
     let best = -10;
     for (let i = 0; i < 9; i++) {
       if (b[i] === 0) {
         b[i] = mark;
-        const s = -negamax(b, other, -beta, -alpha, root);
+        const s = -negamax(b, other, -beta, -alpha);
         b[i] = 0;
         if (s > best) best = s;
         if (best > alpha) alpha = best;
@@ -248,39 +247,51 @@
   function newRound() {
     cells = [0,0,0,0,0,0,0,0,0];
     placeAnim = [0,0,0,0,0,0,0,0,0];
-    winner = 0; winLine = null; winAnim = 0; cpuThinkCD = 0;
+    winner = 0; winLine = null; winAnim = 0; postWinT = 0; cpuThinkCD = 0;
     turn = startingTurn;
     startingTurn = startingTurn === 1 ? 2 : 1;     // alterna en próxima ronda
   }
   function fullReset() {
     scoreX = 0; scoreO = 0; scoreD = 0;
+    scoreBump = { x: 0, o: 0, d: 0 };
     startingTurn = 1;
-    newRound();
-    startingTurn = 2;                              // newRound ya flipeó
+    newRound();                                    // newRound ya flipea startingTurn a 2 para la próxima
   }
   function setMode(m) {
     mode = m;
     fullReset();
     paintModeBtn();
   }
+  function closeInfo() {
+    if (!showInfo) return;
+    showInfo = false;
+    btnInfo.classList.remove('on');
+  }
 
   // ── INPUT ──
   function onCanvasTap(e) {
     const r = canvas.getBoundingClientRect();
     const mx = e.clientX - r.left, my = e.clientY - r.top;
-    if (winner !== 0) { newRound(); return; }
+    if (winner !== 0) {
+      // Aguantar restart hasta que la animación de línea ganadora termine + deadband.
+      // Sin esto, un tap apurado limpia el tablero antes de que el jugador lea el resultado.
+      if (winAnim > 0 || postWinT < RESTART_DELAY) return;
+      newRound();
+      return;
+    }
     const cpu = cpuMark();
-    if (cpu && turn === cpu) return;               // turno de la CPU, ignorar input humano
+    if (cpu && turn === cpu) return;
     const idx = cellAt(mx, my);
     if (idx >= 0 && cells[idx] === 0) play(idx, turn);
   }
   canvas.addEventListener('pointerdown', e => {
+    if (showInfo) { closeInfo(); return; }         // tap con modal abierto = cerrar, sin caer sobre el tablero
     canvas.setPointerCapture(e.pointerId);
     onCanvasTap(e);
     hint.style.opacity = '0';
   });
   canvas.addEventListener('pointermove', e => {
-    if (winner !== 0) { hoverIdx = -1; return; }
+    if (showInfo || winner !== 0) { hoverIdx = -1; return; }
     const cpu = cpuMark();
     if (cpu && turn === cpu) { hoverIdx = -1; return; }
     const r = canvas.getBoundingClientRect();
@@ -288,23 +299,20 @@
   });
   canvas.addEventListener('pointerleave', () => { hoverIdx = -1; });
 
-  // helper de BallsWeb: tap simple en pointerdown así responde aunque otro dedo esté en el canvas
   function tappable(el, fn) {
     el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); });
   }
 
   // ── BOTONES ──
   function modeIconSVG(m) {
-    // pvp: X y O lado a lado · cpuO: O grande (vos jugás X, mostramos lo que SOS) · cpuX: X grande
+    // pvp: X+O lado a lado · cpuO: jugás X → ícono X grande · cpuX: jugás O → ícono O grande.
     // Mostrar la marca del JUGADOR es más claro que mostrar la de la CPU.
     if (m === 'pvp') {
       return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 5l5 5M8 5l-5 5"/><circle cx="17" cy="7.5" r="3"/></svg>';
     }
     if (m === 'cpuO') {
-      // jugás X → ícono X grande
       return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>';
     }
-    // cpuX: jugás O → ícono O grande
     return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><circle cx="12" cy="12" r="7.5"/></svg>';
   }
   function paintModeBtn() {
@@ -312,25 +320,21 @@
     btn.innerHTML = modeIconSVG(mode);
     btn.classList.remove('pvp', 'x', 'o');
     if (mode === 'pvp') btn.classList.add('pvp');
-    else if (mode === 'cpuO') btn.classList.add('x');  // jugás X
-    else btn.classList.add('o');                       // cpuX: jugás O
+    else if (mode === 'cpuO') btn.classList.add('x');
+    else btn.classList.add('o');
   }
 
   const btnMode   = document.getElementById('btnMode');
   const btnReset  = document.getElementById('btnReset');
   const btnScores = document.getElementById('btnScores');
   const btnInfo   = document.getElementById('btnInfo');
-  const btnExit   = document.getElementById('btnExit');
   paintModeBtn();
 
-  tappable(btnMode, () => {
-    const i = (MODE_CYCLE.indexOf(mode) + 1) % MODE_CYCLE.length;
-    setMode(MODE_CYCLE[i]);
-  });
-  tappable(btnReset, () => { newRound(); });
-  tappable(btnScores, () => { fullReset(); });
-  tappable(btnInfo, () => { showInfo = !showInfo; btnInfo.classList.toggle('on', showInfo); });
-  // btnExit lo maneja la shell unificada (sale directo al menú).
+  tappable(btnMode,   () => { const i = (MODE_CYCLE.indexOf(mode) + 1) % MODE_CYCLE.length; setMode(MODE_CYCLE[i]); });
+  tappable(btnReset,  () => { closeInfo(); newRound(); });
+  tappable(btnScores, () => { closeInfo(); fullReset(); });
+  tappable(btnInfo,   () => { showInfo = !showInfo; btnInfo.classList.toggle('on', showInfo); });
+  // btnExit + btnFs los maneja arcade-shell.js.
 
   // ── RESIZE ──
   function resize() {
@@ -346,19 +350,16 @@
   }
   window.addEventListener('resize', resize);
 
-  // ── DRAW ──
+  // ── HELPERS ──
   function rgbStr(c, a) { return `rgba(${c[0]},${c[1]},${c[2]},${a==null?1:a})`; }
   function colorForMark(m) {
     if (m === 1) return COL_X;
     if (m === 2) return COL_O;
-    return [200, 205, 220];
+    return COL_DRAW;
   }
-  // ease-out-back (un poquito de overshoot al aparecer la marca)
-  function easeOutBack(t) {
-    const c1 = 1.70158, c3 = c1 + 1;
-    return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
-  }
+  function easeOutBack(t) { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2); }
   function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+  function clamp01(t) { return Math.max(0, Math.min(1, t)); }
 
   function drawRoundedRect(x, y, w, h, r) {
     ctx.beginPath();
@@ -370,84 +371,32 @@
     ctx.closePath();
   }
 
-  function drawBoard() {
-    const { bx, by, size } = boardRect();
-    const cs = size/3;
-    const lineW = Math.max(2, size * 0.008);
-    const r = size * 0.022;
-
-    // fondo
-    ctx.fillStyle = COL_BOARD;
-    drawRoundedRect(bx, by, size, size, r);
-    ctx.fill();
-
-    // hover preview
-    if (hoverIdx >= 0 && cells[hoverIdx] === 0 && winner === 0) {
-      const cpu = cpuMark();
-      if (!cpu || turn !== cpu) {
-        const row = Math.floor(hoverIdx/3), col = hoverIdx % 3;
-        const hx = bx + col*cs, hy = by + row*cs;
-        const col0 = colorForMark(turn);
-        ctx.fillStyle = `rgba(${col0[0]},${col0[1]},${col0[2]},0.10)`;
-        drawRoundedRect(hx + lineW, hy + lineW, cs - lineW*2, cs - lineW*2, size*0.015);
-        ctx.fill();
-      }
-    }
-
-    // grilla
-    ctx.strokeStyle = COL_GRID;
-    ctx.lineWidth = lineW;
-    ctx.lineCap = 'round';
-    for (let i = 1; i < 3; i++) {
-      ctx.beginPath();
-      ctx.moveTo(bx + cs*i, by + size*0.04);
-      ctx.lineTo(bx + cs*i, by + size - size*0.04);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(bx + size*0.04, by + cs*i);
-      ctx.lineTo(bx + size - size*0.04, by + cs*i);
-      ctx.stroke();
-    }
-
-    // marcas
-    for (let i = 0; i < 9; i++) {
-      if (cells[i] === 0) continue;
-      const { x, y } = cellCenter(i);
-      const t = placeAnim[i] > 0 ? 1 - placeAnim[i] / PLACE_ANIM_T : 1;
-      const scale = easeOutBack(Math.max(0, Math.min(1, t)));
-      drawMark(cells[i], x, y, cs*0.32*scale);
-    }
-
-    // línea ganadora animada
-    if (winLine) {
-      const a = cellCenter(winLine[0]);
-      const c = cellCenter(winLine[2]);
-      const t = winAnim > 0 ? 1 - winAnim / WIN_ANIM_T : 1;
-      const e = easeOutCubic(Math.max(0, Math.min(1, t)));
-      const ex = a.x + (c.x - a.x) * e;
-      const ey = a.y + (c.y - a.y) * e;
-      const col = colorForMark(winner);
-      ctx.strokeStyle = rgbStr(col, 1);
-      ctx.lineWidth = size * 0.018;
-      ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(ex, ey); ctx.stroke();
-      // halo suave
-      ctx.strokeStyle = rgbStr(col, 0.25);
-      ctx.lineWidth = size * 0.04;
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(ex, ey); ctx.stroke();
-      // re-trazado del core encima del halo
-      ctx.strokeStyle = rgbStr(col, 1);
-      ctx.lineWidth = size * 0.018;
-      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(ex, ey); ctx.stroke();
-    }
+  // Texto escalado por SIZE DEL TABLERO, no por H. En landscape mobile H es bajo y los
+  // tamaños relativos a H quedaban minúsculos; el board size ya considera tanto W como H.
+  function fontPx(frac, minPx, maxPx) {
+    const { size } = boardRect();
+    return Math.round(Math.max(minPx, Math.min(maxPx, size * frac)));
   }
 
-  function drawMark(mark, cx, cy, r) {
+  // ── DRAW ──
+  function drawBackground() {
+    const grad = ctx.createRadialGradient(W/2, H*0.45, 0, W/2, H*0.45, Math.hypot(W, H)*0.65);
+    grad.addColorStop(0, COL_BG_INNER);
+    grad.addColorStop(1, COL_BG_OUTER);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  function drawMark(mark, cx, cy, r, alpha) {
+    alpha = alpha == null ? 1 : alpha;
     const col = colorForMark(mark);
-    const thick = Math.max(3, r * 0.32);
+    const thick = Math.max(3, r * 0.30);
     ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.lineWidth = thick;
-    ctx.strokeStyle = rgbStr(col);
+    ctx.strokeStyle = rgbStr(col, alpha);
+    ctx.shadowColor = rgbStr(col, 0.55 * alpha);
+    ctx.shadowBlur = r * 0.40;
     if (mark === 1) {
       ctx.beginPath();
       ctx.moveTo(cx - r, cy - r); ctx.lineTo(cx + r, cy + r);
@@ -458,147 +407,334 @@
       ctx.arc(cx, cy, r, 0, TAU);
       ctx.stroke();
     }
+    ctx.shadowBlur = 0;
+  }
+
+  function drawBoard() {
+    const { bx, by, size } = boardRect();
+    const cs = size/3;
+    const lineW = Math.max(2, size * 0.008);
+    const r = size * 0.025;
+
+    // 1) Tablero — sombra externa suave (color del ganador si terminó)
+    const winning = winner > 0;
+    const glowCol = winning ? colorForMark(winner) : [120, 140, 180];
+    ctx.shadowColor = `rgba(${glowCol[0]},${glowCol[1]},${glowCol[2]},${winning ? 0.22 : 0.08})`;
+    ctx.shadowBlur = size * 0.06;
+    ctx.shadowOffsetY = size * 0.005;
+    ctx.fillStyle = COL_BOARD_B;
+    drawRoundedRect(bx, by, size, size, r);
+    ctx.fill();
+    ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+
+    // 2) Gradiente interno del tablero
+    const grad = ctx.createLinearGradient(0, by, 0, by + size);
+    grad.addColorStop(0, COL_BOARD_T);
+    grad.addColorStop(1, COL_BOARD_B);
+    ctx.fillStyle = grad;
+    drawRoundedRect(bx, by, size, size, r);
+    ctx.fill();
+
+    // 3) Borde fino de luz arriba (interno)
+    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    ctx.lineWidth = 1;
+    drawRoundedRect(bx + 0.5, by + 0.5, size - 1, size - 1, r);
+    ctx.stroke();
+
+    // 4) Pulso de celdas ganadoras (debajo de las marcas), después de que termina la línea
+    if (winLine && winAnim <= 0) {
+      const pulse = 0.5 + 0.5 * Math.sin(performance.now()/1000 * 3.5);
+      const col = colorForMark(winner);
+      for (const idx of winLine) {
+        const row = Math.floor(idx/3), c = idx % 3;
+        const hx = bx + c*cs, hy = by + row*cs;
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${0.05 + 0.10*pulse})`;
+        drawRoundedRect(hx + lineW, hy + lineW, cs - lineW*2, cs - lineW*2, size*0.015);
+        ctx.fill();
+      }
+    }
+
+    // 5) Hover preview: fill tenue + marca fantasma
+    if (hoverIdx >= 0 && cells[hoverIdx] === 0 && winner === 0) {
+      const cpu = cpuMark();
+      if (!cpu || turn !== cpu) {
+        const row = Math.floor(hoverIdx/3), c = hoverIdx % 3;
+        const hx = bx + c*cs, hy = by + row*cs;
+        const col = colorForMark(turn);
+        ctx.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},0.08)`;
+        drawRoundedRect(hx + lineW, hy + lineW, cs - lineW*2, cs - lineW*2, size*0.015);
+        ctx.fill();
+        const { x, y } = cellCenter(hoverIdx);
+        ctx.save();
+        ctx.globalAlpha = 0.20;
+        drawMark(turn, x, y, cs*0.30, 1);
+        ctx.restore();
+      }
+    }
+
+    // 6) Puntitos en celdas vacías — hint sutil de "esto se toca"
+    if (winner === 0) {
+      ctx.fillStyle = 'rgba(255,255,255,0.045)';
+      for (let i = 0; i < 9; i++) {
+        if (cells[i] !== 0) continue;
+        if (i === hoverIdx) continue;
+        const { x, y } = cellCenter(i);
+        ctx.beginPath();
+        ctx.arc(x, y, Math.max(1.5, cs*0.018), 0, TAU);
+        ctx.fill();
+      }
+    }
+
+    // 7) Líneas de la grilla
+    ctx.strokeStyle = COL_GRID;
+    ctx.lineWidth = lineW;
+    ctx.lineCap = 'round';
+    for (let i = 1; i < 3; i++) {
+      ctx.beginPath();
+      ctx.moveTo(bx + cs*i, by + size*0.06);
+      ctx.lineTo(bx + cs*i, by + size - size*0.06);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(bx + size*0.06, by + cs*i);
+      ctx.lineTo(bx + size - size*0.06, by + cs*i);
+      ctx.stroke();
+    }
+
+    // 8) Marcas. En game-over las que NO son de la línea ganadora se atenúan al 35%.
+    for (let i = 0; i < 9; i++) {
+      if (cells[i] === 0) continue;
+      const { x, y } = cellCenter(i);
+      const t = placeAnim[i] > 0 ? 1 - placeAnim[i] / PLACE_ANIM_T : 1;
+      const scale = easeOutBack(clamp01(t));
+      const dim = (winner > 0 && winLine && !winLine.includes(i)) ? 0.35 : 1;
+      drawMark(cells[i], x, y, cs*0.32*scale, dim);
+    }
+
+    // 9) Línea ganadora — halo ancho + core con glow + tapitas redondas
+    if (winLine) {
+      const a = cellCenter(winLine[0]);
+      const c = cellCenter(winLine[2]);
+      const t = winAnim > 0 ? 1 - winAnim / WIN_ANIM_T : 1;
+      const e = easeOutCubic(clamp01(t));
+      const ex = a.x + (c.x - a.x) * e;
+      const ey = a.y + (c.y - a.y) * e;
+      const col = colorForMark(winner);
+      // halo ancho
+      ctx.strokeStyle = rgbStr(col, 0.22);
+      ctx.lineWidth = size * 0.050;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(ex, ey); ctx.stroke();
+      // core con glow
+      ctx.shadowColor = rgbStr(col, 0.75);
+      ctx.shadowBlur = size * 0.035;
+      ctx.strokeStyle = rgbStr(col, 1);
+      ctx.lineWidth = size * 0.020;
+      ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(ex, ey); ctx.stroke();
+      ctx.shadowBlur = 0;
+      // tapitas
+      ctx.fillStyle = rgbStr(col, 1);
+      ctx.beginPath(); ctx.arc(a.x, a.y, size*0.013, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(ex, ey, size*0.013, 0, TAU); ctx.fill();
+    }
   }
 
   function drawHeader() {
-    const { bx, by, size } = boardRect();
-    const topY = by - H * 0.07;
+    const { by } = boardRect();
+    const headerFs = winner === 0 ? fontPx(0.075, 18, 32) : fontPx(0.100, 22, 42);
+    const topY = by - headerFs * 0.70 - 6;
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'center';
 
     if (winner === 0) {
       const cpu = cpuMark();
-      let label, col;
+      const col = colorForMark(turn);
+      ctx.font = `600 ${headerFs}px 'Segoe UI', system-ui, sans-serif`;
       if (cpu) {
-        col = colorForMark(turn);
-        label = (turn === cpu) ? 'PENSANDO…' : 'TU TURNO';
+        if (turn === cpu) {
+          drawPensando(W/2, topY, col, headerFs);
+        } else {
+          ctx.fillStyle = rgbStr(col);
+          ctx.fillText('TU TURNO', W/2, topY);
+        }
       } else {
-        col = colorForMark(turn);
-        label = (turn === 1 ? 'TURNO DE X' : 'TURNO DE O');
+        ctx.fillStyle = rgbStr(col);
+        ctx.fillText(turn === 1 ? 'TURNO DE  X' : 'TURNO DE  O', W/2, topY);
       }
-      ctx.fillStyle = rgbStr(col);
-      ctx.font = `600 ${Math.round(Math.min(28, H*0.034))}px 'Segoe UI', system-ui, sans-serif`;
-      ctx.fillText(label, W/2, topY);
     } else {
       const cpu = cpuMark();
       let label, col;
-      if (winner === -1) { label = 'EMPATE'; col = [200,205,220]; }
+      if (winner === -1) { label = 'EMPATE'; col = COL_DRAW; }
       else if (cpu) {
-        if (winner === cpu) { label = 'GANA LA CPU'; col = colorForMark(winner); }
-        else { label = '¡GANASTE!'; col = colorForMark(winner); }
+        label = (winner === cpu) ? 'GANA LA CPU' : '¡GANASTE!';
+        col = colorForMark(winner);
       } else {
         label = winner === 1 ? 'GANA X' : 'GANA O';
         col = colorForMark(winner);
       }
+      ctx.font = `700 ${headerFs}px 'Segoe UI', system-ui, sans-serif`;
+      // Pulse sutil en el header del ganador (no en empate) una vez que la línea terminó de dibujarse
+      if (winner > 0 && winAnim <= 0) {
+        const pulse = 0.5 + 0.5 * Math.sin(performance.now()/1000 * 3.5);
+        ctx.shadowColor = rgbStr(col, 0.5);
+        ctx.shadowBlur = headerFs * (0.4 + 0.3 * pulse);
+      }
       ctx.fillStyle = rgbStr(col);
-      ctx.font = `700 ${Math.round(Math.min(34, H*0.045))}px 'Segoe UI', system-ui, sans-serif`;
       ctx.fillText(label, W/2, topY);
+      ctx.shadowBlur = 0;
     }
+  }
+
+  // 3 puntos secuenciales que fade-in/out — sin layout shift gracias a anchoring left.
+  function drawPensando(cxp, cy, col, fs) {
+    const txt = 'PENSANDO';
+    ctx.font = `600 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+    const w = ctx.measureText(txt).width;
+    const dotsArea = fs * 1.2;
+    const leftX = cxp - (w + dotsArea) / 2;
+    ctx.textAlign = 'left';
+    ctx.fillStyle = rgbStr(col);
+    ctx.fillText(txt, leftX, cy);
+    const t = performance.now() / 1000;
+    const period = 1.4;
+    for (let i = 0; i < 3; i++) {
+      const phase = ((t * 1.6) - i * 0.20) % period;
+      // ramp up en la primera mitad, ramp down en la segunda
+      const a = phase < period * 0.5
+        ? phase / (period * 0.5)
+        : Math.max(0, 1 - (phase - period * 0.5) / (period * 0.5));
+      ctx.fillStyle = rgbStr(col, clamp01(a));
+      ctx.fillText('•', leftX + w + fs * 0.30 + i * fs * 0.32, cy);
+    }
+    ctx.textAlign = 'center';
   }
 
   function drawScoreboard() {
     const { by, size } = boardRect();
-    const y = by + size + H * 0.06;
-    const colX = COL_X, colO = COL_O;
+    const y = by + size + fontPx(0.10, 26, 56);
     const cpu = cpuMark();
     const slotW = W / 3;
 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
 
-    let leftLabel, leftScore, leftCol;
-    let rightLabel, rightScore, rightCol;
+    let leftLabel, leftScore, leftCol, leftBump;
+    let rightLabel, rightScore, rightCol, rightBump;
     if (cpu) {
-      const yourScore = (cpu === 1) ? scoreO : scoreX;
-      const cpuScore  = (cpu === 1) ? scoreX : scoreO;
-      const yourCol   = (cpu === 1) ? colO : colX;
-      const cpuColor  = (cpu === 1) ? colX : colO;
-      leftLabel = 'VOS';      leftScore = yourScore; leftCol = yourCol;
-      rightLabel = 'CPU';     rightScore = cpuScore; rightCol = cpuColor;
+      const youIsX = (cpu === 2);
+      leftLabel = 'VOS';
+      leftScore = youIsX ? scoreX : scoreO;
+      leftCol   = youIsX ? COL_X : COL_O;
+      leftBump  = youIsX ? scoreBump.x : scoreBump.o;
+      rightLabel = 'CPU';
+      rightScore = youIsX ? scoreO : scoreX;
+      rightCol   = youIsX ? COL_O : COL_X;
+      rightBump  = youIsX ? scoreBump.o : scoreBump.x;
     } else {
-      leftLabel = 'X';  leftScore = scoreX;  leftCol = colX;
-      rightLabel = 'O'; rightScore = scoreO; rightCol = colO;
+      leftLabel = 'X';  leftScore  = scoreX; leftCol  = COL_X; leftBump  = scoreBump.x;
+      rightLabel = 'O'; rightScore = scoreO; rightCol = COL_O; rightBump = scoreBump.o;
     }
 
-    const labelSize = Math.round(Math.min(14, H*0.018));
-    const numSize   = Math.round(Math.min(30, H*0.038));
+    const labelSize = fontPx(0.040, 11, 16);
+    const numSize   = fontPx(0.085, 22, 38);
 
-    // izquierda
-    ctx.fillStyle = rgbStr(leftCol, 0.85);
-    ctx.font = `600 ${labelSize}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillText(leftLabel, slotW*0.5, y - numSize*0.6);
-    ctx.fillStyle = rgbStr(leftCol);
-    ctx.font = `700 ${numSize}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillText(String(leftScore), slotW*0.5, y + numSize*0.2);
+    drawScoreSlot(slotW*0.5, y, leftLabel,  leftScore,  leftCol,  leftBump,    labelSize, numSize, false);
+    drawScoreSlot(slotW*1.5, y, 'EMPATES',  scoreD,     COL_DRAW, scoreBump.d, labelSize, numSize, true);
+    drawScoreSlot(slotW*2.5, y, rightLabel, rightScore, rightCol, rightBump,   labelSize, numSize, false);
+  }
 
-    // medio (empates)
-    ctx.fillStyle = COL_DIM;
+  function drawScoreSlot(x, y, label, score, col, bump, labelSize, numSize, isDraw) {
+    ctx.fillStyle = isDraw ? COL_DIM : rgbStr(col, 0.85);
     ctx.font = `600 ${labelSize}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillText('EMPATES', slotW*1.5, y - numSize*0.6);
-    ctx.fillStyle = COL_DRAW;
+    ctx.fillText(label, x, y - numSize*0.55);
+    // bump scale 1.35 → 1 + glow breve durante la animación
+    const u = clamp01(bump / SCORE_BUMP_T);
+    const scale = 1 + 0.35 * u;
+    ctx.save();
+    ctx.translate(x, y + numSize*0.25);
+    ctx.scale(scale, scale);
+    if (u > 0) {
+      ctx.shadowColor = rgbStr(col, 0.6 * u);
+      ctx.shadowBlur = numSize * 0.6 * u;
+    }
+    ctx.fillStyle = rgbStr(col);
     ctx.font = `700 ${numSize}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillText(String(scoreD), slotW*1.5, y + numSize*0.2);
-
-    // derecha
-    ctx.fillStyle = rgbStr(rightCol, 0.85);
-    ctx.font = `600 ${labelSize}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillText(rightLabel, slotW*2.5, y - numSize*0.6);
-    ctx.fillStyle = rgbStr(rightCol);
-    ctx.font = `700 ${numSize}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillText(String(rightScore), slotW*2.5, y + numSize*0.2);
+    ctx.fillText(String(score), 0, 0);
+    ctx.shadowBlur = 0;
+    ctx.restore();
   }
 
   function drawGameOverPrompt() {
     if (winner === 0) return;
+    if (winAnim > 0 || postWinT < RESTART_DELAY) return;     // recién aparece cuando ya se puede tocar
     const { by, size } = boardRect();
-    const y = by + size + H * 0.135;
+    const y = by + size + fontPx(0.22, 62, 110);
     const blink = (Math.sin(performance.now()/1000 * 3) + 1) * 0.5;
     const a = 0.55 + 0.35 * blink;
     ctx.fillStyle = `rgba(220,225,240,${a})`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font = `500 ${Math.round(Math.min(14, H*0.018))}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.font = `500 ${fontPx(0.035, 11, 15)}px 'Segoe UI', system-ui, sans-serif`;
     ctx.fillText('TOCÁ PARA OTRA PARTIDA', W/2, y);
   }
 
   function drawInfoOverlay() {
     if (!showInfo) return;
+    // backdrop oscurece todo el juego — refuerza el hint "tocá afuera para cerrar"
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(0, 0, W, H);
+
     const lines = [
-      'TATETI',
-      '',
-      'Modo (botón izquierdo de la barra):',
-      '· 2 jugadores  · vs CPU (vos X)  · vs CPU (vos O)',
-      '',
-      'CPU usa minimax — juega perfecto.',
-      'El que arranca alterna cada ronda.',
-      '',
-      'Botón ↻  : otra partida',
-      'Botón ⫶  : resetear marcador',
+      ['TATETI', 'title'],
+      ['', 'gap'],
+      ['Modo (botón izquierdo de la barra):', 'body'],
+      ['· 2 jugadores  · vs CPU (vos X)  · vs CPU (vos O)', 'body'],
+      ['', 'gap'],
+      ['CPU usa minimax — juega perfecto.', 'body'],
+      ['El que arranca alterna cada ronda.', 'body'],
+      ['', 'gap'],
+      ['↻  otra partida', 'body'],
+      ['⫶  resetear marcador', 'body'],
+      ['', 'gap'],
+      ['tocá afuera para cerrar', 'hint'],
     ];
-    const fs = Math.round(Math.min(14, H*0.020));
-    const lh = fs * 1.5;
-    ctx.font = `500 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+    const fs = fontPx(0.046, 12, 16);
+    const titleFs = Math.round(fs * 1.5);
+    const lh = fs * 1.55;
+
+    // measure widest line con cada font correspondiente
     let maxW = 0;
-    for (const l of lines) maxW = Math.max(maxW, ctx.measureText(l).width);
-    const padX = 16, padY = 14;
+    for (const [l, kind] of lines) {
+      if (kind === 'title') ctx.font = `700 ${titleFs}px 'Segoe UI', system-ui, sans-serif`;
+      else if (kind === 'hint') ctx.font = `400 ${Math.round(fs*0.88)}px 'Segoe UI', system-ui, sans-serif`;
+      else ctx.font = `500 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+      maxW = Math.max(maxW, ctx.measureText(l).width);
+    }
+    const padX = 22, padY = 18;
     const boxW = maxW + padX*2;
     const boxH = lh*lines.length + padY*2;
     const bx = (W - boxW) / 2;
     const by = (H - boxH) / 2;
-    ctx.fillStyle = 'rgba(0,0,0,0.78)';
-    drawRoundedRect(bx, by, boxW, boxH, 12);
+    ctx.fillStyle = 'rgba(20,23,32,0.95)';
+    drawRoundedRect(bx, by, boxW, boxH, 14);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
     ctx.lineWidth = 1;
-    drawRoundedRect(bx, by, boxW, boxH, 12);
+    drawRoundedRect(bx + 0.5, by + 0.5, boxW - 1, boxH - 1, 14);
     ctx.stroke();
-    ctx.fillStyle = '#ebebf5';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
     for (let i = 0; i < lines.length; i++) {
-      const l = lines[i];
-      if (i === 0) ctx.font = `700 ${Math.round(fs*1.4)}px 'Segoe UI', system-ui, sans-serif`;
-      else ctx.font = `500 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+      const [l, kind] = lines[i];
+      if (kind === 'title') {
+        ctx.fillStyle = '#ebebf5';
+        ctx.font = `700 ${titleFs}px 'Segoe UI', system-ui, sans-serif`;
+      } else if (kind === 'hint') {
+        ctx.fillStyle = COL_DIM;
+        ctx.font = `400 ${Math.round(fs*0.88)}px 'Segoe UI', system-ui, sans-serif`;
+      } else {
+        ctx.fillStyle = '#d2d5e1';
+        ctx.font = `500 ${fs}px 'Segoe UI', system-ui, sans-serif`;
+      }
       ctx.fillText(l, bx + padX, by + padY + i*lh);
     }
   }
@@ -613,28 +749,32 @@
     // animaciones
     for (let i = 0; i < 9; i++) if (placeAnim[i] > 0) placeAnim[i] = Math.max(0, placeAnim[i] - dt);
     if (winAnim > 0) winAnim = Math.max(0, winAnim - dt);
+    if (winner !== 0) postWinT += dt;
+    scoreBump.x = Math.max(0, scoreBump.x - dt);
+    scoreBump.o = Math.max(0, scoreBump.o - dt);
+    scoreBump.d = Math.max(0, scoreBump.d - dt);
 
-    // CPU
+    // CPU — pausada mientras el modal está abierto, así no juega "atrás" del cartel
     const cpu = cpuMark();
-    if (winner === 0 && cpu && turn === cpu) {
+    if (!showInfo && winner === 0 && cpu && turn === cpu) {
       if (cpuThinkCD <= 0) cpuThinkCD = CPU_THINK_T;
       cpuThinkCD = Math.max(0, cpuThinkCD - dt);
       if (cpuThinkCD === 0) {
         const m = bestMove(cells.slice(), cpu);
         if (m >= 0) play(m, cpu);
       }
-    } else {
+    } else if (winner !== 0 || !cpu || turn !== cpu) {
       cpuThinkCD = 0;
     }
 
-    // render
-    ctx.fillStyle = COL_BG;
-    ctx.fillRect(0, 0, W, H);
+    // render — orden: fondo → header → tablero (con marcas+línea) → marcador → prompt → modal
+    drawBackground();
     drawHeader();
     drawBoard();
     drawScoreboard();
     drawGameOverPrompt();
     drawInfoOverlay();
+
     requestAnimationFrame(loop);
   }
 

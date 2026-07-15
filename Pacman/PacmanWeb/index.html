@@ -107,20 +107,44 @@
   //  los centros → nunca hay bugs de "me pasé del cruce". El túnel usa tiles
   //  virtuales c = -1 / 28 que al llegar se envuelven al otro lado.
   // ════════════════════════════════════════════════════════════════════
-  const ri  = (a, b) => a + Math.floor(Math.random() * (b - a + 1));              // randint inclusivo
+  // RNG SEMBRABLE (#9): en modo Diario se reemplaza por un PRNG determinista (semilla = fecha) para que
+  // el "run del día" sea reproducible; en el resto es Math.random. Todo lo aleatorio del juego usa ri().
+  let rng = Math.random;
+  const ri  = (a, b) => a + Math.floor(rng() * (b - a + 1));                      // randint inclusivo
+  function mulberry32(seed) {
+    let s = seed >>> 0;
+    return function () { s = (s + 0x6D2B79F5) | 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  }
+  function todaySeed() { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); }
   const TAU = Math.PI * 2;
   const FONT = "'Press Start 2P', 'Courier New', monospace";
 
   // ── TUNING ──
   const BASE        = 9.0;                                                       // velocidad 100% (tiles/seg)
   const TUNNEL_ROW  = 14;                                                        // fila del túnel (y de la casa)
-  const WALL_COL    = '#2434f0';                                                 // azul del laberinto
-  const WALL_GLOW   = '#3b4cff';
-  const DOT_COL     = '#ffc7a8';                                                 // puntitos (durazno clásico)
-  const PAC_COL     = '#ffe300';
+  // colores de SKIN (#6): mutables — applySkin() los reasigna y el resto del código los lee tal cual.
+  let WALL_COL  = '#2434f0';                                                     // azul del laberinto
+  let WALL_GLOW = '#3b4cff';
+  let DOT_COL   = '#ffc7a8';                                                     // puntitos (durazno clásico)
+  let PAC_COL   = '#ffe300';
   const GHOST_PTS   = [200, 400, 800, 1600];
   const FRUIT_PTS   = [100, 300, 500, 700, 1000, 3000, 5000];
   const FRUIT_NAMES = ['cereza', 'frutilla', 'naranja', 'manzana', 'melón', 'campana', 'llave'];
+
+  // ── SKINS cosméticos (#6): PURO color, cero efecto mecánico. Se desbloquean por récord histórico. ──
+  const SKINS = [
+    { name: 'Clasico', pac: '#ffe300', wall: '#2434f0', wallGlow: '#3b4cff', dot: '#ffc7a8', unlock: 0 },
+    { name: 'Neon',    pac: '#ffe300', wall: '#12d6a0', wallGlow: '#1effc4', dot: '#bdfff0', unlock: 15000 },
+    { name: 'Synth',   pac: '#ff5ad6', wall: '#7a2bff', wallGlow: '#b06bff', dot: '#ffd0f4', unlock: 30000 },
+    { name: 'Fuego',   pac: '#ffd23f', wall: '#b02418', wallGlow: '#ff5a32', dot: '#ffd9b0', unlock: 60000 },
+    { name: 'Hielo',   pac: '#eafcff', wall: '#1f6fe0', wallGlow: '#7fc8ff', dot: '#dff4ff', unlock: 100000 },
+  ];
+  function applySkin(i) {
+    const s = SKINS[i] || SKINS[0];
+    PAC_COL = s.pac; WALL_COL = s.wall; WALL_GLOW = s.wallGlow; DOT_COL = s.dot;
+  }
+  const MODE_NAMES = ['Clasico', 'Dificil', 'Maraton', 'Diario'];
+  const MODE_TAG   = ['C', 'D', 'M', '*'];
 
   // ── MAPA clásico 28×31. '#' pared · '.' punto · 'o' energizante · '-' puerta · ' ' pasillo/vacío ──
   const MAP = [
@@ -158,13 +182,90 @@
   ];
   const COLS = 28, ROWS = 31;
 
+  // Segundo laberinto (#1): banda central (filas 9-19) idéntica a MAP; cuadrantes en patrón de pilares
+  // (look de "panal", distinto al de cámaras del clásico). Validado: 0 pellets inalcanzables.
+  const MAZE2 = [
+    '############################',
+    '#..........................#',
+    '#.####.##.##.##.##.##.####.#',
+    '#o####.##.##.##.##.##.####o#',
+    '#.####.##.##.##.##.##.####.#',
+    '#..........................#',
+    '#.####.##.##.##.##.##.####.#',
+    '#.####.##.##.##.##.##.####.#',
+    '#..........................#',
+    '######.##### ## #####.######',
+    '######.##### ## #####.######',
+    '######.##          ##.######',
+    '######.## ###--### ##.######',
+    '######.## #      # ##.######',
+    '      .   #      #   .      ',
+    '######.## #      # ##.######',
+    '######.## ######## ##.######',
+    '######.##          ##.######',
+    '######.## ######## ##.######',
+    '######.## ######## ##.######',
+    '#..........................#',
+    '#.####.##.##.##.##.##.####.#',
+    '#.####.##.##.##.##.##.####.#',
+    '#..........................#',
+    '#.####.##.##.##.##.##.####.#',
+    '#.####.##.##.##.##.##.####.#',
+    '#..........................#',
+    '#o####.##.##.##.##.##.####o#',
+    '#.####.##.##.##.##.##.####.#',
+    '#..........................#',
+    '############################',
+  ];
+
+  // ── LABERINTOS ROTATIVOS (#1) ── todos comparten la banda central (filas 9-19: casa + túnel + espinas
+  // verticales en col 6/21) porque la geometría de la casa/túnel/spawns está hardcodeada; sólo cambian
+  // los cuadrantes de arriba y abajo. mazeForLevel() rota cada 4 niveles. `maze` es el activo.
+  const MAZES = [MAP, MAZE2];
+  let maze = MAP;
+  function mazeForLevel(L) { return MAZES[Math.floor((L - 1) / 4) % MAZES.length]; }
+
   // ¿Se puede caminar a (c,r)? Tiles virtuales -1/28 en la fila del túnel = sí (wrap al llegar).
   function open(c, r) {
     if (r === TUNNEL_ROW && (c === -1 || c === COLS)) return true;
     if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return false;
-    const ch = MAP[r][c];
+    const ch = maze[r][c];
     return ch !== '#' && ch !== '-';
   }
+
+  // ════════════════ PERSISTENCIA (récords #5 · logros #7 · skin #6) ════════════════
+  function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+
+  // Tabla top-5 (#5): [{n:iniciales, s:score, m:tag de modo}]. Migra el viejo pacmanHigh si existe.
+  let scores = (function () {
+    let arr = [];
+    try { arr = JSON.parse(lsGet('pacmanScores', '[]')) || []; } catch (e) { arr = []; }
+    if (!arr.length) { const old = +lsGet('pacmanHigh', 0); if (old > 0) arr.push({ n: 'YOU', s: old, m: 'C' }); }
+    return arr.sort((a, b) => b.s - a.s).slice(0, 5);
+  })();
+  function topScore() { return scores.length ? scores[0].s : 0; }
+  function qualifies(s) { return s > 0 && (scores.length < 5 || s > scores[scores.length - 1].s); }
+  function insertScore(name, s, tag) {
+    scores.push({ n: name, s, m: tag });
+    scores.sort((a, b) => b.s - a.s);
+    scores = scores.slice(0, 5);
+    lsSet('pacmanScores', JSON.stringify(scores));
+  }
+
+  // Logros (#7): set de ids desbloqueados + toasts.
+  const ACH = {
+    firstGhost: 'Cazaste un fantasma', allFour: 'Los 4 de un saque', fruit: 'Fruta jugosa',
+    level5: 'Nivel 5', level10: 'Nivel 10', score10k: '10.000 puntos', score50k: '50.000 puntos',
+    perfect: 'Nivel perfecto', bonus: 'Ronda bonus',
+  };
+  let achUnlocked = (function () { try { return new Set(JSON.parse(lsGet('pacmanAch', '[]'))); } catch (e) { return new Set(); } })();
+  let toasts = [];
+  function toast(txt) { toasts.push({ txt, t: 0 }); }
+  function unlockAch(id) { if (achUnlocked.has(id)) return; achUnlocked.add(id); lsSet('pacmanAch', JSON.stringify([...achUnlocked])); toast('LOGRO - ' + (ACH[id] || id)); }
+
+  // Skins (#6): desbloqueados por récord histórico.
+  function skinUnlocked(i) { return topScore() >= SKINS[i].unlock; }
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
@@ -174,20 +275,29 @@
   let ts = 16, ox = 0, oy = 0;                                                   // tile size + esquina del laberinto (px)
   let mazeCv = null, mazeFlashCv = null;                                         // laberinto horneado (azul / blanco para el flash)
   let pelletCv = null, pctx = null;                                              // puntitos horneados (se borran al comer)
+  let vignette = null;                                                           // gradiente radial cacheado (atmósfera)
 
   // ════════════════ ESTADO ════════════════
   const gh = {
-    state: 'menu',            // menu | ready | play | dying | flash | gameover
+    state: 'menu',            // menu | ready | play | dying | flash | gameover | initials
     stateT: 0,                // tiempo dentro del estado actual
     firstReady: true,         // el primer READY de la partida dura más (jingle)
     score: 0, lives: 3, level: 1,
-    high: +(localStorage.getItem('pacmanHigh') || 0),
+    high: topScore(),
     dotsLeft: 0, dotsEaten: 0,
     frightT: 0, combo: 0,     // energizante activo + multiplicador de fantasmas
     modeIdx: 0, modeT: 0,     // línea de tiempo scatter/chase
     pauseT: 0,                // freeze cortito al comer un fantasma
-    fruit: null,              // {x, y, t} en tiles
+    fruit: null,              // actor de fruta móvil (#2): {from,to,t,dirv,kind,life}
     extraGiven: false,
+    // ── nuevos sistemas ──
+    mode: 0,                  // 0 Clásico · 1 Difícil · 2 Maratón · 3 Diario (#4/#9)
+    skin: 0,                  // índice de SKINS (#6)
+    menuSel: 0,               // fila enfocada en el menú: 0 modo · 1 skin · 2 jugar
+    bonusRound: false, bonusT: 0, bonusFruits: [],   // ronda bonus (#3)
+    deathsThisLevel: 0, perfectStreak: 0,            // bonos de maestría (#8)
+    levelTime: 0,                                    // bonus por limpieza rápida (#10)
+    initials: ['A', 'A', 'A'], initialSlot: 0, pendingScore: 0,  // entrada de iniciales (#5)
   };
   let pac = null, ghosts = [];
   let dots = new Uint8Array(COLS * ROWS);                                        // 0 nada · 1 punto · 2 energizante
@@ -196,17 +306,36 @@
   // ── Specs por nivel (velocidades como fracción de BASE, fright en seg, releases de la casa) ──
   function lvlSpec(L) {
     return {
-      pac:    L === 1 ? 0.80 : L < 5 ? 0.90 : 1.00,
+      // Pac un poco más rápido que los fantasmas en los primeros niveles → margen para escapar.
+      pac:    L === 1 ? 0.80 : L < 5 ? 0.90 : L < 9 ? 0.95 : 1.00,
       pacFr:  L === 1 ? 0.90 : L < 5 ? 0.95 : 1.00,
-      ghost:  L === 1 ? 0.75 : L < 5 ? 0.85 : 0.95,
-      ghostFr:L === 1 ? 0.50 : L < 5 ? 0.55 : 0.60,
+      // fantasmas: arranque MÁS LENTO (0.70) y rampa gradual; antes era 0.75/0.85/0.95 (muy duro).
+      ghost:  L === 1 ? 0.70 : L < 5 ? 0.78 : L < 9 ? 0.86 : 0.92,
+      ghostFr:L === 1 ? 0.48 : L < 5 ? 0.52 : 0.56,
       tunnel: L === 1 ? 0.40 : L < 5 ? 0.45 : 0.50,
-      fright: Math.max(1, 6 - (L - 1)),
-      release:[0, 0.6, Math.max(1.5, 4.5 - L * 0.5), Math.max(3, 7.5 - L * 0.5)],
-      modes:  L < 2 ? [7, 20, 7, 20, 5, 20, 5, 1e9] : L < 5 ? [7, 20, 7, 20, 5, 1e9] : [5, 20, 5, 20, 5, 1e9],
+      // fright MÁS LARGO: N1 = 8s (antes 6) y baja de a poco; piso 2s en niveles altos.
+      fright: Math.max(2, 9 - L),
+      // release GRADUAL de la casa: Blinky ya afuera, Pinky ~2.7s, Inky ~8s, Clyde ~15s en N1
+      // (antes salían todos en ~7s). Decae con el nivel hasta ser casi inmediato.
+      release:[0, Math.max(0, 3 - L * 0.3), Math.max(2, 9 - L), Math.max(4, 16 - L * 1.4)],
+      // scatter un toque más largo y chase un toque más corto al inicio → más respiros.
+      modes:  L < 2 ? [8, 18, 8, 18, 6, 18, 6, 1e9] : L < 5 ? [7, 20, 7, 20, 5, 20, 5, 1e9] : [5, 20, 5, 20, 5, 1e9],
     };
   }
   function fruitKind(L) { return L <= 2 ? L - 1 : Math.min(6, Math.floor((L - 3) / 2) + 2); }
+
+  // spec(): lvlSpec del nivel actual AJUSTADO por modo (#4). Clásico/Diario/Maratón = base intacta
+  // (Maratón sólo arranca en nivel alto). Difícil sube un toque a los fantasmas y acorta el fright.
+  function spec() {
+    const s = lvlSpec(gh.level);
+    if (gh.mode === 1) {                          // Difícil
+      s.ghost   = Math.min(1.05, s.ghost + 0.06);
+      s.ghostFr = Math.min(0.75, s.ghostFr + 0.05);
+      s.fright  = Math.max(1, s.fright * 0.7);
+    }
+    return s;
+  }
+  function isBonus(L) { return L > 0 && L % 5 === 0; }   // ronda bonus cada 5 niveles (#3)
 
   // ════════════════ AUDIO (sintetizado, sin assets) ════════════════
   let actx = null, master = null;
@@ -288,7 +417,7 @@
     cv.width = COLS * ts; cv.height = ROWS * ts;
     const m = cv.getContext('2d');
     const d = Math.max(2, ts * 0.30);
-    const isW = (c, r) => (c >= 0 && c < COLS && r >= 0 && r < ROWS) && MAP[r][c] === '#';
+    const isW = (c, r) => (c >= 0 && c < COLS && r >= 0 && r < ROWS) && maze[r][c] === '#';
     m.strokeStyle = strokeCol;
     m.lineWidth = Math.max(1.5, ts * 0.13);
     m.lineCap = 'round';
@@ -329,12 +458,18 @@
     pelletCv.width = COLS * ts; pelletCv.height = ROWS * ts;
     pctx = pelletCv.getContext('2d');
     pctx.fillStyle = DOT_COL;
-    const s = Math.max(2, ts * 0.20);
+    const rad = Math.max(1.4, ts * 0.13);                                         // puntos redondos (más suaves que los cuadrados)
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-      if (dots[r * COLS + c] === 1) pctx.fillRect(c * ts + ts / 2 - s / 2, r * ts + ts / 2 - s / 2, s, s);
+      if (dots[r * COLS + c] === 1) { pctx.beginPath(); pctx.arc(c * ts + ts / 2, r * ts + ts / 2, rad, 0, TAU); pctx.fill(); }
     }
   }
   function eatPelletAt(c, r) { pctx.clearRect(c * ts, r * ts, ts, ts); }
+  // hornea las dos capas del laberinto activo (azul con glow + blanco para el flash). Se rehornea en
+  // cada resize y cada vez que cambia el maze (rotación #1) o el skin (#6).
+  function bakeMazeLayers() {
+    mazeCv = bakeMaze(WALL_COL, WALL_GLOW, ts * 0.5);
+    mazeFlashCv = bakeMaze('#eef2ff', '#ffffff', 0);
+  }
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
@@ -351,9 +486,12 @@
     ts = Math.max(8, Math.floor(Math.min(W / COLS, H / (ROWS + 4))));
     ox = Math.floor((W - COLS * ts) / 2);
     oy = Math.floor((H - (ROWS + 4) * ts) / 2 + 2 * ts);
-    mazeCv = bakeMaze(WALL_COL, WALL_GLOW, ts * 0.5);
-    mazeFlashCv = bakeMaze('#eef2ff', '#ffffff', 0);
+    bakeMazeLayers();
     bakePellets();
+    // viñeta: centro transparente → bordes apenas más oscuros y azulados (profundidad)
+    vignette = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.32, W / 2, H / 2, Math.max(W, H) * 0.72);
+    vignette.addColorStop(0, 'rgba(0,0,10,0)');
+    vignette.addColorStop(1, 'rgba(0,0,12,0.5)');
   }
   window.addEventListener('resize', resize);
 
@@ -366,13 +504,14 @@
   const DIRS = [{ x: 0, y: -1 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 0 }];   // desempate clásico: ↑ ← ↓ →
 
   function resetActors() {
-    const rel = lvlSpec(gh.level).release;
+    const rel = spec().release;
     pac = {
       from: { c: 14, r: 23 }, to: { c: 13, r: 23 }, t: 0.5,
       dirv: { x: -1, y: 0 }, desired: { x: -1, y: 0 },
       ang: Math.PI, dist: 0,
     };
-    ghosts = [
+    // En ronda bonus (#3) no hay fantasmas — es un respiro de puntaje.
+    ghosts = gh.bonusRound ? [] : [
       { id: 0, color: '#ff2222', corner: { c: 25, r: -2 }, state: 'grid',
         from: { c: 14, r: 11 }, to: { c: 13, r: 11 }, t: 0.5, dirv: { x: -1, y: 0 }, frightened: false },
       { id: 1, color: '#ffb8ff', corner: { c: 2, r: -2 },  state: 'house', sx: 14.0, sy: 14.5, bdir: -1, releaseT: rel[1],
@@ -385,21 +524,40 @@
     gh.frightT = 0; gh.combo = 0; gh.modeIdx = 0; gh.modeT = 0; gh.pauseT = 0;
     popups = [];
   }
+  // Elige N celdas-punto al azar fuera de la casa para soltar frutas en la ronda bonus (#3).
+  function pickFruitSpots(n) {
+    const cells = [];
+    for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+      if (maze[r][c] === '.' && !(r >= 11 && r <= 17 && c >= 9 && c <= 18)) cells.push([c, r]);
+    }
+    const out = [];
+    for (let i = 0; i < n && cells.length; i++) {
+      const [c, r] = cells.splice(ri(0, cells.length - 1), 1)[0];
+      out.push({ x: c + 0.5, y: r + 0.5, kind: ri(0, 6), eaten: false });
+    }
+    return out;
+  }
   function resetLevel() {
+    maze = mazeForLevel(gh.level);
+    gh.bonusRound = isBonus(gh.level);
+    gh.bonusT = gh.bonusRound ? 22 : 0;
     gh.dotsLeft = 0; gh.dotsEaten = 0; gh.fruit = null;
+    gh.deathsThisLevel = 0; gh.levelTime = 0;
     dots.fill(0);
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-      const ch = MAP[r][c];
+      const ch = maze[r][c];
       if (ch === '.') { dots[r * COLS + c] = 1; gh.dotsLeft++; }
       else if (ch === 'o') { dots[r * COLS + c] = 2; gh.dotsLeft++; }
     }
+    gh.bonusFruits = gh.bonusRound ? pickFruitSpots(8) : [];
+    bakeMazeLayers();
     bakePellets();
     resetActors();
   }
 
   // ── PAC-MAN ──
   function pacSpeed() {
-    const S = lvlSpec(gh.level);
+    const S = spec();
     return BASE * (gh.frightT > 0 ? S.pacFr : S.pac);
   }
   function pacDecide() {
@@ -454,7 +612,7 @@
     return far ? pt : g.corner;
   }
   function ghostSpeed(g) {
-    const S = lvlSpec(gh.level);
+    const S = spec();
     if (g.state === 'eyes') return BASE * 1.8;
     const p = posA(g);
     const c = Math.floor(p.x);
@@ -541,10 +699,60 @@
   function addScore(n) {
     gh.score += n;
     if (!gh.extraGiven && gh.score >= 10000) { gh.extraGiven = true; gh.lives++; sndLife(); popup(14, 20.5, '+1 VIDA', '#ffe300'); }
+    if (gh.score >= 10000) unlockAch('score10k');
+    if (gh.score >= 50000) unlockAch('score50k');
     if (gh.score > gh.high) gh.high = gh.score;
   }
-  function saveHigh() { try { localStorage.setItem('pacmanHigh', String(gh.high)); } catch (e) {} }
+  function saveHigh() { lsSet('pacmanHigh', String(gh.high)); }    // legacy; la tabla real es `scores`
   function popup(x, y, txt, color) { popups.push({ x, y, txt, t: 0, color }); }
+
+  // Nivel limpiado (todos los puntos comidos): bonos de maestría (#8) y limpieza rápida (#10), luego flash.
+  function clearLevel() {
+    if (!gh.bonusRound) {
+      const fast = Math.max(0, Math.round((55 - gh.levelTime) * 40));            // #10: cuanto más rápido, más bono
+      if (fast > 0) { addScore(fast); popup(14, 20.5, 'RAPIDO +' + fast, '#9effa0'); }
+      if (gh.deathsThisLevel === 0) {                                            // #8: nivel sin muertes → racha
+        gh.perfectStreak++;
+        const pb = 1000 * gh.perfectStreak;
+        addScore(pb); popup(14, 18.5, 'PERFECTO +' + pb, '#ffe300'); unlockAch('perfect');
+      } else gh.perfectStreak = 0;
+    }
+    gh.state = 'flash'; gh.stateT = 0; setSiren('off');
+  }
+
+  // ── FRUTA MÓVIL (#2): entra por un extremo del túnel y deambula por el laberinto un rato. ──
+  function spawnFruit() {
+    if (gh.bonusRound) return;
+    const fromLeft = ri(0, 1) === 0;
+    const c = fromLeft ? -1 : COLS;                                              // tile virtual del túnel
+    gh.fruit = {
+      from: { c, r: TUNNEL_ROW }, to: { c: fromLeft ? 0 : COLS - 1, r: TUNNEL_ROW }, t: 0,
+      dirv: { x: fromLeft ? 1 : -1, y: 0 }, kind: fruitKind(gh.level), life: 13,
+    };
+  }
+  function fruitPos() { const f = gh.fruit; return { x: f.from.c + (f.to.c - f.from.c) * f.t + 0.5, y: f.from.r + (f.to.r - f.from.r) * f.t + 0.5 }; }
+  function fruitDecide(f) {
+    const c = f.from.c, r = f.from.r, rev = { x: -f.dirv.x, y: -f.dirv.y };
+    const opts = [];
+    for (const d of DIRS) { if (d.x === rev.x && d.y === rev.y) continue; if (!open(c + d.x, r + d.y)) continue; opts.push(d); }
+    const pick = opts.length ? opts[ri(0, opts.length - 1)] : rev;
+    f.dirv = pick; f.to = { c: c + pick.x, r: r + pick.y }; f.t = 0;
+  }
+  function updFruit(dt) {
+    const f = gh.fruit; if (!f) return;
+    f.life -= dt;
+    if (f.life <= 0) { gh.fruit = null; return; }
+    let dist = BASE * 0.55 * dt;
+    while (dist > 1e-9) {
+      const step = Math.min(dist, 1 - f.t); f.t += step; dist -= step;
+      if (f.t >= 1 - 1e-9) {
+        let c = f.to.c, r = f.to.r;
+        if (c < 0) c += COLS; else if (c >= COLS) c -= COLS;
+        f.from = { c, r }; f.t = 1;
+        fruitDecide(f);
+      }
+    }
+  }
 
   function eatAt(c, r) {
     if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return;
@@ -555,18 +763,19 @@
     if (v === 1) { addScore(10); eatPelletAt(c, r); sndWaka(); }
     else {
       addScore(50); sndEnergizer();
-      gh.frightT = lvlSpec(gh.level).fright; gh.combo = 0;
+      gh.frightT = spec().fright; gh.combo = 0;
       for (const g of ghosts) {
         if (g.state === 'eyes' || g.state === 'entering') continue;
         g.frightened = true;
         reverseGhost(g);
       }
     }
-    if (gh.dotsEaten === 70 || gh.dotsEaten === 170) gh.fruit = { x: 14, y: 17.5, t: 9 };
-    if (gh.dotsLeft === 0) { gh.state = 'flash'; gh.stateT = 0; setSiren('off'); saveHigh(); }
+    if (gh.dotsEaten === 70 || gh.dotsEaten === 170) spawnFruit();
+    if (gh.dotsLeft === 0) { saveHigh(); clearLevel(); }
   }
 
   function startDeath() {
+    gh.deathsThisLevel++;                                                        // rompe la racha de nivel perfecto (#8)
     gh.state = 'dying'; gh.stateT = 0;
     setSiren('off'); sndDeath(); saveHigh();
   }
@@ -582,10 +791,14 @@
         addScore(pts);
         popup(gp.x, gp.y, String(pts), '#33ddff');
         sndEatGhost();
+        unlockAch('firstGhost');
         g.frightened = false;
         if (g.state === 'grid') g.state = 'eyes';
         else { g.state = 'entering'; }                                           // lo comieron saliendo: vuelve a bajar
         gh.pauseT = 0.45;
+        if (gh.combo >= 4) {                                                     // #8: comió los 4 con un solo energizante
+          addScore(2000); popup(13.5, 16, 'x4 +2000', '#ffe300'); unlockAch('allFour');
+        }
       } else {
         startDeath();
         return;
@@ -595,7 +808,11 @@
 
   // ════════════════ FLUJO DE PARTIDA ════════════════
   function startGame() {
-    gh.score = 0; gh.lives = 3; gh.level = 1; gh.extraGiven = false;
+    applySkin(gh.skin);
+    rng = gh.mode === 3 ? mulberry32(todaySeed()) : Math.random;                 // #9: Diario = run reproducible
+    gh.score = 0; gh.lives = 3; gh.level = gh.mode === 2 ? 6 : 1;                 // #4: Maratón arranca alto (nivel 6, ya con MAZE2 + fantasmas rápidos)
+    gh.extraGiven = false; gh.perfectStreak = 0;
+    gh.high = topScore();
     gh.firstReady = true;
     resetLevel();
     gh.state = 'ready'; gh.stateT = 0;
@@ -606,15 +823,34 @@
     gh.state = 'menu'; gh.stateT = 0;
     setSiren('off'); saveHigh();
   }
+  // Fin de partida (#5): si el score entra al top-5 → pantalla de iniciales; si no, game over directo.
+  function endGame() {
+    setSiren('off'); saveHigh();
+    gh.pendingScore = gh.score;
+    if (qualifies(gh.score)) { gh.initials = ['A', 'A', 'A']; gh.initialSlot = 0; gh.state = 'initials'; gh.stateT = 0; }
+    else { gh.state = 'gameover'; gh.stateT = 0; }
+  }
+  function finalizeInitials() {
+    insertScore(gh.initials.join(''), gh.pendingScore, MODE_TAG[gh.mode] || 'C');
+    gh.high = topScore();
+    gh.state = 'gameover'; gh.stateT = 0;
+  }
+  function cycleInitial(d) {
+    const A = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    let i = A.indexOf(gh.initials[gh.initialSlot]);
+    gh.initials[gh.initialSlot] = A[(i + d + 26) % 26];
+  }
 
   function updPlay(dt) {
     if (gh.pauseT > 0) { gh.pauseT -= dt; return; }                              // freeze al comer fantasma
+    gh.levelTime += dt;                                                          // #10: cronómetro del nivel
+    if (gh.bonusRound) { updBonus(dt); return; }
     // línea de tiempo scatter/chase (pausada durante el fright)
     if (gh.frightT > 0) {
       gh.frightT -= dt;
       if (gh.frightT <= 0) { gh.frightT = 0; for (const g of ghosts) g.frightened = false; }
     } else {
-      const modes = lvlSpec(gh.level).modes;
+      const modes = spec().modes;
       gh.modeT += dt;
       if (gh.modeT >= modes[Math.min(gh.modeIdx, modes.length - 1)] && gh.modeIdx < modes.length - 1) {
         gh.modeIdx++; gh.modeT = 0;
@@ -625,26 +861,45 @@
     const pp = posA(pac);
     eatAt(Math.floor(pp.x), Math.floor(pp.y));
     if (gh.state !== 'play') return;                                             // comió el último punto → flash
-    if (gh.fruit) {
-      gh.fruit.t -= dt;
-      if (gh.fruit.t <= 0) gh.fruit = null;
-      else if (Math.hypot(gh.fruit.x - pp.x, gh.fruit.y - pp.y) < 0.8) {
-        const pts = FRUIT_PTS[fruitKind(gh.level)];
-        addScore(pts);
-        popup(gh.fruit.x, gh.fruit.y, String(pts), '#ff9ed2');
-        sndFruit();
-        gh.fruit = null;
+    if (gh.fruit) {                                                              // #2: fruta móvil
+      updFruit(dt);
+      if (gh.fruit) {
+        const fp = fruitPos();
+        if (Math.hypot(fp.x - pp.x, fp.y - pp.y) < 0.8) {
+          addScore(FRUIT_PTS[gh.fruit.kind]);
+          popup(fp.x, fp.y, String(FRUIT_PTS[gh.fruit.kind]), '#ff9ed2');
+          sndFruit(); unlockAch('fruit');
+          gh.fruit = null;
+        }
       }
     }
     for (const g of ghosts) updGhost(g, dt);
     checkCollisions();
     updateSiren();
   }
+  // Ronda bonus (#3): sin fantasmas, timer corriendo, frutas repartidas para juntar a las apuradas.
+  function updBonus(dt) {
+    gh.bonusT -= dt;
+    updPac(dt);
+    const pp = posA(pac);
+    eatAt(Math.floor(pp.x), Math.floor(pp.y));
+    if (gh.state !== 'play') return;
+    for (const bf of gh.bonusFruits) {
+      if (bf.eaten) continue;
+      if (Math.hypot(bf.x - pp.x, bf.y - pp.y) < 0.8) {
+        bf.eaten = true; addScore(FRUIT_PTS[bf.kind]);
+        popup(bf.x, bf.y, String(FRUIT_PTS[bf.kind]), '#ff9ed2'); sndFruit();
+      }
+    }
+    if (gh.bonusT <= 0) { unlockAch('bonus'); gh.state = 'flash'; gh.stateT = 0; setSiren('off'); }
+  }
 
   function update(dt) {
     gh.stateT += dt;
     for (const p of popups) p.t += dt;
     popups = popups.filter(p => p.t < 1);
+    for (const t of toasts) t.t += dt;
+    toasts = toasts.filter(t => t.t < 2.6);
     if (gh.state === 'play') updPlay(dt);
     else if (gh.state === 'ready') {
       if (gh.stateT >= (gh.firstReady ? 2.2 : 1.4)) {
@@ -655,12 +910,14 @@
     } else if (gh.state === 'dying') {
       if (gh.stateT >= 2.3) {
         gh.lives--;
-        if (gh.lives <= 0) { gh.state = 'gameover'; gh.stateT = 0; saveHigh(); }
+        if (gh.lives <= 0) endGame();
         else { resetActors(); gh.state = 'ready'; gh.stateT = 0; }
       }
     } else if (gh.state === 'flash') {
       if (gh.stateT >= 2.2) {
         gh.level++;
+        if (gh.level >= 5) unlockAch('level5');
+        if (gh.level >= 10) unlockAch('level10');
         resetLevel();
         gh.state = 'ready'; gh.stateT = 0;
       }
@@ -677,6 +934,23 @@
     ctx.fillStyle = color;
     ctx.fillText(content, x, y);
     ctx.shadowBlur = 0;
+  }
+  function rrect(x, y, w, h, r) {                                                // path de rect redondeado
+    r = Math.min(r, h / 2, w / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+  // toasts de logros (#7): banda superior que aparece/desaparece con fade.
+  function drawToasts() {
+    let y = H * 0.10;
+    for (const t of toasts) {
+      const a = t.t < 0.3 ? t.t / 0.3 : t.t > 2.2 ? Math.max(0, (2.6 - t.t) / 0.4) : 1;
+      ctx.globalAlpha = a;
+      text(W / 2, y, Math.max(8, 11 * scl), t.txt, '#9effa0', 8);
+      ctx.globalAlpha = 1;
+      y += Math.max(16, 22 * scl);
+    }
   }
 
   function drawPacBody(x, y, r, ang, mouth) {
@@ -743,6 +1017,8 @@
       ctx.closePath();
       ctx.fill();
       ctx.shadowBlur = 0;
+      ctx.fillStyle = 'rgba(255,255,255,0.16)';                                  // brillo superior → da volumen
+      ctx.beginPath(); ctx.ellipse(x - r * 0.28, yTop - r * 0.12, r * 0.46, r * 0.3, -0.4, 0, TAU); ctx.fill();
     }
     if (mode === 'fright' || mode === 'flash') {
       const fc = mode === 'flash' ? '#ff3b3b' : '#ffffff';
@@ -768,6 +1044,9 @@
       ctx.fillStyle = '#2030e0';
       ctx.beginPath(); ctx.arc(x - ex + dx, eyeY + dy, r * 0.16, 0, TAU); ctx.fill();
       ctx.beginPath(); ctx.arc(x + ex + dx, eyeY + dy, r * 0.16, 0, TAU); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';                                   // reflejo en las pupilas
+      ctx.beginPath(); ctx.arc(x - ex + dx - r * 0.05, eyeY + dy - r * 0.05, r * 0.05, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + ex + dx - r * 0.05, eyeY + dy - r * 0.05, r * 0.05, 0, TAU); ctx.fill();
     }
   }
   function drawGhost(g, T) {
@@ -858,7 +1137,7 @@
     const yBot = oy + ROWS * ts + ts * 1.0;
     for (let i = 0; i < Math.min(5, gh.lives - 1); i++)
       drawPacBody(ox + ts * (1 + i * 1.5), yBot, ts * 0.5, Math.PI, 0.5);
-    text(ox + COLS * ts * 0.5, yBot, fp, 'NIVEL ' + gh.level, 'rgba(255,255,255,0.65)');
+    text(ox + COLS * ts * 0.5, yBot, fp, 'NIVEL ' + gh.level + (gh.mode ? ' ' + MODE_TAG[gh.mode] : ''), 'rgba(255,255,255,0.65)');
     const kMax = fruitKind(gh.level);
     const nIcons = Math.min(3, gh.level);
     for (let i = 0; i < nIcons; i++)
@@ -873,19 +1152,27 @@
     ctx.drawImage(flashing ? mazeFlashCv : mazeCv, ox, oy);
     if (gh.state !== 'flash') {
       ctx.drawImage(pelletCv, ox, oy);
-      // energizantes (parpadean)
-      if (Math.floor(T * 4) % 2 === 0 || gh.state !== 'play') {
-        ctx.fillStyle = DOT_COL;
-        ctx.shadowColor = DOT_COL; ctx.shadowBlur = ts * 0.5;
-        for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
-          if (dots[r * COLS + c] === 2) {
-            ctx.beginPath(); ctx.arc(px(c + 0.5), py(r + 0.5), ts * 0.42, 0, TAU); ctx.fill();
-          }
+      // energizantes: pulso suave (escala + glow respirando) en vez de parpadeo duro
+      const pulse = 0.5 + 0.5 * Math.sin(T * 6.5);
+      const erad = ts * (0.30 + 0.12 * pulse);
+      ctx.save();
+      ctx.fillStyle = DOT_COL;
+      ctx.shadowColor = DOT_COL; ctx.shadowBlur = ts * (0.35 + 0.5 * pulse);
+      ctx.globalAlpha = 0.7 + 0.3 * pulse;
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        if (dots[r * COLS + c] === 2) {
+          ctx.beginPath(); ctx.arc(px(c + 0.5), py(r + 0.5), erad, 0, TAU); ctx.fill();
         }
-        ctx.shadowBlur = 0;
       }
+      ctx.restore();
     }
-    if (gh.fruit) drawFruitIcon(px(gh.fruit.x), py(gh.fruit.y), ts * 0.62, fruitKind(gh.level));
+    // frutas: bonus (estáticas, varias) o la fruta móvil normal (#2)
+    if (gh.bonusRound) {
+      for (const bf of gh.bonusFruits) if (!bf.eaten) drawFruitIcon(px(bf.x), py(bf.y), ts * 0.6, bf.kind);
+    } else if (gh.fruit) {
+      const fp = fruitPos();
+      drawWrapped(fp, x => drawFruitIcon(x, py(fp.y), ts * 0.62, gh.fruit.kind));
+    }
     if (gh.state !== 'flash' && !(gh.state === 'dying' && gh.stateT > 0.5)) {
       for (const g of ghosts) drawGhost(g, T);
     }
@@ -894,19 +1181,64 @@
       text(px(p.x), py(p.y) - p.t * ts * 0.8, Math.max(8, ts * 0.5), p.txt, p.color, 6);
       ctx.globalAlpha = 1;
     }
+    if (vignette) { ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H); }         // atmósfera (antes del HUD → HUD nítido)
     drawHud();
-    if (gh.state === 'ready') text(px(14), py(17.5), Math.max(10, ts * 0.8), '¡LISTO!', PAC_COL, 12);
-    if (gh.state === 'gameover') {
-      text(px(14), py(14.5), Math.max(10, ts * 0.8), 'GAME OVER', '#ff3b3b', 14);
-      text(px(14), py(17.5), Math.max(8, ts * 0.55), 'tocá o Enter para jugar de nuevo', '#ddd', 0);
+    if (gh.state === 'ready') text(px(14), py(17.5), Math.max(10, ts * 0.8), gh.bonusRound ? 'BONUS!' : 'LISTO!', PAC_COL, 12);
+    if (gh.bonusRound && (gh.state === 'play' || gh.state === 'ready')) {        // #3: banner + cronómetro
+      text(px(14), py(8.5), Math.max(9, ts * 0.6), 'RONDA BONUS', '#ffe300', 10);
+      text(px(14), py(22), Math.max(10, ts * 0.8), Math.max(0, Math.ceil(gh.bonusT)) + 's', '#9effa0', 8);
     }
+    if (gh.state === 'gameover') drawGameOver();
+    if (gh.state === 'initials') drawInitials();
+    drawToasts();
+  }
+  function drawGameOver() {
+    ctx.fillStyle = 'rgba(0,0,0,0.62)'; ctx.fillRect(0, 0, W, H);
+    text(W / 2, H * 0.20, Math.max(13, 20 * scl), 'GAME OVER', '#ff3b3b', 14);
+    text(W / 2, H * 0.30, Math.max(9, 12 * scl), 'RECORDS', '#ffb8de', 8);
+    for (let i = 0; i < scores.length; i++) {
+      const s = scores[i];
+      const fresh = gh.pendingScore === s.s && s.s > 0;
+      const line = (i + 1) + '  ' + s.n + '  ' + String(s.s).padStart(6, ' ') + '  ' + s.m;
+      text(W / 2, H * (0.37 + i * 0.055), Math.max(9, 12 * scl), line, i === 0 ? '#ffe300' : (fresh ? '#9effa0' : '#ddd'));
+    }
+    text(W / 2, H * 0.80, Math.max(8, 11 * scl), 'tocá o Enter para jugar', '#ccc');
+  }
+  // Entrada de iniciales (#5): 3 slots con ▲/▼ tocables + botón OK. También teclado A-Z/Enter.
+  let initUI = null;
+  function drawInitials() {
+    ctx.fillStyle = 'rgba(0,0,0,0.82)'; ctx.fillRect(0, 0, W, H);
+    const cx = W / 2;
+    text(cx, H * 0.20, Math.max(13, 19 * scl), 'NUEVO RECORD!', '#ffe300', 14);
+    text(cx, H * 0.28, Math.max(10, 13 * scl), gh.pendingScore + ' PTS', '#fff');
+    text(cx, H * 0.36, Math.max(8, 10 * scl), 'toca flechas o escribi', 'rgba(180,190,205,0.8)');
+    const sw = Math.max(38, 46 * scl), gap = sw * 0.45, totalw = sw * 3 + gap * 2, sx0 = cx - totalw / 2;
+    const midY = H * 0.52, fp = Math.max(22, 34 * scl);
+    const slots = [];
+    for (let i = 0; i < 3; i++) {
+      const x = sx0 + i * (sw + gap), sel = i === gh.initialSlot;
+      const col = sel ? PAC_COL : 'rgba(255,255,255,0.45)';
+      text(x + sw / 2, midY - fp * 0.95, fp * 0.55, '▲', col);
+      text(x + sw / 2, midY + fp * 0.95, fp * 0.55, '▼', col);
+      if (sel) { ctx.strokeStyle = PAC_COL; ctx.lineWidth = 2; ctx.strokeRect(x, midY - fp * 0.62, sw, fp * 1.24); }
+      text(x + sw / 2, midY, fp, gh.initials[i], sel ? '#fff' : '#ccc');
+      slots.push({ x, w: sw, midY });
+    }
+    const okw = Math.max(110, 140 * scl), okh = Math.max(34, 44 * scl), okx = cx - okw / 2, oky = H * 0.68;
+    ctx.save();
+    ctx.strokeStyle = PAC_COL; ctx.lineWidth = 2; ctx.shadowColor = PAC_COL; ctx.shadowBlur = 12;
+    ctx.fillStyle = 'rgba(255,227,0,0.14)';
+    rrect(okx, oky, okw, okh, okh / 2); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    text(cx, oky + okh / 2, Math.max(11, 15 * scl), 'OK', '#fff');
+    initUI = { slots, ok: { x: okx, y: oky, w: okw, h: okh } };
   }
 
   // ── MENÚ estilo TronV2: título glow + animación de persecución + botón JUGAR ──
   let playBox = null;
   function drawTitle(T) {
-    const fp = Math.min(W / 8.5, H * 0.075);
-    const x = W / 2, y = H * 0.22;
+    const fp = Math.min(W / 8.5, H * 0.07);
+    const x = W / 2, y = H * 0.14;
     const breathe = 0.5 + 0.5 * Math.sin(T * 1.6);
     ctx.save();
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -923,7 +1255,7 @@
   }
   function drawChase(T) {
     // pac persiguiendo / perseguido en loop, comiendo una hilera de puntos
-    const y = H * 0.42, r = Math.max(10, ts * 0.8);
+    const y = H * 0.26, r = Math.max(9, ts * 0.7);
     const span = W + r * 14;
     const xPac = ((T * W * 0.18) % span) - r * 7;
     ctx.save();
@@ -937,40 +1269,83 @@
       drawGhostBody(xPac - r * (3 + i * 2.4), y, r * 0.95, cols[i], { x: 1, y: 0 }, 'norm', T);
     ctx.restore();
   }
+  // posiciones Y (fracción de H) de las filas tocables del menú
+  const MENU_Y = { mode: 0.40, skin: 0.48, play: 0.59 };
+  function nearY(ly, frac) { return Math.abs(ly - H * frac) < H * 0.042; }
+  function drawMenuRow(label, value, fy, sel) {
+    const col = sel ? PAC_COL : 'rgb(150,160,175)';
+    const s = label + '   ' + (sel ? '‹ ' + value + ' ›' : value);
+    text(W / 2, H * fy, Math.max(9, 13 * scl), s, col, sel ? 10 : 0);
+  }
+  function drawPlayBtn(fy, sel, T) {
+    const fp = Math.max(12, 22 * scl);
+    ctx.font = `${Math.round(fp)}px ${FONT}`;
+    const tw = ctx.measureText('JUGAR').width;
+    const bw = tw + fp * 1.9, bh = fp * 2.1, bx = W / 2 - bw / 2, by = H * fy - bh / 2;
+    playBox = { x: bx, y: by, w: bw, h: bh };
+    const pulse = 0.6 + 0.4 * Math.sin(T * 4);
+    ctx.save();
+    ctx.shadowColor = PAC_COL; ctx.shadowBlur = sel ? 24 : 14;
+    ctx.lineWidth = 2; ctx.strokeStyle = sel ? PAC_COL : 'rgba(255,227,0,0.7)';
+    ctx.fillStyle = sel ? 'rgba(255,227,0,0.20)' : 'rgba(255,227,0,0.10)';
+    rrect(bx, by, bw, bh, bh / 2); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 10;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = `rgba(255,255,255,${0.8 + 0.2 * pulse})`;
+    ctx.fillText('JUGAR', W / 2, by + bh / 2);
+    ctx.restore();
+  }
   function drawMenu(T) {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
-    // campo de puntitos tenue de fondo
-    const step = Math.max(34, Math.round(Math.min(W, H) / 12));
+    const step = Math.max(34, Math.round(Math.min(W, H) / 12));                  // campo de puntitos tenue
     ctx.fillStyle = 'rgba(255,199,168,0.10)';
     for (let x = step / 2; x < W; x += step) for (let y = step / 2; y < H; y += step)
       ctx.fillRect(x - 1, y - 1, 2, 2);
     drawTitle(T);
     drawChase(T);
-    text(W / 2, H * 0.55, Math.max(9, 13 * scl), 'RECORD  ' + gh.high, '#ffb8de', 0);
-    // botón JUGAR (caja redondeada amarilla, como el de Tron)
-    const fp = Math.max(12, 22 * scl);
-    ctx.font = `${Math.round(fp)}px ${FONT}`;
-    const tw = ctx.measureText('▶ JUGAR').width;
-    const bw = tw + fp * 1.6, bh = fp * 2.2, bx = W / 2 - bw / 2, by = H * 0.68 - bh / 2;
-    playBox = { x: bx, y: by, w: bw, h: bh };
-    const pulse = 0.6 + 0.4 * Math.sin(T * 4);
-    ctx.save();
-    ctx.shadowColor = PAC_COL; ctx.shadowBlur = 16;
-    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,227,0,0.8)';
-    ctx.fillStyle = 'rgba(255,227,0,0.12)';
-    ctx.beginPath();
-    const rr = bh / 2;
-    ctx.moveTo(bx + rr, by); ctx.arcTo(bx + bw, by, bx + bw, by + bh, rr); ctx.arcTo(bx + bw, by + bh, bx, by + bh, rr);
-    ctx.arcTo(bx, by + bh, bx, by, rr); ctx.arcTo(bx, by, bx + bw, by, rr); ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    ctx.shadowBlur = 10;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = `rgba(255,255,255,${0.8 + 0.2 * pulse})`;
-    ctx.fillText('▶ JUGAR', W / 2, by + bh / 2);
-    ctx.restore();
-    text(W / 2, H * 0.86, Math.max(8, 10 * scl), 'deslizá o usá flechas/WASD', 'rgba(150,160,175,0.8)');
-    text(W / 2, H * 0.86 + Math.max(14, 18 * scl), Math.max(8, 10 * scl), 'comé los puntos · esquivá fantasmas', 'rgba(150,160,175,0.6)');
+    // filas seleccionables: modo (#4) · skin (#6) · jugar
+    const sk = SKINS[gh.skin];
+    drawMenuRow('MODO', MODE_NAMES[gh.mode], MENU_Y.mode, gh.menuSel === 0);
+    drawMenuRow('SKIN', sk.name + (skinUnlocked(gh.skin) ? '' : ' 🔒'), MENU_Y.skin, gh.menuSel === 1);
+    drawPlayBtn(MENU_Y.play, gh.menuSel === 2, T);
+    // mini-tabla de récords (#5)
+    text(W / 2, H * 0.69, Math.max(8, 11 * scl), 'RECORDS', '#ffb8de', 6);
+    if (scores.length) {
+      for (let i = 0; i < Math.min(3, scores.length); i++) {
+        const s = scores[i];
+        text(W / 2, H * (0.74 + i * 0.045), Math.max(8, 11 * scl),
+          (i + 1) + '  ' + s.n + '  ' + String(s.s).padStart(6, ' ') + '  ' + s.m, i === 0 ? '#ffe300' : '#cfd6e0');
+      }
+    } else {
+      text(W / 2, H * 0.745, Math.max(8, 10 * scl), 'todavía no hay', 'rgba(150,160,175,0.7)');
+    }
+    text(W / 2, H * 0.90, Math.max(8, 9 * scl), 'flechas/WASD o swipe · tocá una fila', 'rgba(150,160,175,0.7)');
+  }
+  // ── helpers de input del menú ──
+  function menuChangeSkin(dir) {
+    let i = gh.skin;
+    for (let k = 0; k < SKINS.length; k++) { i = (i + dir + SKINS.length) % SKINS.length; if (skinUnlocked(i)) break; }
+    gh.skin = i; applySkin(i); lsSet('pacmanSkin', String(i));
+  }
+  function menuChange(dir) {
+    if (gh.menuSel === 0) gh.mode = (gh.mode + dir + 4) % 4;
+    else if (gh.menuSel === 1) menuChangeSkin(dir);
+  }
+  function tapMenu(lx, ly) {
+    const dir = lx < W * 0.5 ? -1 : 1;
+    if (nearY(ly, MENU_Y.mode)) { gh.menuSel = 0; gh.mode = (gh.mode + dir + 4) % 4; }
+    else if (nearY(ly, MENU_Y.skin)) { gh.menuSel = 1; menuChangeSkin(dir); }
+    else if (playBox && lx >= playBox.x && lx <= playBox.x + playBox.w && ly >= playBox.y - 14 && ly <= playBox.y + playBox.h + 14) startGame();
+  }
+  function tapInitials(lx, ly) {
+    if (!initUI) return;
+    for (let i = 0; i < 3; i++) {
+      const s = initUI.slots[i];
+      if (lx >= s.x && lx <= s.x + s.w) { gh.initialSlot = i; cycleInitial(ly < s.midY ? 1 : -1); return; }
+    }
+    const o = initUI.ok;
+    if (lx >= o.x && lx <= o.x + o.w && ly >= o.y && ly <= o.y + o.h) finalizeInitials();
   }
 
   // ════════════════ INPUT ════════════════
@@ -982,13 +1357,31 @@
   };
   window.addEventListener('keydown', e => {
     ensureAudio();
-    const d = KEY_DIRS[e.code];
-    if (d) {
-      if (pac) pac.desired = d;
-      e.preventDefault();
+    if (gh.state === 'menu') {                                                   // navegación del menú (#4/#6)
+      if (e.code === 'ArrowUp' || e.code === 'KeyW') gh.menuSel = (gh.menuSel + 2) % 3;
+      else if (e.code === 'ArrowDown' || e.code === 'KeyS') gh.menuSel = (gh.menuSel + 1) % 3;
+      else if (e.code === 'ArrowLeft' || e.code === 'KeyA') menuChange(-1);
+      else if (e.code === 'ArrowRight' || e.code === 'KeyD') menuChange(1);
+      else if (e.code === 'Enter' || e.code === 'Space') startGame();
+      if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Enter'].includes(e.code)) e.preventDefault();
+      return;
     }
-    if (e.code === 'Enter' && (gh.state === 'menu' || gh.state === 'gameover')) startGame();
-    if (e.code === 'Escape' && gh.state !== 'menu') backToMenu();
+    if (gh.state === 'initials') {                                               // entrada de iniciales (#5)
+      if (/^Key[A-Z]$/.test(e.code)) { gh.initials[gh.initialSlot] = e.code.slice(3); if (gh.initialSlot < 2) gh.initialSlot++; }
+      else if (e.code === 'Backspace') { gh.initials[gh.initialSlot] = 'A'; if (gh.initialSlot > 0) gh.initialSlot--; }
+      else if (e.code === 'ArrowLeft') gh.initialSlot = (gh.initialSlot + 2) % 3;
+      else if (e.code === 'ArrowRight') gh.initialSlot = (gh.initialSlot + 1) % 3;
+      else if (e.code === 'ArrowUp') cycleInitial(1);
+      else if (e.code === 'ArrowDown') cycleInitial(-1);
+      else if (e.code === 'Enter') finalizeInitials();
+      else if (e.code === 'Escape') backToMenu();
+      e.preventDefault();
+      return;
+    }
+    const d = KEY_DIRS[e.code];
+    if (d) { if (pac) pac.desired = d; e.preventDefault(); }
+    if (e.code === 'Enter' && gh.state === 'gameover') startGame();
+    if (e.code === 'Escape') backToMenu();
     if (e.code === 'Space') e.preventDefault();
   });
 
@@ -998,14 +1391,12 @@
   canvas.addEventListener('pointerdown', e => {
     ensureAudio();
     hideHint();
-    swipe = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };
-    if (gh.state === 'menu' && playBox) {
-      const r = canvas.getBoundingClientRect();
-      const lx = e.clientX - r.left, ly = e.clientY - r.top;
-      if (lx >= playBox.x && lx <= playBox.x + playBox.w && ly >= playBox.y - 14 && ly <= playBox.y + playBox.h + 14) startGame();
-    } else if (gh.state === 'gameover' && gh.stateT > 0.6) {
-      startGame();
-    }
+    const r = canvas.getBoundingClientRect();
+    const lx = e.clientX - r.left, ly = e.clientY - r.top;
+    if (gh.state === 'menu') { tapMenu(lx, ly); return; }
+    if (gh.state === 'initials') { tapInitials(lx, ly); return; }
+    if (gh.state === 'gameover') { if (gh.stateT > 0.6) startGame(); return; }
+    swipe = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };       // en juego: swipe
   });
   canvas.addEventListener('pointermove', e => {
     if (!swipe || e.pointerId !== swipe.id) return;
@@ -1055,6 +1446,9 @@
   }
 
   // ── INIT ──
+  gh.skin = +lsGet('pacmanSkin', 0) || 0;                                        // #6: skin guardado (clampeado a desbloqueado)
+  if (gh.skin < 0 || gh.skin >= SKINS.length || !skinUnlocked(gh.skin)) gh.skin = 0;
+  applySkin(gh.skin);                                                            // antes de resize() para hornear con el color correcto
   resize();
   resetLevel();                                                                  // deja actores listos para el menú/ready
   loop();

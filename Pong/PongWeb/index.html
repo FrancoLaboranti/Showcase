@@ -110,7 +110,7 @@
   <button class="cbtn" id="btnExit" aria-label="salir" title="Salir">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
-  <button class="cbtn" id="btnInfo" aria-label="info" title="Info (FPS)">
+  <button class="cbtn" id="btnInfo" aria-label="info" title="Cómo jugar / stats">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
   </button>
   <button class="cbtn" id="btnFull" aria-label="pantalla completa" title="Pantalla completa">
@@ -180,6 +180,7 @@
 
   const FIRE_STREAK     = 2;       // racha para prenderse fuego
   const SERVE_DELAY     = 0.7;     // pausa (s) antes de lanzar el saque
+  const RALLY_TIERS     = [6, 12, 20];  // devoluciones seguidas que disparan un "hito" de peloteo (flash + cartel)
 
   // IA (modo 1 jugador) — juega con intención: predice el rebote, se posiciona y "tira" angulando
   // la pelota lejos del rival. Buena pero no perfecta (error de puntería + despistes ocasionales).
@@ -204,6 +205,8 @@
     AWAKE_MAX:    9,
     SLEEP_MIN:    0.8,    // duración de la siesta
     SLEEP_MAX:    2.0,
+    PADDLE_H_MULT: 1,     // alto de la paleta del rival ×esto (≤1: sólo se achica → más fácil, nunca buffea al difícil)
+    FIREPROOF:     false, // true = el rival NO se puede prender fuego (hay que ganarle a peloteo, no a snowball)
   };
   // Contrincantes (modo 1 jugador): color de la paleta + overrides de IA → cada uno juega distinto.
   // glow = color del resplandor (para el negro, que es oscuro, usa un gris claro para que se vea).
@@ -219,17 +222,17 @@
     { name: 'Negro', letter: 'N', col: [58, 60, 76], glow: [185, 195, 215], ai: {
       SPEED_MULT: 1.05, ERROR_FRAC: 0.02, REACT_FRAC: 0.95, MIX_CHANCE: 0.05, FLICK_TIME: 0.10, AIM_FRAC: 0.18,
       SMART_MIN: 6, SMART_MAX: 10, DUMB_MIN: 0.3, DUMB_MAX: 0.6, DUMB_SPEED: 0.8, IDLE_AMP: 0.02,
-      AWAKE_MIN: 14, AWAKE_MAX: 22, SLEEP_MIN: 0.3, SLEEP_MAX: 0.6 } },
+      AWAKE_MIN: 14, AWAKE_MAX: 22, SLEEP_MIN: 0.3, SLEEP_MAX: 0.6, FIREPROOF: true } },
     // Amarillo — errático/payaso: tira para cualquier lado, mucho vaivén, se despista y duerme seguido. Fácil/gracioso.
     { name: 'Amarillo', letter: 'A', col: [255, 225, 70], glow: [255, 235, 90], ai: {
       SPEED_MULT: 0.95, ERROR_FRAC: 0.09, MIX_CHANCE: 0.7, IDLE_AMP: 0.09, IDLE_FREQ: 3.2,
       SMART_MIN: 1.5, SMART_MAX: 3, DUMB_MIN: 1.2, DUMB_MAX: 2.6, DUMB_SPEED: 0.45,
-      AWAKE_MIN: 2.5, AWAKE_MAX: 5, SLEEP_MIN: 1.0, SLEEP_MAX: 2.2 } },
+      AWAKE_MIN: 2.5, AWAKE_MAX: 5, SLEEP_MIN: 1.0, SLEEP_MAX: 2.2, PADDLE_H_MULT: 0.85 } },
     // Celeste — principiante tranquilo: lenta, reacciona tarde, error grande, dead-zone amplia. Fácil.
     { name: 'Celeste', letter: 'C', col: [120, 210, 255], glow: [140, 220, 255], ai: {
       SPEED_MULT: 0.85, ERROR_FRAC: 0.11, REACT_FRAC: 0.62, FLICK_TIME: 0.12, MIX_CHANCE: 0.2,
       DUMB_DEADZONE: 0.16, DUMB_SPEED: 0.4, SMART_MIN: 2, SMART_MAX: 4, DUMB_MIN: 1.0, DUMB_MAX: 2.2,
-      AWAKE_MIN: 3.5, AWAKE_MAX: 7, SLEEP_MIN: 1.0, SLEEP_MAX: 2.0 } },
+      AWAKE_MIN: 3.5, AWAKE_MAX: 7, SLEEP_MIN: 1.0, SLEEP_MAX: 2.0, PADDLE_H_MULT: 0.9 } },
   ];
   const SCORE_LABELS    = ['5', '10', '20', '40', '∞'];
   const WIN_POINTS      = [5, 10, 20, 40, null];   // null = práctica (sin fin)
@@ -257,11 +260,25 @@
   let fireEnabled = true;
   let oppIdx = 0;                  // contrincante elegido (índice en OPPONENTS) — sólo importa en 1 jugador
   let A = { ...AI_BASE };          // config de IA efectiva del contrincante actual
-  function applyOpponent() { A = { ...AI_BASE, ...OPPONENTS[oppIdx].ai }; }
+  function applyOpponent() {
+    A = { ...AI_BASE, ...OPPONENTS[oppIdx].ai };
+    left.hMul = twoPlayers ? 1 : A.PADDLE_H_MULT;   // la paleta del rival hereda su tamaño; el humano (der) siempre 1
+    right.hMul = 1;
+  }
 
   // DESAFÍO: jugás 1 game (a 10) contra cada rival en orden fácil → difícil. Ganás → siguiente; perdés → fin.
   let challenge = false, challengeIdx = 0;
   const CHALLENGE_ORDER = [3, 4, 0, 1, 2];   // Amarillo → Celeste → Magenta → Verde → Negro
+  // Modificadores por PELDAÑO del Desafío — keyed por id de RIVAL (no por slot), así reordenar
+  // CHALLENGE_ORDER no re-empareja mal. Peldaños tempranos (Amarillo/Celeste) no tienen entrada = sin mod.
+  const CHALLENGE_MODS = {
+    0: { serveMult: 1.06, label: 'SAQUE RÁPIDO' },                   // Magenta (peldaño 3)
+    1: { forceFire: true, label: 'FUEGO FORZADO' },                  // Verde (peldaño 4)
+    2: { forceFire: true, serveMult: 1.12, label: 'FUEGO + SAQUE' }, // Negro (peldaño 5)
+  };
+  let cmod = {};                   // modificador del peldaño actual (lo arma applyChallengeMod)
+  function applyChallengeMod() { cmod = challenge ? (CHALLENGE_MODS[CHALLENGE_ORDER[challengeIdx]] || {}) : {}; }
+
 
   // match
   let state = 'menu';              // 'menu' | 'play' | 'paused' | 'over'
@@ -273,17 +290,25 @@
   let j1score = 0, j2score = 0;
   let j1racha = 0, j2racha = 0;
   let j1pulse = 0, j2pulse = 0;    // 1→0: "golpe" visual del marcador al sumar (se nota el punto)
+  // PELOTEO: rallyHits = devoluciones seguidas en el peloteo actual (resetea al sacar); bestRally = el mejor del
+  // partido; rallyFlash 0.5→0 = brillo del hito; rallyMilestone = el umbral cruzado que muestra el cartel.
+  let rallyHits = 0, bestRally = 0, rallyFlash = 0, rallyMilestone = 0;
+  let records = loadRecords();     // récords por rival (localStorage): { [nombre]: {rally, margin} }
+  let newRecordFlag = false;       // true si el último partido batió un récord (lo lee drawOver)
   let showDebug = false;
 
   // paletas (cy = centro vertical en px, vel = velocidad px/s). powerFireT/boostT: timers de powers (modo ladrillos)
-  const right = { cy: 0, vel: 0, onFire: false, powerFireT: 0, boostT: 0 };  // jugador 1
-  const left  = { cy: 0, vel: 0, onFire: false, powerFireT: 0, boostT: 0 };  // jugador 2 / CPU
+  const right = { cy: 0, vel: 0, onFire: false, powerFireT: 0, boostT: 0, hMul: 1, shield: false };  // jugador 1
+  const left  = { cy: 0, vel: 0, onFire: false, powerFireT: 0, boostT: 0, hMul: 1, shield: false };  // jugador 2 / CPU (hMul: alto ×rival)
 
   // ── MODO LADRILLOS (Pong + Breakout) ──
   let bricksMode = false;
   let balls = [];                  // varias bolas: {x,y,vx,vy,fire,last,trail,px,py,rx,ry,delay}
   let bricks = [];                 // ladrillos sobre la red: {x,y,w,h,power}
   let drops = [];                  // tokens de poder que caen al lado del que rompió: {x,y,vx,vy,type,side,windup,trail}
+  // Contrarreloj (sub-variante de ladrillos): romper ladrillos SÍ suma a tu puntaje y un reloj termina la ronda.
+  let bricksModeIdx = 0;           // 0 = Defensa (gol = punto) · 1 = Contrarreloj (rotura = puntaje, reloj)
+  let brickAttack = false, brickTimer = 0, brickRegenCD = 0, j1brick = 0, j2brick = 0;
   // Bolas: 2 BASE (una hacia cada jugador, siempre respawnean) + EXTRA por power-up cian,
   // sin tope: cada extra vive hasta que sale de cancha.
   const BRICK_SPEED = 0.72;        // las bolas van un poco más lentas en este modo
@@ -322,6 +347,7 @@
 
   // ── GETTERS DE GEOMETRÍA (dependientes de la resolución actual) ──
   const paddleH = () => Math.min(PADDLE_H_FRAC * H, PADDLE_H_MAX_FRAC * Math.min(W, H));
+  const paddleHFor = p => paddleH() * (p.hMul || 1);   // alto efectivo por paleta (rival puede ser más chico)
   const paddleW = () => Math.max(8, PADDLE_W_FRAC * W);
   const paddleMargin = () => PADDLE_MARGIN_FRAC * W;
   const ballR   = () => Math.max(5, BALL_R_FRAC * Math.min(W, H));
@@ -335,15 +361,17 @@
   function serve(dir) {
     bx = W / 2;
     by = rnd(ballR(), H - ballR());
-    bvx = dir * VX0_FRAC * W * rnd(0.85, 1.15);
+    bvx = dir * VX0_FRAC * W * rnd(0.85, 1.15) * (challenge ? (cmod.serveMult || 1) : 1);   // peldaño tardío: saque más vivo (capado en paddleHit)
     bvy = rnd(-1, 1) * VY0_FRAC * H * 0.6;
     serveCD = SERVE_DELAY;
     fireball = false; firetrail = false; fireTop = false; fireBot = false; fireNet = false;
     ballTrail.length = 0;                              // sin estela cruzando la cancha al sacar
+    rallyHits = 0; rallyFlash = 0; rallyMilestone = 0; // el peloteo arranca de cero en cada saque (bestRally persiste)
     prevBx = bx; prevBy = by; rbx = bx; rby = by;      // sin streak de interpolación tras el reset
   }
   function newMatch() {
     j1score = 0; j2score = 0; j1racha = 0; j2racha = 0;
+    bestRally = 0;
     right.cy = left.cy = H / 2;
     right.vel = left.vel = 0;
     updateFireStates();
@@ -352,8 +380,10 @@
     serve(Math.random() < 0.5 ? -1 : 1);
   }
   function updateFireStates() {
-    right.onFire = fireEnabled && j1racha >= FIRE_STREAK;
-    left.onFire  = fireEnabled && j2racha >= FIRE_STREAK;
+    const fireOn = fireEnabled || (challenge && cmod.forceFire);   // un peldaño del Desafío puede forzar el fuego
+    right.onFire = fireOn && j1racha >= FIRE_STREAK;
+    // el rival FIREPROOF (Negro) no se prende en 1P; en 2P la izquierda es humana y se prende normal
+    left.onFire  = fireOn && (twoPlayers || !A.FIREPROOF) && j2racha >= FIRE_STREAK;
   }
 
   function scorePoint(scorer) {
@@ -364,11 +394,25 @@
     const cond = WIN_POINTS[ptsIdx];
     if (cond != null && (j1score >= cond || j2score >= cond)) {
       winner = scorer;
+      recordMatch(scorer);
       state = 'over';
     } else {
       // saque hacia el que recibió el punto en contra (jug. que falló)
       serve(scorer === 1 ? -1 : 1);
     }
+  }
+
+  // ── RÉCORDS POR RIVAL (persisten en localStorage; sólo 1P/Desafío — en 2P no hay rival fijo) ──
+  function loadRecords() { try { return JSON.parse(localStorage.getItem('pong.records')) || {}; } catch (e) { return {}; } }
+  function saveRecords() { try { localStorage.setItem('pong.records', JSON.stringify(records)); } catch (e) {} }
+  function recordMatch(scorer) {
+    if (twoPlayers) return;
+    const name = OPPONENTS[oppIdx].name;
+    const rec = records[name] || { rally: 0, margin: 0 };
+    newRecordFlag = false;
+    if (bestRally > (rec.rally || 0)) { rec.rally = bestRally; newRecordFlag = true; }     // peloteo más largo
+    if (scorer === 1) { const m = j1score - j2score; if (m > (rec.margin || 0)) { rec.margin = m; newRecordFlag = true; } } // mejor margen ganando
+    records[name] = rec; saveRecords();
   }
 
   // ── FÍSICA ──
@@ -384,7 +428,7 @@
         // paleta esté en movimiento en el contacto → la pelota sale angulada (no plana).
         p.vel = aiFlickVel;
         p.cy += p.vel * dt;
-        const span = paddleH() * A.AIM_FRAC;
+        const span = paddleHFor(p) * A.AIM_FRAC;
         p.cy = clampN(p.cy, aiBaseY - span, aiBaseY + span);
       } else {
         // CPU posicionándose: persigue aiTarget
@@ -404,7 +448,7 @@
       p.vel += (targetVel - p.vel) * k;
       p.cy += p.vel * dt;
     }
-    const half = paddleH() / 2;
+    const half = paddleHFor(p) / 2;
     if (p.cy < half)     { p.cy = half;     p.vel = 0; }
     if (p.cy > H - half) { p.cy = H - half; p.vel = 0; }
   }
@@ -485,7 +529,7 @@
       aiBaseY = (pred == null ? by : pred) + aiError;
       const faceX = leftX() + paddleW() + ballR();
       const tHit = Math.max(0, (bx - faceX) / Math.abs(bvx || 1));
-      const span = paddleH() * A.AIM_FRAC;
+      const span = paddleHFor(left) * A.AIM_FRAC;
       if (tHit < A.FLICK_TIME && Math.abs(left.cy - aiBaseY) <= span) {
         // YA posicionada y a punto de pegar: BARRE la paleta a velocidad fija en la dirección del tiro.
         // Como el spin sale de la velocidad de la paleta, la pelota sale angulada y fuerte (no plana).
@@ -503,7 +547,7 @@
   }
 
   function paddleHit(p, isRight) {
-    const pw = paddleW(), ph = paddleH(), r = ballR();
+    const pw = paddleW(), ph = paddleHFor(p), r = ballR();
     const px = isRight ? rightX() : leftX();
     const movingInto = isRight ? bvx > 0 : bvx < 0;
     if (!movingInto) return;
@@ -528,6 +572,14 @@
     // chispas en el color de la paleta (naranja si está en llamas)
     const col = p.onFire ? [255, 170, 40] : (isRight ? NEON_P1 : leftGlow());
     burst(bx, by, col, 12, Math.min(W, H) * 0.6, ballR() * 0.5, 0.4);
+    // hito de peloteo: contás devoluciones exitosas; al cruzar un umbral, brillo del marco/red + cartel breve.
+    // NO toca ninguna velocidad ni clamp (sólo lee un entero) → la escalada del rally queda intacta.
+    rallyHits++;
+    if (rallyHits > bestRally) bestRally = rallyHits;
+    if (RALLY_TIERS.includes(rallyHits)) {
+      rallyFlash = 0.5; rallyMilestone = rallyHits;
+      burst(W / 2, H * 0.12, NEON_P1, 10, Math.min(W, H) * 0.5, ballR() * 0.5, 0.5);
+    }
   }
 
   function updateBall(dt) {
@@ -576,39 +628,70 @@
     b.fire = false; b.last = 0; b.trail.length = 0; b.px = b.x; b.py = b.y; b.entry = 0;
     b.hold = SERVE_DELAY;                          // pausa de saque antes de salir (como el modo normal)
   }
+  // Layouts de pared (uno por ronda, elegido en startBricks). Cada generador recibe addBrick(x,y) — que hace
+  // el roll de power + anti-cluster — y la geometría g. Ninguno sube la densidad de powers (mismo roll por celda).
+  const BRICK_LAYOUTS = [
+    // 0 · Muralla: 3 columnas escalonadas (la de siempre)
+    (add, g) => {
+      const xs = [W / 2 - g.bw * 1.5 - g.gapX, W / 2 - g.bw / 2, W / 2 + g.bw * 0.5 + g.gapX];
+      for (let c = 0; c < 3; c++) {
+        const off = c === 1 ? (g.bh + g.gapY) / 2 : 0;
+        const n = c === 1 ? BRICK_ROWS - 1 : BRICK_ROWS;
+        for (let i = 0; i < n; i++) add(xs[c], g.top + off + i * (g.bh + g.gapY));
+      }
+    },
+    // 1 · Diamante: columna central completa; las laterales sólo en las filas del medio (se afina arriba/abajo)
+    (add, g) => {
+      const xs = [W / 2 - g.bw * 1.5 - g.gapX, W / 2 - g.bw / 2, W / 2 + g.bw * 0.5 + g.gapX];
+      const mid = (BRICK_ROWS - 1) / 2;
+      for (let i = 0; i < BRICK_ROWS; i++) {
+        const y = g.top + i * (g.bh + g.gapY);
+        add(xs[1], y);
+        if (Math.abs(i - mid) <= mid * 0.6) { add(xs[0], y); add(xs[2], y); }
+      }
+    },
+    // 2 · Dispersa: una columna central con posiciones jittereadas (irregular)
+    (add, g) => {
+      const n = BRICK_ROWS + 1;
+      for (let i = 0; i < n; i++)
+        add(W / 2 - g.bw / 2 + rnd(-g.bw * 0.8, g.bw * 0.8), g.top + i * (g.avail / n) + rnd(-g.gapY, g.gapY));
+    },
+    // 3 · Doble pared: dos columnas completas a cada lado de la red
+    (add, g) => {
+      const xs = [W / 2 - g.bw - g.gapX, W / 2 + g.gapX];
+      for (let c = 0; c < 2; c++)
+        for (let i = 0; i < BRICK_ROWS; i++) add(xs[c], g.top + i * (g.bh + g.gapY));
+    },
+  ];
+  let brickLayout = 0;             // layout de la ronda (se fija en startBricks; estable entre regeneraciones de la pared)
   function setupBricks() {
     bricks = [];
-    // pared de 3 columnas ESCALONADAS sobre la red (la central corrida media celda, como pared real)
     const bw = W * 0.022, gapX = W * 0.005, gapY = H * 0.016;
     const top = H * 0.07, avail = H * 0.86;
     const bh = (avail - (BRICK_ROWS - 1) * gapY) / BRICK_ROWS;
-    const xs = [W / 2 - bw * 1.5 - gapX, W / 2 - bw / 2, W / 2 + bw * 0.5 + gapX];
-    for (let c = 0; c < 3; c++) {
-      const off = c === 1 ? (bh + gapY) / 2 : 0;       // columna central desfasada media celda
-      const n = c === 1 ? BRICK_ROWS - 1 : BRICK_ROWS; // (pierde media arriba y media abajo)
-      for (let i = 0; i < n; i++) {
-        const x = xs[c], y = top + off + i * (bh + gapY);
-        // power = null | 'fire' (naranja) | 'ball' (cian) | 'speed' (verde). El color anticipa el token.
-        const roll = Math.random();
-        let power = Math.random() < BRICK_POWER_CHANCE
-          ? (roll < 1 / 3 ? 'fire' : roll < 2 / 3 ? 'ball' : 'speed') : null;
-        // anti-cluster: si ya hay un power a menos de ~2 celdas (vecino directo o diagonal), sale normal
-        if (power) for (const o of bricks) {
-          if (o.power && Math.hypot(o.x - x, o.y - y) < bh * 2.2) { power = null; break; }
-        }
-        bricks.push({ x, y, w: bw, h: bh, power });
-      }
-    }
+    const addBrick = (x, y) => {
+      // power = null | fire (naranja) | ball (cian) | speed (verde) | shield (claro, raro). El color lo anticipa.
+      const roll = Math.random();
+      let power = Math.random() < BRICK_POWER_CHANCE
+        ? (roll < 0.30 ? 'fire' : roll < 0.58 ? 'ball' : roll < 0.86 ? 'speed' : 'shield') : null;
+      if (power) for (const o of bricks)               // anti-cluster: nada de powers pegados (≥ ~2 celdas)
+        if (o.power && Math.hypot(o.x - x, o.y - y) < bh * 2.2) { power = null; break; }
+      bricks.push({ x, y, w: bw, h: bh, power });
+    };
+    BRICK_LAYOUTS[brickLayout](addBrick, { bw, gapX, gapY, top, avail, bh });
   }
   function startBricks() {
     bricksMode = true; challenge = false; twoPlayers = false; pendingBricks = false;
     applyOpponent();                                   // rival elegido en el setup (su color e IA aplican acá)
     aiSleeping = false; aiSleepCD = rnd(A.AWAKE_MIN, A.AWAKE_MAX);   // arranca despierta
     j1score = 0; j2score = 0;
+    brickAttack = (bricksModeIdx === 1); brickTimer = brickAttack ? 90 : 0; brickRegenCD = 0; j1brick = j2brick = 0;
     right.cy = left.cy = H / 2; right.vel = left.vel = 0;
     right.onFire = left.onFire = false;
     right.powerFireT = left.powerFireT = 0; right.boostT = left.boostT = 0;
+    right.shield = left.shield = false;
     fireball = false; fireTop = fireBot = fireNet = false;
+    brickLayout = rndi(0, BRICK_LAYOUTS.length - 1);   // layout de pared aleatorio para esta ronda
     setupBricks();
     balls = [];
     for (const dir of [1, -1]) {                   // una bola hacia cada jugador, fuera de la pared
@@ -655,6 +738,11 @@
   }
   let brickAimErr = 0, brickChasing = false;   // sesgo de puntería del acercamiento en curso (modo ladrillos)
   function stepBricks(dt) {
+    if (brickAttack) {                                 // reloj: termina la ronda (no los goles); gana el mayor brick-score
+      brickTimer -= dt;
+      if (brickTimer <= 0) { brickTimer = 0; winner = j1brick >= j2brick ? 1 : 2; state = 'over'; return; }
+      if (brickRegenCD > 0) { brickRegenCD -= dt; if (brickRegenCD <= 0 && !bricks.length) setupBricks(); }  // regen con cooldown (anti-camp)
+    }
     for (const p of [right, left]) {
       if (p.boostT > 0) p.boostT -= dt;
       if (p.powerFireT > 0) { p.powerFireT -= dt; p.onFire = p.powerFireT > 0; }
@@ -685,11 +773,18 @@
     for (const k of bricks) if (b.x + r > k.x && b.x - r < k.x + k.w && b.y + r > k.y && b.y - r < k.y + k.h) { breakBrick(k, b); break; }
     // gol: si la bola sale por un lado, punto para el RIVAL. NO corta la ronda (sólo termina al llegar
     // al total). Las bolas BASE reaparecen; las EXTRA (de power-up) desaparecen — viven una sola vida.
-    if (b.x - r > W)      { addBrickPoint(2); b.extra ? b.dead = true : respawnBall(b); }   // → punto jug.2
-    else if (b.x + r < 0) { addBrickPoint(1); b.extra ? b.dead = true : respawnBall(b); }   // → punto jug.1
+    if (b.x - r > W) {                                 // pasó al jugador (der) → punto CPU, salvo que el jugador tenga escudo
+      if (right.shield) { right.shield = false; burst(W, b.y, POWER_COLS.shield, 20, Math.min(W, H) * 0.7, r * 0.6, 0.5); }
+      else addBrickPoint(2);
+      b.extra ? b.dead = true : respawnBall(b);
+    } else if (b.x + r < 0) {                          // pasó a la CPU (izq) → punto jugador, salvo que la CPU tenga escudo
+      if (left.shield) { left.shield = false; burst(0, b.y, POWER_COLS.shield, 20, Math.min(W, H) * 0.7, r * 0.6, 0.5); }
+      else addBrickPoint(1);
+      b.extra ? b.dead = true : respawnBall(b);
+    }
   }
   function paddleHitBall(b, p, isRight) {
-    const pw = paddleW(), ph = paddleH(), r = ballR();
+    const pw = paddleW(), ph = paddleHFor(p), r = ballR();
     const px = isRight ? rightX() : leftX();
     const movingInto = isRight ? b.vx > 0 : b.vx < 0;
     if (!movingInto) return;
@@ -718,9 +813,14 @@
     // los ladrillos NO suman puntos (eso es sólo por goles). El de color SUELTA un token (fuego/bola)
     // que cae hacia el lado del que la tocó — hay que atraparlo con la paleta.
     if ((b.last === 1 || b.last === 2) && k.power) spawnDrop(cx, cy, b.last, k.power);
-    if (!bricks.length) setupBricks();                  // reaparece la columna → la ronda sigue
+    if (brickAttack && (b.last === 1 || b.last === 2)) { if (b.last === 1) j1brick++; else j2brick++; }  // contrarreloj: romper SÍ suma a tu puntaje
+    if (!bricks.length) { if (brickAttack) brickRegenCD = 1.2; else setupBricks(); }   // defensa: regen al toque · contrarreloj: con cooldown
   }
   function addBrickPoint(scorer) {
+    if (brickAttack) {                                  // contrarreloj: el gol da +3 de bonus y NO termina la ronda
+      if (scorer === 1) { j1brick += 3; j1pulse = 1; } else { j2brick += 3; j2pulse = 1; }
+      return;
+    }
     if (scorer === 1) { j1score++; j1pulse = 1; } else { j2score++; j2pulse = 1; }
     const cond = WIN_POINTS[ptsIdx];
     if (cond != null && (j1score >= cond || j2score >= cond)) { winner = scorer; state = 'over'; }
@@ -740,7 +840,7 @@
       d.x += d.vx * dt; d.y += d.vy * dt;
       if (d.y < r) { d.y = r; d.vy = Math.abs(d.vy); }
       if (d.y > H - r) { d.y = H - r; d.vy = -Math.abs(d.vy); }
-      const p = d.side === 1 ? right : left, pw = paddleW(), ph = paddleH();
+      const p = d.side === 1 ? right : left, pw = paddleW(), ph = paddleHFor(p);
       const px = d.side === 1 ? rightX() : leftX();
       const reached = d.side === 1 ? d.x + r >= px : d.x - r <= px + pw;   // llegó al plano de la paleta
       if (reached) {
@@ -757,8 +857,10 @@
     const self = side === 1 ? right : left;
     if (type === 'fire')  { self.powerFireT = 10; return; }  // paleta en llamas 10s
     if (type === 'speed') { self.boostT = 8; return; }       // paleta más rápida 8s (verde)
+    if (type === 'shield') { self.shield = true; return; }   // escudo: salva UN gol en contra (no suma punto)
     // bola extra: sale de TU lado hacia el rival con un DASH DIAGONAL rápido (animación de entrada),
-    // sin importar dónde esté la paleta. Sin tope: vive hasta que sale de cancha (no respawnea).
+    // sin importar dónde esté la paleta. Sin tope en Defensa; en Contrarreloj se capa (el sink de gol no alcanza).
+    if (brickAttack && balls.length >= 6) return;
     const dir = side === 1 ? -1 : 1, r = ballR();
     const nb = makeBall(dir);
     nb.x = side === 1 ? rightX() - r * 2 : leftX() + paddleW() + r * 2;
@@ -775,7 +877,7 @@
     const r = ballR(), s = Math.min(W, H);
     for (const [p, isR] of [[right, true], [left, false]]) {
       if (!p.onFire) continue;
-      const pw = paddleW(), cx = (isR ? rightX() : leftX()) + pw / 2, ph = paddleH();
+      const pw = paddleW(), cx = (isR ? rightX() : leftX()) + pw / 2, ph = paddleHFor(p);
       if (Math.random() < 0.6) spawnEmber(cx + rnd(-1, 1) * pw * 0.4, p.cy + rnd(-ph / 2, ph / 2),
         rnd(-1, 1) * s * 0.05, -rnd(s * 0.1, s * 0.3), rnd(0.3, 0.6), rnd(pw * 0.5, pw * 1.2), 2);
     }
@@ -787,7 +889,7 @@
     }
   }
   // colores por tipo de power (los usan ladrillos, tokens y chispas): naranja=fuego · cian=bola · verde=velocidad
-  const POWER_COLS = { fire: [255, 150, 40], ball: [90, 210, 255], speed: [110, 235, 130], norm: [110, 170, 235] };
+  const POWER_COLS = { fire: [255, 150, 40], ball: [90, 210, 255], speed: [110, 235, 130], shield: [205, 215, 235], norm: [110, 170, 235] };
 
   // Sprites de ladrillo HORNEADOS (cuerpo degradé + glow + sheen + borde, una vez por tamaño/dpr).
   // Antes cada ladrillo creaba un gradiente y pintaba con shadowBlur POR FRAME (~20 ladrillos = el
@@ -797,7 +899,7 @@
   function bakeBrickSprites(bw, bh) {
     const s = Math.min(W, H);
     brickSprites = {};
-    for (const type of ['norm', 'fire', 'ball', 'speed']) {
+    for (const type of ['norm', 'fire', 'ball', 'speed', 'shield']) {
       const power = type !== 'norm';
       const col = POWER_COLS[type];
       const dark = [col[0] * 0.38, col[1] * 0.38, col[2] * 0.45];
@@ -912,6 +1014,18 @@
         // rayo ⚡ blanco (velocidad)
         ctx.fillStyle = 'rgba(255,255,255,0.95)';
         boltPath(0, 0, sz); ctx.fill();
+      } else if (d.type === 'shield') {
+        // escudo (silueta blanca)
+        const sh = sz * 0.34;
+        ctx.fillStyle = 'rgba(255,255,255,0.95)';
+        ctx.beginPath();
+        ctx.moveTo(0, -sh);
+        ctx.lineTo(sh * 0.85, -sh * 0.5);
+        ctx.lineTo(sh * 0.85, sh * 0.2);
+        ctx.quadraticCurveTo(sh * 0.85, sh * 0.95, 0, sh * 1.15);
+        ctx.quadraticCurveTo(-sh * 0.85, sh * 0.95, -sh * 0.85, sh * 0.2);
+        ctx.lineTo(-sh * 0.85, -sh * 0.5);
+        ctx.closePath(); ctx.fill();
       } else {
         // mini pelota glossy + un "+" (bola extra)
         const br = sz * 0.26;
@@ -1036,7 +1150,7 @@
   // Filas del setup (nivel 1): en 2P se omite "Rival"; en ladrillos no hay "Fuego" (sale de los
   // power-ups). Centradas verticalmente según cuántas haya.
   function menuSetupRows() {
-    const keys = pendingBricks ? ['rival', 'puntos']
+    const keys = pendingBricks ? (bricksModeIdx === 1 ? ['rival', 'modo'] : ['rival', 'modo', 'puntos'])
                : twoPlayers ? ['puntos', 'fuego'] : ['rival', 'puntos', 'fuego'];
     const span = 0.12, mid = 0.55, y0 = mid - span * (keys.length - 1) / 2;
     return keys.map((key, i) => ({ key, y: y0 + i * span }));
@@ -1045,11 +1159,13 @@
   function setupRowLabel(key) {
     if (key === 'rival')  return 'Rival: ' + OPPONENTS[oppIdx].name;
     if (key === 'puntos') return 'Puntos: ' + (WIN_POINTS[ptsIdx] == null ? 'Práctica' : SCORE_LABELS[ptsIdx]);
+    if (key === 'modo')   return 'Modo: ' + (bricksModeIdx === 0 ? 'Defensa' : 'Contrarreloj');
     return 'Fuego: ' + (fireEnabled ? 'Sí' : 'No');
   }
   function setupCycle(key, dir) {
     if (key === 'rival')       { oppIdx = (oppIdx + dir + OPPONENTS.length) % OPPONENTS.length; applyOpponent(); }
     else if (key === 'puntos') { ptsIdx = (ptsIdx + dir + WIN_POINTS.length) % WIN_POINTS.length; }
+    else if (key === 'modo')   { bricksModeIdx = (bricksModeIdx + dir + 2) % 2; }
     else                         fireEnabled = !fireEnabled;
   }
   // navegación con teclado
@@ -1100,7 +1216,7 @@
   function startChallenge() {
     challenge = true; bricksMode = false; challengeIdx = 0;
     twoPlayers = false; ptsIdx = 1;                  // 1 jugador, games a 10
-    oppIdx = CHALLENGE_ORDER[0]; applyOpponent();
+    oppIdx = CHALLENGE_ORDER[0]; applyOpponent(); applyChallengeMod();
     newMatch(); confirmQuit = false; syncUI();
   }
   // acción al tocar/Enter en la pantalla de fin de partido
@@ -1109,7 +1225,7 @@
     if (winner === 1) {                              // ganaste este game
       if (challengeIdx >= CHALLENGE_ORDER.length - 1) { backToMenu(); return; }   // venciste a todos
       challengeIdx++;
-      oppIdx = CHALLENGE_ORDER[challengeIdx]; applyOpponent();
+      oppIdx = CHALLENGE_ORDER[challengeIdx]; applyOpponent(); applyChallengeMod();
       newMatch(); confirmQuit = false; syncUI();
     } else {
       backToMenu();                                  // perdiste → fin del desafío
@@ -1119,6 +1235,10 @@
     state = 'menu'; menulevel = 0; menuOption = bricksMode ? 3 : twoPlayers ? 1 : 0;
     confirmQuit = false; challenge = false; bricksMode = false; pendingBricks = false;
     embers.length = 0; sparks.length = 0; ballTrail.length = 0; balls = []; bricks = []; drops = [];
+    brickAttack = false; brickTimer = 0; j1brick = j2brick = 0; brickRegenCD = 0;
+    rallyHits = 0; bestRally = 0; rallyFlash = 0;        // sin peloteo residual en el menú
+    right.shield = left.shield = false;                 // sin halo de escudo residual en otros modos
+    cmod = {};
     syncUI();
   }
   function onBack() {
@@ -1300,8 +1420,8 @@
     const col = lit ? FIRE : rgba(NEON_P1, 0.55);
     ctx.save();
     ctx.strokeStyle = col;
-    ctx.lineWidth = Math.max(2, H * 0.004) * (lit ? 1.8 : 1);
-    ctx.shadowColor = col; ctx.shadowBlur = Math.min(W, H) * (lit ? 0.04 : 0.02);
+    ctx.lineWidth = Math.max(2, H * 0.004) * (lit ? 1.8 : 1) * (1 + 0.6 * rallyFlash);
+    ctx.shadowColor = col; ctx.shadowBlur = Math.min(W, H) * (lit ? 0.04 : 0.02) * (1 + rallyFlash);
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
     ctx.restore();
   }
@@ -1312,10 +1432,10 @@
     const dash = H * 0.03, gap = H * 0.022;
     ctx.save();
     ctx.strokeStyle = col;
-    ctx.lineWidth = w;
+    ctx.lineWidth = w * (1 + 0.6 * rallyFlash);
     ctx.lineCap = 'round';
     ctx.shadowColor = fireNet ? FIRE : rgba(NEON_P1, 0.7);
-    ctx.shadowBlur = Math.min(W, H) * (fireNet ? 0.03 : 0.013);
+    ctx.shadowBlur = Math.min(W, H) * (fireNet ? 0.03 : 0.013) * (1 + rallyFlash);
     ctx.setLineDash([dash, gap]);
     ctx.beginPath();
     ctx.moveTo(W / 2, 0);
@@ -1325,7 +1445,7 @@
   }
 
   function drawPaddle(p, isRight) {
-    const pw = paddleW(), ph = paddleH();
+    const pw = paddleW(), ph = paddleHFor(p);
     const x = isRight ? rightX() : leftX();
     const y = p.cy - ph / 2;
     const r = Math.min(pw, ph) * 0.45, s = Math.min(W, H);
@@ -1351,6 +1471,15 @@
     cg.addColorStop(1,   onF ? 'rgba(255,160,60,0.82)'  : rgba(col, 0.7));
     ctx.fillStyle = cg;
     roundRect(x + inset * 0.5, y + ph * 0.05, pw - inset, ph * 0.9, r * 0.5); ctx.fill();
+    // ESCUDO activo (ladrillos): halo claro alrededor de la paleta — salva un gol en contra
+    if (p.shield) {
+      const pul = 0.6 + 0.4 * Math.sin(performance.now() / 160);
+      ctx.save();
+      ctx.strokeStyle = `rgba(220,230,255,${0.7 + 0.3 * pul})`; ctx.lineWidth = Math.max(2, pw * 0.22);
+      ctx.shadowColor = 'rgba(200,220,255,0.9)'; ctx.shadowBlur = s * 0.02;
+      roundRect(x - pw * 0.22, y - ph * 0.05, pw * 1.44, ph * 1.10, r); ctx.stroke();
+      ctx.restore();
+    }
     // boost verde activo: rayo ⚡ pulsante sobre el centro de la paleta (indicador del power de velocidad)
     if (!onF && p.boostT > 0) {
       const pul = 0.6 + 0.4 * Math.sin(performance.now() / 90);
@@ -1444,7 +1573,7 @@
     }
     for (const [p, isR] of [[right, true], [left, false]]) {
       if (!p.onFire) continue;
-      const ph = paddleH(), pw = paddleW();
+      const ph = paddleHFor(p), pw = paddleW();
       const cx = (isR ? rightX() : leftX()) + pw / 2;   // centro de la paleta
       if (Math.random() < 0.7)                    // brasas: suben desde el centro, repartidas a lo alto
         spawnEmber(cx + rnd(-1, 1) * pw * 0.4, p.cy + rnd(-ph / 2, ph / 2),
@@ -1536,6 +1665,7 @@
   }
 
   function drawScores() {
+    if (brickAttack) { drawBrickAttackHUD(); return; }       // contrarreloj: brick-score + reloj
     if (WIN_POINTS[ptsIdx] == null && !bricksMode) return;   // práctica: sin marcador (en ladrillos SÍ se muestra)
     const fs0 = Math.round(Math.min(60, H * 0.082));
     ctx.textAlign = 'center';
@@ -1556,6 +1686,33 @@
     const cc = [col[0] + (255 - col[0]) * pulse, col[1] + (255 - col[1]) * pulse, col[2] + (255 - col[2]) * pulse];
     ctx.fillStyle = rgba(cc, 0.95);
     ctx.fillText(txt, x, H * 0.045);
+  }
+  // HUD de Contrarreloj: brick-score por lado (reusa drawScoreNum) + el reloj arriba-centro (rojo al final).
+  function drawBrickAttackHUD() {
+    const s = Math.min(W, H), fs0 = Math.round(Math.min(60, H * 0.082));
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.save();
+    drawScoreNum(String(j2brick), W * 0.25, leftGlow(), j2pulse, fs0);
+    drawScoreNum(String(j1brick), W * 0.75, NEON_P1, j1pulse, fs0);
+    ctx.restore();
+    mtext(Math.ceil(brickTimer) + 's', Math.round(Math.min(24, s * 0.036)),
+      brickTimer < 10 ? [255, 120, 120] : [180, 210, 240], W / 2, H * 0.05, s * 0.012, 0.92, 700);
+  }
+
+  // HUD de peloteo (sólo modo normal — se llama en esa rama del render): cartel breve "RALLY xN" al cruzar
+  // un hito, y en PRÁCTICA (donde no hay marcador de goles) un contador persistente "rally N · récord M".
+  // Va arriba-centro para no competir con el marcador ni tapar el "Zzz" de la paleta dormida.
+  function drawRallyHUD() {
+    const s = Math.min(W, H);
+    if (WIN_POINTS[ptsIdx] == null) {                    // práctica: sin marcador → el peloteo ES la meta
+      mtext(`rally ${rallyHits} · récord ${bestRally}`, Math.round(Math.min(26, s * 0.032)),
+            [150, 210, 245], W / 2, H * 0.06, s * 0.012, 0.9, 700);
+    }
+    if (rallyFlash > 0) {                                // hito recién cruzado: cartel que se desvanece
+      const a = rallyFlash / 0.5;
+      mtext(`RALLY x${rallyMilestone}`, Math.round(Math.min(40, s * 0.055)),
+            NEON_P1, W / 2, H * 0.12, s * 0.04 * a, a, 900);
+    }
   }
 
   function drawFireLabels() {
@@ -1599,7 +1756,9 @@
     let big, sub = 'tocá: revancha   ·   atrás: menú';
     if (bricksMode) {
       big = winner === 1 ? '¡GANASTE!' : 'GANA ' + OPPONENTS[oppIdx].name.toUpperCase();
-      sub = `puntos ${j1score} - ${j2score}  ·  tocá: revancha  ·  atrás: menú`;
+      sub = brickAttack
+        ? `ladrillos ${j1brick} - ${j2brick}  ·  tocá: revancha  ·  atrás: menú`
+        : `puntos ${j1score} - ${j2score}  ·  tocá: revancha  ·  atrás: menú`;
     } else if (challenge) {
       const total = CHALLENGE_ORDER.length;
       const oppName = OPPONENTS[CHALLENGE_ORDER[challengeIdx]].name;
@@ -1629,12 +1788,23 @@
     ctx.letterSpacing = '0.16em';
     ctx.fillText(sub, W / 2, H / 2 + bs * 0.7);
     ctx.letterSpacing = '0px';
+    // línea de récord (1P/Desafío): "¡NUEVO RÉCORD!" si lo batiste, sino tu mejor peloteo vs este rival
+    if (!twoPlayers && !bricksMode) {
+      const yLine = H / 2 + bs * 0.7 + ss * 2.0;
+      if (newRecordFlag) {
+        mtext('¡NUEVO RÉCORD!', Math.round(Math.min(18, s * 0.034)), OPPONENTS[oppIdx].glow, W / 2, yLine, s * 0.02, 1, 900);
+      } else {
+        const rec = records[OPPONENTS[oppIdx].name];
+        if (rec) mtext(`mejor peloteo: ${rec.rally || 0}`, Math.round(Math.min(14, s * 0.026)), [180, 190, 210], W / 2, yLine, 0, 0.65, 500);
+      }
+    }
   }
 
   // Cartel de progreso del desafío (centro-arriba, entre los marcadores).
   function drawChallengeBadge() {
     const s = Math.min(W, H), o = OPPONENTS[CHALLENGE_ORDER[challengeIdx]];
-    mtext(`DESAFÍO  ${challengeIdx + 1}/${CHALLENGE_ORDER.length}  ·  ${o.name}`,
+    const ml = cmod.label ? '  ·  ' + cmod.label : '';
+    mtext(`DESAFÍO  ${challengeIdx + 1}/${CHALLENGE_ORDER.length}  ·  ${o.name}${ml}`,
       Math.min(15, s * 0.026), o.glow, W / 2, H * 0.04, 0, 0.85, 700);
   }
 
@@ -1668,6 +1838,12 @@
         const label = setupRowLabel(r.key);
         const col = (r.key === 'rival') ? OPPONENTS[oppIdx].glow : cyan;
         mtext(on ? `‹  ${label}  ›` : label, Math.min(34, s * 0.05), on ? col : dim, W / 2, r.y * H, on ? s * 0.025 : 0, on ? 1 : 0.78, 700);
+        if (r.key === 'rival') {                       // récord persistente del rival elegido (sub-línea)
+          const rec = records[OPPONENTS[oppIdx].name];
+          if (rec && (rec.rally || rec.margin))
+            mtext(`récord: rally ${rec.rally || 0}${rec.margin ? '  ·  +' + rec.margin : ''}`,
+              Math.min(13, s * 0.022), dim, W / 2, (r.y + 0.035) * H, 0, 0.6, 500);
+        }
       });
       const pp = 0.6 + 0.4 * Math.sin(t * 4);
       mtext('▶ JUGAR', Math.min(40, s * 0.058), [120 + 120 * pp, 235, 150], W / 2, PLAY_BTN_Y * H, s * 0.03, 1, 900);
@@ -1685,21 +1861,31 @@
     mtext('se pierde el partido', Math.min(13, s * 0.022), [180, 190, 210], W / 2, H * 0.72, 0, 0.65, 500);
   }
 
-  // HUD de FPS, estilo BallsWeb: panel monoespaciado arriba a la izquierda.
+  // Overlay del botón de info: tarjeta CÓMO JUGAR (hace legible la gracia del juego) + stats en vivo.
   function drawDebugHUD() {
     if (!showDebug) return;
-    const lines = [
+    const help = [
+      'CÓMO JUGAR',
+      '· Tu paleta: ↑/↓  ·  jug.2: W/S  ·  P: pausa',
+      '· 2 puntos seguidos → te prendés fuego',
+      '· La CPU se duerme (Zzz): aprovechá la siesta',
+    ];
+    const stats = [
       'FPS: ' + Math.round(1 / Math.max(1e-3, dtSmoothed)),
       'Bola: ' + Math.round(Math.hypot(bvx, bvy)) + ' px/s',
+      'Peloteo más largo: ' + bestRally,
     ];
-    const lh = 18, padX = 8, padY = 8, boxW = 132;
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(padX, padY, boxW, lh * lines.length + 8);
-    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    const all = help.concat([''], stats);
+    const lh = 18, padX = 8, padY = 8, boxW = 326;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(padX, padY, boxW, lh * all.length + 10);
     ctx.font = '13px ui-monospace, Menlo, Consolas, monospace';
     ctx.textAlign = 'left';
     ctx.textBaseline = 'top';
-    lines.forEach((s, i) => ctx.fillText(s, padX + 6, padY + 4 + i * lh));
+    all.forEach((str, i) => {
+      ctx.fillStyle = i === 0 ? 'rgba(120,210,255,0.95)' : 'rgba(255,255,255,0.88)';
+      ctx.fillText(str, padX + 7, padY + 5 + i * lh);
+    });
   }
 
   // "Zzz" sobre la paleta de la CPU mientras duerme (sólo en 1 jugador).
@@ -1712,7 +1898,7 @@
     ctx.font = `700 ${Math.round(s * 0.05)}px ${FONT}`;
     ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
     ctx.fillText('Zzz', leftX() + paddleW() + s * 0.02,
-      Math.max(left.cy - paddleH() / 2 - s * 0.015, s * 0.055));   // clamp: visible aunque duerma pegada al techo
+      Math.max(left.cy - paddleHFor(left) / 2 - s * 0.015, s * 0.055));   // clamp: visible aunque duerma pegada al techo
     ctx.restore();
   }
 
@@ -1793,6 +1979,7 @@
     if (bricksMode && state === 'play' && !confirmQuit) updateDrops(dt);   // tokens caen/se atrapan (frame-rate)
     j1pulse = Math.max(0, j1pulse - dt / 0.55);          // decae el "golpe" del marcador (~0.55s)
     j2pulse = Math.max(0, j2pulse - dt / 0.55);
+    rallyFlash = Math.max(0, rallyFlash - dt / 0.5);     // decae el brillo del hito de peloteo (~0.5s)
 
     // render
     if (state === 'menu') {
@@ -1818,6 +2005,7 @@
       drawNet();
       drawScores();
       drawFireLabels();
+      drawRallyHUD();
       drawPaddle(left, false);
       drawPaddle(right, true);
       drawAISleep();

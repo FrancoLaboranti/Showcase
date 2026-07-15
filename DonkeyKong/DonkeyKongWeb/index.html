@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../../Arcade/arcade-shell.css">
 <style>
-  :root { --bar-height: 66px; }
+  :root { --bar-height: 122px; }   /* alto para los dos pulgares (D-pad grande) */
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     width: 100%; height: 100%;
@@ -36,29 +36,37 @@
     box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
-  /* Barra inferior: ◄ ▲ ▼ ► (caminar / trepar). Saltar = tocar la pantalla. Mismo shell que TronWeb. */
+  /* Barra inferior a DOS PULGARES: cluster izquierdo ◄ ► (pulgar izq) · utilidades al centro · cluster
+     derecho ▲ ▼ (pulgar der). Saltar = tocar la pantalla. Botones grandes, look moderno (gradiente + relieve). */
   #bar {
     position: absolute; left: 0; right: 0; bottom: 0;
     height: calc(var(--bar-height) + env(safe-area-inset-bottom));
-    padding: 0 16px env(safe-area-inset-bottom);
-    display: flex; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.85);
-    border-top: 1px solid rgba(255,255,255,0.08);
+    padding: 8px 14px env(safe-area-inset-bottom);
+    display: flex; align-items: center; justify-content: space-between;
+    background: linear-gradient(180deg, rgba(22,16,24,0.94), rgba(8,8,12,0.97));
+    border-top: 1px solid rgba(255,93,146,0.28);
+    box-shadow: 0 -6px 22px rgba(0,0,0,0.45);
     z-index: 3;
   }
-  #ui { display: flex; gap: 8px; }
-  #ui button {
-    width: 48px; height: 48px; border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.22);
-    background: rgba(255,255,255,0.08);
-    color: #fff;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none;
-    transition: background 0.1s, transform 0.08s;
-    padding: 0;
+  .pad { display: flex; gap: 16px; align-items: center; }
+  .pad button {
+    width: 66px; height: 66px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.18);
+    background: radial-gradient(circle at 50% 30%, rgba(255,255,255,0.16), rgba(255,255,255,0.04) 72%);
+    color: #fff; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    box-shadow: inset 0 2px 10px rgba(0,0,0,0.45), 0 3px 12px rgba(0,0,0,0.4);
+    transition: background 0.08s, transform 0.06s, box-shadow 0.08s;
   }
-  #ui button:active, #ui button.held { background: rgba(255,93,146,0.30); transform: scale(0.92); }
-  #ui button svg { display: block; width: 24px; height: 24px; pointer-events: none; }
+  .pad button svg { display: block; width: 32px; height: 32px; pointer-events: none; }
+  .pad button:active, .pad button.held {
+    background: radial-gradient(circle at 50% 30%, rgba(255,120,150,0.62), rgba(255,60,95,0.32) 72%);
+    border-color: rgba(255,120,150,0.7); transform: scale(0.93);
+    box-shadow: inset 0 2px 12px rgba(0,0,0,0.5), 0 0 20px rgba(255,80,115,0.5);
+  }
+  /* utilidades (✕ ⛶ ⓘ) compactas y centradas; neutralizamos el align-self del arcade-shell */
+  .util { display: flex; align-items: center; gap: 8px; }
+  .util button { align-self: center !important; margin-bottom: 0 !important; }
 
   /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
   /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
@@ -107,30 +115,36 @@
   <canvas id="c"></canvas>
   <div id="hint">◄ ► caminar · ▲ ▼ trepar escaleras<br>tocá la pantalla para SALTAR</div>
   <div id="bar">
-  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-  </button>
-<div id="ui">
+    <!-- pulgar IZQUIERDO: caminar ◄ ► -->
+    <div class="pad padL">
       <button id="btnLeft"  aria-label="caminar izquierda" title="Caminar izquierda">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
-      </button>
-      <button id="btnUp" aria-label="trepar arriba" title="Trepar arriba">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg>
-      </button>
-      <button id="btnDown" aria-label="bajar" title="Bajar">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
       </button>
       <button id="btnRight" aria-label="caminar derecha" title="Caminar derecha">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
       </button>
     </div>
-    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
-    </button>
-    <button id="btnInfo" aria-label="info" title="Info / FPS">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
-    </button>
-  </div>
+    <!-- utilidades centrales -->
+    <div class="util">
+      <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+      <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+      </button>
+      <button id="btnInfo" aria-label="info" title="Info / FPS">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
+      </button>
+    </div>
+    <!-- pulgar DERECHO: trepar ▲ ▼ -->
+    <div class="pad padR">
+      <button id="btnUp" aria-label="trepar arriba" title="Trepar arriba">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg>
+      </button>
+      <button id="btnDown" aria-label="bajar" title="Bajar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg>
+      </button>
+    </div>
 
   <script>
   // ════════════════════════════════════════════════════════════════════
@@ -153,12 +167,17 @@
 
   // ── TUNING ──
   const ASPECT      = 0.58;     // relación de aspecto del playfield (portrait, ~9:15.5)
-  const WALK        = 0.155;    // velocidad de Mario (PF.w / s)
+  const WALK        = 0.158;    // velocidad MÁXIMA de Mario (PF.w / s)
+  // ── movimiento moderno: acelera al apretar y conserva inercia al soltar (glide), no es on/off ──
+  const RUN_ACCEL   = 1.9;      // aceleración al caminar (PF.w/s²) → llega al máx en ~0.08 s
+  const RUN_DECEL   = 0.85;     // fricción al soltar → se desliza ~0.19 s antes de frenar (guarda velocidad)
+  const AIR_ACCEL   = 0.9;      // control aéreo (menor que en piso, pero existe)
+  const TURN_BOOST  = 2.4;      // × aceleración al cambiar de dirección (giro snappy, plataformero moderno)
   const CLIMB       = 0.085;    // velocidad trepando (PF.h / s)
   const GRAV        = 0.85;     // gravedad (PF.h / s²)
   const JUMP_V      = 0.26;     // impulso de salto (PF.h / s) → ápice ≈ 0.04 PF.h
-  const FALL_DEATH  = 0.23;     // caída (desde el pico) mayor a esto = muerte (PF.h) — sobrevive bajar 1 viga
-                                //   (caminar off-edge ~0.11 / saltar hacia abajo ~0.20), mata caer 2+ vigas (~0.27)
+  const FALL_DEATH  = 0.075;    // caída (desde el pico) mayor a esto = MUERTE (PF.h) — como el original: el salto
+                                //   propio (ápice ~0.04) se sobrevive, pero CAERSE de una viga (~0.11+) te mata.
   const BARREL_SPD  = 0.19;     // velocidad base de barriles (PF.w / s)
   const BARREL_DESC = 0.16;     // barril bajando escalera (PF.h / s)
   const FIRE_SPD    = 0.055;    // bola de fuego (PF.w / s)
@@ -166,11 +185,14 @@
   const HAMMER_HOVER= 0.082;    // a cuánto flota el martillo sobre la viga (PF.h) — sólo se agarra saltando
   const BONUS_TICK  = 2.0;      // s entre descuentos de bonus
   const MAX_BARRELS = 12;
+  const MAX_PIES    = 3;        // #9 tope de tortas en pantalla
+  const BELT_SPD    = 0.18;     // #9 deriva de la cinta como fracción de WALK (siempre out-walkable)
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
 
   let W = 0, H = 0, dpr = 1;
+  let bgGrad = null, pfGrad = null, vigGrad = null;   // gradientes de fondo (se construyen una vez por resize)
   // Playfield: rect portrait centrado dentro del canvas (en desktop quedan bandas laterales tipo arcade).
   const PF = { x: 0, y: 0, w: 1, h: 1 };
   const ppx = f => PF.x + f * PF.w;     // fracción → px (los análogos de xper/yper)
@@ -183,6 +205,18 @@
     ctx.fillText(txt, ppx(fx), ppy(fy));
   }
   const pad = (n, d) => String(Math.max(0, n | 0)).padStart(d, '0');
+  // path de rectángulo redondeado (HUD / paneles) sobre cualquier contexto
+  function roundRectPath(c, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    c.beginPath();
+    c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
+  }
+  // sombra elíptica de contacto (barata, SIN shadowBlur por frame) para dar volumen a los sprites
+  function shadowAt(px, syPx, halfW) {
+    ctx.fillStyle = 'rgba(0,0,0,0.30)';
+    ctx.beginPath(); ctx.ellipse(px, syPx, halfW, halfW * 0.32, 0, 0, TAU); ctx.fill();
+  }
 
   // ════════════════ NIVEL (fracciones del playfield) ════════════════
   // Vigas: superficie lineal de (x0,yL) a (x1,yR). Los barriles ruedan hacia el extremo MÁS BAJO
@@ -231,6 +265,29 @@
   const MARIO_START = 0.18;
   const HAMMER_SPOTS = [ { g: 4, x: 0.40 }, { g: 1, x: 0.38 } ];
 
+  // ════════════════ SEMILLA / VARIEDAD DE TABLERO (foundation) ════════════════
+  // PRNG determinista (mulberry32): un mismo seed → misma secuencia. Lo usan el reroll de escaleras
+  // rotas, el jitter de pendiente, la posición de martillos, los coleccionables y el modo Diario.
+  function mulberry32(a) {
+    return function () {
+      a |= 0; a = a + 0x6D2B79F5 | 0;
+      let t = Math.imul(a ^ a >>> 15, 1 | a);
+      t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+      return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+  }
+  // Snapshot del tablero hand-authored ANTES de cualquier mutación: fallback si un seed diera algo
+  // inválido, y base sobre la que se aplica el jitter cada nivel (no se acumula).
+  const GIRDERS_ORIG = GIRDERS.map(g => ({ yL: g.yL, yR: g.yR }));
+  const LADDERS_ORIG_BROKEN = LADDERS.map(l => l.broken);
+  // Índices de escaleras agrupados por tramo (lo) y cuántas rotas tiene cada tramo en el original.
+  // Reproducir esa MISMA cuenta por tramo mantiene la dificultad: sólo cambia CUÁL escalera está rota.
+  const TIERS = [];                                         // TIERS[lo] = [idx, idx, ...]
+  LADDERS.forEach((l, i) => { (TIERS[l.lo] = TIERS[l.lo] || []).push(i); });
+  const BROKEN_PER_TIER = TIERS.map(idxs => idxs.filter(i => LADDERS_ORIG_BROKEN[i]).length);
+  const dailyKey = () => 'dk_daily_' + new Date().toISOString().slice(0, 10);
+  function dateSeed() { const d = new Date(); return (d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate()) >>> 0; }
+
   // ════════════════ SPRITES pixel-art ════════════════
   // makeSprite hornea un mapa de strings a un canvas offscreen 1px-por-celda; se dibuja escalado
   // con imageSmoothing apagado (pixeles duros = look arcade). '.' = transparente.
@@ -260,87 +317,48 @@
   }
 
   const MPAL = { R:'#e83b2a', H:'#7a3b12', S:'#ffc69b', W:'#ffffff', B:'#2456e6', X:'#26140a' };
-  const M_IDLE = makeSprite([
-    '...RRRRR....',
-    '..RRRRRRRRR.',
-    '..HHHSSWS...',
-    '.HSHHSSWSS..',
-    '.HSHHSSSSS..',
-    '.HHSSSSSS...',
-    '...SSSSSS...',
-    '..BBRRRRBB..',
-    '.BBBRRRRBBB.',
-    'BBBBRRRRBBBB',
-    'SS.BRRRRB.SS',
-    '...RRRRRR...',
-    '..RRR..RRR..',
-    '..HHH..HHH..',
-    '.HHHH..HHHH.',
-  ], MPAL);
-  const M_RUN = makeSprite([
-    '...RRRRR....',
-    '..RRRRRRRRR.',
-    '..HHHSSWS...',
-    '.HSHHSSWSS..',
-    '.HSHHSSSSS..',
-    '.HHSSSSSS...',
-    '...SSSSSS...',
-    '..BBRRRRBB..',
-    '.BBBRRRRBBS.',
-    'BBBBRRRRBBSS',
-    'SSBBRRRRBB..',
-    '...RRRRRR...',
-    '..RRR.RRR...',
-    '.HHH...HHH..',
-    'HHHH....HHH.',
-  ], MPAL);
-  const M_JUMP = makeSprite([
-    '...RRRRR....',
-    '..RRRRRRRRR.',
-    '..HHHSSWS...',
-    '.HSHHSSWSS..',
-    '.HSHHSSSSS..',
-    '.HHSSSSSS...',
-    '...SSSSSS...',
-    'S.BBRRRRBB.S',
-    'SSBBRRRRBBSS',
-    '.BBBRRRRBBB.',
-    '..BRRRRRRB..',
-    '..RRRRRRRR..',
-    '..HHH..HHH..',
-    '.HHH....HHH.',
-  ], MPAL);
-  const M_CLIMB = makeSprite([
-    '...RRRRR....',
-    '..RRRRRRRR..',
-    '..HHHHHHH...',
-    '.S.HHHHH....',
-    '.S.BBBBBB...',
-    '...BBRRBB.S.',
-    '..BBBRRBBBS.',
-    '..BBRRRRBB..',
-    '..BRRRRRRB..',
-    '...RRRRRR...',
-    '...RRRRRR...',
-    '...RRR.RR...',
-    '..HHH..HH...',
-    '..HHH..HHH..',
-  ], MPAL);
-  const M_DEAD = makeSprite([
-    '...RRRRR....',
-    '..RRRRRRRR..',
-    '..HHXSSXS...',
-    '.HSHHSSSSS..',
-    '.HHSSSSSS...',
-    '...SSSSSS...',
-    'S.BBRRRRBB.S',
-    'SSBBRRRRBBSS',
-    '.BBBRRRRBBB.',
-    '..BRRRRRRB..',
-    '..RRRRRRRR..',
-    '..RRR..RRR..',
-    '.HHHH..HHHH.',
-  ], MPAL);
+  // #7 filas factorizadas: las skins re-hornean estos mismos mapas con otra paleta (mismo tamaño/hitbox).
+  const M_IDLE_ROWS = [
+    '...RRRRR....', '..RRRRRRRRR.', '..HHHSSWS...', '.HSHHSSWSS..', '.HSHHSSSSS..',
+    '.HHSSSSSS...', '...SSSSSS...', '..BBRRRRBB..', '.BBBRRRRBBB.', 'BBBBRRRRBBBB',
+    'SS.BRRRRB.SS', '...RRRRRR...', '..RRR..RRR..', '..HHH..HHH..', '.HHHH..HHHH.',
+  ];
+  const M_RUN_ROWS = [
+    '...RRRRR....', '..RRRRRRRRR.', '..HHHSSWS...', '.HSHHSSWSS..', '.HSHHSSSSS..',
+    '.HHSSSSSS...', '...SSSSSS...', '..BBRRRRBB..', '.BBBRRRRBBS.', 'BBBBRRRRBBSS',
+    'SSBBRRRRBB..', '...RRRRRR...', '..RRR.RRR...', '.HHH...HHH..', 'HHHH....HHH.',
+  ];
+  const M_JUMP_ROWS = [
+    '...RRRRR....', '..RRRRRRRRR.', '..HHHSSWS...', '.HSHHSSWSS..', '.HSHHSSSSS..',
+    '.HHSSSSSS...', '...SSSSSS...', 'S.BBRRRRBB.S', 'SSBBRRRRBBSS', '.BBBRRRRBBB.',
+    '..BRRRRRRB..', '..RRRRRRRR..', '..HHH..HHH..', '.HHH....HHH.',
+  ];
+  const M_CLIMB_ROWS = [
+    '...RRRRR....', '..RRRRRRRR..', '..HHHHHHH...', '.S.HHHHH....', '.S.BBBBBB...',
+    '...BBRRBB.S.', '..BBBRRBBBS.', '..BBRRRRBB..', '..BRRRRRRB..', '...RRRRRR...',
+    '...RRRRRR...', '...RRR.RR...', '..HHH..HH...', '..HHH..HHH..',
+  ];
+  const M_DEAD_ROWS = [
+    '...RRRRR....', '..RRRRRRRR..', '..HHXSSXS...', '.HSHHSSSSS..', '.HHSSSSSS...',
+    '...SSSSSS...', 'S.BBRRRRBB.S', 'SSBBRRRRBBSS', '.BBBRRRRBBB.', '..BRRRRRRB..',
+    '..RRRRRRRR..', '..RRR..RRR..', '.HHHH..HHHH.',
+  ];
+  let M_IDLE, M_RUN, M_JUMP, M_CLIMB, M_DEAD;
+  function bakeMario(pal) {
+    M_IDLE = makeSprite(M_IDLE_ROWS, pal); M_RUN = makeSprite(M_RUN_ROWS, pal);
+    M_JUMP = makeSprite(M_JUMP_ROWS, pal); M_CLIMB = makeSprite(M_CLIMB_ROWS, pal);
+    M_DEAD = makeSprite(M_DEAD_ROWS, pal);
+  }
+  // #7 SKINS: recolores de MPAL desbloqueados por puntos de POR VIDA (dk_total). 100% cosmético —
+  // no toca hitbox (MH / razón 12/15) ni físicas → imposible alterar el balance.
+  const SKINS = [
+    { id:'classic', name:'CLASICO', unlock:0,      pal: MPAL },
+    { id:'verde',   name:'VERDE',   unlock:8000,   pal: { ...MPAL, R:'#2fb24a' } },
+    { id:'cielo',   name:'CIELO',   unlock:25000,  pal: { ...MPAL, R:'#2a9df4', B:'#16407a' } },
+    { id:'fuego',   name:'FUEGO',   unlock:60000,  pal: { ...MPAL, R:'#ff8c1a', B:'#b3232c' } },
+    { id:'oro',     name:'ORO',     unlock:120000, pal: { ...MPAL, R:'#f6c945', H:'#8a5a2b', B:'#7a5a12' } },
+  ];
+  bakeMario(MPAL);                                   // default seguro; el init re-hornea con la skin guardada
 
   const DKPAL = { B:'#8a5a2b', D:'#5e3413', F:'#d9a066', W:'#ffffff', K:'#1c0e04', R:'#b3232c' };
   const DK_UP = makeSprite([
@@ -438,7 +456,7 @@
     return rows;
   }
   const BARREL_FR = [0, 1, 2, 3].map(p => makeSprite(barrelMap(p), BPAL));
-  const BARREL_END = makeSprite([
+  const BARREL_END_ROWS = [
     '...oooo...',
     '..oOOOOo..',
     '.oOYYYYOo.',
@@ -449,7 +467,22 @@
     '.oOYYYYOo.',
     '..oOOOOo..',
     '...oooo...',
-  ], BPAL);
+  ];
+  const BARREL_END = makeSprite(BARREL_END_ROWS, BPAL);
+  // #2 BARRIL SALVAJE: misma forma, paleta azul (rodado + tapa). El frame `air` también va azul porque
+  // el salvaje pasa casi todo el tiempo cayendo de borde en borde — si no, parpadearía naranja.
+  const BBPAL = { O:'#3a7fe0', o:'#16306e', Y:'#7fb0ee' };
+  const BARREL_FR_WILD = [0, 1, 2, 3].map(p => makeSprite(barrelMap(p), BBPAL));
+  const BARREL_END_WILD = makeSprite(BARREL_END_ROWS, BBPAL);
+  // #9 torta de la cinta-fábrica
+  const PIE_SPR = makeSprite([
+    '..CCCC..',
+    '.CCCCCC.',
+    'CCCCCCCC',
+    'CWWWWWWC',
+    '.CCCCCC.',
+    '..CCCC..',
+  ], { C:'#c9892e', W:'#f4d9a0' });
 
   const FPAL = { R:'#ff3b1f', O:'#ff8c1a', Y:'#ffd23f', W:'#ffffff', K:'#26140a' };
   const FIRE_1 = makeSprite([
@@ -535,6 +568,38 @@
     '...RR...',
   ], { R:'#ff3b57' });
 
+  // #4 remache (bolt cyan) · #6 coleccionables de Pauline (sombrero / cartera / paraguas)
+  const RIVET_SPR = makeSprite([
+    '.CCCC.',
+    'CCCCCC',
+    'C.CC.C',
+    'CCCCCC',
+    '.CCCC.',
+  ], { C:'#3fd4ff' });
+  const HAT_SPR = makeSprite([
+    '..BBBB..',
+    '.BBBBBB.',
+    '.BBBBBB.',
+    'WWWWWWWW',
+    'WWWWWWWW',
+  ], { B:'#ff7ad9', W:'#ffd23f' });
+  const PURSE_SPR = makeSprite([
+    '.Y....Y.',
+    '.YYYYYY.',
+    'YYYYYYYY',
+    'YYYYYYYY',
+    'YYYKKYYY',
+    'YYYYYYYY',
+  ], { Y:'#ffd23f', K:'#7a3b12' });
+  const UMB_SPR = makeSprite([
+    '..CCCC..',
+    '.CCCCCC.',
+    'CCCCCCCC',
+    '...WW...',
+    '...WW...',
+    '...WWC..',
+  ], { C:'#7fd4ff', W:'#ffffff' });
+
   // Tamaños (alto en fracciones de PF.h)
   const MH = 0.052, BH = 0.030, DKH = 0.105, PAUH = 0.052, FBH = 0.034, OILH = 0.045, HAMH = 0.034;
 
@@ -563,32 +628,77 @@
     death()  { if (ac()) note(420, 55, 0, 0.7, 'sawtooth', 0.07); },
     win()    { if (ac()) { note(523, 0, 0, 0.10, 'square', 0.05); note(659, 0, 0.11, 0.10, 'square', 0.05); note(784, 0, 0.22, 0.10, 'square', 0.05); note(1047, 0, 0.33, 0.25, 'square', 0.06); } },
     throw_() { if (ac()) note(95, 60, 0, 0.12, 'triangle', 0.06); },
+    throwWild() { if (ac()) note(150, 95, 0, 0.12, 'triangle', 0.06); },     // #2 barril salvaje (tono más agudo)
+    warn()   { if (ac()) { note(330, 0, 0, 0.10, 'square', 0.05); note(440, 0, 0.12, 0.10, 'square', 0.05); note(620, 0, 0.24, 0.14, 'square', 0.06); } }, // #5 aviso de furia
   };
 
   // ════════════════ ESTADO ════════════════
   const gh = {
     screen: 'menu',           // 'menu' | 'game'
     phase: 'play',            // 'intro' | 'play' | 'dying' | 'win' | 'over'
+    mode: 'classic',          // 'classic' | 'daily'
+    daily: false,             // ¿la run actual es el Desafío Diario? (score va a clave aparte)
+    seed: 1,                  // semilla de la RUN (random en classic, fecha en daily)
     level: 1, score: 0, lives: 3,
     hi: parseInt(localStorage.getItem('dk_hiscore') || '0', 10) || 0,
+    total: parseInt(localStorage.getItem('dk_total') || '0', 10) || 0,   // puntos de POR VIDA (desbloqueo de skins)
+    skin: 'classic',          // #7 skin equipada (id)
     bonus: 5000, bonusT: 0,
     phaseT: 0,                // tiempo dentro de la fase (intro/dying/win/over)
     newHi: false,
+    comboN: 0, comboT: 0,     // #1 combo de saltos encadenados
+    frenzy: false, frenzyWarn: false, frenzyT: 0, frenzyAt: 99, frenzyDone: false,   // #5 furia
+    hazard: null, hazardChoices: null,   // #8 draft "elegí tu veneno"
+    rivetWarp: false,         // #4 ¿se completó el barrido de remaches este nivel?
+    pickupLevel: 0, rivetsPopped: [], itemsTaken: [],   // #4/#6 estado de pickups PERSISTIDO por nivel (no re-farmear muriendo)
   };
-  let barrels = [], fireballs = [], popups = [];
+  let barrels = [], fireballs = [], popups = [], pies = [];
   let hammers = [];           // pickups {g, x, taken}
+  let rivets = [], items = []; // #4 remaches · #6 coleccionables de Pauline
+  let belt = { g: -1, dir: 0 };// #9 viga-cinta activa este nivel
+  let pieT = 0;               // #9 timer de spawn de tortas
+  let hammerSpots = HAMMER_SPOTS;   // spots vigentes (se re-siembran por nivel en #3)
   let oilLit = false, oilT = 0;
+  const isRivetLevel = () => gh.level >= 3 && gh.level % 4 === 0;   // #4: cada 4 niveles, etapa de remaches
 
-  const lvlSpeed  = () => Math.min(1.7, 1 + 0.10 * (gh.level - 1));
-  const spawnGap  = () => Math.max(1.3, 3.0 - 0.25 * (gh.level - 1)) + rnd(0, 0.9);
-  const descProb  = () => { const base = Math.min(0.5, 0.22 + 0.04 * gh.level); return mario.g < curBarrelG ? Math.min(0.65, base + 0.18) : base; };
+  // #8 HAZARDS (draft "elegí tu veneno"): multiplicadores ACOTADOS sobre las perillas ya clampeadas +
+  // un multiplicador de score acorde. Todos se aplican DENTRO de los clamps existentes, así el peor caso
+  // = dificultad de nivel-alto ya alcanzable, nunca más allá. CALMA x1 siempre disponible.
+  const HAZARDS = [
+    { id:'calma',    name:'CALMA',            spd:1.00, gap:1.0, desc:0.00, fb:0, mult:1.0  },
+    { id:'veloz',    name:'BARRILES VELOCES', spd:1.15, gap:1.0, desc:0.00, fb:0, mult:1.25 },
+    { id:'lluvia',   name:'LLUVIA',           spd:1.00, gap:0.8, desc:0.00, fb:0, mult:1.3  },
+    { id:'escal',    name:'ESCALADORES',      spd:1.00, gap:1.0, desc:0.10, fb:0, mult:1.3  },
+    { id:'infernal', name:'INFERNAL',         spd:1.08, gap:0.9, desc:0.00, fb:1, mult:1.45 },
+  ];
+  const CALMA = HAZARDS[0];
+  const FRENZY_SPD = 1.25, FRENZY_GAP = 0.55;               // #5 furia: bump de velocidad/cadencia (clampeado)
+  const hazSpd  = () => gh.hazard ? gh.hazard.spd  : 1;
+  const hazGap  = () => gh.hazard ? gh.hazard.gap  : 1;
+  const hazDesc = () => gh.hazard ? gh.hazard.desc : 0;
+  const hazMult = () => gh.hazard ? gh.hazard.mult : 1;
+
+  const lvlSpeed  = () => Math.min(1.7, (1 + 0.10 * (gh.level - 1)) * hazSpd());
+  const spawnGap  = () => {
+    let g = (3.0 - 0.25 * (gh.level - 1)) * hazGap();
+    if (gh.frenzy) g *= FRENZY_GAP;
+    return Math.max(gh.frenzy ? 0.9 : 1.3, g) + rnd(0, gh.frenzy ? 0.4 : 0.9);
+  };
+  const descProb  = () => { const base = Math.min(0.5, 0.22 + 0.04 * gh.level + hazDesc()); return mario.g < curBarrelG ? Math.min(0.65, base + 0.18) : base; };
   let curBarrelG = 5;         // hack: girder del barril que está decidiendo (para descProb)
 
   function addScore(n, fx, fy, color) {
     gh.score += n;
-    if (gh.score > gh.hi) { gh.hi = gh.score; gh.newHi = true; localStorage.setItem('dk_hiscore', String(gh.hi)); }
+    gh.total += n; localStorage.setItem('dk_total', String(gh.total));    // #7 puntos de por vida
+    if (gh.score > gh.hi) {
+      gh.hi = gh.score; gh.newHi = true;
+      localStorage.setItem(gh.daily ? dailyKey() : 'dk_hiscore', String(gh.hi));   // #3 daily va a clave aparte
+    }
     popups.push({ text: String(n), fx, fy, t: 0, color: color || '#ffd23f' });
   }
+  // puntos de JUGADA (saltar/martillar): los escala el multiplicador del hazard. El bonus de nivel,
+  // remaches y coleccionables NO se escalan (van por addScore directo).
+  function gpScore(n, fx, fy, color) { addScore(Math.round(n * hazMult()), fx, fy, color); }
 
   // ════════════════ INPUT ════════════════
   const keys = {};                                  // e.code → bool (teclado)
@@ -608,13 +718,13 @@
   const mario = {
     fx: 0, fy: 0, g: 0, dir: 1,
     state: 'ground',          // 'ground' | 'air' | 'climb'
-    vy: 0, airVx: 0, peakY: 0,
+    vx: 0, vy: 0, airVx: 0, peakY: 0,   // vx = velocidad horizontal (con inercia)
     onLadder: null, hammerT: 0, hamSwing: 0,
     animT: 0, deadT: 0,
 
     reset() {
       this.fx = MARIO_START; this.g = 0; this.fy = surfY(0, this.fx);
-      this.dir = 1; this.state = 'ground'; this.vy = 0; this.airVx = 0;
+      this.dir = 1; this.state = 'ground'; this.vx = 0; this.vy = 0; this.airVx = 0;
       this.peakY = this.fy; this.onLadder = null; this.hammerT = 0; this.animT = 0; this.deadT = 0;
     },
 
@@ -624,24 +734,37 @@
 
       if (this.state === 'ground') {
         const mv = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
-        if (mv !== 0) { this.dir = mv; this.fx += mv * WALK * dt; this.animT += dt; }
-        else this.animT = 0;
+        if (mv !== 0) {
+          this.dir = mv;
+          const turning = mv * this.vx < 0;                                 // cambio de dirección → giro más ágil
+          this.vx += mv * RUN_ACCEL * (turning ? TURN_BOOST : 1) * dt;
+          this.vx = clamp(this.vx, -WALK, WALK);
+          this.animT += dt;
+        } else {
+          // fricción: conserva inercia y se DESLIZA hasta frenar (no corta de golpe)
+          const dec = RUN_DECEL * dt;
+          if (this.vx > 0) this.vx = Math.max(0, this.vx - dec);
+          else if (this.vx < 0) this.vx = Math.min(0, this.vx + dec);
+          if (Math.abs(this.vx) > 0.003) this.animT += dt; else this.animT = 0;
+        }
+        this.fx += this.vx * dt;
+        if (this.g === belt.g) this.fx += belt.dir * WALK * BELT_SPD * dt;   // #9 deriva de cinta (hacia el extremo seguro)
 
         const g = GIRDERS[this.g];
         if (this.g === PAULINE_G) {
           this.fx = clamp(this.fx, g.x0 + 0.02, g.x1 - 0.02);     // de la plataforma de Pauline no se cae
-          this.fy = surfY(this.g, this.fx);
+          this.fy = surfY(this.g, this.fx); this.vx = 0;
         } else if (this.fx < g.x0 + 0.004 || this.fx > g.x1 - 0.004) {
-          this.state = 'air'; this.vy = 0; this.airVx = mv * WALK * 0.6; this.peakY = this.fy;   // se cayó del borde
+          this.state = 'air'; this.vy = 0; this.airVx = this.vx; this.peakY = this.fy;   // se cayó del borde (lleva su inercia) → caída mortal
         } else {
           this.fx = clamp(this.fx, 0.012, 0.988);
           this.fy = surfY(this.g, this.fx);
         }
 
-        // saltar (toque en pantalla o Space) — con martillo no se salta (clásico)
+        // saltar (toque en pantalla o Space) — lleva el momentum horizontal actual; con martillo no se salta
         if (this.state === 'ground' && jumpBuf > 0 && this.hammerT <= 0) {
           jumpBuf = 0;
-          this.state = 'air'; this.vy = -JUMP_V; this.airVx = mv * WALK; this.peakY = this.fy;
+          this.state = 'air'; this.vy = -JUMP_V; this.airVx = this.vx; this.peakY = this.fy;
           sfx.jump();
         }
         // trepar — sin martillo
@@ -656,6 +779,8 @@
         }
       }
       else if (this.state === 'air') {
+        const mv = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);                 // control aéreo suave
+        if (mv !== 0) { this.dir = mv; this.airVx = clamp(this.airVx + mv * AIR_ACCEL * dt, -WALK, WALK); }
         const prevY = this.fy;
         this.fy += this.vy * dt; this.vy += GRAV * dt;
         this.fx += this.airVx * dt;
@@ -672,8 +797,8 @@
           }
           if (landG >= 0) {
             const fall = landY - this.peakY;
-            this.g = landG; this.fy = landY; this.state = 'ground'; this.vy = 0;
-            if (fall > FALL_DEATH) { die(); return; }
+            this.g = landG; this.fy = landY; this.state = 'ground'; this.vy = 0; this.vx = this.airVx;   // retoma el momentum
+            if (fall > FALL_DEATH) { die(); return; }              // caerse más de tu propio salto = perdés la ronda
           }
         }
         if (this.fy > 1.05) { die(); return; }                     // se fue del playfield
@@ -699,6 +824,25 @@
         }
       }
 
+      // #4 remaches: caminarlos (en piso) los saca; completar los 8 abre el WARP (bonus al llegar a Pauline)
+      if (rivets.length && this.state === 'ground') {
+        for (const rv of rivets) {
+          if (rv.popped || rv.g !== this.g) continue;
+          if (Math.abs(this.fx - rv.x) < 0.025) {
+            rv.popped = true; gh.rivetsPopped[rivets.indexOf(rv)] = true; addScore(150, rv.x, surfY(rv.g, rv.x) - 0.03, '#7fd4ff'); sfx.score();
+            if (rivets.every(r => r.popped)) { gh.rivetWarp = true; popups.push({ text: '¡REMACHES!', fx: 0.5, fy: 0.4, t: 0, color: '#7fd4ff' }); }
+          }
+        }
+      }
+      // #6 coleccionables: tocarlos (piso o aire) suma; juntar los 3 da bonus de set (+2000)
+      for (const it of items) {
+        if (it.taken || it.g !== this.g) continue;
+        if (Math.abs(this.fx - it.x) < 0.03) {
+          it.taken = true; gh.itemsTaken[items.indexOf(it)] = true; addScore(it.kind.val, it.x, surfY(it.g, it.x) - 0.04, it.kind.c); sfx.score();
+          if (items.every(q => q.taken)) addScore(2000, this.fx, surfY(this.g, this.fx) - 0.06, '#ffffff');
+        }
+      }
+
       // tocar a DK = muerte; llegar a Pauline = victoria
       if (this.g === 5 && Math.abs(this.fx - DK_X) < 0.085 && this.state !== 'climb') { die(); return; }
       if (this.g === PAULINE_G) { winLevel(); return; }
@@ -715,7 +859,7 @@
     },
     startClimb(l) {
       this.state = 'climb'; this.onLadder = l; this.fx = l.x;
-      this.animT = 0;
+      this.vx = 0; this.animT = 0;
     },
 
     // hitbox del martillo (px) — alterna arriba / al frente
@@ -732,6 +876,7 @@
     draw() {
       const mh = MH * PF.h;
       const px = ppx(this.fx), py = ppy(this.fy) - mh / 2;
+      if (gh.phase !== 'dying' && this.state !== 'climb') shadowAt(px, ppy(surfY(this.g, this.fx)), mh * 0.36);
       if (gh.phase === 'dying') {
         // animación de muerte: congelado → giro → tendido
         if (this.deadT < 0.4) drawSpr(M_IDLE, px, py, mh, this.dir < 0);
@@ -771,9 +916,13 @@
 
   // ════════════════ BARRILES ════════════════
   class Barrel {
-    constructor() {
+    constructor(wild = false) {
       this.g = 5; this.fx = DK_X + 0.10; this.fy = surfY(5, this.fx);
-      this.dir = rollDir(5); this.spd = BARREL_SPD * lvlSpeed();
+      this.wild = wild;                                                      // #2 barril salvaje
+      this.dir = rollDir(5);
+      // velocidad: nivel × hazard, ×1.5 si salvaje, ×1.25 en furia — pero clampeada a 1.9× la base para que
+      // el pico nunca sea inesquivable (gotcha de balance del review).
+      this.spd = Math.min(BARREL_SPD * 1.9, BARREL_SPD * lvlSpeed() * (wild ? 1.5 : 1) * (gh.frenzy ? FRENZY_SPD : 1));
       this.state = 'roll';    // 'roll' | 'ladder' | 'air'
       this.vy = 0; this.vx = 0; this.rotT = 0; this.scored = false; this.dead = false;
       this.l = null;
@@ -784,13 +933,16 @@
         this.fx += this.dir * this.spd * dt;
         this.rotT += dt;
         this.fy = surfY(this.g, this.fx);
-        // ¿bajar por una escalera? (sólo al cruzarla; más probable si Mario está abajo)
+        // ¿bajar por una escalera? (sólo al cruzarla; más probable si Mario está abajo). El SALVAJE nunca
+        // baja escaleras: siempre rueda hasta el borde y cae viga por viga.
         curBarrelG = this.g;
-        for (const l of LADDERS) {
-          if (l.hi !== this.g) continue;
-          if ((prevX - l.x) * (this.fx - l.x) <= 0 && prevX !== this.fx) {
-            if (Math.random() < descProb()) { this.state = 'ladder'; this.l = l; this.fx = l.x; }
-            break;
+        if (!this.wild) {
+          for (const l of LADDERS) {
+            if (l.hi !== this.g) continue;
+            if ((prevX - l.x) * (this.fx - l.x) <= 0 && prevX !== this.fx) {
+              if (Math.random() < descProb()) { this.state = 'ladder'; this.l = l; this.fx = l.x; }
+              break;
+            }
           }
         }
         if (this.state === 'roll') {
@@ -801,7 +953,7 @@
           // llegó al tambor de aceite → desaparece (y quizás sale una bola de fuego)
           if (this.g === 0 && this.fx < OIL_X + 0.025) {
             this.dead = true; oilLit = true;
-            const maxFb = gh.level >= 3 ? 2 : 1;
+            const maxFb = Math.min(3, (gh.level >= 3 ? 2 : 1) + (gh.hazard ? gh.hazard.fb : 0));   // #8 INFERNAL +1
             if (fireballs.length < maxFb && Math.random() < Math.min(0.6, 0.30 + 0.05 * gh.level)) {
               fireballs.push(new Fireball());
             }
@@ -829,18 +981,24 @@
         if (this.fy > 1.1) this.dead = true;
       }
 
-      // puntos por saltarlo: Mario en el aire, bien arriba del barril
+      // puntos por saltarlo: Mario en el aire, bien arriba del barril. #1 combo: encadenar saltos de
+      // barriles DISTINTOS dentro de la ventana sube el multiplicador (tope x5 / +500 pre-hazard).
       if (!this.scored && mario.state === 'air' &&
           Math.abs(mario.fx - this.fx) < 0.045 &&
           (this.fy - mario.fy) > 0.012 && (this.fy - mario.fy) < 0.11) {
-        this.scored = true; addScore(100, this.fx, this.fy - 0.05); sfx.score();
+        this.scored = true;
+        gh.comboT = 0.85; gh.comboN = Math.min(5, gh.comboN + 1);
+        const base = this.wild ? 150 : 100;                                 // #2 el salvaje vale más
+        gpScore(Math.min(500, base * gh.comboN), this.fx, this.fy - 0.05, gh.comboN >= 3 ? '#ff8c1a' : '#ffd23f');
+        if (gh.comboN >= 2) popups.push({ text: 'COMBO x' + gh.comboN, fx: this.fx, fy: this.fy - 0.10, t: 0, color: '#7fd4ff' });
+        sfx.score();
       }
       // martillazo
       const hb = mario.hammerBox();
       if (hb) {
         const bx = ppx(this.fx), by = ppy(this.fy) - BH * PF.h / 2;
         if (Math.hypot(bx - hb.x, by - hb.y) < hb.r + BH * PF.h * 0.5) {
-          this.dead = true; addScore(300, this.fx, this.fy - 0.05); sfx.hammer();
+          this.dead = true; gpScore(300, this.fx, this.fy - 0.05); sfx.hammer();
           return;
         }
       }
@@ -850,10 +1008,11 @@
     draw() {
       const bh = BH * PF.h;
       const px = ppx(this.fx), py = ppy(this.fy) - bh / 2;
-      if (this.state === 'air') drawSpr(BARREL_END, px, py, bh * 1.15);
+      if (this.state !== 'air') shadowAt(px, ppy(this.fy), bh * 0.45);
+      if (this.state === 'air') drawSpr(this.wild ? BARREL_END_WILD : BARREL_END, px, py, bh * 1.15);
       else {
         const fr = Math.floor(this.rotT / 0.07) % 4;
-        drawSpr(BARREL_FR[this.dir > 0 ? fr : 3 - fr], px, py, bh);
+        drawSpr((this.wild ? BARREL_FR_WILD : BARREL_FR)[this.dir > 0 ? fr : 3 - fr], px, py, bh);
       }
     }
   }
@@ -902,7 +1061,7 @@
       if (hb) {
         const fx = ppx(this.fx), fy = ppy(this.fy) - FBH * PF.h / 2;
         if (Math.hypot(fx - hb.x, fy - hb.y) < hb.r + FBH * PF.h * 0.5) {
-          this.dead = true; addScore(500, this.fx, this.fy - 0.05, '#ff8c1a'); sfx.hammer();
+          this.dead = true; gpScore(500, this.fx, this.fy - 0.05, '#ff8c1a'); sfx.hammer();
           return;
         }
       }
@@ -913,6 +1072,81 @@
       const fr = (Math.floor(this.animT / 0.12) % 2) === 0 ? FIRE_1 : FIRE_2;
       drawSpr(fr, ppx(this.fx), ppy(this.fy) - fh / 2, fh, this.dir < 0);
     }
+  }
+
+  // ════════════════ #9 TORTA (rueda por la cinta-fábrica) ════════════════
+  class Pie {
+    constructor() {
+      this.g = belt.g;
+      const open = rollDir(this.g);                  // hacia el borde abierto (bajo)
+      this.dir = open;
+      const gg = GIRDERS[this.g];
+      this.fx = open > 0 ? gg.x0 + 0.04 : gg.x1 - 0.04;   // arranca del extremo seguro
+      this.fy = surfY(this.g, this.fx);
+      this.spd = BARREL_SPD * 0.8 * lvlSpeed();
+      this.rotT = 0; this.scored = false; this.dead = false;
+    }
+    process(dt) {
+      this.fx += this.dir * this.spd * dt;
+      this.rotT += dt;
+      const gg = GIRDERS[this.g];
+      this.fy = surfY(this.g, this.fx);
+      if (this.fx < gg.x0 - 0.01 || this.fx > gg.x1 + 0.01) { this.dead = true; return; }   // se cae del borde → fin
+      // saltarla = +100 (alimenta el combo) · martillazo = +300 (mismo score que un barril, sin tier nuevo)
+      if (!this.scored && mario.state === 'air' && Math.abs(mario.fx - this.fx) < 0.045 &&
+          (this.fy - mario.fy) > 0.012 && (this.fy - mario.fy) < 0.11) {
+        this.scored = true;
+        gh.comboT = 0.85; gh.comboN = Math.min(5, gh.comboN + 1);
+        gpScore(Math.min(500, 100 * gh.comboN), this.fx, this.fy - 0.05, gh.comboN >= 3 ? '#ff8c1a' : '#ffd23f');
+        if (gh.comboN >= 2) popups.push({ text: 'COMBO x' + gh.comboN, fx: this.fx, fy: this.fy - 0.10, t: 0, color: '#7fd4ff' });
+        sfx.score();
+      }
+      const hb = mario.hammerBox();
+      if (hb) {
+        const bx = ppx(this.fx), by = ppy(this.fy) - BH * PF.h / 2;
+        if (Math.hypot(bx - hb.x, by - hb.y) < hb.r + BH * PF.h * 0.5) {
+          this.dead = true; gpScore(300, this.fx, this.fy - 0.05); sfx.hammer(); return;
+        }
+      }
+      if (hitsMario(this.fx, this.fy, BH, 12 / 9)) die();
+    }
+    draw() {
+      const bh = BH * PF.h;
+      shadowAt(ppx(this.fx), ppy(this.fy), bh * 0.45);
+      drawSpr(PIE_SPR, ppx(this.fx), ppy(this.fy) - bh / 2, bh * 1.1, this.dir < 0);
+    }
+  }
+  // viga-cinta del nivel (sembrada por run, no parity predecible). Deriva hacia el extremo CLAMP-seguro
+  // (-rollDir): en vigas 2/3 el extremo opuesto al de caída está protegido por el clamp → un Mario quieto
+  // choca la pared, nunca se cae.
+  function beltFor(level) {
+    if (level < 2) return { g: -1, dir: 0 };
+    const rng = mulberry32((gh.seed ^ Math.imul(level, 0x27D4EB2F)) >>> 0);
+    const g = [2, 3][Math.floor(rng() * 2)];
+    return { g, dir: -rollDir(g) };
+  }
+  function updatePies(dt) {
+    if (belt.g < 0) return;
+    pieT -= dt;
+    if (pieT <= 0 && pies.length < MAX_PIES) { pies.push(new Pie()); pieT = rnd(2.6, 4.2); }
+    for (const p of pies) { p.process(dt); if (gh.phase !== 'play') break; }
+    pies = pies.filter(p => !p.dead);
+  }
+  function drawBelt() {
+    if (belt.g < 0) return;
+    const gg = GIRDERS[belt.g], span = gg.x1 - gg.x0, n = 8, move = perfT * 0.10 * belt.dir;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(130,205,255,0.55)'; ctx.lineWidth = Math.max(1.5, PF.h * 0.0035);
+    const d = belt.dir >= 0 ? 1 : -1, w = PF.w * 0.012, hh = PF.h * 0.006;
+    for (let i = 0; i < n; i++) {
+      let f = (i / n + move) % 1; if (f < 0) f += 1;
+      const x = gg.x0 + 0.03 + f * (span - 0.06);
+      const px = ppx(x), py = ppy(surfY(belt.g, x)) + PF.h * 0.007;
+      ctx.beginPath();
+      ctx.moveTo(px - d * w / 2, py - hh); ctx.lineTo(px + d * w / 2, py); ctx.lineTo(px - d * w / 2, py + hh);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   // ════════════════ DONKEY KONG (el que tira barriles) ════════════════
@@ -927,7 +1161,9 @@
         if (this.t >= 0.45) { this.phase = 'throw'; this.t = 0; }
       } else { // throw
         if (!this.thrown && this.t >= 0.18 && barrels.length < MAX_BARRELS) {
-          barrels.push(new Barrel()); this.thrown = true; sfx.throw_();
+          const wild = gh.level >= 3 && Math.random() < Math.min(0.32, 0.08 * (gh.level - 2));   // #2 barril salvaje (spike tardío)
+          barrels.push(new Barrel(wild)); this.thrown = true;
+          (wild ? sfx.throwWild : sfx.throw_)();
         }
         if (this.t >= 0.4) { this.phase = 'beat'; this.t = 0; this.nextThrow = spawnGap(); }
       }
@@ -935,6 +1171,7 @@
     draw() {
       const h = DKH * PF.h;
       const px = ppx(DK_X), py = ppy(surfY(5, DK_X)) - h / 2;
+      shadowAt(px, ppy(surfY(5, DK_X)), h * 0.30);
       if (this.phase === 'beat') {
         const fr = Math.floor(this.t / 0.32) % 2;
         drawSpr(fr === 0 ? DK_UP : DK_CHEST, px, py, h);
@@ -965,17 +1202,29 @@
   };
 
   // ════════════════ FLUJO DE PARTIDA ════════════════
-  function startGame() {
+  function startGame(mode) {
+    gh.mode = mode || 'classic';
+    gh.daily = gh.mode === 'daily';
+    gh.seed = (gh.daily ? dateSeed() : (Math.floor(Math.random() * 1e9) >>> 0)) || 1;
     gh.level = 1; gh.score = 0; gh.lives = 3; gh.newHi = false;
+    gh.hi = parseInt(localStorage.getItem(gh.daily ? dailyKey() : 'dk_hiscore') || '0', 10) || 0;
     gh.screen = 'game';
     startLevel();
   }
   function startLevel() {
-    barrels = []; fireballs = []; popups = [];
-    hammers = HAMMER_SPOTS.map(s => ({ g: s.g, x: s.x, taken: false }));
+    barrels = []; fireballs = []; popups = []; pies = [];
+    applyLevelLayout();                                      // #3 reroll escaleras/jitter/martillos sembrados + bakeLevel
+    hammers = hammerSpots.map(s => ({ g: s.g, x: s.x, taken: false }));
+    setupRivetsItems();                                     // #4 remaches / #6 coleccionables (según nivel)
+    belt = beltFor(gh.level); pieT = 1.5;                   // #9 viga-cinta + delay inicial de torta
     oilLit = false; oilT = 0;
     dk.reset(); mario.reset();
     gh.bonus = Math.min(8000, 5000 + 500 * (gh.level - 1)); gh.bonusT = 0;
+    gh.comboN = 0; gh.comboT = 0;                           // #1
+    gh.frenzy = false; gh.frenzyWarn = false; gh.frenzyDone = false; gh.frenzyT = 0;   // #5
+    gh.frenzyAt = Math.max(7, 15 - gh.level);
+    gh.rivetWarp = rivets.length > 0 && rivets.every(r => r.popped);   // #4 (restaura el warp si ya barriste todo y reapareciste)
+    gh.hazard = CALMA; gh.hazardChoices = pickHazardChoices();   // #8 (CALMA por defecto hasta elegir)
     gh.phase = 'intro'; gh.phaseT = 0;
     jumpBuf = 0;
   }
@@ -983,15 +1232,152 @@
   function die() {
     if (gh.phase !== 'play') return;
     gh.phase = 'dying'; gh.phaseT = 0; mario.deadT = 0;
+    gh.comboN = 0; gh.comboT = 0;                           // #1: el combo no sobrevive la muerte
+    gh.frenzy = false; gh.frenzyWarn = false;              // #5: la furia no se dibuja sobre la animación de muerte
     sfx.death();
   }
   function winLevel() {
     if (gh.phase !== 'play') return;
     gh.phase = 'win'; gh.phaseT = 0;
     addScore(gh.bonus, PAULINE_X, surfY(PAULINE_G, PAULINE_X) - 0.10, '#7fd4ff');
+    if (gh.rivetWarp) addScore(800, PAULINE_X, surfY(PAULINE_G, PAULINE_X) - 0.16, '#7fd4ff');   // #4 barrido completo
     sfx.win();
   }
-  function backToMenu() { gh.screen = 'menu'; }
+  function backToMenu() {
+    restoreOriginalLayout(); bakeLevel();                   // que el menú muestre el tablero canónico de fondo
+    gh.screen = 'menu';
+  }
+
+  // ════════════════ #3 VARIEDAD DE TABLERO (sembrada) ════════════════
+  function restoreOriginalLayout() {
+    for (let i = 0; i < LADDERS.length; i++) LADDERS[i].broken = LADDERS_ORIG_BROKEN[i];
+    for (let i = 0; i < GIRDERS.length; i++) { GIRDERS[i].yL = GIRDERS_ORIG[i].yL; GIRDERS[i].yR = GIRDERS_ORIG[i].yR; }
+    hammerSpots = HAMMER_SPOTS.map(s => ({ g: s.g, x: s.x }));
+  }
+  // ¿existe una cadena de escaleras SANAS 0→6, cada una con x dentro de AMBAS vigas? (invariante de ganabilidad).
+  function layoutWinnable() {
+    const reach = new Set([0]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const l of LADDERS) {
+        if (l.broken || !reach.has(l.lo) || reach.has(l.hi)) continue;
+        if (l.x >= GIRDERS[l.lo].x0 && l.x <= GIRDERS[l.lo].x1 &&
+            l.x >= GIRDERS[l.hi].x0 && l.x <= GIRDERS[l.hi].x1) { reach.add(l.hi); changed = true; }
+      }
+    }
+    return reach.has(6);
+  }
+  function applyLevelLayout() {
+    restoreOriginalLayout();
+    // Nivel 1 en classic = tablero hand-authored (intro estable). Daily + niveles 2+ = sembrado por nivel.
+    if (gh.level === 1 && !gh.daily) { bakeLevel(); return; }
+    const rng = mulberry32((gh.seed ^ Math.imul(gh.level, 0x9E3779B1)) >>> 0);
+    const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = arr[i]; arr[i] = arr[j]; arr[j] = t; } return arr; };
+    // 1) Reroll de rotas: MISMA cuenta por tramo que el original → sólo cambia CUÁL está rota, no la dificultad.
+    TIERS.forEach((idxs, lo) => {
+      const order = shuffle(idxs.slice()), nB = BROKEN_PER_TIER[lo] || 0;
+      order.forEach((idx, k) => { LADDERS[idx].broken = k < nB; });
+    });
+    // 2) Jitter sutil de pendiente en vigas 1..4 (no toca x-extents ni topología; nunca invierte la pendiente
+    //    ni convierte una caída de 1 viga en una de 2 → FALL_DEATH intacto).
+    for (let gi = 1; gi <= 4; gi++) {
+      const o = GIRDERS_ORIG[gi], d = (rng() * 2 - 1) * 0.012;
+      GIRDERS[gi].yL = o.yL + d; GIRDERS[gi].yR = o.yR - d * 0.6;
+    }
+    // 3) Re-sembrar 2 martillos en vigas 1..4 (excluye 0=aceite/fuego y 5=DK), con margen al borde para el salto.
+    const hgs = shuffle([1, 2, 3, 4]).slice(0, 2);
+    hammerSpots = hgs.map(g => ({ g, x: GIRDERS[g].x0 + 0.10 + rng() * (GIRDERS[g].x1 - GIRDERS[g].x0 - 0.20) }));
+    // 4) Red de seguridad: si un seed diera algo no ganable (no debería, la cuenta por tramo lo garantiza),
+    //    volver al tablero canónico.
+    if (!layoutWinnable()) restoreOriginalLayout();
+    bakeLevel();
+  }
+
+  // ════════════════ #4 REMACHES / #6 COLECCIONABLES ════════════════
+  // Para no saturar el tablero, ALTERNAN por nivel: niveles de remache (cada 4) muestran 8 remaches a
+  // barrer; el resto, 3 coleccionables de Pauline sembrados. Ambos son score puro y opcional.
+  const ITEM_SPOTS = [
+    { g:1, x:0.30 }, { g:1, x:0.66 }, { g:2, x:0.24 }, { g:2, x:0.80 },
+    { g:3, x:0.34 }, { g:3, x:0.70 }, { g:4, x:0.28 }, { g:4, x:0.78 },
+  ];
+  const ITEM_KINDS = [
+    { spr: HAT_SPR,   val: 300, c:'#ff7ad9' },
+    { spr: PURSE_SPR, val: 500, c:'#ffd23f' },
+    { spr: UMB_SPR,   val: 800, c:'#7fd4ff' },
+  ];
+  function setupRivetsItems() {
+    rivets = []; items = [];
+    // El estado tomado/popped persiste DENTRO de una vida: un respawn en el MISMO nivel no re-otorga score.
+    // Se limpia sólo cuando el nivel realmente avanza (gh.level cambia).
+    if (gh.pickupLevel !== gh.level) { gh.pickupLevel = gh.level; gh.rivetsPopped = []; gh.itemsTaken = []; }
+    if (isRivetLevel()) {
+      let ri = 0;
+      for (const g of [1, 2, 3, 4]) {
+        const a = GIRDERS[g].x0, b = GIRDERS[g].x1;
+        rivets.push({ g, x: a + (b - a) * 0.28, popped: !!gh.rivetsPopped[ri++] });
+        rivets.push({ g, x: a + (b - a) * 0.72, popped: !!gh.rivetsPopped[ri++] });
+      }
+    } else {
+      const rng = mulberry32((gh.seed ^ Math.imul(gh.level, 0x85EBCA77) ^ 0x51) >>> 0);
+      const pool = ITEM_SPOTS.slice();
+      for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+      items = ITEM_KINDS.map((k, i) => ({ g: pool[i].g, x: pool[i].x, kind: k, taken: !!gh.itemsTaken[i] }));
+    }
+  }
+
+  // ════════════════ #5 FURIA (pacing intra-nivel) ════════════════
+  // Una vez por nivel: avisa 1.5 s antes (cartel + sonido), después 6 s de cadencia/velocidad spikeada
+  // (clampeadas en spawnGap()/Barrel). La velocidad NO sube durante el aviso → telegrafía honesta.
+  function updateFrenzy(dt) {
+    if (gh.frenzyDone) return;
+    gh.frenzyT += dt;
+    const t = gh.frenzyT, wasWarn = gh.frenzyWarn;
+    gh.frenzyWarn = (!gh.frenzy && t >= gh.frenzyAt - 1.5 && t < gh.frenzyAt);
+    if (gh.frenzyWarn && !wasWarn) sfx.warn();
+    if (!gh.frenzy && t >= gh.frenzyAt) gh.frenzy = true;
+    if (gh.frenzy && t >= gh.frenzyAt + 6) { gh.frenzy = false; gh.frenzyDone = true; }
+  }
+  function drawFrenzy() {
+    if (gh.frenzyWarn && Math.floor(gh.frenzyT * 6) % 2 === 0) ptext('¡FURIA!', 0.5, 0.42, 0.024, '#ff3b30');
+    if (gh.frenzy) {
+      const a = 0.35 + 0.3 * Math.sin(perfT * 10), lw = Math.max(2, PF.w * 0.012);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,59,48,' + a.toFixed(3) + ')'; ctx.lineWidth = lw;
+      ctx.strokeRect(PF.x + lw / 2, PF.y + lw / 2, PF.w - lw, PF.h - lw);
+      ctx.restore();
+    }
+  }
+
+  // ════════════════ #8 DRAFT DE HAZARD ════════════════
+  const HAZ_PILL_Y = [0.56, 0.66];     // y (fracción) de los dos pills del draft (y zona de tap)
+  function pickHazardChoices() {        // izq = CALMA (seguro x1), der = un hazard picante (más riesgo, más score)
+    const spicy = HAZARDS.slice(1);
+    const rng = mulberry32((gh.seed ^ Math.imul(gh.level, 0xC2B2AE35) ^ 0x9) >>> 0);
+    return [CALMA, spicy[Math.floor(rng() * spicy.length)]];
+  }
+  function chooseHazard(i) {
+    if (gh.phase !== 'intro') return;
+    gh.hazard = (gh.hazardChoices && gh.hazardChoices[i]) || CALMA;
+    gh.phase = 'play'; gh.phaseT = 0;
+    jumpBuf = 0;                        // que el tap/tecla de elegir NO bufferee un salto al arrancar
+    keys.ArrowUp = keys.ArrowDown = keys.ArrowLeft = keys.ArrowRight = false;   // ni mueva a Mario con la flecha de elegir
+  }
+  function drawHazardPill(hz, fy) {
+    const fp = Math.round(0.016 * PF.h);
+    ctx.font = fp + 'px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const label = hz.mult > 1 ? (hz.name + '  x' + hz.mult) : (hz.name + '  x1');
+    const tw = ctx.measureText(label).width, padX = fp * 0.9;
+    const bw = Math.max(tw + padX * 2, PF.w * 0.62), bhh = fp + fp * 1.2;
+    const bx = ppx(0.5) - bw / 2, by = ppy(fy) - bhh / 2, r = bhh / 2;
+    const col = hz === CALMA ? '#7fd4ff' : '#ff8c1a';
+    ctx.beginPath();
+    ctx.moveTo(bx + r, by); ctx.arcTo(bx + bw, by, bx + bw, by + bhh, r); ctx.arcTo(bx + bw, by + bhh, bx, by + bhh, r);
+    ctx.arcTo(bx, by + bhh, bx, by, r); ctx.arcTo(bx, by, bx + bw, by, r); ctx.closePath();
+    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.fillText(label, ppx(0.5), ppy(fy));
+  }
 
   // ════════════════ HORNEADO DEL NIVEL (vigas + escaleras + tambor) ════════════════
   let levelCv = null, lctx = null;
@@ -1002,12 +1388,11 @@
     lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     lctx.clearRect(0, 0, W, H);
 
-    // escaleras primero (las vigas tapan la unión)
+    // escaleras primero (las vigas tapan la unión). Horneado → el glow (shadowBlur) es gratis.
     for (const l of LADDERS) {
       const x = ppx(l.x);
       const top = ppy(surfY(l.hi, l.x)), foot = ppy(surfY(l.lo, l.x));
-      const w = PF.w * 0.032, rail = Math.max(1.5, PF.w * 0.007);
-      lctx.strokeStyle = '#3fd4ff'; lctx.lineWidth = rail; lctx.lineCap = 'butt';
+      const w = PF.w * 0.034, rail = Math.max(1.5, PF.w * 0.007);
       const gapTop = top + (foot - top) * 0.36, gapBot = top + (foot - top) * 0.66;
       const rails = (yA, yB) => {
         lctx.beginPath();
@@ -1015,8 +1400,12 @@
         lctx.moveTo(x + w / 2, yA); lctx.lineTo(x + w / 2, yB);
         lctx.stroke();
       };
+      lctx.save();
+      lctx.shadowColor = 'rgba(63,212,255,0.7)'; lctx.shadowBlur = Math.max(3, PF.h * 0.006);
+      lctx.strokeStyle = '#6fe0ff'; lctx.lineWidth = rail; lctx.lineCap = 'round';
       if (l.broken) { rails(top, gapTop); rails(gapBot, foot); } else rails(top, foot);
-      lctx.lineWidth = Math.max(1, PF.w * 0.0045);
+      lctx.restore();
+      lctx.strokeStyle = 'rgba(63,212,255,0.85)'; lctx.lineWidth = Math.max(1, PF.w * 0.0045); lctx.lineCap = 'butt';
       const step = PF.h * 0.016;
       for (let y = top + step * 0.7; y < foot; y += step) {
         if (l.broken && y > gapTop && y < gapBot) continue;
@@ -1024,26 +1413,43 @@
       }
     }
 
-    // vigas estilo DK: bordes rosas + entramado diagonal
+    // vigas estilo DK modernizadas: relleno con gradiente vertical (volumen) + entramado tenue + rim
+    // superior brillante con glow horneado + remaches.
     const th = PF.h * 0.020;
     for (const g of GIRDERS) {
       const x0 = ppx(g.x0), x1 = ppx(g.x1), y0 = ppy(g.yL), y1 = ppy(g.yR);
+      const gradTop = Math.min(y0, y1);
+      const grd = lctx.createLinearGradient(0, gradTop, 0, gradTop + th);
+      grd.addColorStop(0, '#9c1f4e'); grd.addColorStop(0.5, '#6a1233'); grd.addColorStop(1, '#3c0a20');
       lctx.beginPath();
       lctx.moveTo(x0, y0); lctx.lineTo(x1, y1); lctx.lineTo(x1, y1 + th); lctx.lineTo(x0, y0 + th);
       lctx.closePath();
-      lctx.fillStyle = '#5c0f2c'; lctx.fill();
+      lctx.fillStyle = grd; lctx.fill();
       lctx.save(); lctx.clip();
-      lctx.strokeStyle = '#d63b78'; lctx.lineWidth = Math.max(1, PF.w * 0.005);
-      const step = PF.w * 0.024;
+      lctx.strokeStyle = 'rgba(255,120,170,0.22)'; lctx.lineWidth = Math.max(1, PF.w * 0.004);
+      const step = PF.w * 0.030;
       for (let x = x0 - th; x < x1 + th; x += step) {
         const t = clamp((x - x0) / (x1 - x0 || 1), 0, 1);
         const yy = y0 + (y1 - y0) * t;
         lctx.beginPath(); lctx.moveTo(x, yy + th); lctx.lineTo(x + th, yy); lctx.stroke();
       }
       lctx.restore();
-      lctx.strokeStyle = '#ff5d92'; lctx.lineWidth = Math.max(1.5, PF.h * 0.0040);
+      // rim superior brillante con glow (horneado → shadowBlur gratis)
+      lctx.save();
+      lctx.shadowColor = 'rgba(255,93,146,0.9)'; lctx.shadowBlur = Math.max(4, PF.h * 0.010);
+      lctx.strokeStyle = '#ff7da8'; lctx.lineWidth = Math.max(1.5, PF.h * 0.0045);
       lctx.beginPath(); lctx.moveTo(x0, y0); lctx.lineTo(x1, y1); lctx.stroke();
+      lctx.restore();
+      lctx.strokeStyle = 'rgba(120,20,55,0.9)'; lctx.lineWidth = 1;
       lctx.beginPath(); lctx.moveTo(x0, y0 + th); lctx.lineTo(x1, y1 + th); lctx.stroke();
+      // remaches a lo largo del rim
+      lctx.fillStyle = 'rgba(255,185,210,0.5)';
+      const rstep = PF.w * 0.06, rr = Math.max(1, PF.w * 0.004);
+      for (let x = x0 + rstep * 0.5; x < x1; x += rstep) {
+        const t = clamp((x - x0) / (x1 - x0 || 1), 0, 1);
+        const yy = y0 + (y1 - y0) * t + th * 0.5;
+        lctx.beginPath(); lctx.arc(x, yy, rr, 0, TAU); lctx.fill();
+      }
     }
 
     // tambor de aceite (cuerpo; la llama va animada encima)
@@ -1069,6 +1475,14 @@
     const pw = Math.min(W, H * ASPECT);
     PF.w = pw; PF.h = pw / ASPECT;
     PF.x = (W - PF.w) / 2; PF.y = (H - PF.h) / 2;
+    // gradientes de fondo (screen-space, una sola vez por resize): gabinete + atmósfera del playfield +
+    // viñeta para profundidad (patrón TankWARS/CrazyTanks; nada de shadowBlur por frame).
+    bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+    bgGrad.addColorStop(0, '#16131d'); bgGrad.addColorStop(1, '#070709');
+    pfGrad = ctx.createLinearGradient(0, PF.y, 0, PF.y + PF.h);
+    pfGrad.addColorStop(0, '#161029'); pfGrad.addColorStop(0.55, '#0a0713'); pfGrad.addColorStop(1, '#050407');
+    vigGrad = ctx.createRadialGradient(PF.x + PF.w / 2, PF.y + PF.h * 0.42, PF.h * 0.22, PF.x + PF.w / 2, PF.y + PF.h * 0.5, PF.h * 0.72);
+    vigGrad.addColorStop(0, 'rgba(0,0,0,0)'); vigGrad.addColorStop(1, 'rgba(0,0,0,0.55)');
     bakeLevel();
     // Las posiciones viven en fracciones del playfield → el juego sigue donde estaba, sin reset.
   }
@@ -1076,27 +1490,38 @@
 
   // ════════════════ DIBUJO ════════════════
   function drawBezel() {
-    ctx.fillStyle = '#0a0b10';
+    ctx.fillStyle = bgGrad || '#0a0b10';
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = pfGrad || '#000';
     ctx.fillRect(PF.x, PF.y, PF.w, PF.h);
-    ctx.strokeStyle = 'rgba(255,93,146,0.22)';
-    ctx.lineWidth = 1;
-    ctx.strokeRect(PF.x + 0.5, PF.y + 0.5, PF.w - 1, PF.h - 1);
+    if (vigGrad) { ctx.fillStyle = vigGrad; ctx.fillRect(PF.x, PF.y, PF.w, PF.h); }
+    // marco neón: glow ancho translúcido + línea fina encima (glow barato, sin shadowBlur por frame)
+    ctx.strokeStyle = 'rgba(255,93,146,0.12)'; ctx.lineWidth = 6;
+    ctx.strokeRect(PF.x + 3, PF.y + 3, PF.w - 6, PF.h - 6);
+    ctx.strokeStyle = 'rgba(255,93,146,0.5)'; ctx.lineWidth = 1.5;
+    ctx.strokeRect(PF.x + 1, PF.y + 1, PF.w - 2, PF.h - 2);
   }
 
   function drawHUD() {
+    // panel translúcido detrás de la fila de score (legibilidad + look moderno)
+    ctx.save();
+    roundRectPath(ctx, PF.x + PF.w * 0.02, PF.y + PF.h * 0.006, PF.w * 0.96, PF.h * 0.064, PF.h * 0.012);
+    ctx.fillStyle = 'rgba(8,6,14,0.55)'; ctx.fill();
+    ctx.strokeStyle = 'rgba(255,93,146,0.25)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.restore();
     ptext('PUNTOS', 0.035, 0.022, 0.014, '#ff3b30', 'left');
     ptext(pad(gh.score, 6), 0.035, 0.047, 0.015, '#ffffff', 'left');
-    ptext('RECORD', 0.5, 0.022, 0.014, '#ff3b30');
+    ptext(gh.daily ? 'DIARIO' : 'RECORD', 0.5, 0.022, 0.014, '#ff3b30');   // #3 daily: récord aparte
     ptext(pad(gh.hi, 6), 0.5, 0.047, 0.015, gh.newHi ? '#ffd23f' : '#ffffff');
     ptext('NIVEL ' + pad(gh.level, 2), 0.965, 0.022, 0.014, '#7fd4ff', 'right');
     ptext('BONUS ' + pad(gh.bonus, 4), 0.965, 0.047, 0.013, '#ffd23f', 'right');
-    // vidas en reserva
+    // vidas en reserva (izq)
     const ih = 0.020 * PF.h;
-    for (let i = 0; i < gh.lives - 1; i++) {
-      drawSpr(M_IDLE, ppx(0.045 + i * 0.05), ppy(0.078), ih);
-    }
+    for (let i = 0; i < gh.lives - 1; i++) drawSpr(M_IDLE, ppx(0.045 + i * 0.05), ppy(0.078), ih);
+    // tercera línea: combo (centro) · remaches (centro-bajo) · hazard activo (der)
+    if (gh.comboN >= 2) ptext('COMBO x' + gh.comboN, 0.5, 0.072, 0.013, '#7fd4ff');           // #1
+    if (rivets.length) ptext('REMACHES ' + rivets.filter(r => r.popped).length + '/8', 0.5, 0.095, 0.012, '#7fd4ff');  // #4
+    if (gh.hazard && gh.hazard !== CALMA) ptext(gh.hazard.name, 0.965, 0.072, 0.011, '#ffb3c1', 'right');  // #8
   }
 
   function drawOilFlame() {
@@ -1114,6 +1539,20 @@
     }
   }
 
+  function drawRivets() {           // #4
+    const rh = 0.020 * PF.h;
+    for (const rv of rivets) {
+      drawSpr(RIVET_SPR, ppx(rv.x), ppy(surfY(rv.g, rv.x)) - rh * 0.4, rh, false, 0, rv.popped ? 0.18 : 1);
+    }
+  }
+  function drawItems() {            // #6
+    for (const it of items) {
+      if (it.taken) continue;
+      const ih = 0.026 * PF.h;
+      drawSpr(it.kind.spr, ppx(it.x), ppy(surfY(it.g, it.x)) - ih * 0.65, ih);
+    }
+  }
+
   function drawPopups(dt) {
     for (const p of popups) {
       p.t += dt; p.fy -= 0.035 * dt;
@@ -1126,18 +1565,30 @@
     drawBezel();
     ctx.drawImage(levelCv, 0, 0, W, H);
     drawOilFlame();
+    drawBelt();              // #9 chevrons animados de la cinta
+    drawRivets();            // #4
+    drawItems();             // #6
     drawHammers();
     pauline.draw();
     dk.draw();
     for (const b of barrels) b.draw();
+    for (const p of pies) p.draw();    // #9
     for (const f of fireballs) f.draw();
     mario.draw();
+    drawFrenzy();            // #5 borde pulsante + cartel ¡FURIA!
     drawPopups(dt);
     drawHUD();
 
     if (gh.phase === 'intro') {
-      ptext('NIVEL ' + gh.level, 0.5, 0.50, 0.026, '#7fd4ff');
-      ptext('¿LISTO?', 0.5, 0.55, 0.018, '#ffffff');
+      if (gh.hazardChoices && gh.level >= 2) {                 // #8 draft
+        ptext('NIVEL ' + gh.level, 0.5, 0.40, 0.024, '#7fd4ff');
+        ptext('ELEGÍ TU DESAFÍO', 0.5, 0.47, 0.014, '#ffffff');
+        drawHazardPill(gh.hazardChoices[0], HAZ_PILL_Y[0]);
+        drawHazardPill(gh.hazardChoices[1], HAZ_PILL_Y[1]);
+      } else {
+        ptext('NIVEL ' + gh.level, 0.5, 0.50, 0.026, '#7fd4ff');
+        ptext('¿LISTO?', 0.5, 0.55, 0.018, '#ffffff');
+      }
     } else if (gh.phase === 'win') {
       const hh = 0.030 * PF.h * (1 + 0.12 * Math.sin(gh.phaseT * 6));
       drawSpr(HEART_SPR, ppx((mario.fx + PAULINE_X) / 2), ppy(surfY(PAULINE_G, PAULINE_X) - PAUH - 0.045), hh);
@@ -1145,80 +1596,108 @@
     } else if (gh.phase === 'over') {
       ctx.fillStyle = 'rgba(0,0,0,0.62)';
       ctx.fillRect(PF.x, PF.y, PF.w, PF.h);
-      ptext('FIN DEL JUEGO', 0.5, 0.42, 0.026, '#ff3b30');
+      ptext(gh.daily ? 'FIN — DIARIO' : 'FIN DEL JUEGO', 0.5, 0.42, 0.024, '#ff3b30');
       ptext(pad(gh.score, 6) + ' PUNTOS', 0.5, 0.50, 0.016, '#ffffff');
       if (gh.newHi) ptext('¡NUEVO RECORD!', 0.5, 0.555, 0.015, '#ffd23f');
-      if (gh.phaseT % 1 < 0.6) ptext('TOCA PARA SEGUIR', 0.5, 0.63, 0.013, '#7fd4ff');
+      const next = SKINS.find(s => gh.total < s.unlock);                    // #7 feedback "una run más"
+      if (next) ptext('SIG. SKIN ' + next.name + ': ' + pad(Math.max(0, next.unlock - gh.total), 6), 0.5, 0.59, 0.0105, '#9aa3b2');
+      if (gh.phaseT % 1 < 0.6) ptext('TOCA PARA SEGUIR', 0.5, 0.64, 0.013, '#7fd4ff');
     }
   }
 
   // ════════════════ MENÚ ════════════════
-  const MENU_PLAY_Y = 0.66;
+  const SKIN_CAR_Y = 0.55, MENU_PLAY_Y = 0.65, MENU_DAILY_Y = 0.745;
   let menuBarrelT = 0;
+  // píldora pulsante reutilizable (JUGAR / DESAFÍO DIARIO). baseCol = "r,g,b".
+  function drawPill(label, fy, baseCol) {
+    const pulse = 0.6 + 0.4 * Math.sin(perfT * 4);
+    const fp = Math.round(0.022 * PF.h);
+    ctx.font = fp + 'px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const tw = ctx.measureText(label).width, padX = fp * 0.9, padY = fp * 0.6;
+    const bw = tw + padX * 2, bhh = fp + padY * 2, bx = ppx(0.5) - bw / 2, by = ppy(fy) - bhh / 2, r = bhh / 2;
+    ctx.beginPath();
+    ctx.moveTo(bx + r, by); ctx.arcTo(bx + bw, by, bx + bw, by + bhh, r); ctx.arcTo(bx + bw, by + bhh, bx, by + bhh, r);
+    ctx.arcTo(bx, by + bhh, bx, by, r); ctx.arcTo(bx, by, bx + bw, by, r); ctx.closePath();
+    ctx.fillStyle = 'rgba(' + baseCol + ',' + (0.18 + 0.10 * pulse) + ')';
+    ctx.strokeStyle = 'rgb(' + baseCol + ')'; ctx.lineWidth = 2; ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,' + (0.8 + 0.2 * pulse) + ')'; ctx.fillText(label, ppx(0.5), ppy(fy));
+  }
+  function skinSwatchX(i, n) { return 0.5 + (i - (n - 1) / 2) * 0.135; }
+  function drawSkinCarousel() {       // #7
+    const n = SKINS.length, sz = PF.h * 0.030;
+    ptext('SKINS  (TOTAL ' + pad(gh.total, 6) + ')', 0.5, SKIN_CAR_Y - 0.045, 0.0095, 'rgba(200,205,215,0.7)');
+    for (let i = 0; i < n; i++) {
+      const s = SKINS[i], unlocked = gh.total >= s.unlock, sel = gh.skin === s.id;
+      const px = ppx(skinSwatchX(i, n)), py = ppy(SKIN_CAR_Y);
+      ctx.save();
+      ctx.globalAlpha = unlocked ? 1 : 0.28;
+      ctx.fillStyle = s.pal.R; ctx.fillRect(px - sz / 2, py - sz / 2, sz, sz);
+      ctx.strokeStyle = sel ? '#ffffff' : 'rgba(255,255,255,0.3)'; ctx.lineWidth = sel ? 3 : 1;
+      ctx.strokeRect(px - sz / 2, py - sz / 2, sz, sz);
+      ctx.restore();
+      if (!unlocked) ptext(Math.ceil((s.unlock - gh.total) / 1000) + 'k', skinSwatchX(i, n), SKIN_CAR_Y + 0.035, 0.0085, '#9aa3b2');
+    }
+  }
   function drawMenu(dt) {
     drawBezel();
     ctx.save(); ctx.globalAlpha = 0.14;
     ctx.drawImage(levelCv, 0, 0, W, H);             // el nivel de fondo, bien tenue
     ctx.restore();
 
-    // título tipo marquesina: rojo con sombra y borde claro
-    const t = perfT;
-    const ts = 0.052;
-    const shake = Math.sin(t * 1.8) * 0.002;
-    for (const [line, fy] of [['DONKEY', 0.17], ['KONG', 0.245]]) {
+    const t = perfT, ts = 0.050, shake = Math.sin(t * 1.8) * 0.002;
+    for (const [line, fy] of [['DONKEY', 0.16], ['KONG', 0.23]]) {
       ctx.font = Math.round(ts * PF.h) + 'px ' + FONT;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillStyle = '#7a0d0d';
-      ctx.fillText(line, ppx(0.5 + 0.006), ppy(fy + 0.006 + shake));
-      ctx.fillStyle = '#ff2e1f';
-      ctx.fillText(line, ppx(0.5), ppy(fy + shake));
-      ctx.strokeStyle = 'rgba(255,255,255,0.85)';
-      ctx.lineWidth = Math.max(1, PF.h * 0.0016);
+      ctx.fillStyle = '#7a0d0d'; ctx.fillText(line, ppx(0.5 + 0.006), ppy(fy + 0.006 + shake));
+      ctx.fillStyle = '#ff2e1f'; ctx.fillText(line, ppx(0.5), ppy(fy + shake));
+      ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = Math.max(1, PF.h * 0.0016);
       ctx.strokeText(line, ppx(0.5), ppy(fy + shake));
     }
 
-    // DK animado al centro + barriles rodando decorativos
     menuBarrelT += dt;
-    const dkh = 0.13 * PF.h;
-    drawSpr((Math.floor(t / 0.4) % 2) === 0 ? DK_UP : DK_CHEST, ppx(0.5), ppy(0.42), dkh);
-    const bh = 0.030 * PF.h;
+    drawSpr((Math.floor(t / 0.4) % 2) === 0 ? DK_UP : DK_CHEST, ppx(0.5), ppy(0.36), 0.115 * PF.h);
     const bx = (menuBarrelT * 0.12) % 1.3 - 0.15;
-    drawSpr(BARREL_FR[Math.floor(menuBarrelT / 0.07) % 4], ppx(bx), ppy(0.545), bh);
+    drawSpr(BARREL_FR[Math.floor(menuBarrelT / 0.07) % 4], ppx(bx), ppy(0.435), 0.028 * PF.h);
 
-    ptext('RECORD ' + pad(gh.hi, 6), 0.5, 0.575, 0.015, '#7fd4ff');
+    ptext('RECORD ' + pad(parseInt(localStorage.getItem('dk_hiscore') || '0', 10) || 0, 6), 0.5, 0.485, 0.013, '#7fd4ff');
+    drawSkinCarousel();
+    drawPill('> JUGAR <', MENU_PLAY_Y, '232,59,42');
+    drawPill('DESAFIO DIARIO', MENU_DAILY_Y, '63,212,255');
 
-    // botón JUGAR: píldora roja pulsante (mismo gesto que el JUGAR de TronWeb)
-    const pulse = 0.6 + 0.4 * Math.sin(t * 4);
-    const fp = Math.round(0.024 * PF.h);
-    ctx.font = fp + 'px ' + FONT;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    const label = '> JUGAR <';
-    const tw = ctx.measureText(label).width, padX = fp * 0.9, padY = fp * 0.65;
-    const bw = tw + padX * 2, bhh = fp + padY * 2;
-    const bxx = ppx(0.5) - bw / 2, byy = ppy(MENU_PLAY_Y) - bhh / 2;
-    ctx.fillStyle = 'rgba(232,59,42,' + (0.18 + 0.10 * pulse) + ')';
-    ctx.strokeStyle = '#e83b2a'; ctx.lineWidth = 2;
-    ctx.beginPath();
-    const r = bhh / 2;
-    ctx.moveTo(bxx + r, byy); ctx.arcTo(bxx + bw, byy, bxx + bw, byy + bhh, r);
-    ctx.arcTo(bxx + bw, byy + bhh, bxx, byy + bhh, r); ctx.arcTo(bxx, byy + bhh, bxx, byy, r);
-    ctx.arcTo(bxx, byy, bxx + bw, byy, r); ctx.closePath();
-    ctx.fill(); ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,' + (0.8 + 0.2 * pulse) + ')';
-    ctx.fillText(label, ppx(0.5), ppy(MENU_PLAY_Y));
-
-    ptext('< > CAMINAR · ARRIBA/ABAJO TREPAR', 0.5, 0.78, 0.011, 'rgba(200,205,215,0.75)');
-    ptext('TOCA LA PANTALLA PARA SALTAR', 0.5, 0.81, 0.011, 'rgba(200,205,215,0.75)');
-    if (t % 1.2 < 0.7) ptext('INSERTE UNA MONEDA', 0.5, 0.90, 0.013, '#ffd23f');
+    ptext('< > CAMINAR · ↑↓ TREPAR · TOCAR=SALTAR', 0.5, 0.83, 0.0092, 'rgba(200,205,215,0.7)');
+    if (t % 1.2 < 0.7) ptext('INSERTE UNA MONEDA', 0.5, 0.91, 0.012, '#ffd23f');
+  }
+  function menuTap(lx, ly) {
+    // #7 swatches de skin (X+Y, antes que los pills para no robarles el tap)
+    if (Math.abs(ly - ppy(SKIN_CAR_Y)) < PF.h * 0.028) {
+      const n = SKINS.length;
+      for (let i = 0; i < n; i++) {
+        if (Math.abs(lx - ppx(skinSwatchX(i, n))) < PF.w * 0.055) {
+          const s = SKINS[i];
+          if (gh.total >= s.unlock) { gh.skin = s.id; localStorage.setItem('dk_skin', s.id); bakeMario(s.pal); }
+          return;
+        }
+      }
+      return;
+    }
+    if (Math.abs(ly - ppy(MENU_PLAY_Y)) < PF.h * 0.045) { startGame('classic'); return; }
+    if (Math.abs(ly - ppy(MENU_DAILY_Y)) < PF.h * 0.045) { startGame('daily'); return; }
   }
 
   // ════════════════ INPUT (listeners) ════════════════
   window.addEventListener('keydown', e => {
     keys[e.code] = true;
-    if (e.code === 'Space' || e.code === 'KeyX') jumpBuf = 0.12;
-    if (e.code === 'Enter') {
-      if (gh.screen === 'menu') startGame();
-      else if (gh.phase === 'over') backToMenu();
+    const draftIntro = gh.screen === 'game' && gh.phase === 'intro' && gh.hazardChoices && gh.level >= 2;
+    if (draftIntro) {                                          // #8: elegir hazard con teclado (no bufferea salto)
+      if (e.code === 'ArrowUp' || e.code === 'ArrowLeft') chooseHazard(0);
+      else if (e.code === 'ArrowDown' || e.code === 'ArrowRight') chooseHazard(1);
+      else if (e.code === 'Enter' || e.code === 'Space') chooseHazard(0);
+    } else {
+      if (e.code === 'Space' || e.code === 'KeyX') jumpBuf = 0.12;
+      if (e.code === 'Enter') {
+        if (gh.screen === 'menu') startGame('classic');
+        else if (gh.phase === 'over') backToMenu();
+      }
     }
     if (e.code === 'Escape' && gh.screen === 'game') backToMenu();
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'Enter'].includes(e.code)) e.preventDefault();
@@ -1232,7 +1711,7 @@
   const clearInput = () => {
     for (const k in keys) keys[k] = false;
     vk.left = vk.right = vk.up = vk.down = false;
-    document.querySelectorAll('#ui button.held').forEach(b => b.classList.remove('held'));
+    document.querySelectorAll('.pad button.held').forEach(b => b.classList.remove('held'));
     jumpBuf = 0;
   };
   window.addEventListener('blur', clearInput);
@@ -1241,12 +1720,13 @@
   canvas.addEventListener('pointerdown', e => {
     ac();                                            // despierta el audio con el primer gesto
     const r = canvas.getBoundingClientRect();
-    const ly = e.clientY - r.top;
-    if (gh.screen === 'menu') {
-      if (Math.abs(ly - ppy(MENU_PLAY_Y)) < PF.h * 0.07) startGame();
+    const lx = e.clientX - r.left, ly = e.clientY - r.top;
+    if (gh.screen === 'menu') { menuTap(lx, ly); return; }
+    if (gh.phase === 'over') { backToMenu(); return; }
+    if (gh.phase === 'intro' && gh.hazardChoices && gh.level >= 2) {        // #8 elegir hazard tocando un pill
+      for (let i = 0; i < 2; i++) if (Math.abs(ly - ppy(HAZ_PILL_Y[i])) < PF.h * 0.035) { chooseHazard(i); return; }
       return;
     }
-    if (gh.phase === 'over') { backToMenu(); return; }
     jumpBuf = 0.12;                                  // en juego: tocar la pantalla = saltar
   });
 
@@ -1288,18 +1768,24 @@
     } else {
       if (gh.phase === 'intro') {
         gh.phaseT += dt;
-        if (gh.phaseT > 1.3) { gh.phase = 'play'; gh.phaseT = 0; }
+        // #8 draft de hazard desde nivel 2: NO auto-avanza, espera que elijas un pill (con safety a los 8 s).
+        const draft = gh.hazardChoices && gh.level >= 2;
+        if (!draft) { if (gh.phaseT > 1.3) { gh.phase = 'play'; gh.phaseT = 0; jumpBuf = 0; } }
+        else if (gh.phaseT > 8) chooseHazard(0);
       } else if (gh.phase === 'play') {
+        updateFrenzy(dt);                                   // #5 furia (telegrafía + ventana)
         dk.process(dt);
         pauline.process(dt);
         oilT += dt;
         for (const b of barrels) { b.process(dt); if (gh.phase !== 'play') break; }
         barrels = barrels.filter(b => !b.dead);
+        if (gh.phase === 'play') updatePies(dt);            // #9 cinta: spawn + proceso de tortas
         if (gh.phase === 'play') {
           for (const f of fireballs) { f.process(dt); if (gh.phase !== 'play') break; }
           fireballs = fireballs.filter(f => !f.dead);
         }
         if (gh.phase === 'play') mario.process(dt);
+        if (gh.comboT > 0) { gh.comboT -= dt; if (gh.comboT <= 0) gh.comboN = 0; }   // #1 ventana del combo
         // bonus que baja — llegar a 0 mata (se acabó el tiempo)
         if (gh.phase === 'play') {
           gh.bonusT += dt;
@@ -1329,6 +1815,12 @@
 
   // ── INIT ──
   if (document.fonts && document.fonts.load) document.fonts.load('12px "Press Start 2P"');
+  // #7 resolver skin guardada (defensivo: si el id no existe o no está desbloqueada → classic; nunca crashea)
+  {
+    const saved = SKINS.find(s => s.id === (localStorage.getItem('dk_skin') || 'classic'));
+    const sk = (saved && gh.total >= saved.unlock) ? saved : SKINS[0];
+    gh.skin = sk.id; bakeMario(sk.pal);
+  }
   resize();
   loop();
 

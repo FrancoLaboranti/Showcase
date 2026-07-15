@@ -120,11 +120,20 @@
 
   let litPad = -1;         // pad iluminado (showing/input)
   let pressedPad = -1;     // pad que el dedo mantiene apretado
+  let activePointer = null;// pointerId del dedo que está apretando un pad (anti multi-touch)
   let showIdx = 0;         // índice en la secuencia que se está mostrando
   let showSub = 'gap';     // 'gap' (todo apagado) → 'lit' (pad encendido)
   let inputPos = 0;        // progreso del jugador dentro de la secuencia
   let timer = 0;           // contador de la fase actual (seg)
   let menuPad = 0, menuTimer = 0;
+
+  // visuales
+  let clock = 0;                  // reloj acumulado (seg) para animaciones
+  let padGlow = [0, 0, 0, 0];     // brillo suavizado por pad (0..1) — da trails al on/off
+  let nicePulse = 0;              // anillo expansivo al acertar (1→0)
+  let best = 0;                   // mejor score (persistido)
+  let newRecord = false;          // si el último game over batió el récord
+  try { best = parseInt(localStorage.getItem('simon_best') || '0', 10) || 0; } catch (_) {}
 
   let soundOn = true;
   let showInfo = false;
@@ -232,7 +241,7 @@
   function backToMenu() {
     phase = 'menu';
     sequence = []; score = 0; mistakes = 0;
-    litPad = -1; pressedPad = -1;
+    litPad = -1; pressedPad = -1; activePointer = null;
     stopTone();
   }
 
@@ -252,15 +261,22 @@
     const expected = sequence[inputPos];
     if (id !== expected) {
       mistakes++;
-      playWrong();
-      if (mistakes >= 3) { phase = 'gameover'; }
-      else { phase = 'wrong'; timer = WRONG_T; }   // flashea todo y re-muestra
+      if (mistakes >= 3) {                          // game over: guardar récord
+        newRecord = score > best;
+        if (newRecord) { best = score; try { localStorage.setItem('simon_best', String(best)); } catch (_) {} }
+        playWrong();
+        phase = 'gameover';
+      } else {
+        playWrong();
+        phase = 'wrong'; timer = WRONG_T;            // flashea todo y re-muestra
+      }
       return;
     }
     inputPos++;
     if (inputPos >= sequence.length) {             // secuencia completa
       score++;
       playCorrect();
+      nicePulse = 1;
       phase = 'nice'; timer = NICE_T;
     }
   }
@@ -281,7 +297,6 @@
   }
 
   canvas.addEventListener('pointerdown', e => {
-    canvas.setPointerCapture(e.pointerId);
     audioResume();
     hint.style.opacity = '0';
     const r = canvas.getBoundingClientRect();
@@ -291,12 +306,21 @@
       else if (phase === 'gameover') backToMenu();
       return;
     }
-    if (typeof hit === 'number') pressPad(hit);
+    if (typeof hit === 'number') {
+      if (phase !== 'input') return;               // los pads sólo responden en tu turno
+      if (activePointer !== null) return;          // ya hay un dedo apretando un pad → ignorar 2do
+      activePointer = e.pointerId;
+      try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      pressPad(hit);
+    }
   });
-  function endPointer() { releasePad(); }
+  function endPointer(e) {
+    if (activePointer === null || e.pointerId !== activePointer) return;
+    activePointer = null;
+    releasePad();
+  }
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
-  canvas.addEventListener('pointerleave', () => { if (pressedPad >= 0) releasePad(); });
 
   // tap simple en pointerdown (helper de BallsWeb)
   function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
@@ -326,9 +350,9 @@
     layout();
   }
   function layout() {
-    const topReserved = H * 0.16;
-    const usableH = H - topReserved - H * 0.06;
-    R = Math.min(W * 0.88, usableH) / 2;
+    const topReserved = H * 0.18;   // espacio para el header (título/estado + vidas)
+    const usableH = H - topReserved - H * 0.05;
+    R = Math.min(W * 0.86, usableH) / 2;
     holeR = R * 0.34;
     hubR  = R * 0.30;
     cx = W / 2;
@@ -337,118 +361,183 @@
   window.addEventListener('resize', resize);
 
   // ── DRAW ──
-  function rgbStr(c, a) { return `rgba(${c[0]},${c[1]},${c[2]},${a==null?1:a})`; }
+  function rgbStr(c, a) { return `rgba(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])},${a==null?1:a})`; }
+  function rgbStr2(c) { return typeof c === 'string' ? c : rgbStr(c); }
   function scaleCol(c, f) { return [c[0]*f, c[1]*f, c[2]*f]; }
+  function clampCol(c) { return c.map(v => Math.max(0, Math.min(255, v))); }
+  const lerp = (a, b, t) => a + (b - a) * t;
+  function lerpCol(a, b, t) { return [lerp(a[0],b[0],t), lerp(a[1],b[1],t), lerp(a[2],b[2],t)]; }
+  function font(weight, size) { return `${weight} ${Math.round(size)}px 'Segoe UI', system-ui, sans-serif`; }
 
-  function drawPad(id, lit) {
+  // Pad como sector anular, con gradiente de profundidad + bloom según `glow` (0..1).
+  function drawPad(id, glow) {
     const p = PADS[id];
     const [a0, a1] = p.ang;
     const s = a0 + PAD_GAP/2, e = a1 - PAD_GAP/2;
+    const mid = (s + e) / 2;
+    const dim = scaleCol(p.base, 0.18);
+    const col = lerpCol(dim, p.base, glow);
+
     ctx.beginPath();
     ctx.arc(cx, cy, R, s, e);
     ctx.arc(cx, cy, holeR, e, s, true);
     ctx.closePath();
-    ctx.fillStyle = rgbStr(lit ? p.base : scaleCol(p.base, 0.26));
-    ctx.fill();
-    if (lit) {
-      // halo interior suave para el "encendido"
-      ctx.save();
-      ctx.clip();
-      const mid = (s + e) / 2, rr = (R + holeR) / 2;
-      const gx = cx + Math.cos(mid) * rr, gy = cy + Math.sin(mid) * rr;
-      const grad = ctx.createRadialGradient(gx, gy, R*0.02, gx, gy, R*0.6);
-      grad.addColorStop(0, rgbStr(scaleCol(p.base, 1.35).map(v=>Math.min(255,v)), 0.55));
-      grad.addColorStop(1, rgbStr(p.base, 0));
-      ctx.fillStyle = grad;
+    ctx.save();
+    ctx.clip();
+
+    // gradiente radial desde el borde externo → da sensación de domo/iluminación
+    const ox = cx + Math.cos(mid) * R * 0.74, oy = cy + Math.sin(mid) * R * 0.74;
+    const grad = ctx.createRadialGradient(ox, oy, R*0.04, ox, oy, R*0.98);
+    grad.addColorStop(0, rgbStr(clampCol(lerpCol(col, [255,255,255], 0.10 + 0.22*glow))));
+    grad.addColorStop(0.55, rgbStr(col));
+    grad.addColorStop(1, rgbStr(scaleCol(col, 0.6)));
+    ctx.fillStyle = grad;
+    ctx.fillRect(cx - R, cy - R, R*2, R*2);
+
+    // bloom cuando está encendido
+    if (glow > 0.01) {
+      const gx = cx + Math.cos(mid) * (R + holeR)/2, gy = cy + Math.sin(mid) * (R + holeR)/2;
+      const gg = ctx.createRadialGradient(gx, gy, R*0.02, gx, gy, R*0.66);
+      gg.addColorStop(0, rgbStr(clampCol(scaleCol(p.base, 1.6)), 0.65 * glow));
+      gg.addColorStop(1, rgbStr(p.base, 0));
+      ctx.fillStyle = gg;
       ctx.fillRect(cx - R, cy - R, R*2, R*2);
-      ctx.restore();
     }
+    ctx.restore();
+
+    // rim externo: brilla cuando glow alto, oscuro cuando apagado (define el sector)
+    ctx.lineWidth = Math.max(1.5, R*0.014);
+    ctx.strokeStyle = glow > 0.02
+      ? rgbStr(clampCol(scaleCol(p.base, 1.7)), 0.35 + 0.55*glow)
+      : 'rgba(0,0,0,0.45)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, R - ctx.lineWidth/2, s, e);
+    ctx.stroke();
   }
 
   function drawDisk() {
-    // anillo de fondo
-    ctx.beginPath();
-    ctx.arc(cx, cy, R + R*0.02, 0, TAU);
-    ctx.fillStyle = '#05060a';
-    ctx.fill();
+    // sombra + backplate (los gaps entre pads y el agujero muestran este plato oscuro)
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.55)';
+    ctx.shadowBlur = R * 0.14;
+    ctx.shadowOffsetY = R * 0.05;
+    ctx.beginPath(); ctx.arc(cx, cy, R * 1.06, 0, TAU);
+    ctx.fillStyle = '#0b0d13'; ctx.fill();
+    ctx.restore();
 
-    const allLit = (phase === 'wrong');
-    const wrongBlink = allLit && (Math.sin(performance.now()/1000 * 12) > -0.3);
-    for (let i = 0; i < 4; i++) {
-      let lit = false;
-      if (phase === 'menu') lit = (i === menuPad);
-      else if (phase === 'showing' || phase === 'input') lit = (i === litPad);
-      else if (phase === 'wrong') lit = wrongBlink;
-      drawPad(i, lit);
+    // aro exterior con bisel
+    ctx.beginPath(); ctx.arc(cx, cy, R * 1.045, 0, TAU);
+    const rg = ctx.createLinearGradient(cx, cy - R, cx, cy + R);
+    rg.addColorStop(0, 'rgba(255,255,255,0.12)');
+    rg.addColorStop(0.5, 'rgba(255,255,255,0.02)');
+    rg.addColorStop(1, 'rgba(0,0,0,0.45)');
+    ctx.lineWidth = R * 0.03; ctx.strokeStyle = rg; ctx.stroke();
+
+    for (let i = 0; i < 4; i++) drawPad(i, padGlow[i]);
+
+    drawHub();
+  }
+
+  function drawHub() {
+    // anillo de pulso al acertar
+    if (nicePulse > 0) {
+      const t = 1 - nicePulse;
+      const rr = hubR + t * (R - holeR) * 0.95;
+      ctx.beginPath(); ctx.arc(cx, cy, rr, 0, TAU);
+      ctx.strokeStyle = `rgba(125,225,155,${0.55 * nicePulse})`;
+      ctx.lineWidth = Math.max(2, R * 0.025 * nicePulse);
+      ctx.stroke();
     }
 
-    // hub central
-    ctx.beginPath();
-    ctx.arc(cx, cy, hubR, 0, TAU);
-    let hubFill = '#15171f', hubLabel = '', hubCol = COL_TEXT, hubSub = '';
+    // "breathing" sutil en el menú
+    const scale = phase === 'menu' ? 1 + 0.045 * Math.sin(clock * 3) : 1;
+    const r = hubR * scale;
+
+    let label = '', sub = '', labelCol = COL_TEXT;
+    const grad = ctx.createRadialGradient(cx - r*0.3, cy - r*0.4, r*0.1, cx, cy, r);
     if (phase === 'menu') {
-      hubFill = '#f4f4fa'; hubLabel = 'START'; hubCol = '#15171f';
+      grad.addColorStop(0, '#ffffff'); grad.addColorStop(1, '#ccd0dd');
+      label = 'START'; labelCol = '#15171f';
     } else if (phase === 'gameover') {
-      hubFill = '#1b1d27'; hubLabel = 'MENÚ'; hubCol = '#ff5a64';
+      grad.addColorStop(0, '#2a2d39'); grad.addColorStop(1, '#15171f');
+      label = 'MENÚ'; labelCol = '#ff6b74';
     } else {
-      hubFill = '#12141c'; hubLabel = String(score); hubCol = COL_TEXT; hubSub = 'NIVEL';
+      grad.addColorStop(0, '#1b1e29'); grad.addColorStop(1, '#0d0f15');
+      label = String(score); sub = 'NIVEL'; labelCol = COL_TEXT;
     }
-    ctx.fillStyle = hubFill;
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-    ctx.lineWidth = 2;
-    ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU);
+    ctx.fillStyle = grad; ctx.fill();
+    ctx.lineWidth = Math.max(1.5, R * 0.01);
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.stroke();
 
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    if (hubSub) {
+    if (sub) {
       ctx.fillStyle = COL_DIM;
-      ctx.font = `600 ${Math.round(hubR*0.22)}px 'Segoe UI', system-ui, sans-serif`;
-      ctx.fillText(hubSub, cx, cy - hubR*0.42);
-      ctx.fillStyle = hubCol;
-      ctx.font = `700 ${Math.round(hubR*0.7)}px 'Segoe UI', system-ui, sans-serif`;
-      ctx.fillText(hubLabel, cx, cy + hubR*0.12);
+      ctx.font = font(600, r * 0.20);
+      ctx.fillText(sub, cx, cy - r * 0.42);
+      ctx.fillStyle = labelCol;
+      ctx.font = font(800, r * 0.72);
+      ctx.fillText(label, cx, cy + r * 0.14);
     } else {
-      ctx.fillStyle = hubCol;
-      ctx.font = `700 ${Math.round(hubR*0.46)}px 'Segoe UI', system-ui, sans-serif`;
-      ctx.fillText(hubLabel, cx, cy);
+      ctx.fillStyle = labelCol;
+      ctx.font = font(800, label.length > 4 ? r * 0.40 : r * 0.5);
+      ctx.fillText(label, cx, cy);
     }
   }
 
   function drawHeader() {
-    const topY = cy - R - H * 0.07;
+    const topY = cy - R * 1.06 - H * 0.045;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     let label = '', col = COL_TEXT, big = false;
-    if (phase === 'menu')          { label = 'SIMÓN'; col = COL_TEXT; big = true; }
-    else if (phase === 'showing')  { label = 'MIRÁ…'; col = COL_DIM; }
-    else if (phase === 'input')    { label = 'TU TURNO'; col = '#8fe3a0'; }
-    else if (phase === 'wrong')    { label = '¡MAL!'; col = '#ff5a64'; }
-    else if (phase === 'nice')     { label = '¡BIEN!'; col = '#6cd98a'; }
-    else if (phase === 'gameover') { label = 'GAME OVER'; col = '#ff5a64'; big = true; }
-    ctx.fillStyle = rgbStr2(col);
-    ctx.font = `${big?700:600} ${Math.round(Math.min(big?40:30, H*(big?0.05:0.036)))}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillText(label, W/2, topY);
+    if (phase === 'menu')          { label = 'SIMÓN'; big = true; }
+    else if (phase === 'showing')  { label = 'MIRÁ'; col = COL_DIM; }
+    else if (phase === 'input')    { label = 'TU TURNO'; col = '#7fe3a0'; }
+    else if (phase === 'wrong')    { label = '¡MAL!'; col = '#ff6b74'; }
+    else if (phase === 'nice')     { label = '¡BIEN!'; col = '#7fe39a'; }
+    else if (phase === 'gameover') { label = 'GAME OVER'; col = '#ff6b74'; big = true; }
 
-    // sub-línea: vidas (mistakes) durante el juego, score en gameover
-    const subY = topY + Math.min(30, H*0.04);
-    if (phase === 'gameover') {
+    ctx.save();
+    ctx.shadowColor = rgbStr2(col);
+    ctx.shadowBlur = big ? 18 : 11;
+    ctx.fillStyle = rgbStr2(col);
+    ctx.font = font(big ? 800 : 700, Math.min(big ? 46 : 28, H * (big ? 0.058 : 0.034)));
+    ctx.fillText(label, W/2, topY);
+    ctx.restore();
+
+    const subY = topY + Math.min(32, H * 0.042);
+    if (phase === 'menu') {
       ctx.fillStyle = COL_DIM;
-      ctx.font = `600 ${Math.round(Math.min(20, H*0.026))}px 'Segoe UI', system-ui, sans-serif`;
-      ctx.fillText(`SCORE  ${score}`, W/2, subY);
-    } else if (phase !== 'menu') {
-      // 3 corazones-de-vida (mistakes restantes)
+      ctx.font = font(600, Math.min(15, H * 0.02));
+      ctx.fillText(best > 0 ? `MEJOR  ${best}` : 'memorizá la secuencia', W/2, subY);
+    } else if (phase === 'gameover') {
+      if (newRecord) {
+        ctx.fillStyle = '#ffd54a';
+        ctx.font = font(800, Math.min(19, H * 0.025));
+        ctx.fillText(`¡NUEVO RÉCORD!  ${score}`, W/2, subY);
+      } else {
+        ctx.fillStyle = COL_TEXT;
+        ctx.font = font(700, Math.min(17, H * 0.023));
+        ctx.fillText(`SCORE ${score}    ·    MEJOR ${best}`, W/2, subY);
+      }
+    } else {
+      // 3 vidas (puntos con glow)
       const lives = 3 - mistakes;
-      const r = Math.min(6, H*0.008);
-      const gap = r * 3.2;
-      const total = (3 - 1) * gap;
+      const dr = Math.min(6, H * 0.008);
+      const gap = dr * 3.4;
       for (let i = 0; i < 3; i++) {
-        const lx = W/2 - total/2 + i*gap;
-        ctx.beginPath(); ctx.arc(lx, subY, r, 0, TAU);
-        ctx.fillStyle = i < lives ? '#ff5a64' : 'rgba(255,255,255,0.14)';
-        ctx.fill();
+        const lx = W/2 - gap + i * gap;
+        ctx.beginPath(); ctx.arc(lx, subY, dr, 0, TAU);
+        if (i < lives) {
+          ctx.save();
+          ctx.shadowColor = '#ff5a64'; ctx.shadowBlur = 8;
+          ctx.fillStyle = '#ff5a64'; ctx.fill();
+          ctx.restore();
+        } else {
+          ctx.fillStyle = 'rgba(255,255,255,0.14)'; ctx.fill();
+        }
       }
     }
   }
-  function rgbStr2(c) { return typeof c === 'string' ? c : rgbStr(c); }
 
   function drawInfoOverlay() {
     if (!showInfo) return;
@@ -460,6 +549,7 @@
       'Cada acierto suma un color más.',
       '',
       'Tenés 3 vidas — al 3er error, game over.',
+      'Tu mejor score queda guardado.',
       '',
       'Centro: empezar / volver al menú.',
       'Botón ↻ : volver al menú',
@@ -533,6 +623,22 @@
     }
   }
 
+  // ── VISUALES (independiente de la lógica de juego) ──
+  function updateVisuals(dt) {
+    clock += dt;
+    // brillo objetivo por pad según la fase
+    const tg = [0, 0, 0, 0];
+    if (phase === 'menu') tg[menuPad] = 1;
+    else if (phase === 'showing' || phase === 'input') { if (litPad >= 0) tg[litPad] = 1; }
+    else if (phase === 'wrong') { const v = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(clock * 22)); tg[0]=tg[1]=tg[2]=tg[3]=v; }
+    // sube rápido (snap on), baja con un trail corto — nítido entre flashes pero suave
+    for (let i = 0; i < 4; i++) {
+      const rate = tg[i] > padGlow[i] ? 34 : 16;
+      padGlow[i] += (tg[i] - padGlow[i]) * Math.min(1, dt * rate);
+    }
+    if (nicePulse > 0) nicePulse = Math.max(0, nicePulse - dt / 0.6);
+  }
+
   // ── LOOP ──
   let lastT = performance.now();
   function loop(now) {
@@ -540,10 +646,28 @@
     const dt = Math.min(0.05, (now - lastT) / 1000);
     lastT = now;
     update(dt);
-    ctx.fillStyle = COL_BG;
+    updateVisuals(dt);
+
+    // fondo con gradiente radial centrado en el disco
+    const bg = ctx.createRadialGradient(cx, cy, R * 0.1, cx, cy, Math.max(W, H) * 0.8);
+    bg.addColorStop(0, '#141823');
+    bg.addColorStop(1, '#07080c');
+    ctx.fillStyle = bg;
     ctx.fillRect(0, 0, W, H);
+
     drawHeader();
     drawDisk();
+
+    // vignette rojo pulsante al equivocarse
+    if (phase === 'wrong') {
+      const a = 0.08 + 0.12 * (0.5 + 0.5 * Math.sin(clock * 22));
+      const vg = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, Math.max(W, H) * 0.7);
+      vg.addColorStop(0, 'rgba(255,40,50,0)');
+      vg.addColorStop(1, `rgba(255,35,45,${a})`);
+      ctx.fillStyle = vg;
+      ctx.fillRect(0, 0, W, H);
+    }
+
     drawInfoOverlay();
     requestAnimationFrame(loop);
   }

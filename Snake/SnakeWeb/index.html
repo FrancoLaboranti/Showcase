@@ -260,11 +260,12 @@
   const LEN_GROW_FRAC = 0.3;                                                      // qué fracción del crecimiento va al LARGO (el resto es engorde). Bajalo si se sigue amontonando; 0 = sólo engorda
   const AGILITY_DROP = 0.4;                                                       // pérdida de agilidad de giro proporcional al engorde (gorda = gira más lento)
   const ENEMY_TARGET = 8;                                                         // cuántas serpientes enemigas mantener en juego (más población)
+  const PRESSURE_T = 150;                                                         // ESCALADA por tiempo: a los PRESSURE_T s la presión llega al máximo (más enemigas/multi-cabeza/parejas). NO toca HP/daño/XP → no es power-creep, sólo da arco a la run
   const LOAD_TIME = 1.0;                                                          // pantalla de "Cargando" al arrancar (s): congela el juego y da tiempo a que cargue la foto del fondo
   // ── BOSSES: criaturas grandes con barra ON-SCREEN. Aparecen CADA 10 NIVELES y ROTAN entre 3 tipos
   //    (pez globo → pez piedra → pez linterna). Las enemigas normales SIGUEN apareciendo durante la pelea. ──
   const BOSS_FIRST_LEVEL = 5, BOSS_LEVEL_STEP = 5;                                // TEST: jefes a nivel 5/10/15/20 (globo/piedra/linterna/globo...) para verlos rápido. PRODUCCIÓN: poné 10 y 10 (cada 10 niveles)
-  const BOSS_HP_BASE = 240, BOSS_HP_GROW = 75;                                   // vida del jefe — ×8 sobre el nerfeo previo (45/19): más tanques. (Original era 900/380.) El daño que hacen sigue suave (ver *_DMG)
+  const BOSS_HP_BASE = 200, BOSS_HP_GROW = 75;                                   // vida del jefe — ×8 sobre el nerfeo previo (45/19): más tanques. (Original era 900/380.) El daño que hacen sigue suave (ver *_DMG)
   const BOSS_KILL_SCORE = 1200 + BOSS_HP_BASE*2;                                                   // bonus de score por matar un jefe
   // PEZ GLOBO (puffer): cicla desinflado↔inflado; vulnerable al dash DESINFLADO, muerde con púas inflado
   const PUFFER_R_F = 0.075, PUFFER_SPEED_F = 0.16;
@@ -293,8 +294,19 @@
     stone:  { name: 'Stone',   hue: 38,  rF: STONE_R_F,  speedF: STONE_SPEED_F },
     angler: { name: 'Angler', hue: 168, rF: ANGLER_R_F, speedF: ANGLER_SPEED_F },
   };
-  const BOSS_ROTATION = ['stone','puffer', 'stone', 'angler'];                            // orden de rotación por cada jefe aparecido
+  const BOSS_ROTATION = ['puffer', 'stone', 'angler'];                            // orden de rotación por cada jefe aparecido
   const ENEMY_HUES = [5, 22, 60, 225, 255, 275];                                  // paleta más amplia (rojo/naranja/amarillo/azul/índigo/violeta) → menos coincidencias de color casuales
+  // ARQUETIPOS de enemiga: re-pesan la MISMA suma de vectores (no hay AI nueva). Sólo factores sobre los rolls base
+  // (tamaño/vel/giro/agresión/vida) + pesos de steering (foe/food) + flags (flank=rodea, flee=huye herida). 'hunter'
+  // es el más común → la dificultad media por spawn queda igual que hoy. Las parejas son siempre 'hunter' (escoltan).
+  const ENEMY_TYPES = [
+    { id:'hunter',  w:5,   sizeMul:1,    vel:1,    turnR:1,    aggro:1,   hp:1,    foe:1,   food:1,   flank:0, flee:0 },
+    { id:'flanker', w:2,   sizeMul:0.95, vel:1.1,  turnR:1,    aggro:1,   hp:1,    foe:1,   food:1,   flank:1, flee:1 }, // rodea para morder de costado; HUYE con poca vida (arregla el suicidio)
+    { id:'brute',   w:1.5, sizeMul:1.5,  vel:0.78, turnR:1.35, aggro:1,   hp:1.35, foe:1,   food:1,   flank:0, flee:0 }, // grande, lento, tanque: amenaza real (las enemigas casi no crecen)
+    { id:'glutton', w:1.5, sizeMul:1.15, vel:0.95, turnR:1,    aggro:0.2, hp:1,    foe:1,   food:2.4, flank:0, flee:0 }, // ignora al jugador, persigue comida y engorda: presa para herdear/comer alrededor
+  ];
+  const ENEMY_TYPE_W = ENEMY_TYPES.reduce((s, t) => s + t.w, 0);
+  function pickEnemyType() { let r = Math.random()*ENEMY_TYPE_W; for (const t of ENEMY_TYPES) { if ((r -= t.w) < 0) return t; } return ENEMY_TYPES[0]; }
   const ENEMY_MAX_LEN = 130;                                                      // tope de largo de un enemigo (perf)
   const WAVE_TOTAL = 0.2;                                                          // duración de la onda de "respiración" (igual que el wave_time_total del jugador)
   // ── COMBATE: nadie muere por chocar; el daño es por ATAQUE. Si una serpiente ACELERA con la cabeza de otra
@@ -305,16 +317,17 @@
   const ATTACK_ANG = 0.55;                                                         // SEMIÁNGULO del cono de ataque (rad ~31°): hay que apuntar BASTANTE de frente al rival para dashear (antes ~66°, disparaba de costado)
   const ATTACK_RANGE_F = 0.13, ATTACK_COS = Math.cos(ATTACK_ANG);                  // alcance del cono (× sper) y coseno del semiángulo
   const LUNGE_WIND = 0.25, WIND_SPEED_F = 0.88;                                    // RETRACCIÓN: la serpiente se recoge antes de embestir (joroba twin-smoothstep, se ve sin tirón)
-  const LUNGE_TIME = 0.28, LUNGE_SPEED_F = 1.9;                                    // EMBESTIDA: duración y velocidad pico (× sper); curva C1 → avance NETO ~+85px hacia el rival (con la retracción de ~-153px)
+  const LUNGE_TIME = 0.28, LUNGE_SPEED_F = 1.5;                                    // EMBESTIDA: duración y velocidad pico (× sper); curva C1 → avance NETO ~+85px hacia el rival (con la retracción de ~-153px)
   const STRIKE_PEAK = 0.76;                                                        // dónde (0..1) cae el PICO de la embestida: 0.30 = arranque rápido/snap; 0.5 = simétrico. NO cambia el alcance neto (sólo el carácter del golpe)
-  const ATTACK_HIT_F = 0.085;                                                      // RADIO de impacto (× sper): durante la embestida, el daño SÓLO cae si la cabeza llega a esta distancia del rival; sino erra
+  const ATTACK_HIT_F = 0.3;                                                      // RADIO de impacto (× sper): durante la embestida, el daño SÓLO cae si la cabeza llega a esta distancia del rival; sino erra
+  const PARRY_IFRAMES = 0.32, PARRY_CRIT = 2.0;                                    // CONTRA: dashear contra una enemiga EN PLENA EMBESTIDA = i-frames breves (cubren su mordida) + crítico ×2 al conectar (como el contra del angler)
   const HAZARD_DMG = 14;                                                           // vida que saca una mina (más fuerte)
   const BORDER_DPS = 22;                                                           // daño POR SEGUNDO del borde del lago: ya no mata de una, te quema mientras estás pegado a la orilla (regen lo contrarresta apenas te despegás)
   const HP_REGEN = 1;                                                              // regeneración de vida por segundo
   const HEAL_RATE = 12;                                                            // velocidad de curación de la estrella (HP/s): la cura entra POR TIEMPO, no de golpe
   const SIZE_DMG_MAX = 0.5;                                                         // bonus de daño máximo por ser MÁS GRANDE que la víctima (+50%); 0 a igual tamaño
   const TURBO_DRAIN = 0.55, TURBO_RECHARGE = 0.4;                                  // carga del turbo (0..1/s): aguanta ~1.8 s, recarga ~2.5 s al SOLTAR
-  const PAIR_CHANCE = 0.4;                                                         // probabilidad de que un spawn de enemiga sea una PAREJA (mismo color, 1 grande + 1 chica)
+  const PAIR_CHANCE = 0.2;                                                         // probabilidad de que un spawn de enemiga sea una PAREJA (mismo color, 1 grande + 1 chica)
   // ── GOLPES → PEDAZOS: cada impacto (ataque conectado o mina) desprende uno o más "pedazos" que salen volando.
   //    Al morir, cada pedazo se DESVANECE o se convierte en ESTRELLA (re-comestible). Es el feedback visual del golpe. ──
   const CHUNK_DMG_PER = 12;                                                        // 1 pedazo por cada ~12 de daño recibido (mín 1)
@@ -682,20 +695,30 @@
           const RAMP = 0.4, up = Math.min(1, (SPEED_BOOST_TIME - manager.speedBoost) / RAMP), down = Math.min(1, manager.speedBoost / RAMP);
           sb = 1 + (SPEED_BOOST_MULT - 1) * Math.min(up, down);                   // sube en RAMP s, se mantiene, baja en los últimos RAMP s
         }
-        const boost = (manager.boosting ? 1.5 : 1) * sb;                          // turbo (con carga) — ya no es el sprint directo
+        const boost = (manager.boosting ? (manager.overcharge && manager.turbo > 0.85 ? 1.7 : 1.5) : 1) * sb; // turbo (con carga); "Sobrecarga" (turbA legendario) = ×1.7 con turbo casi lleno
         const lf = lungeLoco(manager.lungeT);                                     // amortigua la locomoción normal en pleno golpe (el dash domina)
         this.x += Math.cos(this.ang) * this.vel * deltaT * boost * lf;
         this.y += Math.sin(this.ang) * this.vel * deltaT * boost * lf;
         if (manager.lungeT > 0) {                                                 // ataque: retracción → embestida; el daño SÓLO si CONECTA
           const v = lungeVel(manager.lungeT);                                    // perfil con easing (retracción → embestida)
+          if (manager.lungeFollow && manager.atkTarget && !manager.atkTarget.dead && manager.lungeT <= LUNGE_TIME) { // GUIADO (range épico): corrige el rumbo del dash hacia el blanco → menos fallos
+            const eh = manager.atkTarget.pieces[0], ddx = eh.x - this.x, ddy = eh.y - this.y, dd = Math.hypot(ddx, ddy) || 1, k = Math.min(1, deltaT*6);
+            manager.lungeX += (ddx/dd - manager.lungeX)*k; manager.lungeY += (ddy/dd - manager.lungeY)*k;
+            const mm = Math.hypot(manager.lungeX, manager.lungeY) || 1; manager.lungeX /= mm; manager.lungeY /= mm;
+          }
           this.x += manager.lungeX*v*deltaT; this.y += manager.lungeY*v*deltaT;
           manager.lungeDisp += v*deltaT;                                         // desplazamiento NETO sobre el eje del dash (negativo en la retracción, sube en la embestida)
           manager.lungeT -= deltaT;
           if (manager.lungeT <= LUNGE_TIME && manager.lungeDisp > 0 && !manager.atkHit) { // sólo pega cuando la cabeza YA pasó el origen yendo adelante (no en plena retracción)
             const e = manager.atkTarget;
             if (e && !e.dead && hitConnect(this.x, this.y, e.pieces[0], e.pieces, curR*e.sizeMul*e.g)) {
-              manager.hitEnemy(e, PLAYER_DMG * manager.dmgMul * sizeMod(girth, e.sizeMul*e.g, SIZE_DMG_MAX + manager.sizeDmgBonus), this.ang);
+              manager.hitEnemy(e, PLAYER_DMG * manager.dmgMul * sizeMod(girth, e.sizeMul*e.g, SIZE_DMG_MAX + manager.sizeDmgBonus), this.ang); // PARRY DESACTIVADO: sin crítico de contra
               manager.atkHit = true;
+              if (manager.pierce) {                                              // PERFORA (dmg legendario): alcanza a UNA 2ª enemiga cercana (no jefes)
+                let p2 = null, p2d = sper(ATTACK_HIT_F)*1.7; p2d *= p2d;
+                for (const o of enemies) { if (o === e || o.dead) continue; const oh = o.pieces[0], dx = oh.x-this.x, dy = oh.y-this.y, d2 = dx*dx+dy*dy; if (d2 < p2d) { p2d = d2; p2 = o; } }
+                if (p2) manager.hitEnemy(p2, PLAYER_DMG * manager.dmgMul * sizeMod(girth, p2.sizeMul*p2.g, SIZE_DMG_MAX + manager.sizeDmgBonus), this.ang);
+              }
             } else if (!e) {                                                      // embestida contra un JEFE (sin atkTarget enemigo): conecta por proximidad al cuerpo
               for (const b of bosses) {
                 if (b.dead) continue;
@@ -1210,21 +1233,25 @@
     constructor(opts) {
       opts = opts || {};
       this.hue = opts.hue !== undefined ? opts.hue : ENEMY_HUES[ri(0, ENEMY_HUES.length-1)];
-      this.sizeMul = opts.sizeMul !== undefined ? opts.sizeMul : rndRange(0.7, 1.45); // grosor (la grande de una pareja es mayor)
+      const T = opts.etype || (opts.leader || opts.groupId !== undefined ? ENEMY_TYPES[0] : pickEnemyType()); // ARQUETIPO (parejas = hunter); re-pesa rolls + steering
+      this.etype = T.id;
+      this.foeWeight = 3.4 * T.foe; this.foodWeight = 1.9 * T.food;             // pesos de steering por arquetipo (se leen en process())
+      this.flank = T.flank ? (Math.random() < 0.5 ? 1 : -1) : 0; this.fleeLowHp = !!T.flee; // flanker: rodea (lado al azar) y huye herida
+      this.sizeMul = (opts.sizeMul !== undefined ? opts.sizeMul : rndRange(0.7, 1.45)) * T.sizeMul; // grosor (la grande de una pareja es mayor; brute/glutton más grandes)
       this.groupId = opts.groupId !== undefined ? opts.groupId : null;          // parejas comparten groupId (no se atacan ni se esquivan; van en grupo)
       this.leader = opts.leader || null;                                        // la chica ESCOLTA a la grande
-      this.vel = sper(SNAKE_SPEED) * rndRange(0.8, 1.05);
-      this.turnR = rndRange(2.7, 3.6);                                           // radio de giro MÍNIMO = turnR×grosor (no se enrosca encima)
+      this.vel = sper(SNAKE_SPEED) * rndRange(0.8, 1.05) * T.vel;
+      this.turnR = rndRange(2.7, 3.6) * T.turnR;                                 // radio de giro MÍNIMO = turnR×grosor (no se enrosca encima)
       this.integrated = false;
       this.dead = false;
       this.hurt = 0;                                                             // destello al recibir daño
       this.roamT = 0; this.roamX = 0; this.roamY = 0;
       this.g = 1;
       this.wavePhase = Math.random()*TAU;
-      this.aggro = rndRange(0.8, 1);                                             // MÁS agresivas: casi siempre comprometen al objetivo
+      this.aggro = Math.min(1, rndRange(0.8, 1) * T.aggro);                      // MÁS agresivas; glutton casi no pelea (arquetipo)
       this.targetT = rndRange(0, 2); this.foe = null; this.foePlayer = false;
       this.chase = 1;
-      this.maxHp = 50 * this.sizeMul; this.hp = this.maxHp;
+      this.maxHp = 50 * this.sizeMul * T.hp; this.hp = this.maxHp;
       this.damage = ENEMY_DMG; this.attackCD = 0;
       this.lungeT = 0; this.lungeX = 0; this.lungeY = 0; this.lungeDisp = 0;
       this.atkFoe = null; this.atkPlayer = false; this.atkHit = false;           // objetivo del ataque en curso (daño al iniciar el dash)
@@ -1351,6 +1378,11 @@
         }
       }
     }
+    strikingPlayer() {                                                            // ¿alguna cabeza te está EMBISTIENDO (carga + salto) hacia el jugador? → ventana de PARRY (incluye la recogida → podés reaccionar al aviso)
+      if (this.lungeT > 0 && this.atkPlayer) return true;
+      for (const h of this.extraHeads) if (h.lungeT > 0 && h.atkPlayer) return true;
+      return false;
+    }
     shrink(n) { for (let i = 0; i < n && this.pieces.length > 6; i++) this.pieces.pop(); this.hurt = HAZARD_FLASH_TIME; }
     shedChunk(awayAng, count) {                                                   // golpe → arranca `count` segmentos (pedazos voladores que pueden volverse estrella)
       const h = this.pieces[0];
@@ -1406,7 +1438,7 @@
         let best = null, bd = Infinity;                                          // comida cercana (prioridad sobre la patrulla)
         for (const f of food) { if (f.appear < 0.3 || f.grabbed) continue; const dx = f.x-head.x, dy = f.y-head.y, d = dx*dx+dy*dy; if (d < bd) { bd = d; best = f; } }
         const VIS = sper(0.55);
-        if (best && bd < VIS*VIS) { const d = Math.sqrt(bd) || 1; sx += (best.x-head.x)/d*1.9; sy += (best.y-head.y)/d*1.9; }
+        if (best && bd < VIS*VIS) { const d = Math.sqrt(bd) || 1; sx += (best.x-head.x)/d*this.foodWeight; sy += (best.y-head.y)/d*this.foodWeight; }
         // ORILLA: girar hacia adentro bien ANTES del borde (así bordean y no quedan clavados contra la pared)
         if (hd > WORLD_R*0.66) { const k = (hd - WORLD_R*0.66)/(WORLD_R*0.34), inv = hd || 1; sx += (-head.x/inv)*(2 + k*6); sy += (-head.y/inv)*(2 + k*6); }
         // COMBATE (cut-off estilo slither): elegir una víctima cercana y meterle la cabeza ADELANTE para que
@@ -1426,10 +1458,16 @@
         let tg = null;                                                            // objetivo VIVO
         if (this.foePlayer && snake[0]) tg = snake[0];
         else if (this.foe && !this.foe.dead) tg = this.foe.pieces[0];
-        if (tg) {                                                                 // CARGAR directo a la cabeza del rival (para meterla en el cono y atacar)
+        if (tg) {                                                                 // CARGAR a la cabeza del rival (para meterla en el cono y atacar)
           const dx = tg.x-head.x, dy = tg.y-head.y, d = Math.hypot(dx, dy) || 1;
-          sx += dx/d*3.4; sy += dy/d*3.4;
-          wantsTurbo = true;                                                      // usa el turbo para cazar → habilita el ataque
+          let cx = dx/d, cy = dy/d;
+          if (this.fleeLowHp && this.hp < this.maxHp*0.35) { cx = -cx; cy = -cy; } // HUYE herida (en vez de suicidarse encima)
+          else if (this.flank) {                                                  // FLANQUEA: rota el vector de carga → rodea para morder de costado
+            const rot = this.flank*1.1, rx = cx*Math.cos(rot)-cy*Math.sin(rot), ry = cx*Math.sin(rot)+cy*Math.cos(rot);
+            cx = cx*0.45 + rx*0.55; cy = cy*0.45 + ry*0.55; const m = Math.hypot(cx, cy) || 1; cx /= m; cy /= m;
+          }
+          sx += cx*this.foeWeight; sy += cy*this.foeWeight;
+          wantsTurbo = true;                                                      // usa el turbo para cazar/huir → habilita el ataque
         }
       }
       const MA = sper(0.2);                                                      // esquivar minas (siempre)
@@ -1608,6 +1646,10 @@
         const ehMood = this.hurt > 0 ? 2 : (eh.lungeT > 0 ? 1 : 0);               // cada cabeza extra: enojo durante su ataque; dolor cuando la criatura recibe golpe
         drawCreatureHead(eh.x, eh.y, eh.ang, hrad, hue, flash>0?95:80, light+6, ehMood, 1 - this.hurt/HAZARD_FLASH_TIME);
       }
+      // TELEGRAFÍA de PARRY: anillo rojo sobre la cabeza que te EMBISTE (tenue al recogerse, fuerte en pleno salto → dashealo)
+      const ring = (hx, hy, rr, lt) => { ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.strokeStyle = `rgba(255,70,60,${0.3+0.45*lt})`; ctx.lineWidth = Math.max(1.5, rr*0.18); ctx.beginPath(); ctx.arc(hx, hy, rr*(1.45+0.35*lt), 0, TAU); ctx.stroke(); ctx.restore(); };
+      if (this.lungeT > 0 && this.atkPlayer && inView(this.pieces[0].x, this.pieces[0].y)) ring(this.pieces[0].x, this.pieces[0].y, r0*1.15, this.lungeT <= LUNGE_TIME ? 1 : 0);
+      for (const eh of this.extraHeads) if (eh.lungeT > 0 && eh.atkPlayer && inView(eh.x, eh.y)) ring(eh.x, eh.y, r0, eh.lungeT <= LUNGE_TIME ? 1 : 0);
     }
   }
 
@@ -1893,6 +1935,8 @@
       this.z = -2;
       this.gameOver = false;
       this.score = 0;
+      this.runTime = 0; this.kills = 0;                                          // META + escalada: tiempo de la run y kills (para el resumen y la presión por tiempo)
+      this.best = (() => { try { return +localStorage.getItem('snakeBest') || 0; } catch (e) { return 0; } })(); // mejor score persistente
       this.pause = false;
       this.pauseBlinkCD = 0;
       this.initCD = 4;
@@ -1909,6 +1953,7 @@
       this.maxHp = PLAYER_MAX_HP; this.hp = PLAYER_MAX_HP;                        // vida del jugador
       this.attackCD = 0; this.lungeT = 0; this.lungeX = 0; this.lungeY = 0;       // ataque por embestida
       this.atkTarget = null; this.atkHit = false;                                 // víctima del ataque en curso + si ya pegó (el daño es al iniciar el dash)
+      this.parryActive = 0; this.parryTarget = null;                              // CONTRA: i-frames activos + a quién le aplica el crítico
       this.healQueue = 0;                                                         // cura pendiente de la estrella (entra por tiempo, no de golpe)
       this.turbo = 1; this.boosting = false;                                      // turbo con carga (se drena al usar, se recarga al soltar)
       this.enemyCD = 2;                                                           // delay hasta la próxima serpiente enemiga
@@ -1923,6 +1968,7 @@
       this.turboDrainMul = 1; this.turboRechargeMul = 1;                          // turbo dura más / recarga más rápido
       this.atkRangeMul = 1; this.atkConeBonus = 0; this.turnMul = 1; this.sizeDmgBonus = 0; // alcance / cono / giro / bonus por tamaño
       this.lifesteal = 0; this.thorns = 0; this.armor = 0; this.magnetMul = 1;    // pasivas: robo de vida / espinas / coraza / imán
+      this.pierce = false; this.lungeFollow = false; this.overcharge = false;     // EVOLUCIONES de upgrades (rareza alta desbloquea comportamiento)
       // ── NIVELES (XP mixta + rarezas) ──
       this.xp = 0; this.level = 1; this.xpNeed = XP_BASE; this.choosing = false;  // choosing = eligiendo mejora (congela el juego)
       this.takenPassives = new Set();                                            // pasivas ya tomadas (no se repiten en el pool)
@@ -1940,6 +1986,7 @@
     applyUpgrade(entry) {                                                         // entry = {u, rar}: pasa RF y tier al apply
       const { u, rar } = entry;
       u.apply(this, rar.RF, rar.tier);
+      if (u.evo) u.evo(this, rar.tier);                                          // EVOLUCIÓN por rareza alta: la carta gana un COMPORTAMIENTO (no sólo número). Usa el canal rar.tier
       if (u.passive) this.takenPassives.add(u.id);
       this.choosing = false; this.pause = false;
       if (this.xp >= this.xpNeed) this.startLevelUp();                            // encadena si juntaste varios niveles de un saque
@@ -1953,10 +2000,10 @@
       e.shedChunk(fromAng, Math.max(1, Math.min(CHUNK_MAX, Math.round(dmg/CHUNK_DMG_PER))));
       this.score += Math.round(dmg * HIT_SCORE);                                 // PEGAR da puntos
       if (this.lifesteal > 0) this.healQueue += dmg * this.lifesteal;            // "Sanguijuela"
-      if (e.hp <= 0) { this.score += KILL_SCORE + Math.round(e.maxHp); e.die(); this.addXP(XP_KILL + Math.round(e.maxHp*0.2)); } // MATAR da bonus de score y XP (grandes valen más)
+      if (e.hp <= 0) { this.score += KILL_SCORE + Math.round(e.maxHp); this.kills++; e.die(); this.addXP(XP_KILL + Math.round(e.maxHp*0.2)); } // MATAR da bonus de score y XP (grandes valen más)
     }
     hurtPlayer(dmg, fromAng, attacker) {                                          // una enemiga (o mina) le pega al jugador
-      if (this.immunity > 0 || this.gameOver) return;                            // escudo bloquea
+      if (this.immunity > 0 || this.gameOver) return;                            // escudo bloquea (PARRY DESACTIVADO: ya no hay i-frames de contra)
       dmg *= (1 - this.armor);                                                    // "Coraza"
       this.hp -= dmg; this.hitFlash = HAZARD_FLASH_TIME;
       if (snake[0]) snake[0].wave_time = snake[0].wave_time_total;
@@ -1978,6 +2025,7 @@
     die() {
       if (this.gameOver) return;                                                  // una sola vez
       this.gameOver = true; this.dying = true; this.deathT = 0;
+      if (this.score > this.best) { this.best = this.score; try { localStorage.setItem('snakeBest', this.best); } catch (e) {} } // guarda el récord
       // La víbora se DESHACE en partículas que se dispersan lento como en el agua y se desvanecen (en vez de
       // volar en pedazos). Cada segmento aporta unas pocas; en cuerpos largos se muestrea para acotar el total.
       this.deathParticles = [];
@@ -2047,6 +2095,7 @@
       if (this.choosing) return;                                                 // eligiendo mejora: congela TODO (no drena escudo/boost ni spawnea)
       if (this.hitFlash > 0) this.hitFlash = Math.max(this.hitFlash - deltaT, 0);
       if (this.immunity > 0) this.immunity = Math.max(this.immunity - deltaT, 0);
+      if (this.parryActive > 0) this.parryActive = Math.max(this.parryActive - deltaT, 0); // i-frames del PARRY
       if (this.venom > 0) {                                                        // VENENO del pez piedra: DoT como el borde (respeta Coraza, ignora el escudo; se congela acá en pausa/elección)
         this.venom = Math.max(0, this.venom - deltaT);
         this.hp -= STONE_VENOM_DPS * (1 - this.armor) * deltaT;
@@ -2062,6 +2111,8 @@
       if (this.initCD > 0) this.initCD = Math.max(this.initCD - deltaT, 0);
       if (!snake.length) { for (let i = 0; i < 10; i++) new SnakePiece(i, true); this.immunity = 1; } // largo inicial DESPLEGADO + 1s de inmunidad
       if (this.initCD > 0) return;                                               // nada aparece hasta pasar el initCD inicial
+      this.runTime += deltaT;                                                    // reloj de la run (alimenta el resumen y la ESCALADA por tiempo)
+      const pressure = Math.min(1, this.runTime / PRESSURE_T);                   // 0→1: la run arranca calma y se va poblando/diversificando (sin tocar HP/daño)
 
       // COMBATE del jugador: si ACELERA (boost/sprint) con la cabeza de una enemiga en su cono, lanza la embestida
       // hacia la MÁS CERCANA en cono. El daño no es automático: cae sólo si el dash CONECTA (ver SnakePiece).
@@ -2070,7 +2121,7 @@
       const accel = this.boosting || this.speedBoost > 0;
       if (accel && this.attackCD <= 0 && snake[0]) {
         const h = snake[0], range = sper(ATTACK_RANGE_F)*this.atkRangeMul, cos = Math.cos(ATTACK_ANG + this.atkConeBonus);
-        let best = null, bd = Infinity;
+        let best = null, bd = Infinity;                                           // PARRY DESACTIVADO: vuelve a apuntar a la MÁS CERCANA en cono (sin priorizar al que te embiste)
         for (const e of enemies) {
           const eh = e.pieces[0], dx = eh.x-h.x, dy = eh.y-h.y, d2 = dx*dx+dy*dy;
           if (d2 < bd && inAttackCone(h.x, h.y, h.ang, eh.x, eh.y, range, cos)) { bd = d2; best = e; }
@@ -2084,12 +2135,12 @@
         if (bestBoss) {
           const dx = bestBoss.x-h.x, dy = bestBoss.y-h.y, d = Math.hypot(dx, dy) || 1;
           this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; this.lungeDisp = 0; this.attackCD = ATTACK_CD;
-          this.atkTarget = null; this.atkHit = false;                            // sin atkTarget enemigo → el hit-test de embestida prueba los jefes
+          this.atkTarget = null; this.atkHit = false; this.parryTarget = null;    // sin atkTarget enemigo → el hit-test de embestida prueba los jefes (los jefes tienen su propio contra)
           h.wave_time = h.wave_time_total;
         } else if (best) {
           const eh = best.pieces[0], dx = eh.x-h.x, dy = eh.y-h.y, d = Math.hypot(dx, dy) || 1;
           this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; this.lungeDisp = 0; this.attackCD = ATTACK_CD;
-          this.atkTarget = best; this.atkHit = false;
+          this.atkTarget = best; this.atkHit = false;                            // PARRY DESACTIVADO (no se arma parryActive/parryTarget; sólo quedó el anillo de aviso en el draw)
           h.wave_time = h.wave_time_total;
         }
       }
@@ -2111,10 +2162,11 @@
       } else this.foodCD = FOOD_SPAWN_DELAY;
 
       // serpientes enemigas: mantener una población; aparecen desde fuera del lago (escalonadas)
-      if (enemies.length < ENEMY_TARGET) {
+      const etarget = ENEMY_TARGET + Math.round(pressure*4);                      // ESCALADA: más enemigas, más parejas y más multi-cabeza a medida que avanza la run
+      if (enemies.length < etarget) {
         this.enemyCD -= deltaT;
         if (this.enemyCD <= 0) {
-          if (Math.random() < PAIR_CHANCE && enemies.length <= ENEMY_TARGET - 2) {
+          if (Math.random() < PAIR_CHANCE + pressure*0.15 && enemies.length <= etarget - 2) {
             // PAREJA: mismo color, una grande + una chica (la escolta), mismo lado de entrada; no se atacan
             const hue = ENEMY_HUES[ri(0, ENEMY_HUES.length-1)], gid = ++enemyGroupSeq, ea = Math.random()*TAU;
             const big = new EnemySnake({ hue, sizeMul: rndRange(1.25, 1.5), groupId: gid, entryAng: ea });
@@ -2122,7 +2174,7 @@
             pairAlert = 4;                                                       // aviso en el minimapa
           } else {                                                              // enemiga suelta: a veces MULTI-CABEZA (cluster/hydra/body al azar)
             const opts = {};
-            if (Math.random() < MULTIHEAD_CHANCE) opts.headLayout = HEAD_LAYOUTS[ri(0, HEAD_LAYOUTS.length-1)];
+            if (Math.random() < MULTIHEAD_CHANCE + pressure*0.25) opts.headLayout = HEAD_LAYOUTS[ri(0, HEAD_LAYOUTS.length-1)];
             new EnemySnake(opts);
           }
           this.enemyCD = rndRange(3, 7);
@@ -2186,9 +2238,12 @@
         const t = Math.min(1, Math.max(0, (this.deathT - DEATH_TEXT_DELAY) / 0.7)); // aparición suave tras la rotura
         if (t > 0) {
           ctx.globalAlpha = t;
-          createText(100, 'GAME OVER',          'center', [255,255,255], xper(0.5), yper(0.47));
-          createText(50,  'SCORE: '+this.score, 'center', [120,255,220], xper(0.5), yper(0.6));
-          createText(24,  'TOCÁ PARA REINICIAR','center', [255,90,120],  xper(0.5), yper(0.67));
+          const record = this.score >= this.best && this.score > 0;             // esta run igualó/superó el récord
+          createText(100, 'GAME OVER',          'center', [255,255,255], xper(0.5), yper(0.42));
+          createText(50,  'SCORE: '+this.score, 'center', [120,255,220], xper(0.5), yper(0.54));
+          createText(26,  record ? '★ NUEVO RÉCORD ★' : 'MEJOR: '+this.best, 'center', record ? [255,210,58] : [150,200,210], xper(0.5), yper(0.60));
+          createText(20,  this.kills+' KILLS · NIVEL '+this.level+' · '+Math.floor(this.runTime)+'s', 'center', [140,190,205], xper(0.5), yper(0.65)); // resumen de la run
+          createText(24,  'TOCÁ PARA REINICIAR','center', [255,90,120],  xper(0.5), yper(0.71));
           ctx.globalAlpha = 1;
         }
       }
@@ -2218,15 +2273,17 @@
       this.venom = 0; this.shockwave = null; this.deathGlow = null;
       this.speedBoost = 0;
       this.gameOver = false; this.dying = false; this.deathT = 0; this.deathParticles = [];
-      this.score = 0; this.initCD = 4; this.pause = false; this.loadT = LOAD_TIME;
+      this.score = 0; this.runTime = 0; this.kills = 0; this.initCD = 4; this.pause = false; this.loadT = LOAD_TIME; // best NO se resetea (persiste entre runs)
       this.pendingGrow = 0; this.pendingShrink = 0; this.fed = 0;
       this.maxHp = PLAYER_MAX_HP; this.hp = this.maxHp;                           // las mejoras subían maxHp → volver a base
       this.attackCD = 0; this.lungeT = 0; this.lungeDisp = 0; this.atkTarget = null; this.atkHit = false; this.healQueue = 0;
+      this.parryActive = 0; this.parryTarget = null;
       this.turbo = 1; this.boosting = false;
       // reset de mejoras + nivel
       this.dmgMul = 1; this.regenMul = 1; this.healMul = 1; this.turboDrainMul = 1; this.turboRechargeMul = 1;
       this.atkRangeMul = 1; this.atkConeBonus = 0; this.turnMul = 1; this.sizeDmgBonus = 0;
       this.lifesteal = 0; this.thorns = 0; this.armor = 0; this.magnetMul = 1;
+      this.pierce = false; this.lungeFollow = false; this.overcharge = false;
       this.xp = 0; this.level = 1; this.xpNeed = XP_BASE; this.choosing = false; this.takenPassives.clear();
       this.rerolls = START_REROLLS; this.luFlash = 0;
       const ov = document.getElementById('levelup'); if (ov) ov.classList.remove('show');
@@ -2553,6 +2610,7 @@
     // ── BARRA DE XP: cápsula redondeada, centrada arriba, llenando el hueco entre el score (izq) y los botones
     //    (der) con margen y simétrica respecto al centro. Sólo el NÚMERO de nivel debajo (sin "NIVEL", sin x/need). ──
     const scoreRight = x + ctx.measureText(String(manager.score)).width;         // borde derecho del score (fuente grande aún activa)
+    if (manager.best > 0) { ctx.font = `700 ${small}px 'Segoe UI', system-ui, sans-serif`; ctx.fillStyle = 'rgba(150,205,215,0.78)'; ctx.fillText('MEJOR ' + manager.best, x + 2, y + small + 3 + big + 4); } // récord persistente, bajo el score
     const pr = document.getElementById('padMenu') ? document.getElementById('padMenu').getBoundingClientRect() : null;
     const mmR0 = Math.max(42, Math.min(W, H) * 0.10), mg = 16;                    // radio del minimapa (igual que drawMinimap)
     const by = (pr ? pr.bottom : 44) + 8;                                        // DEBAJO de los botones → despeja la cámara selfie en mobile
@@ -2590,7 +2648,7 @@
     if (m.magnetMul        > 1)             rows.push(['🧲', 'x' + m.magnetMul.toFixed(1)]);
     if (rows.length) {
       const fs = Math.round(12*tscale()), rowH = Math.round(fs*1.5);
-      let ly = y + small + 3 + big + 12;                                          // arranca debajo del número de score
+      let ly = y + small + 3 + big + (manager.best > 0 ? small + 16 : 12);        // arranca debajo del número de score (+ la línea MEJOR si existe)
       ctx.textAlign = 'left'; ctx.textBaseline = 'top';
       ctx.font = `600 ${fs}px 'Segoe UI', system-ui, sans-serif`;
       for (const [ico, val] of rows) {
@@ -2678,11 +2736,17 @@
       ctx.fillStyle = color;
       ctx.beginPath(); ctx.arc(mmx + wx*scale, mmy + wy*scale, r, 0, TAU); ctx.fill();
     };
-    const stepB = Math.max(1, Math.ceil(snake.length / 80));                     // cuerpo (muestreado: ~80 puntos máx), debajo del resto
-    for (let i = snake.length - 1; i >= 0; i -= stepB) dot(snake[i].x, snake[i].y, snake[i]._bodyStr, 1.5);
+    const polyline = (pieces, str, lw, maxPts) => {                              // dibuja la serpiente como LÍNEA CONTINUA (no puntos sueltos → no se ve "cortada" al crecer)
+      const n = pieces.length; if (n < 2) { if (n) dot(pieces[0].x, pieces[0].y, str, lw*0.6); return; }
+      const st = Math.max(1, Math.ceil(n / maxPts));                             // muestreo sólo para acotar vértices (la LÍNEA los une → sin huecos)
+      ctx.strokeStyle = str; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(mmx + pieces[0].x*scale, mmy + pieces[0].y*scale);
+      for (let i = st; i < n; i += st) ctx.lineTo(mmx + pieces[i].x*scale, mmy + pieces[i].y*scale);
+      ctx.lineTo(mmx + pieces[n-1].x*scale, mmy + pieces[n-1].y*scale); ctx.stroke(); // asegura la cola
+    };
+    polyline(snake, 'rgba(70,225,150,0.92)', 2.6, 80);                           // cuerpo del jugador
     for (const e of enemies) {                                                   // serpientes enemigas (su color)
-      const es = Math.max(1, Math.ceil(e.pieces.length / 30));
-      for (let i = e.pieces.length - 1; i >= 0; i -= es) dot(e.pieces[i].x, e.pieces[i].y, `hsl(${e.hue},80%,55%)`, 1.6);
+      polyline(e.pieces, `hsl(${e.hue},80%,55%)`, 2.4, 40);
       if (e.groupId !== null) {                                                  // PAREJA: anillo blanco palpitante para resaltarlas
         const pr = 4 + 1.6*Math.abs(Math.sin(waveClock*5));
         ctx.lineWidth = 1.6; ctx.strokeStyle = 'rgba(255,255,255,0.9)';
@@ -2763,7 +2827,7 @@
 
   // ── BOTONES ──
   // tap en pointerdown (responde aunque otro dedo esté dirigiendo en el canvas), igual que BallsWeb.
-  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
+  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); fn(); }); } // stopPropagation: tocar un botón de la barra NO cuenta como dedo de sprint (evita boost fantasma)
   // press-and-hold: mantener apretado el botón ⚡ acelera; soltar/salir lo corta. SÓLO listeners en el propio
   // elemento (igual que el holdBtn de TankWARS): nada a nivel document, así no se pisa con la palanca.
   let sprintBtnHeld = false;
@@ -2855,13 +2919,13 @@
   // rareza (pasivas no salen comunes). fixedRar = rareza fija. hpLow = sólo aparece si te falta vida.
   const UPGRADES = [
     // TODAS escalan el efecto BASELINE por RF (1 / 1.25 / 1.5 / 2 / 3 / 5 según rareza). terse muestra el número redondeado.
-    { id:'dmg',   ico:'⚔️', desc:'Daño de tu mordida',      terse:R=>`+${Math.round(15*R.RF)}% ATK`,     apply:(m,RF)=>{ m.dmgMul += 0.15*RF; } },
+    { id:'dmg',   ico:'⚔️', desc:'Daño de tu mordida',      terse:R=>`+${Math.round(15*R.RF)}% ATK${R.tier>=5?' ✦PERFORA':''}`, apply:(m,RF)=>{ m.dmgMul += 0.15*RF; }, evo:(m,t)=>{ if (t>=5) m.pierce = true; } }, // legendario+: la embestida alcanza a una 2ª enemiga
     { id:'hp',    ico:'❤️', desc:'Vida máxima',             terse:R=>`+${Math.round(20*R.RF)} HP`,       apply:(m,RF)=>{ m.maxHp += 20*RF; m.hp = m.maxHp; } },
     { id:'regen', ico:'➕', desc:'Recuperás vida sola',     terse:R=>`+${Math.round(45*R.RF)}% REGEN`,   apply:(m,RF)=>{ m.regenMul += 0.45*RF; } },
     { id:'size',  ico:'🦈', desc:'+daño si sos más grande', terse:R=>`+${Math.round(18*R.RF)}% MORDIDA`, apply:(m,RF)=>{ m.sizeDmgBonus += 0.18*RF; } },
-    { id:'range', ico:'🎯', desc:'Atacás de más lejos',     terse:R=>`+${Math.round(18*R.RF)}% ALCANCE`, apply:(m,RF)=>{ m.atkRangeMul += 0.18*RF; } },
+    { id:'range', ico:'🎯', desc:'Atacás de más lejos',     terse:R=>`+${Math.round(18*R.RF)}% ALCANCE${R.tier>=4?' ✦GUIADO':''}`, apply:(m,RF)=>{ m.atkRangeMul += 0.18*RF; }, evo:(m,t)=>{ if (t>=4) m.lungeFollow = true; } }, // épico+: la embestida corrige rumbo hacia el blanco (menos fallos)
     { id:'turn',  ico:'🌀', desc:'Girás más rápido',        terse:R=>`+${Math.round(15*R.RF)}% GIRO`,    apply:(m,RF)=>{ m.turnMul += 0.15*RF; } },
-    { id:'turbA', ico:'⚡', desc:'El turbo dura más',        terse:R=>`TURBO +${Math.round(14*R.RF)}%`,   apply:(m,RF)=>{ m.turboDrainMul = Math.max(0.2, m.turboDrainMul * (1 - 0.14*RF)); } },
+    { id:'turbA', ico:'⚡', desc:'El turbo dura más',        terse:R=>`TURBO +${Math.round(14*R.RF)}%${R.tier>=5?' ✦SOBRECARGA':''}`, apply:(m,RF)=>{ m.turboDrainMul = Math.max(0.2, m.turboDrainMul * (1 - 0.14*RF)); }, evo:(m,t)=>{ if (t>=5) m.overcharge = true; } }, // legendario+: con turbo casi lleno, el boost es ×1.7 en vez de ×1.5
     { id:'turbR', ico:'🔋', desc:'El turbo recarga antes',  terse:R=>`RECARGA +${Math.round(35*R.RF)}%`, apply:(m,RF)=>{ m.turboRechargeMul += 0.35*RF; } },
     { id:'cone',  ico:'📐', desc:'Cono de ataque más ancho',terse:R=>`+${Math.round(7*R.RF)}° CONO`,     apply:(m,RF)=>{ m.atkConeBonus = Math.min(0.5, m.atkConeBonus + 0.12*RF); } },
     // pasivas (ÚNICAS; piso de rareza tier≥2 → no salen comunes; el valor escala con RF)
@@ -2910,8 +2974,9 @@
       c.style.animationDelay = (i*0.06) + 's';
       c.innerHTML = `<div class="luIco">${u.ico}</div><div class="luBody"><div class="luTerse">${u.terse(rar)}</div><div class="luDesc">${u.desc}</div></div><div class="luPill">${rar.label}</div>`;
       c.addEventListener('pointerdown', e => {
-        e.preventDefault();
+        e.preventDefault(); e.stopPropagation();                                  // que este toque NO cuente como "dedo de sprint" en activeTouches
         ov.classList.remove('show'); ov.setAttribute('aria-hidden', 'true');
+        activeTouches.clear(); updateSprint();                                    // flush: el overlay se oculta con el dedo apoyado y su pointerup se pierde en mobile → quedaba un dedo fantasma que activaba el boost
         manager.applyUpgrade(entry);
         manager.levelJuice(rar);
       });
@@ -2922,7 +2987,7 @@
     rb.classList.toggle('disabled', manager.rerolls <= 0);
     ov.classList.add('show'); ov.setAttribute('aria-hidden', 'false');
   }
-  document.getElementById('luReroll').addEventListener('pointerdown', e => { e.preventDefault(); rerollUpgrades(); });
+  document.getElementById('luReroll').addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); rerollUpgrades(); }); // stopPropagation: no cuenta como dedo de sprint
 
   // ════════════════ LOOP ════════════════
   function loop(now) {

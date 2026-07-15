@@ -184,6 +184,9 @@
 
   // ── COLORES neón (visuales de v1) ──
   const PLAYER_COLORS = [ [0,240,255], [255,120,0], [120,255,30], [255,40,200] ];
+  const PLAYER_NAMES  = [ 'TÚ', 'RINZLER', 'SARK', 'CLU' ];                        // id 0 = humano; el resto, IAs con nombre
+  const CPU_COLOR     = [ 235, 80, 90 ];                                           // color del "campo" (CPU) en el marcador
+  const BEST_OF       = [ 1, 3, 5, 7 ];                                            // 1 = partida única; resto = torneo TÚ vs CPU
   const rgb  = c => `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
   const rgba = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
   const lerpC = (a, b, t) => [ a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t ];
@@ -420,6 +423,7 @@
       const [sx, sy] = startposFor(id, totalplayers);
       this.colorArr = PLAYER_COLORS[id];
       this.color = rgb(this.colorArr);
+      this.name = PLAYER_NAMES[id] || ('P' + (id + 1));
       this.x = sx; this.y = sy;
       this.head = [];
       this.lastX = null; this.lastY = null;
@@ -550,17 +554,25 @@
   // ════════════════ GAME HANDLER (menú + estado) ════════════════
   const gh = {
     menu: true,
-    currentOption: 0,           // 0 = modo, 1 = cantidad de colores
+    currentOption: 0,           // fila seleccionada: 0 = cantidad, 1 = best-of
     currentPlayers: 0,          // +2 → 2..4
-    currentMode: 0,             // 0 = single, 1 = multi
+    currentMode: 0,             // 0 = single, 1 = multi (siempre 0: sólo vs IA)
+    bestOfIdx: 1,               // índice en BEST_OF (default 3)
     keypressed: false,
     paused: false,
+    // ── TORNEO (TÚ vs CPU): el humano gana la ronda si sobrevive último, la pierde si muere ──
+    youWins: 0, cpuWins: 0, targetWins: 1,
+    roundScored: false,         // se puntúa UNA sola vez por ronda (gameOver se re-evalúa por frame)
+    lastWinner: 'you',          // 'you' | 'cpu' — ganador de la última ronda
+    lastWinnerName: null,       // nombre de la IA si fue una sola sobreviviente
   };
   let players = [];
 
   function aliveCount() { let n = 0; for (const p of players) if (p.alive) n++; return n; }
+  function setOver() { return gh.youWins >= gh.targetWins || gh.cpuWins >= gh.targetWins; }
 
-  function startGame() {
+  // Arranca UNA ronda (mundo + jugadores nuevos), sin tocar el marcador.
+  function startRound() {
     clearField();
     buildWorld();
     const n = gh.currentPlayers + 2;
@@ -569,9 +581,33 @@
     bindControls();
     gh.menu = false;
     gh.paused = false;
+    gh.roundScored = false;
     updateCamera();
   }
+  // Arranca un SET nuevo (resetea marcador) — desde JUGAR o "revancha".
+  function startGame() {
+    const bo = BEST_OF[gh.bestOfIdx];
+    gh.targetWins = Math.ceil(bo / 2);
+    gh.youWins = 0; gh.cpuWins = 0;
+    startRound();
+  }
+  function nextRound() { startRound(); }                                           // siguiente ronda (conserva marcador)
   function restart() { startGame(); }
+  // Asigna el punto de la ronda UNA vez (TÚ si el humano sobrevivió; CPU si murió).
+  function scoreRound() {
+    if (gh.roundScored) return;
+    gh.roundScored = true;
+    const p0 = players.find(p => p.id === 0);
+    const youW = !!(p0 && p0.alive);
+    gh.lastWinner = youW ? 'you' : 'cpu';
+    if (youW) { gh.youWins++; gh.lastWinnerName = null; }
+    else {
+      gh.cpuWins++;
+      const aiAlive = players.filter(p => p.alive && p.id !== 0);                  // si quedó UNA IA viva, la nombramos
+      gh.lastWinnerName = aiAlive.length === 1 ? aiAlive[0].name : null;
+    }
+  }
+  function advance() { setOver() ? startGame() : nextRound(); }                    // tap/Enter en fin de ronda
   function backToMenu() {
     clearField();
     players = [];
@@ -595,29 +631,36 @@
   // Layout COMPACTO centrado: tamaños y separaciones en px proporcionales a min(W,H) — NO a la altura
   // total. Así no se desparrama en pantallas altas (mobile) y entra bien en cualquier orientación.
   function menuLayout() {
-    const S = Math.min(W, H), cy = H * 0.47;
+    const S = Math.min(W, H), cy = H * 0.46;
     return {
-      titleY: cy - S * 0.135, titlePx: S * 0.17,
-      divY:   cy - S * 0.045,
-      optY:   cy + S * 0.035, optPx: S * 0.052,
-      playY:  cy + S * 0.150, playPx: S * 0.052,
-      tol:    S * 0.06,
+      titleY: cy - S * 0.185, titlePx: S * 0.15,
+      divY:   cy - S * 0.085,
+      opt1Y:  cy - S * 0.005, opt2Y: cy + S * 0.075, optPx: S * 0.05,
+      playY:  cy + S * 0.185, playPx: S * 0.05,
+      tol:    S * 0.045,
     };
   }
-  function menuChangeValue(delta) { gh.currentPlayers = (gh.currentPlayers + delta + 3) % 3; }
+  function menuChangeValue(delta) {
+    if (gh.currentOption === 0) gh.currentPlayers = (gh.currentPlayers + delta + 3) % 3;
+    else gh.bestOfIdx = (gh.bestOfIdx + delta + BEST_OF.length) % BEST_OF.length;
+  }
   function tapMenu(lx, ly) {
     const L = menuLayout(), dir = lx < W * 0.5 ? -1 : 1;
-    if (Math.abs(ly - L.optY) < L.tol)       gh.currentPlayers = (gh.currentPlayers + dir + 3) % 3;
+    if (Math.abs(ly - L.opt1Y) < L.tol)      { gh.currentOption = 0; menuChangeValue(dir); }
+    else if (Math.abs(ly - L.opt2Y) < L.tol) { gh.currentOption = 1; menuChangeValue(dir); }
     else if (Math.abs(ly - L.playY) < L.tol) startGame();
   }
   function processMenu() {
     if (!gh.keypressed) {
+      if (keys.ArrowUp)    { gh.currentOption = (gh.currentOption - 1 + 2) % 2; gh.keypressed = true; }
+      if (keys.ArrowDown)  { gh.currentOption = (gh.currentOption + 1) % 2;     gh.keypressed = true; }
       if (keys.ArrowLeft)  { menuChangeValue(-1); gh.keypressed = true; }
       if (keys.ArrowRight) { menuChangeValue(+1); gh.keypressed = true; }
       if (keys.Enter) startGame();
     }
-    if (!keys.ArrowLeft && !keys.ArrowRight) gh.keypressed = false;
+    if (!keys.ArrowLeft && !keys.ArrowRight && !keys.ArrowUp && !keys.ArrowDown) gh.keypressed = false;
   }
+  function bestOfLabel() { const bo = BEST_OF[gh.bestOfIdx]; return bo === 1 ? 'Partida única' : 'Best of ' + bo; }
 
   function drawMenuBg() {
     ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
@@ -713,19 +756,43 @@
     ctx.strokeStyle = rgba(col, 0.5); ctx.shadowColor = rgb(col); ctx.shadowBlur = 10; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(W / 2 - dw / 2, L.divY); ctx.lineTo(W / 2 + dw / 2, L.divY); ctx.stroke();
     ctx.restore();
-    drawOption((gh.currentPlayers + 2) + ' Colors', L.optY, true, col, L.optPx);
+    drawOption((gh.currentPlayers + 2) + ' Colors', L.opt1Y, gh.currentOption === 0, col, L.optPx);
+    drawOption(bestOfLabel(), L.opt2Y, gh.currentOption === 1, col, L.optPx);
     drawPlay(L.playY, col, L.playPx);
   }
 
+  // Marcador TÚ vs CPU: pips a izq (vos) y der (CPU), centrados. Sólo si hay torneo (targetWins > 1).
+  function drawScoreboard(yFrac, scale) {
+    const cx = W * 0.5, y = H * yFrac, n = gh.targetWins;
+    const pipR = 6 * scale, step = 18 * scale, mid = 28 * scale, fp = Math.round(20 * scale);
+    ctx.save();
+    ctx.font = `700 ${fp}px ${FONT}`; ctx.textBaseline = 'middle';
+    const pip = (x, on, col) => {
+      ctx.beginPath(); ctx.arc(x, y, pipR, 0, TAU);
+      if (on) { ctx.shadowColor = rgb(col); ctx.shadowBlur = 8; ctx.fillStyle = rgb(col); }
+      else { ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(120,128,142,0.35)'; }
+      ctx.fill(); ctx.shadowBlur = 0;
+    };
+    for (let i = 0; i < n; i++) pip(cx - mid - i * step, i < gh.youWins, PLAYER_COLORS[0]);
+    for (let i = 0; i < n; i++) pip(cx + mid + i * step, i < gh.cpuWins, CPU_COLOR);
+    ctx.fillStyle = rgb(PLAYER_COLORS[0]); ctx.textAlign = 'right';
+    ctx.fillText('TÚ', cx - mid - (n - 1) * step - pipR - 8 * scale, y);
+    ctx.fillStyle = rgb(CPU_COLOR); ctx.textAlign = 'left';
+    ctx.fillText('CPU', cx + mid + (n - 1) * step + pipR + 8 * scale, y);
+    ctx.restore();
+  }
+
   function drawWinner() {
-    const alive = players.filter(p => p.alive);
-    if (alive.length === 1) {                                                      // un único sobreviviente → ganador
-      const w = alive[0];
-      createText(90, 'Player ' + (w.id + 1) + ' Wins!', w.color, 0.5, 0.45, 22, 'rgba(0,0,0,0.55)');
-    } else {                                                                       // el humano murió con varias IAs vivas
-      createText(90, 'Game Over', 'rgb(235,235,235)', 0.5, 0.45, 22, 'rgba(0,0,0,0.55)');
+    const youCol = PLAYER_COLORS[0], youW = gh.lastWinner === 'you';
+    if (gh.targetWins > 1) drawScoreboard(0.28, 1.05);
+    if (setOver()) {                                                               // fin del set
+      createText(90, youW ? '¡GANASTE!' : 'CPU GANA', youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 22, 'rgba(0,0,0,0.55)');
+      createText(36, 'tocá o Enter para revancha', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
+    } else {                                                                       // ronda dentro del set
+      const msg = youW ? '¡Ronda tuya!' : ('Ronda para ' + (gh.lastWinnerName || 'CPU'));
+      createText(72, msg, youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 18, 'rgba(0,0,0,0.55)');
+      createText(36, 'tocá o Enter: siguiente ronda', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
     }
-    createText(40, 'tocá o Enter para reiniciar', 'rgb(220,220,220)', 0.5, 0.58, 0, 'rgba(0,0,0,0.55)');
   }
 
   // ════════════════ INPUT ════════════════
@@ -739,7 +806,7 @@
     keys[e.code] = true;
     if (!gh.menu) {
       if (e.code === 'Escape') backToMenu();
-      else if (e.code === 'Enter' && gameOver()) restart();
+      else if (e.code === 'Enter' && gameOver()) advance();
     }
     if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Enter'].includes(e.code)) e.preventDefault();
   });
@@ -749,7 +816,7 @@
     const r = canvas.getBoundingClientRect();
     const lx = e.clientX - r.left, ly = e.clientY - r.top;
     if (gh.menu) tapMenu(lx, ly);
-    else if (gameOver()) restart();
+    else if (gameOver()) advance();
     else if (gh.paused) return;                                                    // en pausa, ignorar el giro por toque
     else { const p0 = players.find(p => p.id === 0 && p.alive); if (p0) (lx < W * 0.5 ? p0.turnLeft() : p0.turnRight()); }
   });
@@ -811,10 +878,16 @@
 
       drawMinimap();
 
-      if (gameOver()) { for (const p of players) p.stop = true; drawWinner(); }
-      else if (gh.paused) {
-        createText(80, 'PAUSA', 'rgb(235,235,235)', 0.5, 0.45, 20, 'rgba(0,0,0,0.5)');
-        createText(34, 'tocá ⏸ para seguir', 'rgb(200,200,200)', 0.5, 0.56, 0, 'rgba(0,0,0,0.5)');
+      if (gameOver()) {
+        for (const p of players) p.stop = true;
+        scoreRound();                                                              // asigna el punto UNA vez
+        drawWinner();
+      } else {
+        if (gh.targetWins > 1) drawScoreboard(0.06, 0.8);                          // marcador chico arriba durante la ronda
+        if (gh.paused) {
+          createText(80, 'PAUSA', 'rgb(235,235,235)', 0.5, 0.45, 20, 'rgba(0,0,0,0.5)');
+          createText(34, 'tocá ⏸ para seguir', 'rgb(200,200,200)', 0.5, 0.56, 0, 'rgba(0,0,0,0.5)');
+        }
       }
     }
     requestAnimationFrame(loop);

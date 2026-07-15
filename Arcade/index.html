@@ -132,7 +132,8 @@
     }
     @keyframes tileIn { from { opacity: 0; transform: translateY(14px) scale(0.96); } to { opacity: 1; transform: translateY(0) scale(1); } }
 
-    /* Tile: la TARJETA cuadrada que muestra la imagen del juego. SIEMPRE 1:1 → todas iguales. */
+    /* Tile: la TARJETA cuadrada que muestra la imagen del juego. SIEMPRE 1:1 → todas iguales.
+       Doble inset shadow (highlight arriba + sombra abajo) le da un sutil efecto de "bezel". */
     .tile {
       width: 100%;
       aspect-ratio: 1 / 1;
@@ -142,13 +143,17 @@
       display: block;
       text-decoration: none;
       color: inherit;
-      transition: transform 0.12s ease, border-color 0.25s, box-shadow 0.25s;
+      transition: transform 0.18s cubic-bezier(0.16,1,0.3,1), border-color 0.25s, box-shadow 0.25s;
       position: relative;
       overflow: hidden;
-      box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 22px rgba(0,0,0,0.32);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.08),    /* lip superior */
+        inset 0 -1px 0 rgba(0,0,0,0.35),         /* sombra inferior (relieve) */
+        0 8px 22px rgba(0,0,0,0.32);
     }
     /* La imagen rellena la tarjeta sin deformarse: cover = se mantiene la proporción y se recorta
-       lo que sobre. Así se ve la MAYOR cantidad posible de imagen, todas las tarjetas uniformes. */
+       lo que sobre. Filter: color grade uniforme para que thumbnails con saturaciones/contrastes
+       dispares queden con el mismo "tono" general. En hover hace un zoom-in suave (1.06×). */
     .tile img {
       position: absolute; inset: 0;
       width: 100%; height: 100%;
@@ -156,20 +161,33 @@
       display: block;
       -webkit-user-drag: none;             /* no hay forma estándar; sólo el prefijo de WebKit */
       pointer-events: none;
+      filter: saturate(1.15) contrast(1.06) brightness(1.02);
+      transition: transform 0.55s cubic-bezier(0.16,1,0.3,1), filter 0.35s ease;
+      transform-origin: center;
     }
-    /* Cinta de color arriba (la firma visual de cada juego) — z-index 2 para quedar por encima de la imagen. */
+    .cell:hover .tile img {
+      transform: scale(1.06);
+      filter: saturate(1.28) contrast(1.10) brightness(1.06);
+    }
+    /* Cinta de color arriba (la firma visual de cada juego) — z-index 3 para quedar por encima
+       del overlay de sheen/vignette. */
     .tile::before {
-      content: ''; position: absolute; top: 0; left: 18%; right: 18%; height: 2px; z-index: 2;
+      content: ''; position: absolute; top: 0; left: 18%; right: 18%; height: 2px; z-index: 3;
       background: var(--accent);
       box-shadow: 0 0 14px var(--accent);
-      opacity: 0.75;
+      opacity: 0.8;
       border-radius: 0 0 999px 999px;
     }
-    /* Sheen sutil top-left (suaviza el corte de la imagen contra el borde). */
+    /* Overlay sobre la imagen: vignette suave (bordes ligeramente oscurecidos → la mirada va al
+       centro) + sheen diagonal tipo vidrio arriba-izq → sensación de premium card. */
     .tile::after {
-      content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
-      background: radial-gradient(ellipse 80% 60% at 28% 0%, rgba(255,255,255,0.05), transparent 60%);
+      content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 2;
+      background:
+        linear-gradient(135deg, rgba(255,255,255,0.12) 0%, rgba(255,255,255,0) 38%),
+        radial-gradient(ellipse 110% 110% at 50% 50%, transparent 50%, rgba(0,0,0,0.42) 100%);
+      mix-blend-mode: normal;
     }
+    .cell:hover .tile { transform: translateY(-2px); }
     .cell:hover .tile {
       border-color: color-mix(in srgb, var(--accent) 45%, #262a36);
       box-shadow:
@@ -389,7 +407,7 @@
   <script>
     // Versión visible (splash + footer). SUBIR este número en cada update → permite confirmar
     // de un vistazo si la PWA tomó el último deploy (Android cachea fuerte).
-    const VERSION = 'v1.5';
+    const VERSION = 'v2.0';
     { const sv = document.getElementById('splashVer'); if (sv) sv.textContent = VERSION;
       const fv = document.getElementById('footerVer'); if (fv) fv.textContent = VERSION + ' · © 2026 Franco Laboranti'; }
 
@@ -526,12 +544,14 @@
       });
     }
     function showLockErr(msg) {
-      // En desktop screen.orientation.lock NUNCA está soportado → tira NotSupportedError siempre.
-      // Mostrarlo en el footer era un falso positivo (no es bug del Arcade), así que lo silenciamos.
-      // Cualquier OTRO error (típicamente de Android: "SecurityError", "AbortError") sigue mostrándose.
-      if (msg === 'NotSupportedError') return;
-      const fv = document.getElementById('footerVer');
-      if (fv) fv.textContent = VERSION + ' · lock✗ ' + msg;
+      // TODOS los errores del orientation lock son falsos positivos para el usuario final:
+      //  · NotSupportedError → desktop sin API (Chrome/Firefox de PC)
+      //  · AbortError → request superseded o se perdió la activación (común en desktop FS)
+      //  · SecurityError → necesitaba un gesto que no estaba disponible
+      // Ninguno es un bug del Arcade — el lock simplemente no aplica en ese contexto.
+      // Mantenemos diagnóstico en consola (por si aparece algo raro en un Android nuevo) pero NO
+      // pisamos el footer del copyright: la línea inferior es la firma de la app, no un panel de errores.
+      try { console.warn('orientation.lock failed:', msg); } catch (e) {}
     }
     let entered = false;   // true tras tocar "ENTRAR" (gesto inicial de la app)
 

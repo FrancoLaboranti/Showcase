@@ -46,6 +46,8 @@
   .btn:disabled { opacity: 0.32; cursor: default; }
   .btn.primary { background: rgba(60,140,70,0.75); border-color: rgba(140,230,160,0.4); }
   .btn.danger  { background: rgba(150,50,50,0.6); border-color: rgba(255,150,150,0.3); }
+  /* ALL IN: naranja saturado para que destaque como acción "drástica". */
+  .btn.allin   { background: rgba(210,110,30,0.72); border-color: rgba(255,185,80,0.55); color: #fff5dd; }
   .btn.compact { min-width: 38px; padding: 0 8px; }
   /* Raise group: [-] $40 [+] sticks together so the amount reads as a unit, with two tap targets. */
   #raiseGroup {
@@ -96,6 +98,7 @@
       <button id="btnPlus"  class="btn compact">+</button>
     </div>
     <button id="btnRaise" class="btn">RAISE</button>
+    <button id="btnAllIn" class="btn allin">ALL IN</button>
     <button id="btnDeal"  class="btn primary">DEAL</button>
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
@@ -117,7 +120,8 @@
   const RANKS = '23456789TJQKA';
   const SUITS = 'shdc';
   const SUIT_SYMBOL = { s: '♠', h: '♥', d: '♦', c: '♣' };
-  const SUIT_COLOR  = { s: '#1a1a1a', c: '#1a1a1a', h: '#c81e1e', d: '#c81e1e' };
+  // Heavier red for hearts/diamonds so the pip pops on cream stock; matched to felt-on-paper feel.
+  const SUIT_COLOR  = { s: '#0e0e0e', c: '#0e0e0e', h: '#c0202a', d: '#c0202a' };
   const RANK_DISPLAY = { T: '10' };
   const HAND_NAMES = {
     1:'High Card', 2:'Pair', 3:'Two Pair', 4:'Three of a Kind',
@@ -175,12 +179,28 @@
             }
     return best;
   }
+  // Versión que devuelve también la combinación ganadora — usada en showdown para el highlight.
+  function bestHandCombo(seven) {
+    let best = [0], bestCombo = seven.slice(0, 5);
+    const n = seven.length;
+    for (let a = 0; a < n - 4; a++)
+      for (let b = a + 1; b < n - 3; b++)
+        for (let c = b + 1; c < n - 2; c++)
+          for (let d = c + 1; d < n - 1; d++)
+            for (let e = d + 1; e < n; e++) {
+              const combo = [seven[a],seven[b],seven[c],seven[d],seven[e]];
+              const r = handRank(combo);
+              if (rankCmp(r, best) > 0) { best = r; bestCombo = combo; }
+            }
+    return { rank: best, combo: bestCombo };
+  }
 
   // ── CANVAS / RESIZE ──
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
   let W = 0, H = 0, dpr = 1;
   const barEl = document.getElementById('bar');
+  let feltCache = null;                                                            // offscreen canvas con el felt + rail, reconstruido en cada resize
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     const barH = barEl.offsetHeight;
@@ -191,6 +211,8 @@
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    feltCache = null;                                                              // invalida felt cacheado a la nueva resolución
+    repositionCards();                                                             // cartas en mano siguen ancladas si el usuario rota/redimensiona
   }
   window.addEventListener('resize', resize);
 
@@ -203,24 +225,46 @@
     const w = Math.min(W, H) * 0.13;
     return { w, h: w * 1.45 };
   }
+  // Posición de la "ranura" según owner + índice — usado tanto en deal/advance como en resize.
+  function slotPos(owner, slot) {
+    const { w } = cardSize();
+    const dx = w * 1.05;
+    if (owner === 'player')    return { tx: xp(0.5) + (slot - 0.5) * dx, ty: yp(0.78) };
+    if (owner === 'cpu')       return { tx: xp(0.5) + (slot - 0.5) * dx, ty: yp(0.18) };
+    return { tx: xp(0.5) + (slot - 2) * dx, ty: yp(0.46) };                        // community: 5 ranuras
+  }
 
   // ── CARTAS (sprites con animación de movimiento + flip) ──
+  // Cada carta guarda su .slot (índice dentro del grupo) para que un resize() pueda recalcular
+  // targetX/Y desde el slotPos() actualizado, en lugar de quedar ancladas a la W/H vieja.
   const cards = [];
-  function makeCard(code, targetX, targetY, hidden, owner) {
+  function makeCard(code, slot, owner, hidden) {
     const { w, h } = cardSize();
+    const { tx, ty } = slotPos(owner, slot);
     cards.push({
       code, rank: code[0], suit: code[1],
       x: xp(0.5), y: owner === 'cpu' ? yp(-0.2) : yp(1.2),
-      targetX, targetY,
+      targetX: tx, targetY: ty,
       flip: hidden ? 0 : 1,
       flipTarget: hidden ? 0 : 1,
-      hidden, owner, w, h,
+      hidden, owner, slot, w, h,
     });
+  }
+  function repositionCards() {
+    if (!cards.length) return;
+    const { w, h } = cardSize();
+    for (const c of cards) {
+      const p = slotPos(c.owner, c.slot);
+      c.targetX = p.tx; c.targetY = p.ty;
+      c.w = w; c.h = h;
+    }
   }
   function revealCpuCards() {
     for (const c of cards) if (c.owner === 'cpu') { c.hidden = false; c.flipTarget = 1; }
   }
   function clearCards() { cards.length = 0; }
+
+  const CARD_FONT = "Georgia, 'Times New Roman', serif";
 
   function drawCard(c) {
     const scale = Math.abs(c.flip - 0.5) * 2;
@@ -231,50 +275,126 @@
     const r = sp(0.008);
     const faceUp = c.flip > 0.5 && !c.hidden;
 
-    if (faceUp) {
-      roundRect(ctx, x, y, w, h, r);
-      ctx.fillStyle = '#f8f6ec';
+    // En el showdown: aura dorada bajo cartas ganadoras, dim 0.55 en perdedoras.
+    let alphaMul = 1;
+    let winning = false;
+    if (G.phase === 'hand_end' && G.winningCodes && G.community.length === 5 && faceUp) {
+      if (G.winningCodes.has(c.code)) winning = true;
+      else if (c.owner !== 'community') alphaMul = 0.55;
+    }
+    if (winning) {
+      const halo = ctx.createRadialGradient(c.x, c.y, h*0.25, c.x, c.y, h*0.9);
+      halo.addColorStop(0, 'rgba(255,210,80,0.55)');
+      halo.addColorStop(0.55, 'rgba(255,180,40,0.20)');
+      halo.addColorStop(1, 'rgba(255,180,40,0)');
+      ctx.fillStyle = halo;
+      ctx.fillRect(c.x - h, c.y - h, h*2, h*2);
+    }
+
+    // Sombra elíptica suave bajo la carta — sólo cuando está casi de frente, no en pleno flip.
+    if (scale > 0.55) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.34)';
+      ctx.beginPath();
+      ctx.ellipse(c.x + sp(0.002), c.y + h/2 + sp(0.005), w*0.46, sp(0.006), 0, 0, TAU);
       ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#1a1a1a';
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.globalAlpha = alphaMul;
+
+    if (faceUp) {
+      // Fondo papel marfil con un toque de gradiente vertical (cream → off-white) para no parecer plano.
+      roundRect(ctx, x, y, w, h, r);
+      const stock = ctx.createLinearGradient(0, y, 0, y + h);
+      stock.addColorStop(0, '#fbf9ed');
+      stock.addColorStop(1, '#ece6cf');
+      ctx.fillStyle = stock;
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = 'rgba(20,20,20,0.85)';
       ctx.stroke();
+
       if (scale > 0.4) {
         const color = SUIT_COLOR[c.suit];
         const rtxt = RANK_DISPLAY[c.rank] || c.rank;
         const sym = SUIT_SYMBOL[c.suit];
+        // Rank más chico cuando es '10' (2 chars) para no desbordar la esquina.
+        const rankFs = Math.round(sp(0.028) * (rtxt.length > 1 ? 0.78 : 1));
+        const suitFs = Math.round(sp(0.022));
         ctx.fillStyle = color;
-        ctx.textBaseline = 'top';
-        ctx.textAlign = 'left';
-        ctx.font = `bold ${Math.round(sp(0.022))}px 'Segoe UI', system-ui, sans-serif`;
-        ctx.fillText(rtxt, x + w*0.08, y + h*0.04);
-        ctx.font = `${Math.round(sp(0.018))}px 'Segoe UI', system-ui, sans-serif`;
-        ctx.fillText(sym, x + w*0.10, y + h*0.27);
-        ctx.font = `${Math.round(sp(0.055))}px 'Segoe UI', system-ui, sans-serif`;
+        // TL: rank arriba, suit debajo, MISMO eje x (alineado).
+        ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+        ctx.font = `bold ${rankFs}px ${CARD_FONT}`;
+        ctx.fillText(rtxt, x + w*0.10, y + h*0.06);
+        ctx.font = `${suitFs}px ${CARD_FONT}`;
+        ctx.fillText(sym, x + w*0.10, y + h*0.06 + rankFs + sp(0.002));
+        // BR: el mismo pip rotado 180° (estilo carta de casino real).
+        ctx.save();
+        ctx.translate(x + w*0.90, y + h*0.94);
+        ctx.rotate(Math.PI);
+        ctx.font = `bold ${rankFs}px ${CARD_FONT}`;
+        ctx.fillText(rtxt, 0, 0);
+        ctx.font = `${suitFs}px ${CARD_FONT}`;
+        ctx.fillText(sym, 0, rankFs + sp(0.002));
+        ctx.restore();
+        // Pip central — bien grande para que el palo "lea" a la distancia.
+        ctx.font = `${Math.round(sp(0.075))}px ${CARD_FONT}`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(sym, x + w/2, y + h/2);
-        ctx.font = `bold ${Math.round(sp(0.022))}px 'Segoe UI', system-ui, sans-serif`;
-        ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
-        ctx.fillText(rtxt, x + w*0.92, y + h*0.96);
+        ctx.fillText(sym, x + w/2, y + h*0.55);
       }
     } else {
+      // Respaldo: base azul + vignette + lattice diagonal + crest dorado con palo central.
       roundRect(ctx, x, y, w, h, r);
-      ctx.fillStyle = '#1e3870';
+      ctx.fillStyle = '#1c356f';
       ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = '#c8c8e0';
-      ctx.stroke();
+      ctx.save();
+      roundRect(ctx, x, y, w, h, r);
+      ctx.clip();
+      const vg = ctx.createRadialGradient(c.x, c.y, 0, c.x, c.y, Math.max(w, h) * 0.65);
+      vg.addColorStop(0, 'rgba(110,150,220,0)');
+      vg.addColorStop(1, 'rgba(6,12,32,0.65)');
+      ctx.fillStyle = vg;
+      ctx.fillRect(x, y, w, h);
       if (scale > 0.5) {
-        ctx.fillStyle = '#4664aa';
-        for (let i = 0; i < 4; i++)
-          for (let j = 0; j < 6; j++) {
-            const px = x + w * (0.15 + i*0.23);
-            const py = y + h * (0.1 + j*0.16);
-            ctx.beginPath();
-            ctx.arc(px, py, Math.max(sp(0.004), 1.5), 0, TAU);
-            ctx.fill();
-          }
+        ctx.strokeStyle = 'rgba(180,200,255,0.22)';
+        ctx.lineWidth = 1;
+        // Diagonales: dos sets cruzados → lattice rómbico.
+        const step = w / 5;
+        for (let off = -h; off <= w + h; off += step) {
+          ctx.beginPath();
+          ctx.moveTo(x + off, y);
+          ctx.lineTo(x + off + h, y + h);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(x + off, y + h);
+          ctx.lineTo(x + off + h, y);
+          ctx.stroke();
+        }
+        // Crest dorado al medio con un ♠.
+        ctx.fillStyle = 'rgba(220,180,80,0.62)';
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y, w*0.32, h*0.20, 0, 0, TAU);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(120,90,30,0.55)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.ellipse(c.x, c.y, w*0.32, h*0.20, 0, 0, TAU);
+        ctx.stroke();
+        ctx.fillStyle = '#2a1a4e';
+        ctx.font = `${Math.round(sp(0.045))}px ${CARD_FONT}`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('♠', c.x, c.y + sp(0.002));
       }
+      ctx.restore();
+      // Borde claro como banda exterior tipo carta real.
+      roundRect(ctx, x, y, w, h, r);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#d0d0e6';
+      ctx.stroke();
     }
+    ctx.restore();
   }
 
   function roundRect(ctx, x, y, w, h, r) {
@@ -303,6 +423,9 @@
   const BIG_BLIND   = 20;
   const G = {
     playerChips: 1000, cpuChips: 1000,
+    // Display tweens — chasean al valor real con un k suave; en postBet snapeamos para que apostar
+    // se sienta inmediato y el tween sólo aparezca cuando el pot se vuelca al ganador.
+    displayedPlayerChips: 1000, displayedCpuChips: 1000,
     button: Math.random() < 0.5 ? 'player' : 'cpu',
     phase: 'idle',                         // idle | preflop | flop | turn | river | hand_end
     deck: [], playerHole: [], cpuHole: [], community: [],
@@ -311,9 +434,15 @@
     currentPlayer: 'player',
     raiseAmount: 40,
     message: 'Click DEAL to start',
+    messageT: 0,                            // edad del mensaje en s — drive de la ease-out-back scale-in
     cpuPending: false, cpuTimer: 0,
     handEndTimer: 0,
+    allInActive: false, allInDelay: 0,      // staged auto-advance cuando alguien quedó all-in
+    playerHandName: '',                     // cached — bestHand() es 21 combos, costoso para tirar cada frame
+    winningCodes: null,                     // Set de códigos que ganan en showdown → halo dorado
   };
+
+  function setMsg(s) { G.message = s; G.messageT = 0; }
 
   function inBetting() {
     return G.phase === 'preflop' || G.phase === 'flop' || G.phase === 'turn' || G.phase === 'river';
@@ -324,12 +453,41 @@
       amount = Math.min(amount, G.playerChips);
       G.playerChips -= amount;
       G.playerBet += amount;
+      G.displayedPlayerChips = G.playerChips;                                      // snap on bet — el contador no "se atrasa" mientras apostás
     } else {
       amount = Math.min(amount, G.cpuChips);
       G.cpuChips -= amount;
       G.cpuBet += amount;
+      G.displayedCpuChips = G.cpuChips;
     }
     G.pot += amount;
+  }
+
+  // Si uno queda con 0 fichas y bets desiguales, devolvemos el exceso al de stack mayor (no hay con
+  // qué emparejar — sería pot fantasma) y marcamos ambos como acted para que el round se cierre y
+  // los streets restantes se vayan revelando solos. revealCpuCards() porque ya no se decide nada.
+  function resolveAllIn() {
+    if (G.playerChips > 0 && G.cpuChips > 0) return;
+    if (G.playerBet > G.cpuBet) {
+      const back = G.playerBet - G.cpuBet;
+      G.playerChips += back; G.playerBet -= back; G.pot -= back;
+      G.displayedPlayerChips = G.playerChips;
+    } else if (G.cpuBet > G.playerBet) {
+      const back = G.cpuBet - G.playerBet;
+      G.cpuChips += back; G.cpuBet -= back; G.pot -= back;
+      G.displayedCpuChips = G.cpuChips;
+    }
+    G.acted = new Set(['player', 'cpu']);
+    if (!G.allInActive) {
+      G.allInActive = true;
+      revealCpuCards();
+    }
+  }
+
+  function recomputePlayerHand() {
+    if (G.community.length === 0 || G.playerHole.length === 0) { G.playerHandName = ''; return; }
+    const score = bestHand(G.playerHole.concat(G.community));
+    G.playerHandName = HAND_NAMES[score[0]];
   }
 
   function dealHand() {
@@ -337,6 +495,8 @@
     if (G.playerChips <= 0 || G.cpuChips <= 0) {
       G.playerChips = 1000;
       G.cpuChips = 1000;
+      G.displayedPlayerChips = 1000;
+      G.displayedCpuChips = 1000;
     }
     clearCards();
     G.deck = [];
@@ -348,7 +508,11 @@
     G.playerHole = []; G.cpuHole = []; G.community = [];
     G.pot = 0; G.playerBet = 0; G.cpuBet = 0;
     G.lastRaiser = null; G.acted = new Set();
-    G.message = ''; G.cpuPending = false;
+    G.cpuPending = false;
+    G.allInActive = false; G.allInDelay = 0;
+    G.playerHandName = '';
+    G.winningCodes = null;
+    setMsg('');
 
     G.button = G.button === 'player' ? 'cpu' : 'player';
     const sbWho = G.button;
@@ -361,11 +525,9 @@
       G.playerHole.push(G.deck.pop());
       G.cpuHole.push(G.deck.pop());
     }
-    const { w } = cardSize();
-    const dx = w * 1.05;
     for (let i = 0; i < 2; i++) {
-      makeCard(G.playerHole[i], xp(0.5) + (i - 0.5) * dx, yp(0.76), false, 'player');
-      makeCard(G.cpuHole[i],    xp(0.5) + (i - 0.5) * dx, yp(0.20), true,  'cpu');
+      makeCard(G.playerHole[i], i, 'player', false);
+      makeCard(G.cpuHole[i],    i, 'cpu',    true);
     }
     G.phase = 'preflop';
   }
@@ -373,7 +535,7 @@
   function actFold() {
     if (!inBetting() || G.currentPlayer !== 'player') return;
     G.cpuChips += G.pot; G.pot = 0;
-    G.message = 'CPU wins (you folded)';
+    setMsg('CPU wins (you folded)');
     G.phase = 'hand_end';
     G.handEndTimer = 2.5;
   }
@@ -381,26 +543,61 @@
     if (!inBetting() || G.currentPlayer !== 'player') return;
     const diff = G.cpuBet - G.playerBet;
     if (diff > 0) postBet('player', diff);
+    resolveAllIn();
     G.acted.add('player');
     G.currentPlayer = 'cpu';
     checkRoundEnd();
   }
   function actRaise() {
     if (!inBetting() || G.currentPlayer !== 'player') return;
-    const callAmt = Math.max(0, G.cpuBet - G.playerBet);
-    const bump = Math.min(G.raiseAmount, Math.max(G.playerChips - callAmt, 0));
-    if (bump <= 0) return;
-    postBet('player', callAmt + bump);
+    if (G.allInActive || G.cpuChips === 0) return;                                 // contra un rival ya all-in no hay raise posible
+    const target = G.raiseAmount;
+    const need = target - G.playerBet;
+    if (need <= 0) return;
+    postBet('player', need);
+    // NO resolveAllIn — el oponente todavía tiene que call/fold ante la raise. resolveAllIn vive en
+    // las ramas de CALL únicamente; si lo llamábamos acá refundíamos chips antes de que el otro
+    // respondiera (bug que apareció durante el rediseño: un raise all-in se "auto-desinflaba").
     G.lastRaiser = 'player';
     G.acted = new Set(['player']);
     G.currentPlayer = 'cpu';
   }
-  function decRaise() { G.raiseAmount = Math.max(BIG_BLIND, G.raiseAmount - BIG_BLIND); }
-  function incRaise() { G.raiseAmount = Math.min(Math.max(G.playerChips, BIG_BLIND), G.raiseAmount + BIG_BLIND); }
+  // ALL IN: tira TODO el stack del player. Se rutea como raise o como call según alcance.
+  function actAllIn() {
+    if (!inBetting() || G.currentPlayer !== 'player' || G.allInActive || G.playerChips <= 0) return;
+    // Rival ya all-in → ALL IN colapsa a un call normal (no hay nada que igualar más allá del bet).
+    if (G.cpuChips === 0) { actCall(); return; }
+    postBet('player', G.playerChips);                                              // postBet ya clampea al stack
+    if (G.playerBet > G.cpuBet) {
+      // All-in raise: oponente todavía tiene que responder.
+      G.lastRaiser = 'player';
+      G.acted = new Set(['player']);
+      G.currentPlayer = 'cpu';
+    } else {
+      // All-in call (no alcanzó para cubrir el call entero): cierra el round.
+      resolveAllIn();
+      G.acted.add('player');
+      G.currentPlayer = 'cpu';
+      checkRoundEnd();
+    }
+  }
+  // Clamp del monto de raise al rango legal. Semántica RAISE-TO (absoluta): raiseAmount = total al
+  // que llevás tu apuesta, no un increment. Antes era raise-BY: el cartel decía $40 pero apostabas
+  // call + 40 = $80 efectivos. Ahora "$40" = lo que vas a tener en tu side del pot.
+  function clampRaiseAmount() {
+    const minR = Math.max(G.cpuBet + BIG_BLIND, BIG_BLIND);                        // min raise = bet actual + big blind
+    const maxR = G.playerBet + G.playerChips;                                      // tope = todo lo que podés llegar a poner
+    G.raiseAmount = Math.max(minR, Math.min(maxR, G.raiseAmount));
+  }
+  function decRaise() { G.raiseAmount -= BIG_BLIND; clampRaiseAmount(); }
+  function incRaise() { G.raiseAmount += BIG_BLIND; clampRaiseAmount(); }
 
-  function cpuAct() {
-    if (!inBetting() || G.currentPlayer !== 'cpu') return;
-    const callAmt = Math.max(0, G.playerBet - G.cpuBet);
+  // Baseline por categoría (índice = score[0]). Spread más amplio que el viejo score[0]/9: ahora
+  // un par no se hunde por debajo del fold-threshold ante una bet normal, y las categorías altas
+  // dejan margen para que el bluff/value-raise sea distinguible del ruido.
+  const POSTFLOP_BASE = [0, 0.16, 0.40, 0.56, 0.68, 0.76, 0.83, 0.90, 0.96, 0.99];
+
+  function evalCpuStrength() {
     let strength;
     if (G.phase === 'preflop') {
       const r1 = G.cpuHole[0][0], r2 = G.cpuHole[1][0];
@@ -413,32 +610,103 @@
       if (suited) strength += 0.05;
       if ((high - low) >= 1 && (high - low) <= 4) strength += 0.04;
     } else {
-      const score = bestHand(G.cpuHole.concat(G.community));
-      strength = score[0] / 9.0;
-      if (score.length > 1) strength += (score[1] / 12.0) * 0.04;
+      const all7 = G.cpuHole.concat(G.community);
+      const score = bestHand(all7);
+      strength = POSTFLOP_BASE[score[0]] || 0;
+      // Kicker importa de verdad ahora: el +0.04*top/12 viejo se perdía en el ruido.
+      if (score[0] === 1 || score[0] === 2) strength += (score[1] / 12) * 0.10;
+
+      // Draw bonuses — sólo si todavía hay cartas por venir y el made-hand es flojo.
+      if (score[0] <= 2 && G.community.length < 5) {
+        const ranks = all7.map(c => RANKS.indexOf(c[0]));
+        const suits = all7.map(c => c[1]);
+        const suitCount = {};
+        for (const s of suits) suitCount[s] = (suitCount[s] || 0) + 1;
+        const flushDraw = Object.values(suitCount).some(n => n === 4);
+        const uniq = [...new Set(ranks)].sort((a, b) => a - b);
+        let oesd = false, gutshot = false;
+        // Ventana deslizante de 5: si tengo 4 cartas dentro y el faltante es interior → gutshot;
+        // si los extremos están y falta uno interior, sigue gutshot; si tengo 4 consecutivos
+        // tocando un extremo → OESD.
+        for (let lo = 0; lo <= 8; lo++) {
+          const win = uniq.filter(rk => rk >= lo && rk <= lo + 4);
+          if (win.length === 4) {
+            if (win[0] === lo && win[3] === lo + 4) gutshot = true;                // un hueco interior
+            else oesd = true;                                                       // extremo abierto
+          }
+        }
+        // Rueda: A cuenta como 0 también.
+        if (uniq.includes(12)) {
+          const lowSet = uniq.filter(rk => rk <= 3);
+          if (lowSet.length === 3) gutshot = true;
+        }
+        if (flushDraw)    strength += G.community.length === 3 ? 0.18 : 0.10;
+        if (oesd)         strength += G.community.length === 3 ? 0.14 : 0.08;
+        else if (gutshot) strength += G.community.length === 3 ? 0.06 : 0.03;
+        // Dos overcards en el flop (ej: AK en un board 9-7-3) → siguen vivos.
+        if (score[0] === 1 && G.community.length === 3) {
+          const boardMax = Math.max(...G.community.map(c => RANKS.indexOf(c[0])));
+          const overs = G.cpuHole.filter(c => RANKS.indexOf(c[0]) > boardMax).length;
+          if (overs === 2) strength += 0.05;
+        }
+      }
     }
-    strength += rnd(-0.12, 0.10);
+    // Posición: heads-up el button es OOP preflop e IP postflop (acta último). +0.06 cuando IP.
+    const cpuIsButton = G.button === 'cpu';
+    const inPosition = (G.phase === 'preflop') ? !cpuIsButton : cpuIsButton;
+    if (inPosition) strength += 0.06;
+    // Ruido reducido (-0.06/+0.06) — antes (-0.12/+0.10) sepultaba el signal.
+    strength += rnd(-0.06, 0.06);
+    return strength;
+  }
+
+  function cpuAct() {
+    if (!inBetting() || G.currentPlayer !== 'cpu') return;
+    const rawCallAmt = Math.max(0, G.playerBet - G.cpuBet);
+    const callAmt = Math.min(rawCallAmt, G.cpuChips);                              // no podés deber más que tu stack
+    const strength = evalCpuStrength();
     const potOdds = callAmt / Math.max(G.pot + callAmt, 1);
 
-    if (callAmt > 0 && strength < 0.20 + potOdds * 0.3) {
+    if (callAmt > 0 && strength < 0.18 + potOdds * 0.3) {
       G.playerChips += G.pot; G.pot = 0;
-      G.message = 'You win (CPU folded)';
+      setMsg('You win (CPU folded)');
       G.phase = 'hand_end';
       G.handEndTimer = 2.5;
       return;
     }
-    const canRaise = G.cpuChips > callAmt + BIG_BLIND;
-    const willRaise = canRaise && strength > 0.62 && (G.lastRaiser !== 'cpu' || Math.random() < 0.25);
-    if (willRaise) {
-      const mult = [1,1,2,2,3][Math.floor(Math.random() * 5)];
-      const bump = Math.min(BIG_BLIND * mult, G.cpuChips - callAmt);
+
+    // Raise: '>=' permite el min-raise exacto en el borde stack=callAmt+BB. Y NO se puede raisear
+    // contra un rival ya all-in — no hay chips del otro lado para igualar la subida.
+    const canRaise = G.cpuChips >= callAmt + BIG_BLIND && G.playerChips > 0;
+    // Value raise: mano fuerte; si ya fui el último raiser, reroll a 0.50 (era 0.25, demasiado pasivo).
+    const wantValueRaise = canRaise && strength > 0.55 && (G.lastRaiser !== 'cpu' || Math.random() < 0.5);
+    // Bluff raise: ventana fina, frecuencia escalada por street (más blefeo en flop, menos en river).
+    // Sólo si NO acabo de raisear, así no me convierto en un re-raise machine.
+    const bluffP = G.phase === 'preflop' ? 0.06 : G.phase === 'flop' ? 0.18 : G.phase === 'turn' ? 0.12 : 0.08;
+    const wantBluffRaise = canRaise && !wantValueRaise && strength > 0.15 && G.lastRaiser !== 'cpu' && Math.random() < bluffP;
+
+    if (wantValueRaise || wantBluffRaise) {
+      // Sizing: preflop BB-multiples (como antes); postflop fracción de pot — realista y reactivo.
+      let bump;
+      if (G.phase === 'preflop') {
+        const mult = [1,1,2,2,3][Math.floor(Math.random() * 5)];
+        bump = BIG_BLIND * mult;
+      } else {
+        const frac = [0.4, 0.5, 0.66, 0.75, 1.0][Math.floor(Math.random() * 5)];
+        bump = Math.max(BIG_BLIND, Math.round((G.pot + callAmt) * frac));
+      }
+      bump = Math.min(bump, G.cpuChips - callAmt);
       postBet('cpu', callAmt + bump);
+      // NO resolveAllIn — el player todavía tiene que call/fold. Si lo llamáramos acá, una raise
+      // all-in del CPU se auto-desinflaría antes de que el player respondiera.
       G.lastRaiser = 'cpu';
       G.acted = new Set(['cpu']);
       G.currentPlayer = 'player';
       return;
     }
+
     if (callAmt > 0) postBet('cpu', callAmt);
+    resolveAllIn();
     G.acted.add('cpu');
     G.currentPlayer = 'player';
     checkRoundEnd();
@@ -457,52 +725,60 @@
     G.currentPlayer = nonButton;
     G.cpuPending = false;
 
-    const { w } = cardSize();
-    const dx = w * 1.05;
     if (G.phase === 'preflop') {
       G.phase = 'flop';
       for (let i = 0; i < 3; i++) {
         const code = G.deck.pop();
         G.community.push(code);
-        makeCard(code, xp(0.5) + (i - 2) * dx, yp(0.46), false, 'community');
+        makeCard(code, i, 'community', false);
       }
+      recomputePlayerHand();
     } else if (G.phase === 'flop') {
       G.phase = 'turn';
       const code = G.deck.pop();
       G.community.push(code);
-      makeCard(code, xp(0.5) + (3 - 2) * dx, yp(0.46), false, 'community');
+      makeCard(code, 3, 'community', false);
+      recomputePlayerHand();
     } else if (G.phase === 'turn') {
       G.phase = 'river';
       const code = G.deck.pop();
       G.community.push(code);
-      makeCard(code, xp(0.5) + (4 - 2) * dx, yp(0.46), false, 'community');
+      makeCard(code, 4, 'community', false);
+      recomputePlayerHand();
     } else if (G.phase === 'river') {
       showdown();
+      return;
     }
+    // Si quedó alguien all-in, programamos el siguiente street para que se revele solo.
+    if (G.allInActive && inBetting()) G.allInDelay = 0.9;
   }
 
   function showdown() {
     revealCpuCards();
-    const pScore = bestHand(G.playerHole.concat(G.community));
-    const cScore = bestHand(G.cpuHole.concat(G.community));
-    const pName = HAND_NAMES[pScore[0]];
-    const cName = HAND_NAMES[cScore[0]];
-    const cmp = rankCmp(pScore, cScore);
+    const pBest = bestHandCombo(G.playerHole.concat(G.community));
+    const cBest = bestHandCombo(G.cpuHole.concat(G.community));
+    const pName = HAND_NAMES[pBest.rank[0]];
+    const cName = HAND_NAMES[cBest.rank[0]];
+    const cmp = rankCmp(pBest.rank, cBest.rank);
     if (cmp > 0) {
       G.playerChips += G.pot;
-      G.message = `You win! ${pName} beats ${cName}`;
+      setMsg(`You win! ${pName} beats ${cName}`);
+      G.winningCodes = new Set(pBest.combo);
     } else if (cmp < 0) {
       G.cpuChips += G.pot;
-      G.message = `CPU wins! ${cName} beats ${pName}`;
+      setMsg(`CPU wins! ${cName} beats ${pName}`);
+      G.winningCodes = new Set(cBest.combo);
     } else {
       const half = Math.floor(G.pot / 2);
       G.playerChips += half;
       G.cpuChips += G.pot - half;
-      G.message = `Split pot — both ${pName}`;
+      setMsg(`Split pot — both ${pName}`);
+      // Empate: highlighteamos la unión de las dos combos ganadoras (overlap es común sobre el board).
+      G.winningCodes = new Set([...pBest.combo, ...cBest.combo]);
     }
     G.pot = 0;
     G.phase = 'hand_end';
-    G.handEndTimer = 4;
+    G.handEndTimer = 4.5;                                                          // un poco más largo: hay highlight para mirar
   }
 
   // ── UI WIRING ──
@@ -512,6 +788,7 @@
   const btnMinus = $('btnMinus');
   const btnPlus  = $('btnPlus');
   const btnRaise = $('btnRaise');
+  const btnAllIn = $('btnAllIn');
   const btnDeal  = $('btnDeal');
   const raiseAmtEl = $('raiseAmt');
 
@@ -528,37 +805,88 @@
   tap(btnMinus, decRaise);
   tap(btnPlus,  incRaise);
   tap(btnRaise, actRaise);
+  tap(btnAllIn, actAllIn);
   tap(btnDeal,  dealHand);
 
   function refreshButtons() {
-    const myTurn = inBetting() && G.currentPlayer === 'player';
+    // Después de un all-in no hay decisión: ambos bets están commit y los streets se revelan solos.
+    const myTurn = inBetting() && G.currentPlayer === 'player' && !G.allInActive;
     const callAmt = Math.max(0, G.cpuBet - G.playerBet);
+    const cpuAllIn = G.cpuChips === 0;
+    clampRaiseAmount();                                                            // re-clamp por si el contexto de bet cambió desde el último in/decRaise
+    // RAISE requiere: turno, rival NO all-in, y stack suficiente para llegar a min-raise.
+    const minRaiseTotal = Math.max(G.cpuBet + BIG_BLIND, BIG_BLIND);
+    const canMinRaise = (G.playerBet + G.playerChips) >= minRaiseTotal;
     btnDeal.disabled  = G.phase !== 'idle' && G.phase !== 'hand_end';
     btnFold.disabled  = !myTurn;
     btnCall.disabled  = !myTurn;
-    btnRaise.disabled = !myTurn || G.playerChips <= callAmt;
-    btnMinus.disabled = !myTurn;
-    btnPlus.disabled  = !myTurn;
+    btnRaise.disabled = !myTurn || cpuAllIn || !canMinRaise;
+    btnMinus.disabled = !myTurn || cpuAllIn || !canMinRaise;
+    btnPlus.disabled  = !myTurn || cpuAllIn || !canMinRaise;
+    btnAllIn.disabled = !myTurn || G.playerChips <= 0;
     btnCall.textContent  = callAmt === 0 ? 'CHECK' : `CALL $${callAmt}`;
     btnRaise.textContent = 'RAISE';
-    raiseAmtEl.textContent = '$' + G.raiseAmount;
+    btnAllIn.textContent = `ALL IN $${G.playerChips}`;
+    // El '→' delante del amount comunica que el número es el TOTAL al que llevás la apuesta
+    // (raise-to), no un incremento (raise-by). Antes el cartel "$40" se leía como "+$40"
+    // y la chip count bajaba el doble cuando había callAmt.
+    raiseAmtEl.textContent = '→ $' + G.raiseAmount;
   }
 
-  // ── DRAW LOOP ──
+  // ── DRAW: tabla con felt gradient + wooden rail (cacheado offscreen) ──
+  function buildFeltCache() {
+    const off = document.createElement('canvas');
+    off.width = Math.floor(W * dpr);
+    off.height = Math.floor(H * dpr);
+    const o = off.getContext('2d');
+    o.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    o.translate(W/2, H/2 - H*0.015);
+    const rx = W * 0.47;
+    const ry = H * 0.43;
+    const railW = sp(0.018);
+
+    // Rail de madera: anillo entre dos elipses, evenodd con gradiente vertical.
+    const woodGrad = o.createLinearGradient(0, -ry - railW, 0, ry + railW);
+    woodGrad.addColorStop(0,   '#6b3a17');
+    woodGrad.addColorStop(0.5, '#3a1c08');
+    woodGrad.addColorStop(1,   '#6b3a17');
+    o.fillStyle = woodGrad;
+    o.beginPath();
+    o.ellipse(0, 0, rx + railW, ry + railW, 0, 0, TAU);
+    o.ellipse(0, 0, rx, ry, 0, 0, TAU);
+    o.fill('evenodd');
+    // Highlight tenue arriba del rail.
+    o.strokeStyle = 'rgba(255,210,150,0.20)';
+    o.lineWidth = Math.max(1, sp(0.0022));
+    o.beginPath();
+    o.ellipse(0, -ry*0.02, rx + railW*0.55, ry + railW*0.55, 0, Math.PI*1.1, Math.PI*1.9);
+    o.stroke();
+    // Doble línea oscura en el borde interno (separa rail del felt).
+    o.strokeStyle = 'rgba(0,0,0,0.55)';
+    o.lineWidth = 1.5;
+    o.beginPath(); o.ellipse(0, 0, rx, ry, 0, 0, TAU); o.stroke();
+
+    // Felt: radial gradient cálido en el centro, hundido en el borde — efecto vignette interno.
+    const felt = o.createRadialGradient(0, -ry*0.15, 0, 0, 0, Math.max(rx, ry));
+    felt.addColorStop(0,    '#1d7a35');
+    felt.addColorStop(0.55, '#0f5520');
+    felt.addColorStop(1,    '#062b10');
+    o.fillStyle = felt;
+    o.beginPath(); o.ellipse(0, 0, rx, ry, 0, 0, TAU); o.fill();
+
+    // Ring de "puntada" decorativo.
+    o.strokeStyle = 'rgba(255,255,255,0.06)';
+    o.lineWidth = 1.5;
+    o.setLineDash([3, 4]);
+    o.beginPath(); o.ellipse(0, 0, rx - sp(0.030), ry - sp(0.030), 0, 0, TAU); o.stroke();
+    o.setLineDash([]);
+
+    return off;
+  }
   function drawTable() {
-    ctx.save();
-    ctx.translate(W/2, H/2 - H*0.02);
-    const rx = W * 0.46;
-    const ry = H * 0.42;
-    ctx.fillStyle = '#0f5520';
-    ctx.beginPath(); ctx.ellipse(0, 0, rx, ry, 0, 0, TAU); ctx.fill();
-    ctx.strokeStyle = '#5a3614';
-    ctx.lineWidth = sp(0.012);
-    ctx.stroke();
-    ctx.strokeStyle = '#0a3818';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.ellipse(0, 0, rx - sp(0.025), ry - sp(0.025), 0, 0, TAU); ctx.stroke();
-    ctx.restore();
+    if (!feltCache) feltCache = buildFeltCache();
+    ctx.drawImage(feltCache, 0, 0, W, H);
   }
 
   function txt(size, content, align, color, x, y, baseline) {
@@ -576,35 +904,189 @@
     ctx.fillText(content, x, y);
   }
 
-  function drawHud() {
-    txtBold(sp(0.022), `CPU  $${G.cpuChips}`, 'center', '#f0e8d0', xp(0.5), yp(0.07));
-    txtBold(sp(0.022), `YOU  $${G.playerChips}`, 'center', '#f0e8d0', xp(0.5), yp(0.88));
-    if (G.pot > 0) txtBold(sp(0.028), `POT  $${G.pot}`, 'center', '#ffd86b', xp(0.5), yp(0.355));
-    if (G.cpuBet > 0)    txt(sp(0.018), `$${G.cpuBet}`,    'center', '#fff', xp(0.5), yp(0.30));
-    if (G.playerBet > 0) txt(sp(0.018), `$${G.playerBet}`, 'center', '#fff', xp(0.5), yp(0.65));
+  // ── CHIP STACKS ──
+  // Pickeo de color por denominación (igual que un casino real: blancos, azules, rojos, negros).
+  function chipColor(value) {
+    if (value >= 500) return ['#1f1f1f', '#3a3a3a', 'rgba(255,255,255,0.50)'];
+    if (value >= 100) return ['#a32626', '#d83a3a', 'rgba(255,200,200,0.55)'];
+    if (value >= 25)  return ['#1c5fb0', '#3a8be3', 'rgba(180,210,255,0.55)'];
+    return ['#dadada', '#ffffff', 'rgba(120,120,120,0.45)'];
+  }
+  function drawChipDisk(cx, cy, r, fill, hi, rim) {
+    // Sombra/lateral (elipse "rim" debajo) — da volumen.
+    ctx.fillStyle = '#0b0b0b';
+    ctx.beginPath(); ctx.ellipse(cx, cy + r*0.20, r, r*0.32, 0, 0, TAU); ctx.fill();
+    // Tapa principal.
+    ctx.fillStyle = fill;
+    ctx.beginPath(); ctx.ellipse(cx, cy, r, r*0.32, 0, 0, TAU); ctx.fill();
+    // Highlight tenue (banda superior).
+    ctx.fillStyle = hi;
+    ctx.beginPath(); ctx.ellipse(cx, cy - r*0.04, r*0.62, r*0.18, 0, 0, TAU); ctx.fill();
+    // Marcas radiales (4) — chinchecitas blancas.
+    ctx.strokeStyle = rim;
+    ctx.lineWidth = Math.max(1.2, r*0.06);
+    for (let i = 0; i < 4; i++) {
+      const a = i * Math.PI / 2;
+      const x1 = cx + Math.cos(a) * r * 0.74;
+      const y1 = cy + Math.sin(a) * r * 0.32 * 0.74;
+      const x2 = cx + Math.cos(a) * r * 0.96;
+      const y2 = cy + Math.sin(a) * r * 0.32 * 0.96;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    }
+    // Borde exterior.
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.ellipse(cx, cy, r, r*0.32, 0, 0, TAU); ctx.stroke();
+  }
+  function drawChipStack(cx, cy, amount, baseR) {
+    if (amount <= 0) return;
+    // Mezcla de hasta 2 denominaciones para que la pila SE LEA como cantidad — no es cambio exacto.
+    const denoms = amount >= 500 ? [500, 25]
+                 : amount >= 100 ? [100, 25]
+                 : amount >= 25  ? [25, 5]
+                 : [5, 1];
+    let remain = amount;
+    const stack = [];
+    for (const d of denoms) {
+      const n = Math.min(5, Math.floor(remain / d));
+      for (let i = 0; i < n; i++) stack.push(d);
+      remain -= n * d;
+      if (stack.length >= 6) break;
+    }
+    if (!stack.length) stack.push(amount);                                         // mini-stack para amounts < 1 (no debería pasar pero por las dudas)
+    const dyStack = baseR * 0.22;
+    for (let i = 0; i < stack.length; i++) {
+      const [fill, hi, rim] = chipColor(stack[i]);
+      drawChipDisk(cx, cy - i * dyStack, baseR, fill, hi, rim);
+    }
+  }
 
-    // dealer button
-    const dy = G.button === 'player' ? yp(0.72) : yp(0.22);
-    ctx.fillStyle = '#f0e8b4';
-    ctx.beginPath(); ctx.arc(xp(0.34), dy, sp(0.013), 0, TAU); ctx.fill();
-    ctx.fillStyle = '#1a1408';
-    ctx.font = `bold ${Math.round(sp(0.016))}px 'Segoe UI', system-ui, sans-serif`;
+  // ── DEALER BUTTON: moneda dorada con notches en el rim, sombra y letra D serif ──
+  function drawDealerChip() {
+    const dy = G.button === 'player' ? yp(0.68) : yp(0.26);
+    const dx = xp(0.34);
+    const r = sp(0.020);
+    // Sombra
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.ellipse(dx + r*0.12, dy + r*0.45, r*0.95, r*0.32, 0, 0, TAU); ctx.fill();
+    // Cuerpo: radial gradient con highlight arriba-izquierda → tono dorado real.
+    const rim = ctx.createRadialGradient(dx - r*0.35, dy - r*0.35, 0, dx, dy, r);
+    rim.addColorStop(0,   '#fff4c8');
+    rim.addColorStop(0.7, '#e8d480');
+    rim.addColorStop(1,   '#8a7530');
+    ctx.fillStyle = rim;
+    ctx.beginPath(); ctx.arc(dx, dy, r, 0, TAU); ctx.fill();
+    // Notches blancas alrededor del rim.
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+    ctx.lineWidth = Math.max(1.5, r*0.10);
+    for (let i = 0; i < 8; i++) {
+      const a = i * Math.PI / 4;
+      const x1 = dx + Math.cos(a) * r * 0.78;
+      const y1 = dy + Math.sin(a) * r * 0.78;
+      const x2 = dx + Math.cos(a) * r * 0.96;
+      const y2 = dy + Math.sin(a) * r * 0.96;
+      ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    }
+    // Disco interior crema + outline marrón.
+    ctx.fillStyle = '#f5ebc2';
+    ctx.beginPath(); ctx.arc(dx, dy, r * 0.66, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(60,40,8,0.6)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(dx, dy, r * 0.66, 0, TAU); ctx.stroke();
+    // Letra D bien serif tipo casino.
+    ctx.fillStyle = '#3a2a08';
+    ctx.font = `bold ${Math.round(r*0.88)}px ${CARD_FONT}`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('D', xp(0.34), dy);
+    ctx.fillText('D', dx, dy + sp(0.001));
+  }
 
-    if (G.message)
-      txtBold(sp(0.024), G.message, 'center', '#ffe896', xp(0.5), yp(0.555));
+  // ── ACTIVE-PLAYER INDICATOR: anillo de halo ovalado alrededor de la fila de cartas ──
+  function drawActiveIndicator() {
+    const isPlayer = G.currentPlayer === 'player';
+    const y = isPlayer ? yp(0.78) : yp(0.18);
+    const { w, h } = cardSize();
+    const ringW = w * 2.6;
+    const ringH = h * 1.55;
+    const base = isPlayer ? [120, 255, 130] : [255, 110, 110];
+    ctx.save();
+    for (let i = 0; i < 3; i++) {
+      const u = i / 2;
+      ctx.strokeStyle = `rgba(${base[0]},${base[1]},${base[2]},${0.42 - u*0.32})`;
+      ctx.lineWidth = Math.max(2, sp(0.005) - i);
+      ctx.beginPath();
+      ctx.ellipse(xp(0.5), y, ringW/2 + i*sp(0.004), ringH/2 + i*sp(0.004), 0, 0, TAU);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
 
-    if (G.community.length && inBetting()) {
-      const score = bestHand(G.playerHole.concat(G.community));
-      txt(sp(0.018), 'Your hand: ' + HAND_NAMES[score[0]], 'center', '#bcffbc', xp(0.5), yp(0.83));
+  function drawHud() {
+    // Chip totals con tween display.
+    txtBold(sp(0.022), `CPU  $${Math.round(G.displayedCpuChips)}`,    'center', '#f0e8d0', xp(0.5), yp(0.06));
+    txtBold(sp(0.022), `YOU  $${Math.round(G.displayedPlayerChips)}`, 'center', '#f0e8d0', xp(0.5), yp(0.94));
+
+    // Pot al centro (con stack visualization a un costado).
+    if (G.pot > 0) {
+      txtBold(sp(0.026), `POT  $${G.pot}`, 'center', '#ffd86b', xp(0.5), yp(0.355));
+      drawChipStack(xp(0.40), yp(0.37), G.pot, sp(0.014));
+      drawChipStack(xp(0.60), yp(0.37), G.pot, sp(0.014));
+    }
+    // Bets individuales con chip al lado.
+    if (G.cpuBet > 0) {
+      txt(sp(0.017), `$${G.cpuBet}`, 'right', '#fff', xp(0.49), yp(0.30));
+      drawChipStack(xp(0.535), yp(0.30) + sp(0.005), G.cpuBet, sp(0.011));
+    }
+    if (G.playerBet > 0) {
+      txt(sp(0.017), `$${G.playerBet}`, 'right', '#fff', xp(0.49), yp(0.66));
+      drawChipStack(xp(0.535), yp(0.66) + sp(0.005), G.playerBet, sp(0.011));
     }
 
-    if (inBetting()) {
-      const y = G.currentPlayer === 'player' ? yp(0.76) : yp(0.20);
-      ctx.fillStyle = G.currentPlayer === 'player' ? '#50ff50' : '#ff5050';
-      ctx.beginPath(); ctx.arc(xp(0.66), y, sp(0.009), 0, TAU); ctx.fill();
+    // Dealer button (moneda 3D).
+    drawDealerChip();
+
+    // Active-player glow ring alrededor de la fila de cartas activa.
+    if (inBetting()) drawActiveIndicator();
+
+    // Hand indicator: ABAJO-IZQUIERDA, fuera del área de cartas. Bien lejos del centro, así que
+    // queda en drawHud (antes de cartas) sin riesgo de overlap.
+    if (G.playerHandName && (inBetting() || G.phase === 'hand_end')) {
+      txt(sp(0.016), 'Hand: ' + G.playerHandName, 'left', '#bcffbc', xp(0.025), yp(0.975));
     }
+  }
+
+  // Mensaje del centro — separado de drawHud y llamado DESPUÉS de las cartas en el main loop, así
+  // queda por encima de las community cards en lugar de tapado por ellas. Caja semi-transparente
+  // detrás del texto para que se lea aunque caiga sobre el palo del medio.
+  function drawMessage() {
+    if (!G.message) return;
+    const age = G.messageT;
+    let scale = 1;
+    if (age < 0.35) {
+      const t = age / 0.35;
+      const c1 = 1.70158, c3 = c1 + 1;
+      const e = 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+      scale = 0.85 + 0.15 * e;
+    }
+    const fontSize = sp(0.025);
+    ctx.save();
+    ctx.translate(xp(0.5), yp(0.555));
+    ctx.scale(scale, scale);
+    ctx.font = `bold ${Math.round(fontSize)}px 'Segoe UI', system-ui, sans-serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    // Medir + caja oscura con bordes redondeados, para no leer texto encima de un palo.
+    const m = ctx.measureText(G.message);
+    const padX = sp(0.018), padY = sp(0.010);
+    const boxW = m.width + padX * 2;
+    const boxH = fontSize * 1.2 + padY * 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.72)';
+    roundRect(ctx, -boxW/2, -boxH/2, boxW, boxH, sp(0.008));
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,210,90,0.55)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = '#ffe896';
+    ctx.fillText(G.message, 0, 0);
+    ctx.restore();
   }
 
   // ── MAIN LOOP ──
@@ -614,8 +1096,9 @@
     const dt = Math.min(0.05, (now - lastT) / 1000);
     lastT = now;
 
-    // CPU "turn" pacing — set a delay first time it becomes their turn, then act when it elapses.
-    if (inBetting() && G.currentPlayer === 'cpu') {
+    // CPU "turn" pacing — delay primera vez que toca, después actúa.
+    // NOTA: el all-in auto-advance fuerza a CPU también; el guard `inBetting()` evita doble disparo.
+    if (inBetting() && G.currentPlayer === 'cpu' && !G.allInActive) {
       if (!G.cpuPending) { G.cpuPending = true; G.cpuTimer = 0.9; }
       else {
         G.cpuTimer -= dt;
@@ -624,21 +1107,44 @@
     } else {
       G.cpuPending = false;
     }
+
+    // Hand-end: timer + broke detection. Sólo overrideamos el mensaje del showdown DESPUÉS del
+    // timer — si lo hiciéramos en el mismo frame que el showdown se comería "You win!".
     if (G.phase === 'hand_end') {
       G.handEndTimer -= dt;
       if (G.handEndTimer <= 0) {
         G.phase = 'idle';
-        if (G.playerChips <= 0)      G.message = 'You went broke — DEAL to rebuy';
-        else if (G.cpuChips <= 0)    G.message = 'CPU went broke — DEAL to rebuy';
+        if (G.playerChips <= 0)      setMsg('You went broke — DEAL to rebuy');
+        else if (G.cpuChips <= 0)    setMsg('CPU went broke — DEAL to rebuy');
       }
     }
 
+    // All-in auto-advance: bets ya están commit, sólo abrimos streets con un delay para que se vea.
+    if (G.allInActive && inBetting()) {
+      G.allInDelay -= dt;
+      if (G.allInDelay <= 0) {
+        G.allInDelay = 0.9;
+        advancePhase();
+      }
+    }
+
+    // Display tween de chips — chasea hacia el real con k ≈ 1 - e^{-5dt} (~1 s para converger).
+    // En postBet snapeamos, así que esto sólo aparece cuando el pot se vuelca al ganador.
+    const k = 1 - Math.exp(-dt * 5);
+    G.displayedPlayerChips += (G.playerChips - G.displayedPlayerChips) * k;
+    G.displayedCpuChips    += (G.cpuChips    - G.displayedCpuChips)    * k;
+
+    G.messageT += dt;
     tickCards(dt);
 
     ctx.clearRect(0, 0, W, H);
     drawTable();
+    // Orden de capas: felt → bets/pot/dealer/glow (HUD) → cartas (con highlight encima) → mensaje
+    // del centro al final, ASÍ no queda tapado por la fila de community cards (era el bug del
+    // screenshot — el "You win!" caía justo sobre el borde inferior de las cartas).
     drawHud();
     for (const c of cards) drawCard(c);
+    drawMessage();
 
     refreshButtons();
     requestAnimationFrame(loop);

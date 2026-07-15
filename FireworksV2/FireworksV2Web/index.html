@@ -67,6 +67,10 @@
   #ui button.txt { font-weight: 700; font-size: 17px; letter-spacing: 0.02em; }
   /* visual indicator for toggled-on state */
   #ui button.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); }
+  /* Botón de sonido: alterna ícono parlante ↔ silenciado vía la clase .muted. */
+  #btnMute .ic-off { display: none; }
+  #btnMute.muted .ic-on { display: none; }
+  #btnMute.muted .ic-off { display: block; }
   /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
 </style>
 </head>
@@ -88,6 +92,9 @@
       </button>
       <button id="btnBlowAll" aria-label="reventar todo" title="Reventar todos los que estén volando">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="8.5" cy="9" r="1.7" fill="currentColor" stroke="none"/><path d="M8.5 4.5v2M8.5 11.5v2M4 9h2M11 9h2M6 6.5l1.3 1.3M9.7 10.2L11 11.5M11 6.5L9.7 7.8M7.3 10.2L6 11.5"/><circle cx="16.5" cy="15.5" r="1.3" fill="currentColor" stroke="none"/><path d="M16.5 12v1.6M16.5 17.4V19M13 15.5h1.6M18.4 15.5H20"/></svg>
+      </button>
+      <button id="btnMute" aria-label="sonido" title="Silenciar / activar sonido">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9.5v5h3.2L12 18V6L7.2 9.5H4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 9a4 4 0 0 1 0 6"/><path d="M18 6.5a7.5 7.5 0 0 1 0 11"/></g><g class="ic-off"><path d="M16 9.5l4.5 5M20.5 9.5l-4.5 5"/></g></svg>
       </button>
     </div>
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
@@ -301,6 +308,7 @@
       fw.vx = (tx - x) / T;
       fw.vy = (ty - y) / T - 0.5 * fw.g * T;                                      // muy negativa → dispara fuerte hacia arriba
     }
+    playVoice('launch');                                                          // "whoomph" de encendido al lanzar (el cooldown lo limita en salvos/×5)
     fireworks.push(fw);
     return fw;
   }
@@ -519,6 +527,8 @@
     e.parts = P;
   }
 
+  // Patrones que, además del boom, "sacan más luces" (chispas secundarias) → les sumo el sample sparks.mp3.
+  const SPARKLE_PATTERNS = ['glitter', 'double', 'chrysanthemum'];
   function spawnExplosion(x, y, radius, isChild, color, forcePattern) {
     if (!color) color = pickColor();
     const sizeMul = (Math.random() < EXP_BIG_CHANCE)
@@ -534,6 +544,10 @@
       grav: 0.25, headSize: 1,
     };
     makeParticles(e);
+    if (!isChild) {                                                               // sólo el estallido principal suena (los hijos serían spam)
+      playVoice('explosion', Math.min(1.3, 0.7 + sizeMul * 0.35), 1 / Math.sqrt(Math.max(0.6, sizeMul)));  // boom: más grave y fuerte cuanto más grande
+      if (SPARKLE_PATTERNS.includes(e.pattern)) playVoice('sparks');              // crackle extra para las que sacan más luces (glitter/double/chrysanthemum)
+    }
     explosions.push(e);
     return e;
   }
@@ -638,6 +652,7 @@
   function evtPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
 
   canvas.addEventListener('pointerdown', e => {
+    audioResume();                                                                 // desbloquea el audio en el primer gesto (autoplay policy)
     canvas.setPointerCapture(e.pointerId);
     const p = evtPos(e);
     pointers.set(e.pointerId, { x: p.x, y: p.y, cd: 0 });                          // cd=0 → primer cohete al toque sale ya
@@ -653,7 +668,7 @@
   canvas.addEventListener('contextmenu', e => e.preventDefault());
 
   // botones — tap dispara en pointerdown (responde aunque haya un dedo ocupado en el canvas)
-  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
+  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); audioResume(); fn(); }); }
   function toggle(el, get, set) {
     tappable(el, () => { set(!get()); el.classList.toggle('on', get()); });
   }
@@ -664,7 +679,7 @@
 
   // Reventar de a uno: se mantiene apretado y sigue reventando con cooldown.
   const btnBlowOne = document.getElementById('btnBlowOne');
-  btnBlowOne.addEventListener('pointerdown', e => { e.preventDefault(); blowOneHeld = true; blowOne(); btnBlowOne.classList.add('on'); });
+  btnBlowOne.addEventListener('pointerdown', e => { e.preventDefault(); audioResume(); blowOneHeld = true; blowOne(); btnBlowOne.classList.add('on'); });
   const releaseBlowOne = () => { blowOneHeld = false; btnBlowOne.classList.remove('on'); };
   btnBlowOne.addEventListener('pointerup', releaseBlowOne);
   btnBlowOne.addEventListener('pointercancel', releaseBlowOne);
@@ -674,7 +689,81 @@
 
   const btnInfo = document.getElementById('btnInfo');
   tappable(btnInfo, () => { showDebug = !showDebug; btnInfo.classList.toggle('on', showDebug); });
+  const btnMute = document.getElementById('btnMute');
+  tappable(btnMute, () => { setMuted(!muted); btnMute.classList.toggle('muted', muted); });  // ícono se actualiza solo
   // Fullscreen + lock de orientación + exit los maneja arcade-shell.js (al final del body).
+
+  // ════════════════ SONIDO ════════════════
+  // Misma idea que BallsWeb: Web Audio API con buffers cacheados que se cargan al PRIMER gesto del
+  // usuario (la política de autoplay bloquea el audio hasta entonces). Acá cada "voz" es un archivo
+  // único en sounds/ (sin variantes numeradas): launch.mp3 = encendido al lanzar, sparks.mp3 = chispas
+  // POST-explosión (las que sacan más luces), fw explosion.mp3 = estallido, background.mp3 = ambiente en
+  // loop. Cooldown por voz + tope por frame para no saturar.
+  let actx = null, masterGain = null, bgGain = null, bgNode = null;
+  let muted = false, samplesLoading = false, sndThisFrame = 0;
+  const SOUND_DIR = 'sounds/';
+  const SOUND_FILES = { launch: 'launch.mp3', sparks: 'sparks.mp3', explosion: 'fw explosion.mp3', background: 'background.mp3' };
+  const soundBuffers = {};                                                         // voz → AudioBuffer
+  const SND_MAX_PER_FRAME = 4;                                                     // tope de one-shots por frame (blowAll/salvos no saturan)
+  const PITCH_JITTER = 0.10;                                                       // ± variación de tono por disparo
+  const VOICE_COOLDOWN = { launch: 70, sparks: 60, explosion: 55 };                // ms mínimos entre disparos de cada voz
+  const VOICE_GAIN = { launch: 0.4, sparks: 0.35, explosion: 0.8 };                // volumen base por voz
+  const BG_GAIN = 0.3;                                                             // volumen del ambiente en loop
+  const lastVoiceT = {};
+
+  async function loadSamples() {
+    if (samplesLoading || !actx) return;
+    samplesLoading = true;
+    for (const [voice, file] of Object.entries(SOUND_FILES)) {
+      if (soundBuffers[voice]) continue;
+      try {
+        const r = await fetch(SOUND_DIR + encodeURIComponent(file));               // encodeURIComponent: 'fw explosion.mp3' tiene un espacio
+        if (!r.ok) continue;
+        soundBuffers[voice] = await actx.decodeAudioData(await r.arrayBuffer());
+      } catch (_) { /* archivo faltante: esa voz simplemente no suena */ }
+    }
+    startBackground();
+  }
+
+  function audioResume() {                                                         // llamar en el PRIMER gesto (pointerdown / tap de botón)
+    if (!actx) {
+      actx = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = actx.createGain(); masterGain.gain.value = muted ? 0 : 1; masterGain.connect(actx.destination);
+    }
+    if (actx.state === 'suspended') actx.resume();
+    loadSamples();
+    startBackground();
+  }
+
+  function startBackground() {                                                     // ambiente en loop (idempotente: no arranca dos veces)
+    if (!actx || bgNode || muted || !soundBuffers.background) return;
+    bgNode = actx.createBufferSource(); bgNode.buffer = soundBuffers.background; bgNode.loop = true;
+    bgGain = actx.createGain(); bgGain.gain.value = BG_GAIN;
+    bgNode.connect(bgGain); bgGain.connect(masterGain); bgNode.start();
+  }
+
+  function playVoice(voice, gainMul, pitch) {                                      // one-shot: lanzamiento / estallido
+    if (!actx || muted) return;
+    const buf = soundBuffers[voice];
+    if (!buf) return;
+    const now = performance.now();
+    if (now - (lastVoiceT[voice] || 0) < (VOICE_COOLDOWN[voice] || 0)) return;
+    if (sndThisFrame >= SND_MAX_PER_FRAME) return;
+    const g = actx.createGain();
+    g.gain.value = (VOICE_GAIN[voice] || 0.5) * (gainMul === undefined ? 1 : gainMul);
+    g.connect(masterGain);
+    const src = actx.createBufferSource(); src.buffer = buf;
+    src.playbackRate.value = (pitch || 1) * (1 + (Math.random() * 2 - 1) * PITCH_JITTER);
+    src.connect(g); src.start();
+    lastVoiceT[voice] = now; sndThisFrame++;
+  }
+
+  function setMuted(m) {
+    muted = m;
+    if (masterGain) masterGain.gain.value = muted ? 0 : 1;
+    if (muted) { if (bgNode) { try { bgNode.stop(); } catch (_) {} bgNode = null; } }  // corta el loop del todo
+    else startBackground();                                                        // al reactivar, reanuda el ambiente
+  }
 
   // ── LOOP ──
   let lastT = performance.now();
@@ -684,6 +773,7 @@
     const dt = Math.min(0.05, (now - lastT) / 1000);                              // dt real, clamp a 50ms
     lastT = now;
     dtSmoothed = dtSmoothed * 0.9 + dt * 0.1;
+    sndThisFrame = 0;                                                              // reset del tope de one-shots por frame
 
     blowCD = Math.max(blowCD - dt, 0);
     if (blowOneHeld) blowOne();                                                   // reventar de a uno mientras se mantiene apretado

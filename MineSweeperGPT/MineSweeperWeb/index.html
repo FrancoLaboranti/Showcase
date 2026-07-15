@@ -840,8 +840,8 @@
   const sndCoin   = (n) => { tone(880, 0.10, 'triangle', 0.14); tone(1320, 0.12, 'triangle', 0.12, null, 0.05); if (n > 2) tone(1760, 0.14, 'triangle', 0.10, null, 0.10); };  // moneda (arpegio si junté varias)
 
   // === INPUT (canvas) ===
-  const LONG_MS = 230;
-  const MOVE_TOL = () => tile * 0.6;
+  const LONG_MS = 150;                                                          // hold para bandera (mobile) — bien corto
+  const MOVE_TOL = () => Math.max(tile * 0.9, 22);                              // slop generoso (mín 22px): en celdas chicas un toque tembloroso no cancela el tap
   let pressId = null, pressTile = null, pressX = 0, pressY = 0, longFired = false, pressTimer = null;
 
   function tileAt(clientX, clientY) {
@@ -880,8 +880,7 @@
     if (e.pointerId !== pressId) return;
     clearTimeout(pressTimer); pressTimer = null; pressId = null;
     if (longFired) return;
-    const { gx, gy } = tileAt(e.clientX, e.clientY);
-    if (gx === pressTile.gx && gy === pressTile.gy) processClick(gx, gy, false);
+    processClick(pressTile.gx, pressTile.gy, false);                            // revela la celda donde apretaste (tolerante al jitter del dedo)
   }
   canvas.addEventListener('pointerup', endPress);
   canvas.addEventListener('pointercancel', e => { if (e.pointerId === pressId) { clearTimeout(pressTimer); pressId = null; } });

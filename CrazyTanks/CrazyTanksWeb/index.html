@@ -302,6 +302,7 @@ window.__uiTogglePause = () => { uiPauseReq = true; };                // puente 
 const TOURNEY_THEMES = [0, 1, 2, 3, 4, 5];                            // un bioma cada uno, EN ORDEN: parque · desierto · nieve · tecno · lava · parque-noche
 const TOURNEY_RACES = TOURNEY_THEMES.length;                          // 6
 const TABLE_STEP1 = 2.2;                                              // tabla del torneo: cuánto dura el PASO 1 (posición previa + "x + n") antes de pasar a los totales
+const BOUNTY_CAP = 3;                                                 // #9 torneo: tope de puntos-bounty por lugares ganados en la ÚLTIMA vuelta (additivo a pointsForRank)
 function themeOf(track) { return THEMES[track] !== undefined ? THEMES[track] : Math.floor(track / 2) % 6; }   // %6: ahora hay 6 temas (5 = parque de noche con lluvia)
 function worldW(track) { return (WORLDS[track] && WORLDS[track][0]) || SCREEN_X; }
 function worldH(track) { return (WORLDS[track] && WORLDS[track][1]) || SCREEN_Y; }
@@ -743,11 +744,24 @@ const AI_DIFF = [
 const MOVE_STEER_K = 2.8;                    // palanca única: qué tan fuerte gira hacia el rumbo apuntado
 const SPIN_TIME = 0.6;                        // duración del trompo al recibir un disparo (s) — penaliza menos tiempo
 const SPIN_RATE = 0.34;                       // velocidad del trompo (rad/frame) — gira MÁS rápido visualmente
+const GRAZE_CUT = 0.66;                       // #3 bomba: closeness ≥ esto = impacto DIRECTO (trompo completo); por debajo = ROCE (trompo corto)
+const SPIN_RECOVER_MAX = 0.25;                // #4 contra-trompo: cuánto del trompo se puede "comer" girando contra el giro (tope; nunca termina a 0)
 // — Nitro (boost) e ítems de nitro en la pista —
 const NITRO_MULT  = 1.8;                     // multiplicador de velocidad mientras se usa el nitro
 const NITRO_DRAIN = 0.4;                     // carga/seg que consume el boost (1/0.4 ≈ 2.5s de boost a tope)
 const NITRO_PICK  = 0.25;                    // carga que da cada ítem (1/4 del tanque)
-const NITRO_MAX   = 1;
+const NITRO_MAX   = 1;                        // límite de la 1ª barra (cyan); la 2ª barra (azul) llega hasta NITRO_CAP
+const NITRO_CAP   = 2;                        // #10 capacidad TOTAL = 2 barras (cyan 0..1 + azul 1..2). Todos los ítems aportan al mismo pool; el magenta sólo da más
+const DRIFT_NITRO_RATE = 0.05;               // #1 drift-charge: carga/seg que ganás derrapando de verdad (top-up, NO nueva velocidad)
+const DRIFT_CREDIT_CAP = 0.5;                // #1 tope de carga por derrape continuo (se resetea al dejar de derrapar → no auto-rellena)
+const OVERCHARGE_MULT  = 2.1;                // #6 overcharge (sólo jugador): pico de boost con nitro>0.7, a cambio de DOBLE drenaje
+const OC_GRIP    = 0.5;                       // #6 si abrís overcharge en curva, el agarre lateral cae a este factor (derrapás más)
+const OC_PENALTY = 0.5;                       // #6 duración (s) de esa penalización de agarre
+const DRAFT_RADII = 6;                        // #5 slipstream: rango de rebufo en radios de tanque (tuck pegado detrás del de adelante)
+const DRAFT_READY = 1.0;                      // #5 s pegado en la estela para cargar el tirón
+const SLIP_TIME   = 0.9;                      // #5 duración del tirón (slingshot) al salir de la estela
+const SLIP_MULT   = 1.22;                     // #5 mult del target ADELANTE durante el tirón (acotado; no stackea consigo mismo, sólo lo carga el que va ATRÁS)
+const HAZARD_SLIDE_T = 0.2;                   // #8 s de derrape al pisar un parche-peligro (agarre lateral casi nulo + patada lateral al entrar)
 // — Manejo por BIOMA: índice = themeOf(track). Columnas = [latGrip, spd, turn]. —
 // latGrip = AGARRE LATERAL (fracción de la velocidad de costado que se MATA por frame): ALTO = agarra (NO derrapa), BAJO = DERRAPA.
 // spd = multiplicador de TANK_SPEED (velocidad máx); turn = multiplicador de TANK_TURN. El PICKUP adelante es TANK_ACCEL (igual para todos).
@@ -768,6 +782,32 @@ const CHAIN_DEV   = 2;                         // fidelidad: la colisión queda 
 const CHAIN_SEGMAX = 170;                      // tope de LARGO de cada rect de la cadena (mundo). Matter 0.19 usa Detector = sweep-and-prune en X: un rect LARGO (recta/diagonal) tiene un AABB enorme que el sweep no puede saltear → degenera a O(n²) y mata los FPS. Cortar las rectas largas mantiene cada AABB chico (el sweep saltea bien) sin perder el borde exacto. BAJO = más cuerpos chicos / ALTO = menos cuerpos pero AABB grande (caro).
 const CHAIN_JOIN  = 0.5;                       // cuánto se EXTIENDE cada rect más allá de su tramo (en unidades de thick) para solapar al vecino y no dejar huecos. En curvas MUY cerradas los tramos son cortos y este sobrante hacía que las paredes SOBRESALIERAN del borde dibujado (abanico). 0.5 = la mitad → menos protrusión; los tramos cortos igual se solapan. Más bajo = menos sobresale pero arriesga huecos en esquinas.
 const PICKUP_COUNT = 6;                      // ítems de nitro presentes en la pista a la vez
+// — MUTADORES de carrera (carrera libre, fila del menú): reglas SIMÉTRICAS (afectan a los 16 tanques igual, vía las
+//   mismas constantes que lee la IA) que re-saborizan el mapa. Activo uno por carrera, fijado en startRace. —
+const MUT_NAMES = ['Normal', 'Fog', 'Wet', 'Hot Ammo', 'Drift', 'Chaos'];   // 0..5
+let MUT = { fog: false, wet: false, hotSpin: 1, hotCd: 1, drift: false, pickups: PICKUP_COUNT, drainMul: 1 };
+function applyMutator(m) {
+  MUT = { fog: false, wet: false, hotSpin: 1, hotCd: 1, drift: false, pickups: PICKUP_COUNT, drainMul: 1 };
+  if (m === 1) MUT.fog = true;                                        // Niebla: vignette que tapa la periferia (perceptual)
+  else if (m === 2) MUT.wet = true;                                  // Húmeda: agarre lateral ×0.25 a todos (resbala mucho)
+  else if (m === 3) { MUT.hotSpin = 1.5; MUT.hotCd = 0.75; }         // Munición Caliente: trompo 0.6→0.9, cooldown 2→1.5
+  else if (m === 4) MUT.drift = true;                               // Drift: derrapar de verdad RECARGA nitro (#1, ahora mutador)
+  else if (m === 5) { MUT.pickups = 11; MUT.drainMul = 2; }         // Caos: muchos ítems pero drena el doble (boosts cortos)
+}
+// — #7 MEDALLAS (cosméticas, sin poder): objetivos opcionales por carrera para el jugador. Total histórico en localStorage. —
+let lastMedals = [], medalTotal = 0;
+try { medalTotal = parseInt(localStorage.getItem('ct_medals') || '0', 10) || 0; } catch (e) {}
+const MEDAL_DEFS = [
+  ['Clean',     p => p.hitsTaken === 0],                              // no te pegó NINGUNA bomba
+  ['Sniper',    p => p.hitsLanded >= 3],                              // pegaste ≥3 bombazos
+  ['Comeback',  p => p.startRank > 0 && p.startRank - p.finishPos >= 5],   // ganaste ≥5 puestos respecto de la largada
+  ['Efficient', p => p.nitroSpent < 0.5],                            // terminaste gastando menos de medio tanque de nitro
+];
+function awardMedals(p) {                                            // se evalúa una vez al terminar la carrera (sólo lee datos que el motor ya trackea)
+  if (!p || p._medalsDone) return; p._medalsDone = true;
+  lastMedals = MEDAL_DEFS.filter(m => m[1](p)).map(m => m[0]);
+  if (lastMedals.length) { medalTotal += lastMedals.length; try { localStorage.setItem('ct_medals', String(medalTotal)); } catch (e) {} }
+}
 const PICKUP_FADE  = 0.35;                   // duración (s) de la animación de aparecer/desaparecer
 const PICKUP_FLASH = 0.55;                   // duración (s) del destello celeste sobre el tanque al agarrar nitro
 const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -780,10 +820,17 @@ class Tank {
     this.id = i;
     this.radius = xper(0.016);                                        // más grande
     this.vel = 0; this.ang_vel = 0; this.psteer = 0; this.spin_timer = 0; this.spin_dir = 1; this.pickup_flash = 0;
+    this.spin_saved = 0;                                              // #4 cuánto trompo ya recuperó este giro (tope SPIN_RECOVER_MAX)
+    this._driftCredit = 0;                                            // #1 nitro ya ganado en el derrape actual (tope DRIFT_CREDIT_CAP)
+    this.oc_pen = 0;                                                  // #6 timer de penalización de agarre por overcharge en curva
+    this.draft_t = 0; this.slip_timer = 0;                            // #5 carga de rebufo / timer del tirón slingshot
+    this.slide_timer = 0;                                             // #8 timer de mini-derrape al pisar un parche-peligro
     this.shoot_cooling = 0;
     this.nitro = this.id === 0 ? NITRO_MAX * 0.5 : 0;                 // el jugador arranca con MEDIO boost; la IA en 0 (se junta con ítems de la pista)
+    this.lap_start_rank = -1;                                         // #9 rank al ENTRAR a la última vuelta (para el bounty de remontada del torneo)
+    this.hitsTaken = 0; this.hitsLanded = 0; this.startRank = 0; this.nitroSpent = 0;   // #7 contadores de medallas (sólo el jugador los lee al final)
     const _D = AI_DIFF[difficulty] || AI_DIFF[2];                     // perfil de IA de esta carrera (clamp defensivo a Normal)
-    this.nitro_thresh = _D.nitro >= 1 ? 2 : clampN(_D.nitro + rnd(-0.12, 0.12), 0.2, 0.95);  // umbral de nitro con variación de "personalidad"; ≥1 ⇒ no usa nitro
+    this.nitro_thresh = _D.nitro >= 1 ? 99 : clampN(_D.nitro + rnd(-0.12, 0.12), 0.2, 0.95);  // umbral de nitro con variación de "personalidad"; ≥1 ⇒ NUNCA usa nitro (sentinel > NITRO_CAP)
     this.ai_turnmul = _D.turn;                                        // pericia en curva (mult sobre AI_TURN_K): bajo = corrige flojo, abre las curvas
     this.nitro_engaged = false;                                        // IA: ¿está soltando el nitro ahora? (histéresis)
     this.boosting = false;                                             // ¿bosteando este frame? (para el jet azul de nitro)
@@ -824,6 +871,7 @@ class Tank {
     if (!(this.start && !this.pause)) return;
 
     this.pre_lap_progress = this.lap_progress;
+    if (this.startRank === 0 && this.rank > 0) this.startRank = this.rank;   // #7 foto del puesto de LARGADA (para la medalla Comeback)
     this.shoot_cooling = Math.max(this.shoot_cooling - deltaT, 0);
 
     if (!this.finished) this.racetime += deltaT;                     // el rank lo calcula updateRanks() (con histéresis)
@@ -848,7 +896,7 @@ class Tank {
       const wantFire = keys[this.shoot] || (this.id === 0 && btnState.fire);
       if (wantFire && this.shoot_cooling === 0) {
         addSprite(new Bomb(this.color, this.radius, this.x, this.y, this.ang, this.vel));
-        this.shoot_cooling = 2;
+        this.shoot_cooling = 2 * MUT.hotCd;
       }
     } else {
       this.ai_cooling += deltaT;
@@ -930,7 +978,7 @@ class Tank {
           else throttle = (Math.abs(diff) < Math.PI / 8 ? 1 : 0.55) * this.ai_acel * (this.finished ? 0.6 : 1);
           if (this.ai_shoot === 0 && this.shoot_cooling === 0 && !this.finished) {
             addSprite(new Bomb(this.color, this.radius, this.x, this.y, this.ang, this.vel));
-            this.shoot_cooling = 2;
+            this.shoot_cooling = 2 * MUT.hotCd;
           }
         }
       }
@@ -941,6 +989,9 @@ class Tank {
     this.boosting = false;                                             // se prende abajo sólo si bostea (apagado durante el trompo)
     if (this.spin_timer > 0) {
       // TROMPO por impacto de bomba: gira sin control y frena, ignorando el input por un rato.
+      // #4 CONTRA-TROMPO (CANCELADO — dejar comentado para reactivar): girar contra el giro acortaba el trompo (sólo jugador, tope SPIN_RECOVER_MAX)
+      // let drain = deltaT;
+      // if (!this.ai && Math.sign(steer) === -this.spin_dir && Math.abs(steer) > 0.3) { const e = Math.min(deltaT * 1.2, SPIN_RECOVER_MAX - this.spin_saved); if (e > 0) { drain += e; this.spin_saved += e; } }
       this.spin_timer -= deltaT;
       Body.setAngularVelocity(b, this.spin_dir * SPIN_RATE);
       _vScratch.x = b.velocity.x * 0.9; _vScratch.y = b.velocity.y * 0.9; Body.setVelocity(b, _vScratch);
@@ -958,7 +1009,8 @@ class Tank {
     } else {
       const H = THEME_HANDLING[themeOf(this.track)];                  // manejo del bioma [grip, spd, turn]; fijo por carrera, lookup barato
       // Dirección: velocidad angular directa cuando hay input (feel responsivo, sin inercia); si no, amortiguar.
-      if (Math.abs(steer) > 0.001) Body.setAngularVelocity(b, steer * TANK_TURN * H[2]);  // turn del bioma (afecta jugador e IA: cornering coherente por pista)
+      if (this.slide_timer > 0) { Body.setAngularVelocity(b, 0); this.slide_timer -= deltaT; }   // #8 CHARCO: NO podés girar; la dirección se queda donde estabas apuntando (seguís derecho)
+      else if (Math.abs(steer) > 0.001) Body.setAngularVelocity(b, steer * TANK_TURN * H[2]);  // turn del bioma (afecta jugador e IA: cornering coherente por pista)
       else                          Body.setAngularVelocity(b, b.angularVelocity * 0.85);
       // NITRO: boost de velocidad hacia adelante mientras se usa y haya carga.
       // La IA NO lo usa apenas lo junta: acumula hasta su umbral y recién lo suelta en RECTA (poco giro);
@@ -973,16 +1025,50 @@ class Tank {
         wantBoost = (this.id === 0 && btnState.nitro) || keys.SHIFT;
       }
       let boostMult = 1;
-      if (wantBoost && this.nitro > 0 && throttle > 0) { boostMult = NITRO_MULT; this.nitro = Math.max(0, this.nitro - NITRO_DRAIN * deltaT); }
+      if (wantBoost && this.nitro > 0 && throttle > 0) {
+        const d = NITRO_DRAIN * MUT.drainMul * deltaT;
+        this.nitro = Math.max(0, this.nitro - d); this.nitroSpent += d;   // #7 acumula nitro gastado (para la medalla Efficient)
+        boostMult = NITRO_MULT;
+        // #6 OVERCHARGE (CANCELADO — dejar comentado para reactivar): con nitro>0.7, pico 2.1x a cambio de DOBLE drenaje + castigo de agarre en curva
+        // const over = !this.ai && this.nitro > 0.7;
+        // if (over) { boostMult = OVERCHARGE_MULT; this.nitro = Math.max(0, this.nitro - NITRO_DRAIN * MUT.drainMul * deltaT); this.nitroSpent += NITRO_DRAIN * MUT.drainMul * deltaT; if (Math.abs(steer) > 0.4) this.oc_pen = OC_PENALTY; }
+      }
       this.boosting = boostMult > 1;                                    // prende el jet azul de nitro (efecto visual)
       // Motor: velocidad objetivo a lo largo del heading; suavizado hacia ella.
       const target = (throttle > 0 ? TANK_SPEED * H[1] * throttle : throttle < 0 ? -TANK_REVERSE * (-throttle) : 0) * boostMult;  // spd del bioma (sólo adelante; reversa intacta para destrabar)
       const fx = Math.cos(b.angle), fy = Math.sin(b.angle);
+      // #5 SLIPSTREAM: ¿hay un tanque pegado ADELANTE, alineado y en mi misma dirección? Pegado cargás rebufo; al SALIR de la estela = tirón corto.
+      let inDraft = false;                                             // simétrico (la IA también lo gana); sólo lo carga el que va ATRÁS → herramienta de remontada (el líder no puede)
+      if (!this.finished) {
+        const dr2 = (this.radius * DRAFT_RADII) ** 2;
+        for (const o of tanks) {
+          if (o === this || o.finished) continue;
+          const rx = o.x - this.x, ry = o.y - this.y, d2 = rx * rx + ry * ry;
+          if (d2 > dr2 || d2 < 1) continue;
+          const invd = 1 / Math.sqrt(d2);
+          if ((rx * fx + ry * fy) * invd <= 0.90) continue;            // el otro está ADELANTE y dentro de un cono angosto
+          if (fx * Math.cos(o.ang) + fy * Math.sin(o.ang) <= 0.85) continue;   // y viaja en mi misma dirección (no de frente)
+          inDraft = true; break;
+        }
+      }
+      if (inDraft) this.draft_t = Math.min(DRAFT_READY, this.draft_t + deltaT);
+      else if (this.draft_t >= DRAFT_READY) { this.slip_timer = SLIP_TIME; this.draft_t = 0; }   // salir tras cargar = slingshot; reset → re-disparar exige cargar 1s de nuevo (no se puede cyclar barato)
+      else this.draft_t = Math.max(0, this.draft_t - deltaT * 3);
+      if (this.slip_timer > 0) this.slip_timer -= deltaT;
+      const slipMult = this.slip_timer > 0 ? SLIP_MULT : 1;
       // Motor con DERRAPE DESACOPLADO: la componente ADELANTE (sobre el heading) se acerca al target a TANK_ACCEL
       // (rápido = todos ágiles); la LATERAL (perpendicular) sólo decae por latGrip (H[0]) → bajo = sigue deslizando = DERRAPE.
       const vfwd = b.velocity.x * fx + b.velocity.y * fy;                                // proyección de la velocidad sobre el heading
       const vlatx = b.velocity.x - vfwd * fx, vlaty = b.velocity.y - vfwd * fy;          // resto = velocidad lateral
-      const nf = vfwd + (target - vfwd) * TANK_ACCEL, latSurv = 1 - H[0];                // adelante → target; la lateral sobrevive (1 − latGrip)
+      // #1 DRIFT-CHARGE: derrapar DE VERDAD (lateral alto + avanzando) recarga nitro lento, con TOPE por derrape (no se auto-rellena).
+      const latSpeed = Math.hypot(vlatx, vlaty);                                         // simétrico (la IA también lo gana en biomas resbalosos)
+      if (MUT.drift && latSpeed > TANK_SPEED * 0.35 && vfwd > TANK_SPEED * 0.3) {        // #1 drift-charge: SÓLO con el mutador Drift (derrapar recarga nitro)
+        if (this._driftCredit < DRIFT_CREDIT_CAP) { const g = Math.min(DRIFT_NITRO_RATE * deltaT, DRIFT_CREDIT_CAP - this._driftCredit); this.nitro = Math.min(NITRO_CAP, this.nitro + g); this._driftCredit += g; }
+      } else this._driftCredit = Math.max(0, this._driftCredit - deltaT * 0.5);
+      // Agarre lateral efectivo: bioma → Húmeda (×0.5) → #6 OVERCHARGE en curva (×OC_GRIP). Todo simétrico salvo el oc_pen (sólo jugador).
+      let grip = H[0]; if (MUT.wet) grip *= 0.25;                       // mutador Húmeda: agarre lateral a 1/4 (resbala MUCHO más → se nota)
+      if (this.oc_pen > 0) { grip *= OC_GRIP; this.oc_pen -= deltaT; }   // (overcharge cancelado: oc_pen nunca se setea, queda inerte)
+      const nf = vfwd + ((target > 0 ? target * slipMult : target) - vfwd) * TANK_ACCEL, latSurv = 1 - grip;   // adelante → target (×tirón slipstream si está activo); la lateral sobrevive (1 − latGrip)
       _vScratch.x = fx * nf + vlatx * latSurv;
       _vScratch.y = fy * nf + vlaty * latSurv;
       const sp2 = _vScratch.x * _vScratch.x + _vScratch.y * _vScratch.y;                 // techo de velocidad (anti-tunneling); en juego normal NO se activa
@@ -993,7 +1079,10 @@ class Tank {
     if (this.lap_progress > 0 && this.lap_progress < 5) this.lap_checkpoint = 1;
     if (this.lap_progress > 95 && this.lap_progress < 100 && this.lap_checkpoint === 1) this.lap_checkpoint = 2;
     if (this.lap_progress === 0) {
-      if (this.lap_checkpoint === 2 && !this.finished) this.laps += 1;
+      if (this.lap_checkpoint === 2 && !this.finished) {
+        this.laps += 1;
+        if (this.laps === this.racelength - 1 && this.lap_start_rank < 0) this.lap_start_rank = this.rank;   // #9 entrando a la ÚLTIMA vuelta: foto del puesto (para el bounty de remontada)
+      }
       this.lap_checkpoint = 0;
     }
 
@@ -1036,12 +1125,28 @@ class Tank {
       ctx.beginPath(); ctx.moveTo(back, -r*0.28); ctx.lineTo(back - r*1.2*fl, 0); ctx.lineTo(back, r*0.28); ctx.closePath(); ctx.fill();
       ctx.globalAlpha = 1; ctx.restore();
     }
+    if (this.slip_timer > 0) {                                         // #5 rayas de velocidad del slingshot (barato): líneas blancas detrás
+      ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.ang);
+      ctx.globalAlpha = 0.5 * Math.min(1, this.slip_timer / SLIP_TIME); ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1, r * 0.1); ctx.lineCap = 'round';
+      for (let i = -1; i <= 1; i++) { const oy = i * r * 0.55; ctx.beginPath(); ctx.moveTo(-r * 1.2, oy); ctx.lineTo(-r * 2.6, oy); ctx.stroke(); }
+      ctx.globalAlpha = 1; ctx.restore();
+    }
 
     // Cuerpo via sprite cacheado (rápido): solo translate+rotate+drawImage.
     const spr = tankSpriteFor(this.skin, r, fin);
     ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.ang);
     ctx.drawImage(spr.cv, -spr.half, -spr.half, spr.half * 2, spr.half * 2);
     ctx.restore();
+
+    if (this.slide_timer > 0) {                                        // #8 CHARCO: indicador de "no podés girar" — un par de rayas en cada extremo TRASERO, titilando
+      ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.ang);
+      ctx.globalAlpha = 0.5 + 0.5 * Math.sin(T * 30); ctx.strokeStyle = 'rgba(150,225,255,1)'; ctx.lineWidth = Math.max(1, r * 0.13); ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (const sy of [-1, 1]) { const cy = sy * r * 0.6;             // los dos extremos traseros (arriba/abajo en coords locales)
+        for (let i = 0; i < 2; i++) { const ox = -r * 1.15 - i * r * 0.4; ctx.moveTo(ox, cy); ctx.lineTo(ox - r * 0.34, cy + sy * r * 0.16); } }   // un par de rayitas en cada uno
+      ctx.stroke();
+      ctx.globalAlpha = 1; ctx.restore();
+    }
 
     // Destello de nitro: onda expansiva celeste ENCIMA (crece y se desvanece).
     if (this.pickup_flash > 0) {
@@ -1098,9 +1203,15 @@ class Bomb {
       if (tank.color === this.color || tank.finished) continue;
       const lim = (this.radius + tank.radius) * 0.75;                  // mismo AABB que antes, sin alocar arrays
       if (Math.abs(this.x - tank.x) < lim && Math.abs(this.y - tank.y) < lim) {
-        // impacto: el tanque víctima pega una VUELTA (trompo) sin control y casi frena.
-        tank.spin_timer = SPIN_TIME; tank.spin_dir = (ri(0,1) === 0 ? -1 : 1);
-        _vScratch.x = tank.body.velocity.x * 0.15; _vScratch.y = tank.body.velocity.y * 0.15; Body.setVelocity(tank.body, _vScratch);
+        // #3 ROCE vs DIRECTO (CANCELADO — dejar comentado para reactivar): trompo + frenado graduados por cercanía al centro del impacto
+        // const closeness = 1 - Math.max(Math.abs(this.x - tank.x), Math.abs(this.y - tank.y)) / lim;   // 0 = borde, 1 = centro
+        // const direct = closeness > GRAZE_CUT;
+        // tank.spin_timer = SPIN_TIME * MUT.hotSpin * (direct ? 1 : 0.6 + 0.4 * closeness);
+        // const cut = direct ? 0.15 : 0.35 - 0.20 * closeness;
+        tank.spin_timer = SPIN_TIME * MUT.hotSpin;                      // trompo COMPLETO (comportamiento original; Hot Ammo lo alarga ×1.5)
+        tank.spin_dir = (ri(0,1) === 0 ? -1 : 1); tank.spin_saved = 0;
+        tank.hitsTaken++; const _owner = tanks.find(t => t.color === this.color); if (_owner) _owner.hitsLanded++;   // #7 contadores de medallas (víctima recibió / dueño acertó)
+        _vScratch.x = tank.body.velocity.x * 0.15; _vScratch.y = tank.body.velocity.y * 0.15; Body.setVelocity(tank.body, _vScratch);   // frena fuerte (deja 15%)
         removeFromList(bombs, this); removeFromList(sprites, this);
         return;
       }
@@ -1135,7 +1246,7 @@ class Bomb {
 // Tiene VIDA LIMITADA: si no lo agarrás antes de `ttl`, se desvanece y reaparece en otro lado.
 const NITRO_GLYPH = new Path2D('M12.5 2c.6 3-1.4 4-1.4 6.3 0 1 .7 1.7 1.6 1.7 1.2 0 1.7-1 1.6-2.2 1.7 1.3 2.7 3.4 2.7 5.5a5.5 5.5 0 0 1-11 0c0-2.7 1.7-4.6 3-6.1C10.9 5.3 11.8 3.7 12.5 2z');  // MISMA llama que el botón de nitro (path del SVG, viewBox 24×24)
 class NitroPickup {
-  constructor(x, y) { this.x = x; this.y = y; this.r = xper(0.014); this.age = 0; this.ttl = rnd(6, 10); pickups.push(this); }
+  constructor(x, y) { this.x = x; this.y = y; this.r = xper(0.014); this.age = 0; this.ttl = rnd(6, 10); this.big = ri(0, 5) === 0; pickups.push(this); }   // #10 ~1 de cada 6 = sobrecarga (magenta)
   scale() {                                                           // 0→1 al aparecer, 1→0 al expirar (anim)
     const inn = Math.min(1, this.age / PICKUP_FADE);
     const out = this.age > this.ttl ? Math.max(0, 1 - (this.age - this.ttl) / PICKUP_FADE) : 1;
@@ -1149,7 +1260,7 @@ class NitroPickup {
         if (t.finished) continue;
         const dx = this.x - t.x, dy = this.y - t.y, reach = this.r + t.radius;
         if (dx * dx + dy * dy < reach * reach) {
-          t.nitro = Math.min(NITRO_MAX, t.nitro + NITRO_PICK);
+          t.nitro = Math.min(NITRO_CAP, t.nitro + (this.big ? NITRO_PICK * 2 : NITRO_PICK));   // #10 todos aportan al MISMO pool (2 barras); el magenta sólo da MÁS (nitro más grande)
           t.pickup_flash = PICKUP_FLASH;                              // destello celeste sobre el tanque
           this._remove(); return;
         }
@@ -1160,11 +1271,12 @@ class NitroPickup {
   draw() {
     const s = this.scale(); if (s <= 0.01) return;
     const pulse = 0.6 + 0.4 * Math.sin(T * 5 + this.x * 0.01), r = this.r * (0.45 + 0.55 * s);   // crece/achica con la anim
+    const c = this.big ? [255, 95, 230] : [90, 220, 255];             // #10 magenta = sobrecarga (overflow); cian = normal
     ctx.save();
-    ctx.globalAlpha = 0.30 * pulse * s; drawCircle(this.x, this.y, r * 1.8, [90, 220, 255]);    // halo cian
+    ctx.globalAlpha = 0.30 * pulse * s; drawCircle(this.x, this.y, r * 1.8, c);    // halo
     ctx.globalAlpha = s;
     drawCircle(this.x, this.y, r, [10, 30, 45]);                       // base oscura
-    drawCircle(this.x, this.y, r * 0.86, [90, 220, 255]);            // disco cian
+    drawCircle(this.x, this.y, r * 0.86, c);            // disco
     // glifo: la MISMA llama del botón de nitro (Path2D del SVG), centrada en el disco
     ctx.translate(this.x, this.y);
     const gsc = r * 1.3 / 18;                                          // alto de la llama (~18u en el viewBox) → entra en el disco (un toque más chica)
@@ -1190,7 +1302,7 @@ function ensureNitroPickups() {
   if (!trackpoints.length) return;
   // En mundos grandes (autogenerados) hay más ítems para que no quede vacío (escala con la diagonal del mundo).
   const tr = sprites[0] ? sprites[0].track : 0;
-  const target = Math.min(12, Math.max(PICKUP_COUNT, Math.round(PICKUP_COUNT * Math.sqrt((worldW(tr) * worldH(tr)) / (2700 * 1700)))));
+  const target = Math.min(14, Math.max(MUT.pickups, Math.round(MUT.pickups * Math.sqrt((worldW(tr) * worldH(tr)) / (2700 * 1700)))));   // Caos sube la base a 11
   let guard = 0;
   while (pickups.length < target && guard++ < 60) {
     const tp = trackpoints[ri(1, trackpoints.length - 1)];           // evita el waypoint 0 (largada/meta)
@@ -1776,6 +1888,7 @@ class MainHandler {
     this.menu = true; this.menulevel = 0; this.option = 0;
     this.laps = 1; this.difficulty = 2; this.track = 0;          // dificultad default = Normal (idx 2; ahora hay 5: Very Easy..Very Hard)
     this.biome = 0;                                              // bioma del mapa autogenerado: 0=Aleatorio, 1..6 = temas 0..5 (Parque/Desierto/Nieve/Tecno/Lava/Noche). Persiste como laps/difficulty.
+    this.mutator = 0;                                            // mutador de carrera libre (0..5; ver MUT_NAMES). Persiste; el torneo siempre juega Normal.
     this.choose_option = [0,1,2];
     this.keypressed = false;
     this.tournament = false;
@@ -1809,6 +1922,7 @@ class MainHandler {
             if (this.option === 1) this.laps = (this.laps - 1 + 3) % 3;
             if (this.option === 2) this.difficulty = (this.difficulty - 1 + 5) % 5;
             if (this.option === 3) this.biome = (this.biome - 1 + 7) % 7;   // bioma del autogenerado (Aleatorio + 6 temas)
+            if (this.option === 5) this.mutator = (this.mutator - 1 + 6) % 6;   // mutador de carrera (6 reglas)
           }
           this.keypressed = true;
         }
@@ -1817,6 +1931,7 @@ class MainHandler {
             if (this.option === 1) this.laps = (this.laps + 1) % 3;
             if (this.option === 2) this.difficulty = (this.difficulty + 1) % 5;
             if (this.option === 3) this.biome = (this.biome + 1) % 7;
+            if (this.option === 5) this.mutator = (this.mutator + 1) % 6;
           }
           this.keypressed = true;
         }
@@ -1858,6 +1973,8 @@ class MainHandler {
     if (opt === 1) { this.menulevel = 1; this.tournament = true;  this.option = this.menuOpts()[0]; }
   }
   startRace() {                                                        // menulevel 1: arrancar la carrera
+    applyMutator(this.tournament ? 0 : this.mutator);                  // mutador fijado ANTES de crear tanques/ítems (el torneo siempre Normal)
+    lastMedals = [];                                                   // #7 limpiar las medallas de la carrera anterior
     if (this.tournament) {                                             // TORNEO: 6 carreras (un bioma c/u en orden), mapas autogenerados, colores fijos
       this.tourneyRace = 0;
       this.tank_points = Array(TANK_COUNT).fill(0); this.tank_times = Array(TANK_COUNT).fill(0);
@@ -1919,6 +2036,7 @@ class MainHandler {
         if (opt === 1)      this.laps       = (this.laps + dir + 3) % 3;
         else if (opt === 2) this.difficulty = (this.difficulty + dir + 5) % 5;
         else if (opt === 3) this.biome      = (this.biome + dir + 7) % 7;   // bioma del autogenerado
+        else if (opt === 5) this.mutator    = (this.mutator + dir + 6) % 6;   // mutador de carrera
         else if (opt === 4) this.menulevel = 2;                        // abrir selector de tanque
         return;
       }
@@ -1927,7 +2045,7 @@ class MainHandler {
   }
 
   // Opciones del setup (menulevel 1). Carrera libre: vueltas / dificultad / BIOMA / tanque. Torneo: sin bioma (juega TODOS).
-  menuOpts() { return this.tournament ? [1, 2, 4] : [1, 2, 3, 4]; }
+  menuOpts() { return this.tournament ? [1, 2, 4] : [1, 2, 3, 5, 4]; }   // libre: vueltas/dificultad/bioma/MUTADOR/tanque
   // Filas del setup con su posición Y, centradas verticalmente según cuántas haya.
   menuRowDefs() {
     const opts = this.menuOpts(), span = 0.095, mid = 0.56, y0 = mid - span*(opts.length - 1)/2;
@@ -2004,6 +2122,7 @@ class MainHandler {
       const gl  = on => on ? 14 : 5;
       if (this.menulevel === 0) {
         createText(B_font, 'CrazyTanks', menucolor, null, xper(0.5), yper(0.22), 28);
+        if (medalTotal > 0) createText(Math.round(S_font * 0.9), `★ ${medalTotal} medals`, [255, 225, 120], null, xper(0.5), yper(0.30), 4);   // #7 total histórico
         createText(M_font, 'New Race',   sel(this.option === 0), null, xper(0.5), yper(0.5), gl(this.option === 0));
         createText(M_font, 'Tournament', sel(this.option === 1), null, xper(0.5), yper(0.6), gl(this.option === 1));
       }
@@ -2015,6 +2134,7 @@ class MainHandler {
         const labelFor = opt => opt === 1 ? lapsName
                               : opt === 2 ? `Difficulty: ${diffNames[this.difficulty]}`
                               : opt === 3 ? `Biome: ${biomeNames[this.biome]}`
+                              : opt === 5 ? `Mutator: ${MUT_NAMES[this.mutator]}`
                               : `Tank: ${SKINS[playerSkinIdx].name}`;
         createText(B_font, this.tournament ? 'Tournament' : 'New Race', menucolor, null, xper(0.5), yper(0.2), 28);
         for (const { opt, y } of this.menuRowDefs()) {
@@ -2072,6 +2192,7 @@ class AuxiliaryHandler {
         for (const tank of tanks.slice().sort((a, b) => a.rank - b.rank))
           if (!tank.finished) { tank.finished = true; tank.ai = true; tank.finishPos = ++raceFinishCount; }
         this.racefinished = true;
+        awardMedals(tanks[0]);                                         // #7 evalúa las medallas del jugador (una vez, al terminar)
       }
 
       if (this.racestart_cooling > this.racestart_timer) {
@@ -2098,7 +2219,8 @@ class AuxiliaryHandler {
           this.prevTimes = this.tank_times.slice();
           this.gained = Array(TANK_COUNT).fill(0);
           for (const tank of tanks) {
-            const g = this.pointsForRank(tank.rank);
+            let g = this.pointsForRank(tank.rank);
+            if (tank.lap_start_rank >= 0) g += Math.min(BOUNTY_CAP, Math.max(0, tank.lap_start_rank - tank.rank));   // #9 bounty: lugares ganados en la última vuelta (+1 c/u, tope 3; imposible desde 1º)
             this.gained[tank.id] = g;
             this.tank_points[tank.id] += g;
             this.tank_times[tank.id] += tank.racetime + tank.racetime * 0.01 * (tank.rank - 1);
@@ -2122,6 +2244,7 @@ class AuxiliaryHandler {
   // Rematch (carrera simple): limpia todo salvo MainHandler+self, re-crea, se remueve.
   _rebuildRace() {                                                    // revancha de carrera LIBRE (el torneo usa _tournamentNext)
     const main = sprites[0];
+    applyMutator(main.mutator);                                       // revancha conserva el mutador elegido
     regenAutoTrack(main.biome === 0 ? undefined : main.biome - 1); this.track = AUTO_TRACK; [this.nWalls, this.nTrackpoints] = MAP_COUNTS[this.track];   // revancha = mapa nuevo (mismo bioma elegido)
     raceFinishCount = 0;
     for (const s of sprites.slice()) if (s !== main && s !== this) removeFromList(sprites, s);
@@ -2150,6 +2273,7 @@ class AuxiliaryHandler {
 
   _tournamentNext() {                                                 // siguiente carrera del torneo: mapa autogenerado con la temática del orden
     const main = sprites[0];
+    applyMutator(0);                                                  // el torneo siempre corre en Normal (sin mutador)
     raceFinishCount = 0;
     const nextIdx = this.raceIdx + 1;
     main.tourneyRace = nextIdx;
@@ -2208,6 +2332,7 @@ class AuxiliaryHandler {
         for (const tank of tanks) if (tank.rank === 1)
           createText(B_font, `${tankName(tank)} Wins!`, modifyColor(tank.color,75), null, xper(0.5), yper(0.35), 30);
         createText(M_font, '↻ Rematch', [255,255,255], null, xper(0.5), yper(0.55), selGlow(true));   // (para salir: la X de la esquina)
+        if (lastMedals.length) createText(Math.round(S_font * 0.95), '★ ' + lastMedals.join(' · '), [255, 225, 120], null, xper(0.5), yper(0.66), 6);   // #7 medallas ganadas esta carrera
       } else {
         if (this.table_cooldown < this.table_timer) {
           for (const tank of tanks) if (tank.rank === 1)
@@ -2854,7 +2979,7 @@ function ensureFx(track) {
   const theme = themeOf(track), rng = mulberry32((seed ^ 0xa17e5f) >>> 0);
   const ww = worldW(track), hh = worldH(track), af = (ww * hh) / (1280 * 720);
   const cap = base => Math.max(3, Math.min(Math.round(base * Math.sqrt(af)), Math.round(base * 2.4)));
-  const d = { theme, ww, hh, leaves: [], sand: [], bugs: [], lights: [], devils: [], stands: [], snowmen: [], fire: [], rain: [] };
+  const d = { theme, ww, hh, leaves: [], sand: [], bugs: [], lights: [], devils: [], stands: [], snowmen: [], fire: [], rain: [], hazards: [] };
   if (theme === 0) {                                                   // PARQUE: hojas a la deriva, viento GLOBAL (mundo)
     for (let i = 0, n = cap(FX_LEAF_DENS); i < n; i++) d.leaves.push({ x: rng() * ww, y: rng() * hh, ph: rng() * TAU, rot: rng() * TAU, fs: 1.2 + rng() * 1.4, fa: 10 + rng() * 20, sz: 5 + rng() * 5, hue: rng() });
   } else if (theme === 1) {                                            // DESIERTO: arena volando (mundo) + bichos
@@ -2875,6 +3000,17 @@ function ensureFx(track) {
   } else if (theme === 5) {                                            // PARQUE DE NOCHE: lluvia (mundo, global) — mismas partículas que el fuego pero como agua
     for (let i = 0, n = cap(FX_RAIN_DENS); i < n; i++) d.rain.push({ x: rng() * ww, y: rng() * hh, len: 16 + rng() * 26, w: 1 + rng() * 1.4, a: 0.10 + rng() * 0.16, ph: rng() * TAU });
   }
+  // #8 ZONAS-PELIGRO on-track (TODOS los biomas): parches SOBRE la pista (off-center) que dan un mini-derrape al pisarlos. No daño, simétrico, sembrados por mapa.
+  const nTPh = trackpoints.length;
+  for (let i = 0, nh = cap(4); nTPh > 3 && i < nh; i++) {
+    const a = trackpoints[1 + Math.floor(rng() * (nTPh - 1))], nx = trackpoints[(a.id + 1) % nTPh];
+    const dx = nx.x - a.x, dy = nx.y - a.y, L = Math.hypot(dx, dy) || 1;
+    if (L > 1200) continue;                                            // costura de portal → saltear
+    const ux = dx / L, uy = dy / L, side = rng() < 0.5 ? 1 : -1, off = (10 + rng() * 80) * side;   // ON-road pero descentrado (ensancha la línea, no la corta)
+    const x = a.x - uy * off, y = a.y + ux * off;
+    if (pointInWall(x, y)) continue;
+    d.hazards.push({ x, y, r: 26 + rng() * 16 });
+  }
   fxData = d; return d;
 }
 
@@ -2885,12 +3021,18 @@ function fxSnowballHit(t, s) {
   _vScratch.y = b.velocity.y * 0.6 + (s.vy / L) * SNOWBALL_KNOCK;
   Body.setVelocity(b, _vScratch);
   t.spin_timer = Math.max(t.spin_timer, SPIN_TIME * 0.55);             // trompo corto (más leve que el disparo)
-  t.spin_dir = ri(0, 1) === 0 ? -1 : 1;
+  t.spin_dir = ri(0, 1) === 0 ? -1 : 1; t.spin_saved = 0;             // #4 presupuesto de contra-trompo fresco
 }
 function updateAmbientFx(track) {
   ensureFx(track);
   const d = fxData; if (!d) return;
   const p = tanks[0];                                                  // los muñecos apuntan SÓLO al jugador (lo pedido: "que te tiren bolas"), no a la IA
+  if (d.hazards.length) {                                              // #8 cualquier tanque que pisa un parche-peligro derrapa (simétrico, no daño)
+    for (const t of tanks) {
+      if (t.finished || t.spin_timer > 0) continue;
+      for (const hz of d.hazards) { const dx = t.x - hz.x, dy = t.y - hz.y; if (dx * dx + dy * dy < hz.r * hz.r) { t.slide_timer = HAZARD_SLIDE_T; break; } }   // #8 pisás un charco → te bloquea el giro por HAZARD_SLIDE_T
+    }
+  }
   if (d.theme === 2 && d.snowmen.length && p && p.start && !p.finished) {   // p.start: recién con la carrera EMPEZADA (no durante la cuenta regresiva)
     for (const m of d.snowmen) {
       if (m.thr > 0) m.thr -= deltaT;
@@ -3005,6 +3147,20 @@ function fxDrawFire(d) {                                               // LAVA: 
     ctx.globalAlpha = a;       ctx.fillStyle = 'rgb(255,226,150)'; ctx.beginPath(); ctx.arc(wx, wy, f.r * 0.9, 0, TAU); ctx.fill();   // núcleo amarillo (punto brillante)
   }
   ctx.globalCompositeOperation = 'source-over'; ctx.globalAlpha = 1;
+}
+function fxDrawHazard(hz, theme) {                                     // #8 parche-peligro: decal chato en el piso (charco/aceite/calor/hielo), tinte por bioma. Culleado.
+  const sx = hz.x - camX, sy = hz.y - camY, r = hz.r;
+  if (sx < -r || sx > SCREEN_X + r || sy < -r || sy > SCREEN_Y + r) return;
+  const tech = theme === 3;                                            // techno: piso muy oscuro → el charco neutro no se veía; va neón que PULSA + anillo de borde
+  const col = theme === 4 ? [255, 120, 30] : theme === 2 ? [150, 200, 235] : theme === 1 ? [150, 120, 70] : theme === 5 ? [90, 120, 160] : tech ? [160, 255, 80] : [18, 20, 28];
+  const base = tech ? 0.44 + 0.22 * (0.5 + 0.5 * Math.sin(T * 4 + hz.x * 0.02)) : 0.32;   // techno: más alpha y pulso neón → bien notorio
+  ctx.save();
+  ctx.globalAlpha = base; ctx.fillStyle = rgb(col);
+  ctx.beginPath(); ctx.ellipse(hz.x, hz.y, r, r * 0.72, 0, 0, TAU); ctx.fill();
+  ctx.globalAlpha = Math.min(1, base + 0.15); ctx.strokeStyle = rgb(modifyColorPerc(col, 1.5)); ctx.lineWidth = Math.max(1, r * (tech ? 0.14 : 0.08));
+  ctx.beginPath(); ctx.ellipse(hz.x - r * 0.12, hz.y - r * 0.1, r * 0.55, r * 0.36, 0.4, 0, TAU); ctx.stroke();   // sheen
+  if (tech) { ctx.globalAlpha = base * 0.85; ctx.beginPath(); ctx.ellipse(hz.x, hz.y, r * 0.98, r * 0.7, 0, 0, TAU); ctx.stroke(); }   // anillo de borde neón (contorno)
+  ctx.globalAlpha = 1; ctx.restore();
 }
 function fxDrawRain(d) {                                               // LLUVIA — gotas cayendo, viento GLOBAL en el mundo (wrap), culleada. Misma base que el fuego pero AGUA (raya fría, sin glow)
   const ww = d.ww, hh = d.hh;
@@ -3696,10 +3852,11 @@ function drawMinimap() {
     ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
     ctx.lineCap = 'butt';
   }
-  // ítems de nitro (celestes con glow)
+  // ítems de nitro (celestes; los de SOBRECARGA en magenta y un poco más grandes → se distinguen)
   for (const p of pickups) {
-    ctx.globalAlpha = 0.35; ctx.fillStyle = 'rgba(90,220,255,1)'; ctx.beginPath(); ctx.arc(mx(p.x), my(p.y), 4.5, 0, TAU); ctx.fill();
-    ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(mx(p.x), my(p.y), 2.2, 0, TAU); ctx.fill();
+    ctx.fillStyle = p.big ? 'rgba(255,95,230,1)' : 'rgba(90,220,255,1)';
+    ctx.globalAlpha = 0.35; ctx.beginPath(); ctx.arc(mx(p.x), my(p.y), p.big ? 6 : 4.5, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 1; ctx.beginPath(); ctx.arc(mx(p.x), my(p.y), p.big ? 3 : 2.2, 0, TAU); ctx.fill();
   }
   // tanques: punto con halo; el jugador con anillo pulsante
   const pulse = 0.6 + 0.4 * Math.sin(T * 4);
@@ -3777,6 +3934,9 @@ function frame(now) {
   // Transform a coords del MUNDO, con la cámara restada (para pistas chicas camX=camY=0 → idéntico a antes)
   ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, -camX * scaleX * dpr, -camY * scaleY * dpr);
 
+  // #8 parches-peligro: decals en el PISO → DEBAJO de los tanques (se dibujan antes del loop de sprites, sobre el fondo horneado).
+  if (main0 && !main0.menu) { const fd = ensureFx(main0.track); for (const hz of fd.hazards) fxDrawHazard(hz, fd.theme); }
+
   // process + draw por sprite (paredes/waypoints YA NO están acá: viven horneados en el fondo).
   // El AuxiliaryHandler NO dibuja acá: su overlay (cuenta regresiva / tabla de torneo / pausa) va al FINAL,
   // por ENCIMA del minimapa y los punteros (antes la tabla quedaba tapada por ellos).
@@ -3791,6 +3951,12 @@ function frame(now) {
   }
 
   if (main0 && !main0.menu) drawAmbientFx(main0.track);                // EFECTOS AMBIENTE animados por tema (baratos, culleados) — POR ENCIMA de los tanques
+  if (MUT.fog && main0 && !main0.menu) {                               // mutador NIEBLA: vignette de neblina que tapa la periferia (perceptual; reduce la visibilidad del jugador)
+    const cx = camX + SCREEN_X * 0.5, cy = camY + SCREEN_Y * 0.5, rOut = Math.hypot(SCREEN_X, SCREEN_Y) * 0.52;
+    const g = ctx.createRadialGradient(cx, cy, rOut * 0.30, cx, cy, rOut);
+    g.addColorStop(0, 'rgba(150,158,170,0)'); g.addColorStop(0.6, 'rgba(125,133,146,0.20)'); g.addColorStop(1, 'rgba(96,103,116,0.74)');
+    ctx.fillStyle = g; ctx.fillRect(camX, camY, SCREEN_X, SCREEN_Y);
+  }
   for (const b of bombs) b.draw();                                     // DISPAROS por ENCIMA de todo lo in-game (ambiente, tanques, escenografía); el overlay del HUD/pausa va después
 
   // ── Paso de física (Matter) ── Los process() de arriba ya aplicaron las velocidades a los cuerpos;
@@ -3867,11 +4033,13 @@ function frame(now) {
     if (btnFireEl) btnFireEl.style.opacity = (ch > 0.001) ? '1' : '0.4';     // visible cargando/listo, tenue apenas disparó
   }
   if (nitroFill) {
-    const n = pl ? pl.nitro : 0;
-    nitroFill.style.background = n > 0.001                                                        // relleno cyan de abajo hacia arriba, corte DURO en el nivel de carga
-      ? `linear-gradient(to top, rgba(80,220,255,0.92) ${n*100}%, transparent ${n*100}%)`
-      : 'transparent';
-    if (nfDark) nfDark.style.clipPath = `inset(${(1 - n) * 100}% 0 0 0)`;                          // llama oscura SÓLO sobre la parte cargada (de abajo)
+    const n = pl ? pl.nitro : 0;                                                                  // #10 DOS CAPAS sobre el mismo botón: cyan (1ª barra 0..1) + azul ENCIMA (2ª barra 1..2). Cada una llena 0→100% del alto, desde abajo.
+    const cyanF = Math.min(n, NITRO_MAX) / NITRO_MAX * 100;                                        // 1ª barra (cyan): 0→100% del alto — idéntica a la de antes
+    const blueF = Math.max(0, n - NITRO_MAX) / NITRO_MAX * 100;                                    // 2ª barra (azul): 0→100% del alto, como 2ª CAPA encima del cyan lleno
+    const cyan = `linear-gradient(to top, rgba(80,220,255,0.92) ${cyanF}%, transparent ${cyanF}%)`;
+    const blue = `linear-gradient(to top, rgba(40,120,255,0.95) ${blueF}%, transparent ${blueF}%)`;
+    nitroFill.style.background = n <= 0.001 ? 'transparent' : (blueF > 0.001 ? `${blue}, ${cyan}` : cyan);   // azul = 2ª capa por encima del cyan
+    if (nfDark) nfDark.style.clipPath = `inset(${Math.max(0, 100 - cyanF)}% 0 0 0)`;               // llama oscura sobre la parte cargada de la 1ª barra
     if (btnNitroEl) btnNitroEl.style.opacity = '1';                                                // sin estado "apagado": vacío y con carga se ven igual (sólo cambia el relleno)
   }
 
