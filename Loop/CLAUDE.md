@@ -12,6 +12,142 @@ todo lo que quedó encerrado. Los enemigos son piezas de ajedrez que telegrafía
 la aguja del reloj marca las oleadas, y cada hora elegís **una sola cosa, alternando**:
 una **regla** para la arena o una **carta** (las 5 equipadas forman una mano de póker).
 
+## Pasada MOBILE (2026-09-16) — medir antes de tocar
+
+Franco reportó FPS bajos en teléfono. Lo primero fue un **perfilador**, no una corazonada:
+`s_prof.py` envuelve cada función del render y atribuye las operaciones de canvas caras contando
+los contadores antes y después de cada llamada. (Los TIEMPOS no sirven en headless — el
+virtual-time congela `performance.now()` — pero los CONTEOS son objetivos: 24 clips por frame son
+24 clips en cualquier lado.)
+
+El perfil dijo algo que ninguna intuición habría dicho: **`drawEnemy` era el 43,6 % del render**, y
+buena parte de eso era el `clip()` del bisel que había metido la pasada de arte. Segundo lugar
+inesperado: casi todos los `fill` de `drawEnemy` **no eran la pieza sino su sombra**.
+
+Resultado, misma escena (14 piezas, 8 orbes, hilo de 109, 14 minas):
+
+| | antes | después |
+|---|---|---|
+| peso total | 459 | **172** (−62 %) |
+| `clip` | 16,9 | **4,0** |
+| `fill` | 154,8 | **57,0** |
+| `stroke` | 147,8 | **66,7** |
+| gradientes | 30,0 | **8,2** |
+
+### El principio: lo que se ve igual en todos los frames se dibuja UNA vez
+
+Ninguna de las correcciones baja la calidad — son la misma imagen con menos operaciones.
+`bakeSprite(key, half, dibujar)` (en `p03_engine`) es el único lugar donde se hornea.
+
+- **Piezas**: una pieza siempre se ve igual y sólo tiene cuatro estados de color (propio, flash
+  blanco, frenesí azul, frenesí titilando). Horneada, un `drawImage` reemplaza cuatro fills, tres
+  strokes, un gradiente y un clip. **La sombra de contacto va DENTRO del sprite** (era constante
+  para todo lo que no salta). El caballo queda afuera: su sombra depende del salto.
+- **Casco del tanque**: no rota, sólo la torreta. Horneado se van los últimos clips del render.
+- **Orbes y cabezas de obús**: mismo criterio.
+- **Lo que NO se hornea**: lo que rota (moto, aguja) o lo que mira (los ojos del fantasma). Un
+  sprite rotado gira su propio brillo, y eso rompe la regla de la luz clave fija.
+
+**`resize()` tiene que vaciar los cachés** (`clearBakes`): todo lo horneado depende de PXR, y si no
+crecen sin techo y encima quedan a la escala vieja.
+
+**Un gradiente cacheado guarda COORDENADAS.** Los de la aguja viven en espacio local, así que sólo
+dependen del ángulo de la luz contrarrotada: cuantizarlo en 32 pasos (11° de escalón, invisible en
+algo que da una vuelta por hora) los saca del frame. Se vacían en el mismo `clearBakes`, y se
+declaran **en el mismo archivo** que su limpieza: `typeof` NO protege contra el TDZ de un `const`.
+
+### Otras dos que valen para cualquier canvas
+
+- **Hoisting de `clip`.** `drawSectors` recortaba contra el MISMO círculo una vez por sector (nueve
+  por frame), y la telegrafía de las piezas una vez por pieza que apunta (~16 por frame). Los dos
+  pasaron a un solo clip afuera del bucle. Efecto lateral bienvenido en la telegrafía: las piezas
+  quedan siempre por encima de los carriles.
+- **Lotes por alfa.** Las celdas de mina encendidas del todo comparten alfa, así que sus filos se
+  acumulan en un path. **OJO CON EL ORDEN**: la primera versión trazaba los filos en lote ANTES de
+  los rellenos y el propio relleno se los comía. Van tres pasadas: rellenos, filos en lote, y
+  las que se están apagando una por una.
+- **`arc` de 1-3 px → `fillRect`.** En aditivo y en movimiento son el mismo pixel, pero `arc` hay
+  que teselarlo. Las chispas grandes siguen redondas.
+
+### Escalón táctil
+
+`CFG.perf.sparkMul` (0.62 en táctil) es el ÚNICO lugar donde se baja algo. No toca resolución ni
+saca efectos: baja la cantidad de partículas de un efecto aditivo, donde veinte y treinta se ven
+casi igual y la diferencia la paga el relleno de píxeles — justo lo que escasea en un móvil.
+
+## Layout VERTICAL: dos bugs que sólo aparecen en teléfono
+
+Toda la sesión se revisó a 1280×720 y 1920×1080. A 500×905 aparecieron dos cosas que en apaisado
+no se ven, y ninguna la detecta el QA de invariantes — hay que MIRAR:
+
+- **La línea de racha caía encima de la placa siguiente.** En vertical `panelRects` apila las
+  placas con `gap = H*0.016`, pero abajo de cada una se dibuja la racha en `b.y + b.h + S*0.026`.
+  El hueco entre placas **no es decorativo**: tiene que dejar lugar a lo que se dibuja ahí.
+- **Los naipes del draft usaban el 63 % del ancho.** `cw = min(W*0.19, S*0.25)`: en desktop manda
+  el tope `S*0.25` y no se nota, pero en un teléfono (donde `S == W`) mandaba el `0.19` y los
+  naipes quedaban chicos, con el texto del efecto ilegible y 37 % del ancho sin usar. Subir el
+  factor a `0.26` sólo cambia las pantallas angostas.
+
+**Moraleja de método**: un `min(fracción_de_W, fracción_de_S)` se comporta distinto según cuál de
+los dos manda, y en apaisado manda uno y en vertical el otro. Cada vez que aparezca ese patrón hay
+que preguntarse cuál gana en cada orientación.
+
+### Trampas al verificar mobile en headless
+
+- **Chrome headless tiene un ancho mínimo de 500 px.** Pedir `--window-size=390,...` da una captura
+  de 390 px pero la página reporta `innerWidth = 500`: el layout se calcula para 500 y la captura
+  muestra 390, así que todo aparece corrido y cortado. Parece un bug de centrado y no lo es. Usar
+  500 o más (500×1000 es proporción de teléfono real).
+- **Sacar `body.noTouch` no vuelve táctil al navegador.** `IS_TOUCH` es una constante de JS y sigue
+  en falso, así que se dibujan los anillos de recarga del canvas (que en táctil están detrás de
+  `if (!IS_TOUCH)`) Y además aparecen los botones DOM: se ve una superposición que **en un teléfono
+  real no existe**. Me hizo perseguir un bug inexistente.
+
+## MOVIMIENTO vs SELECCIÓN — el joystick se comía los taps
+
+`#jMove` es un div fijo de **52 % × 84 %** con `z-index: 3` sobre el canvas, y sólo se ocultaba con
+`body.inMenu`. Durante `rule`/`card`/`slot` seguía vivo: **tocar la carta de la izquierda creaba un
+joystick y la selección nunca llegaba al canvas.**
+
+La solución NO es achicar el joystick (empeora el control, que es lo que se quería arreglar): es
+apagar las zonas táctiles cuando la pantalla es de SELECCIÓN (`body.picking`, sincronizada por
+`syncTouchUI()` una vez por frame y escrita **sólo cuando cambia**). Mientras elegís no hay nada
+que mover, así que el dedo sólo puede significar una cosa.
+
+Detalle que hay que acordarse: si la zona se oculta con el dedo apoyado, el navegador **no manda
+`pointerup`** y la palanca queda pegada. Por eso `moveStick.soltar()`.
+
+El escenario `touchsel` lo prueba con `document.elementFromPoint` sobre el centro de cada elemento
+seleccionable. **Tiene que sacar `body.noTouch` primero**: en headless `IS_TOUCH` es falso, las
+zonas están ocultas de todos modos, y el test pasaría trivialmente sin probar nada.
+
+## La palanca manda VELOCIDAD, no aceleración
+
+```js
+const ax = (inP.mx / mag) * accel;   // ax * mag = mx * accel
+P.vx += ax * mag * dt;               // y el tope es maxS SIEMPRE
+```
+
+Escalaba la ACELERACIÓN: con el stick al 30 % igual terminabas a velocidad máxima, sólo que
+tardando más. En un analógico eso es **no tener control fino**. Ahora `mag` es la fracción de
+velocidad y la velocidad se acerca al objetivo con `CFG.player.respHl`.
+
+Dos cosas de una: el 30 % es el 30 %, y arrancar, frenar y doblar cuestan lo mismo (antes invertir
+el sentido eran 0,88 u/s frenados a 4,6 u/s² = **0,34 s arrastrándose en la dirección equivocada**,
+que era exactamente la sensación que Franco describió como "se arrastra").
+
+Medido por el escenario `feel`:
+
+| | antes | después |
+|---|---|---|
+| arranque al 90 % | 0,172 s | **0,117 s** |
+| frenado al 10 % | 0,282 s | **0,133 s** |
+| inversión al 80 % | 0,344 s | **0,150 s** |
+| palanca al 50 % | 100 % de velocidad | **50 %** |
+
+Queda física: es un acercamiento exponencial, no un teletransporte de velocidad. Lo que se fue es
+la inercia residual, no el peso.
+
 ## Cómo se edita este archivo de 5500 líneas
 
 **`LoopWeb/index.html` es la fuente de verdad y lo único que hay en el repo**, igual que el resto

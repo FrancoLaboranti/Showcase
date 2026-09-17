@@ -113,6 +113,12 @@
   #btnMute.muted .ic-off { display: block; }
 
   body.inMenu #actBtns, body.inMenu #jMove, body.inMenu #aimSafe { display: none; }
+  /* ── MOVIMIENTO vs SELECCIÓN ──
+     Mientras elegís una carta, una regla o un hueco no hay nada que mover, así que las zonas
+     táctiles se apagan enteras y el dedo sólo puede significar una cosa: elegir. Sin esto el
+     div del joystick (52% x 84%, z-index 3) se comía el tap sobre la carta de la izquierda y
+     la selección nunca llegaba al canvas. */
+  body.picking #actBtns, body.picking #jMove, body.picking #aimSafe { display: none; }
   body.inMenu #btnPause, body.inMenu #btnReset { display: none; }
   body.noTouch #actBtns, body.noTouch #jMove, body.noTouch #aimSafe { display: none; }
 
@@ -223,14 +229,24 @@
 
 // ─── CONFIG: todo lo tuneable en un solo lugar (panel de debug con tecla T) ───
 const CFG = {
-  perf:   { dtMax: 0.05, dprCap: 2, sparkCap: 300, dustCap: 140, dmgCap: 14, sndPerFrame: 5 },
+  perf:   { dtMax: 0.05, dprCap: 2, sparkCap: 300, dustCap: 140, dmgCap: 14, sndPerFrame: 5,
+            // Fracción de chispas que se emiten. En táctil se bajan: en un efecto ADITIVO
+            // veinte chispas y treinta se ven casi igual, y lo que cuesta es el relleno de
+            // píxeles — justo lo que escasea en un móvil. No se toca ni la resolución ni
+            // ningún efecto: sólo cuántas partículas tiene un golpe.
+            sparkMul: 1 },
   arena:  { gridN: 9, rimLoss: 0.94, rimPush: 3.2 },
 
   player: {
     r: 0.030,
-    accel: 4.6,               // u/s² — llega al tope en ~0.19 s
+    // `respHl` es la semivida con la que la velocidad ALCANZA a la que pide la palanca. Manda
+    // la respuesta entera: arrancar, frenar y doblar son el mismo número, así que invertir el
+    // sentido cuesta lo mismo que arrancar (antes frenar 0.88 u/s a 4.6 u/s² eran 0.38 s de
+    // arrastre en la dirección equivocada). 55 ms = 87% del objetivo en 165 ms.
+    respHl: 0.045,
+    accel: 4.6,               // sin uso desde que la palanca manda velocidad; queda por el tuner
     maxSpd: 0.88,             // u/s  — cruzar el diámetro (2 u) toma ~2.3 s
-    dragHl: 0.085,            // semivida del frenado al soltar la palanca
+    dragHl: 0.042,            // semivida del frenado al soltar la palanca
     hp: 100,
     ifr: 1.0,                 // invulnerabilidad tras recibir (s)
     shDelay: 3.4, shRegen: 14, // escudo: espera sin recibir daño, luego recarga (pts/s)
@@ -564,6 +580,7 @@ function resize() {
   PXR = Math.min(W * 0.455, (H - Math.min(H * 0.12, 84)) * 0.5);   // la esfera ocupa ~88% del alto
   CX = W / 2; CY = H / 2 + Math.min(H * 0.035, 22);
   bgGrad = null; vigGrad = null;
+  clearBakes();                                       // los sprites dependen de PXR
   const cr = canvas.getBoundingClientRect();
   cvLeft = cr.left; cvTop = cr.top;
   if (typeof invalidateStrip === 'function') invalidateStrip();
@@ -646,6 +663,35 @@ function bloomPx(px, py, rpx, col, alpha) {
   ctx.globalAlpha = a0; ctx.globalCompositeOperation = 'source-over';
 }
 function bloom(x, y, r, col, alpha) { bloomPx(sx(x), sy(y), sr(r), col, alpha); }
+
+// ════════════════ HORNEADO DE SPRITES ════════════════
+// Lo que se ve IGUAL en todos los frames se dibuja UNA vez. `bakeSprite` corre `dibujar` contra
+// un canvas offscreen centrado, y devuelve algo que después cuesta un `drawImage`.
+// Los helpers de dibujo escriben en la global `ctx`, así que se la cambia y se restaura — mismo
+// truco que ya usaban `bakeDial` y `bakeHandStrip`.
+// OJO: todo lo horneado depende de PXR, así que `resize()` tiene que VACIAR los cachés o crecen
+// sin techo y encima quedan a la escala vieja.
+const _bakes = new Map();
+// Gradientes cacheados (la aguja del reloj). Viven acá, al lado de su limpieza, porque un
+// gradiente guarda COORDENADAS: a otra escala dibuja cualquier cosa y hay que tirarlo.
+const _handGrads = new Map();
+function bakeSprite(key, half, dibujar) {
+  let sp = _bakes.get(key);
+  if (sp) return sp;
+  const S = Math.max(2, Math.ceil(half) * 2);
+  const cv = document.createElement('canvas');
+  cv.width = Math.max(1, Math.round(S * dpr)); cv.height = cv.width;
+  const prev = ctx;
+  ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  dibujar(S / 2, S / 2);
+  ctx = prev;
+  sp = { cv, h: S / 2, S };
+  _bakes.set(key, sp);
+  return sp;
+}
+function clearBakes() { _bakes.clear(); _handGrads.clear(); }
+function blit(sp, x, y) { ctx.drawImage(sp.cv, x - sp.h, y - sp.h, sp.S, sp.S); }
 
 // ════════════════ MODELO DE LUZ DE LA ARENA ════════════════
 // Una sola clave, arriba a la izquierda, en coordenadas de PANTALLA. Todo lo que tenga
@@ -770,6 +816,7 @@ function addHitstop(t) { hitstop = Math.max(hitstop, t); }
 function screenFlash(a, col) { if (a > flashA) { flashA = a; flashCol = col || [255, 255, 255]; } }
 
 function spawnSparks(x, y, n, col, spd, dirA, spread) {
+  n = Math.max(1, Math.round(n * CFG.perf.sparkMul));  // un solo lugar donde se aplica el escalón
   for (let k = 0; k < n && sparks.length < CFG.perf.sparkCap; k++) {
     const a = dirA === undefined ? rnd(-PI, PI) : dirA + rnd(-(spread || PI), (spread || PI));
     const s = (spd || 0.7) * rnd(0.35, 1.15);
@@ -852,8 +899,13 @@ function drawEffects() {
   ctx.globalCompositeOperation = 'lighter';
   for (const p of sparks) {
     const a = 1 - p.t / p.life;
+    const rr = Math.max(0.5, sr(p.r * (0.4 + a * 0.9)));
     ctx.fillStyle = rgba(p.col, a * 0.9);
-    ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), Math.max(0.5, sr(p.r * (0.4 + a * 0.9))), 0, TAU); ctx.fill();
+    // Una chispa mide uno a tres píxeles. A ese tamaño, en aditivo y en movimiento, un cuadrado
+    // y un círculo son el mismo pixel — pero `arc` hay que teselarlo y `fillRect` no necesita
+    // ni construir el path. Las pocas grandes siguen redondas, que ahí sí se nota.
+    if (rr < 2.4) ctx.fillRect(sx(p.x) - rr, sy(p.y) - rr, rr * 2, rr * 2);
+    else { ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), rr, 0, TAU); ctx.fill(); }
   }
   ctx.globalCompositeOperation = 'source-over';
 }
@@ -950,7 +1002,12 @@ window.addEventListener('pointerdown', audioResume, true);
 // multitouch — por eso CrazyTanks/Snake/TankWARS lo reemplazaron por esto).
 function createJoystick(zoneEl, opts) {
   opts = opts || {};
-  const BASE_R = opts.baseR || 54, KNOB_R = opts.knobR || 30, DEAD = opts.dead || 6;
+  // El radio ESCALA con la pantalla: 54 px fijos son enormes en un teléfono chico y minúsculos
+  // en una tablet, y el radio es literalmente la resolución de la palanca — cuanto más chico,
+  // menos pasos distinguibles entre quieto y a fondo.
+  const S0 = Math.min(window.innerWidth, window.innerHeight);
+  const BASE_R = opts.baseR || clamp(Math.round(S0 * 0.155), 46, 88);
+  const KNOB_R = opts.knobR || Math.round(BASE_R * 0.54), DEAD = opts.dead || Math.max(4, BASE_R * 0.10);
   const aDead = opts.activeDead || 0, REST = opts.restMargin || 122;
   const out = opts.target || { active: false, x: 0, y: 0, mag: 0 };
   const base = document.createElement('div'), knob = document.createElement('div');
@@ -995,16 +1052,22 @@ function createJoystick(zoneEl, opts) {
     out.active = out.mag > aDead;
   });
   const end = e => {
-    if (e.pointerId !== id) return;
+    if (e && e.pointerId !== undefined && e.pointerId !== id) return;
     id = null; out.active = false; out.x = 0; out.y = 0; out.mag = 0;
     if (idleWanted) showRest(); else hideAll();
   };
+  // Si la zona se oculta con el dedo apoyado (entra un draft justo cuando estabas moviéndote),
+  // el navegador no manda pointerup: la palanca quedaba pegada y el jugador seguía "caminando"
+  // dentro de la pantalla de selección. `soltar()` la libera a mano.
+  out.soltar = () => { if (id !== null) end(null); };
   zoneEl.addEventListener('pointerup', end);
   zoneEl.addEventListener('pointercancel', end);
   zoneEl.addEventListener('lostpointercapture', end);   // el 3er handler: sin él queda colgada
   return out;
 }
-const moveStick = { active: false, x: 0, y: 0, mag: 0, idle: () => {} };
+// Escalón táctil. Se decide UNA vez, acá, y no se vuelve a preguntar por frame.
+if (IS_TOUCH) { CFG.perf.sparkMul = 0.62; CFG.perf.sparkCap = 190; CFG.perf.dustCap = 90; }
+const moveStick = { active: false, x: 0, y: 0, mag: 0, idle: () => {}, soltar: () => {} };
 if (IS_TOUCH) createJoystick(document.getElementById('jMove'), { target: moveStick, activeDead: 0.06 });
 else document.body.classList.add('noTouch');
 
@@ -1039,6 +1102,19 @@ addEventListener('keydown', e => {
   if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ¿La pantalla actual es de SELECCIÓN? Entonces el dedo no mueve: elige.
+// Se escribe la clase SÓLO cuando cambia — tocar classList cada frame es una escritura al CSSOM
+// por frame para dejar todo igual (mismo criterio que `wantPointer` y que el idle del joystick).
+let pickingNow = null;
+function syncTouchUI() {
+  const picking = game.state === 'rule' || game.state === 'card' || game.state === 'slot' ||
+                  game.state === 'over' || game.state === 'win' || game.showHand || game.paused;
+  if (picking === pickingNow) return;
+  pickingNow = picking;
+  document.body.classList.toggle('picking', picking);
+  if (picking) { moveStick.soltar(); inP.mx = 0; inP.my = 0; }
+}
 
 function pollInputs(dt) {
   let mx = 0, my = 0;
@@ -1424,22 +1500,30 @@ function drawSectorTargets() {
 
 // Sectores reclamados: relleno translúcido + marco. Se dibujan DEBAJO de todo lo vivo.
 function drawSectors(dt) {
+  // El recorte contra el plato se hace UNA vez para los nueve. Estaba dentro del bucle: con el
+  // tablero lleno eran nueve `clip` por frame para recortar siempre contra el mismo círculo, y
+  // clip es de lo más caro que hay en GPU móvil.
+  let algo = false;
   for (let i = 0; i < 9; i++) {
     if (sectors[i]) sectorT[i] = Math.min(1, sectorT[i] + dt * 3.2);
     else sectorT[i] = Math.max(0, sectorT[i] - dt * 4.5);
+    if (sectorT[i] > 0.001) algo = true;
+  }
+  if (!algo) return;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(CX, CY, sr(0.995), 0, TAU); ctx.clip();
+  for (let i = 0; i < 9; i++) {
     if (sectorT[i] <= 0.001) continue;
     const k = easeOutCubic(sectorT[i]);
     const R2 = sectRect(i);
-    ctx.save();
-    ctx.beginPath(); ctx.arc(CX, CY, sr(0.995), 0, TAU); ctx.clip();   // recortado al plato
     const pulse = 0.5 + 0.5 * Math.sin(perfT * 2.6 + i);
     ctx.fillStyle = 'rgba(125,249,255,' + (0.055 + 0.030 * pulse) * k + ')';
     ctx.fillRect(sx(R2.x), sy(R2.y), sr(R2.w), sr(R2.h));
     ctx.strokeStyle = 'rgba(125,249,255,' + (0.30 + 0.16 * pulse) * k + ')';
     ctx.lineWidth = Math.max(1, sr(0.005));
     ctx.strokeRect(sx(R2.x), sy(R2.y), sr(R2.w), sr(R2.h));
-    ctx.restore();
   }
+  ctx.restore();
 }
 // ════════════════ EL JUGADOR: canica + HILO ════════════════
 // Todo el juego cuelga de tres verbos: MOVERSE (deja hilo) · DESVIAR (el hilo es una
@@ -1797,10 +1881,15 @@ function updatePlayer(dt) {
     const mag = hyp(inP.mx, inP.my);
     const maxS = CFG.player.maxSpd * P.spdMul * RULE.spdMul * (sectorBoost() ? 1.14 : 1);
     if (mag > 0.06) {
-      const ax = (inP.mx / mag) * CFG.player.accel * P.spdMul, ay = (inP.my / mag) * CFG.player.accel * P.spdMul;
-      P.vx += ax * mag * dt; P.vy += ay * mag * dt;
-      const s = hyp(P.vx, P.vy);
-      if (s > maxS) { P.vx = P.vx / s * maxS; P.vy = P.vy / s * maxS; }
+      // LA PALANCA MANDA VELOCIDAD, NO ACELERACIÓN.
+      // Antes escalaba la aceleración y el tope era `maxS` pase lo que pase: con el stick al 30%
+      // igual terminabas a fondo, sólo que tardando más. En un analógico eso es no tener control
+      // fino. Ahora `mag` ES la fracción de velocidad, y acercarse al objetivo con una semivida
+      // corta hace que arrancar, frenar y doblar cuesten lo mismo.
+      const k = Math.min(1, mag) / mag;                // normaliza dirección sin perder magnitud
+      const vdx = inP.mx * k * maxS, vdy = inP.my * k * maxS;
+      P.vx = dampHL(P.vx, vdx, CFG.player.respHl, dt);
+      P.vy = dampHL(P.vy, vdy, CFG.player.respHl, dt);
     } else {
       P.vx = dampHL(P.vx, 0, CFG.player.dragHl, dt);
       P.vy = dampHL(P.vy, 0, CFG.player.dragHl, dt);
@@ -2003,7 +2092,9 @@ function drawThread() {
   // envoltura gris semitransparente pegada al trazo — justo lo que molestaba. Ahora el brillo
   // abraza la cinta (2×) y es mucho más tenue: se nota como neón, no como una segunda forma.
   ctx.globalCompositeOperation = 'lighter';
-  const HH = 6;
+  // Seis capas de resplandor para una cinta de 20 px de largo en pantalla es más de lo que el ojo
+  // separa; con cuatro el degradé del neón se ve igual y son dos strokes menos por frame.
+  const HH = 4;
   for (let k = 0; k < HH; k++) {
     const i0 = Math.floor(k * (n - 1) / HH), i1 = Math.floor((k + 1) * (n - 1) / HH);
     if (i1 <= i0) continue;
@@ -2014,7 +2105,10 @@ function drawThread() {
   }
   ctx.globalCompositeOperation = 'source-over';
   // Cuerpo: rodajas opacas que comparten vértices (violeta apagado → cian caliente).
-  const CH = clamp(Math.round(n / 8), 6, 18);
+  // Las rodajas son el degradé violeta→cian del cuerpo. El tope estaba en 18: a esa cantidad
+  // cada rodaja mide un par de píxeles y el salto de color entre vecinas es invisible. Con 13 el
+  // degradé se ve idéntico y son cinco fills menos por frame con el hilo largo.
+  const CH = clamp(Math.round(n / 9), 6, 13);
   for (let k = 0; k < CH; k++) {
     const i0 = Math.floor(k * (n - 1) / CH), i1 = Math.floor((k + 1) * (n - 1) / CH);
     if (i1 <= i0) continue;
@@ -2024,9 +2118,14 @@ function drawThread() {
     slice(i0, i1); ctx.fill();
   }
   // Donde le pegaron, brilla un instante (la vibración ya la hace la física).
-  for (let i = 0; i < n - 1; i++) {
+  // Un golpe enciende varios puntos vecinos y cada uno pedía su blit: medidos 18 por frame para
+  // lo que el ojo lee como TRES destellos. Se sube el umbral y se topea: se ve igual.
+  let destellos = 0;
+  for (let i = 0; i < n - 1 && destellos < 4; i++) {
     const p = thread[i];
-    if (p.hitT > 0.05) bloomPx(px[i], py[i], sr(0.03) * p.hitT, [190, 250, 255], 0.45 * p.hitT);
+    if (p.hitT <= 0.30) continue;
+    bloomPx(px[i], py[i], sr(0.034) * p.hitT, [190, 250, 255], 0.5 * p.hitT);
+    destellos++; i += 2;                              // el vecino inmediato es el mismo golpe
   }
 }
 
@@ -2326,24 +2425,33 @@ function updateOrbs(dt) {
     }
 }
 
+// Cuerpo de la orbe: esfera con la luz clave + rebote en el borde opuesto. Igual que las piezas,
+// se ve siempre igual, así que se hornea. El radio se cuantiza al píxel: cada orbe nace con un
+// radio propio (rnd 0.85-1.25), pero a nivel de pixel eso son un puñado de tamaños distintos.
+function orbSprite(col, r) {
+  const key = 'o|' + col[0] + ',' + col[1] + ',' + col[2] + '|' + Math.round(r);
+  return bakeSprite(key, Math.ceil(r) + 2, (cx, cy) => {
+    const g = ctx.createRadialGradient(cx + LIGHT.x * r * 0.92, cy + LIGHT.y * r * 0.92, r * 0.06, cx, cy, r);
+    g.addColorStop(0, '#ffffff');
+    g.addColorStop(0.38, 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')');
+    g.addColorStop(1, 'rgb(' + Math.round(col[0] * 0.26) + ',' + Math.round(col[1] * 0.26) + ',' + Math.round(col[2] * 0.34) + ')');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+    // Luz de rebote en el borde OPUESTO a la clave: es lo que separa una esfera de un círculo
+    // con degradado.
+    const ab = Math.atan2(-LIGHT.y, -LIGHT.x);
+    ctx.strokeStyle = 'rgba(' + Math.min(255, col[0] + 60) + ',' + Math.min(255, col[1] + 60) + ',' + Math.min(255, col[2] + 60) + ',0.55)';
+    ctx.lineWidth = Math.max(1, r * 0.15);
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.90, ab - 0.85, ab + 0.85); ctx.stroke();
+  });
+}
 function drawOrbs() {
   for (const o of orbs) {
     const x = sx(o.x), y = sy(o.y), r = sr(o.r);
     const ch = o.charge > 0;
     const col = ch ? [255, 210, 63] : [[130, 190, 255], [170, 160, 255], [130, 230, 220], [200, 170, 240]][o.hue];
     bloomPx(x, y, r * (ch ? 4.2 : 2.2), col, ch ? 0.65 : 0.16);
-    const g = ctx.createRadialGradient(x + LIGHT.x * r * 0.92, y + LIGHT.y * r * 0.92, r * 0.06, x, y, r);
-    g.addColorStop(0, '#ffffff');
-    g.addColorStop(0.38, 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')');
-    g.addColorStop(1, 'rgb(' + Math.round(col[0] * 0.26) + ',' + Math.round(col[1] * 0.26) + ',' + Math.round(col[2] * 0.34) + ')');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
-    // Luz de rebote en el borde OPUESTO a la clave. Es el detalle que separa una esfera de un
-    // círculo con degradado, y cuesta un arco: la orbe deja de ser un punto de color.
-    const ab = Math.atan2(-LIGHT.y, -LIGHT.x);
-    ctx.strokeStyle = 'rgba(' + Math.min(255, col[0] + 60) + ',' + Math.min(255, col[1] + 60) + ',' + Math.min(255, col[2] + 60) + ',0.55)';
-    ctx.lineWidth = Math.max(1, r * 0.15);
-    ctx.beginPath(); ctx.arc(x, y, r * 0.90, ab - 0.85, ab + 0.85); ctx.stroke();
+    blit(orbSprite(col, r), x, y);
     if (ch) {                                        // aro de carga que se achica con el timer
       ctx.strokeStyle = 'rgba(255,235,150,' + (0.45 + 0.35 * Math.sin(perfT * 12)) + ')';
       ctx.lineWidth = Math.max(1, r * 0.2);
@@ -2408,18 +2516,32 @@ function updateShells(dt) {
     }
   }
 }
+// Cabeza del obús: resplandor + cuerpo + núcleo blanco. Son siempre los mismos dos obuses
+// posibles (propio / enemigo) al mismo tamaño, así que van horneados: un drawImage reemplaza un
+// blit de glow y dos fills.
+// OJO: el RESPLANDOR no entra acá. `bloomPx` compone en 'lighter' (aditivo) y hornearlo lo
+// convierte en una mezcla normal: sobre el fieltro oscuro casi no se nota, pero cuando el obús
+// cruza algo brillante deja de sumar y se ve distinto. El glow se queda dinámico; lo que se
+// hornea es el cuerpo, que es opaco y se compone igual de las dos formas.
+function shellSprite(col, r) {
+  const key = 's|' + col[0] + ',' + col[1] + ',' + col[2] + '|' + Math.round(r);
+  return bakeSprite(key, Math.ceil(r) + 2, (cx, cy) => {
+    ctx.fillStyle = 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')';
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.42, 0, TAU); ctx.fill();
+  });
+}
 function drawShells() {
   for (const s of shells) {
     const x = sx(s.x), y = sy(s.y), r = sr(s.r);
     const col = s.mine ? [255, 210, 63] : [255, 110, 80];
-    bloomPx(x, y, r * 3.4, col, 0.55);
-    // estela corta: 3 círculos decrecientes hacia atrás (glow barato, sin shadowBlur)
+    // estela corta hacia atrás (glow barato, sin shadowBlur). Eran TRES blits por obús — con
+    // ocho obuses, 32 por frame para un adorno que nadie mira de a uno. Con dos se lee igual.
     const m = hyp(s.vx, s.vy) || 1;
-    for (let k = 1; k <= 3; k++) bloomPx(x - s.vx / m * r * 1.5 * k, y - s.vy / m * r * 1.5 * k, r * (1.5 - k * 0.3), col, 0.16);
-    ctx.fillStyle = 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')';
-    ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.arc(x, y, r * 0.42, 0, TAU); ctx.fill();
+    for (let k = 1; k <= 2; k++) bloomPx(x - s.vx / m * r * 1.9 * k, y - s.vy / m * r * 1.9 * k, r * (1.5 - k * 0.38), col, 0.17);
+    bloomPx(x, y, r * 3.4, col, 0.55);               // aditivo, igual que siempre
+    blit(shellSprite(col, r), x, y);
   }
 }
 
@@ -2515,28 +2637,59 @@ function updateMines(dt) {
 // explicara. Franco, textual: "¿qué marca ese número?".
 function drawMineCells() {
   if (!mines.length) return;
+  const lw = Math.max(1, sr(0.0032));
+  const S = sr(CELL);
+  // ── 1. RELLENOS ── (van primero: si no, tapan los filos)
+  let llenas = 0;
   for (let r = 0; r < GN; r++) for (let c = 0; c < GN; c++) {
     const a = cellLit(c, r);
     if (a <= 0.001) continue;
-    const X = sx(-1 + c * CELL), Y = sy(-1 + r * CELL), S = sr(CELL);
+    if (a >= 0.995) llenas++;
     const n = mineCountAt(c, r);
     // Las celdas LIMPIAS (0 al lado) se pintan mucho más tenues: son la enorme mayoría y eran
     // las que convertían el plato en una mancha verde.
-    // Casilla DESTAPADA, y se nota que está destapada: en el Buscaminas de verdad la celda
-    // abierta está HUNDIDA. Acá sale igual de barato — un relleno y dos líneas, la clara del
-    // lado de la luz y la oscura del contrario. Es el mismo grabado que usa el plato.
     ctx.fillStyle = n > 0 ? 'rgba(96,150,205,' + (0.17 * a).toFixed(3) + ')'
                           : 'rgba(110,205,150,' + (0.055 * a).toFixed(3) + ')';
-    ctx.fillRect(X, Y, S, S);
-    const lw = Math.max(1, sr(0.0032));
-    ctx.lineWidth = lw;
-    ctx.strokeStyle = 'rgba(0,0,0,' + (0.30 * a).toFixed(3) + ')';   // borde en sombra
+    ctx.fillRect(sx(-1 + c * CELL), sy(-1 + r * CELL), S, S);
+  }
+  // ── 2. FILOS DE LAS LLENAS, EN LOTE ──
+  // Casilla DESTAPADA, y se nota que está destapada: en el Buscaminas de verdad la celda abierta
+  // está HUNDIDA — filo claro del lado de la luz, oscuro del contrario. Las que están encendidas
+  // del todo comparten alfa, así que sus filos se acumulan en un path y salen de a un stroke en
+  // vez de dos POR CELDA (eran ~42 strokes por frame).
+  ctx.lineWidth = lw;
+  if (llenas) {
+    ctx.beginPath();
+    for (let r = 0; r < GN; r++) for (let c = 0; c < GN; c++) {
+      if (cellLit(c, r) < 0.995) continue;
+      const X = sx(-1 + c * CELL), Y = sy(-1 + r * CELL);
+      ctx.moveTo(X + S - lw / 2, Y); ctx.lineTo(X + S - lw / 2, Y + S - lw / 2); ctx.lineTo(X, Y + S - lw / 2);
+    }
+    ctx.strokeStyle = 'rgba(0,0,0,0.300)'; ctx.stroke();
+    for (const conNum of [true, false]) {
+      ctx.beginPath();
+      let hay = false;
+      for (let r = 0; r < GN; r++) for (let c = 0; c < GN; c++) {
+        if (cellLit(c, r) < 0.995 || (mineCountAt(c, r) > 0) !== conNum) continue;
+        const X = sx(-1 + c * CELL), Y = sy(-1 + r * CELL);
+        ctx.moveTo(X + lw / 2, Y + S); ctx.lineTo(X + lw / 2, Y + lw / 2); ctx.lineTo(X + S, Y + lw / 2);
+        hay = true;
+      }
+      if (hay) { ctx.strokeStyle = conNum ? 'rgba(165,220,255,0.340)' : 'rgba(150,235,185,0.140)'; ctx.stroke(); }
+    }
+  }
+  // ── 3. LAS QUE SE ESTÁN APAGANDO ── una por una, para no cuantizar el desvanecido. Son pocas.
+  for (let r = 0; r < GN; r++) for (let c = 0; c < GN; c++) {
+    const a = cellLit(c, r);
+    if (a <= 0.001 || a >= 0.995) continue;
+    const X = sx(-1 + c * CELL), Y = sy(-1 + r * CELL), n = mineCountAt(c, r);
+    ctx.strokeStyle = 'rgba(0,0,0,' + (0.30 * a).toFixed(3) + ')';
     ctx.beginPath();
     ctx.moveTo(X + S - lw / 2, Y); ctx.lineTo(X + S - lw / 2, Y + S - lw / 2); ctx.lineTo(X, Y + S - lw / 2);
     ctx.stroke();
     ctx.strokeStyle = n > 0 ? 'rgba(165,220,255,' + (0.34 * a).toFixed(3) + ')'
                             : 'rgba(150,235,185,' + (0.14 * a).toFixed(3) + ')';
-    ctx.beginPath();                                                  // filo de luz
+    ctx.beginPath();
     ctx.moveTo(X + lw / 2, Y + S); ctx.lineTo(X + lw / 2, Y + lw / 2); ctx.lineTo(X + S, Y + lw / 2);
     ctx.stroke();
   }
@@ -3005,6 +3158,105 @@ function piecePath(kind, x, y, r) {
   }
 }
 
+// ── TELEGRAFÍA: el carril que va a barrer. Es LA información del juego. ──
+// Vive aparte de `drawEnemy` por una razón de costo: recortar contra el plato cuesta un `clip`,
+// y clip es de lo más caro que hay en GPU móvil. Dentro de drawEnemy era UN CLIP POR PIEZA que
+// apunta (medidos ~16 por frame); acá los carriles de todas las piezas se dibujan bajo UN solo
+// clip. Efecto lateral bienvenido: las piezas quedan siempre por encima de los carriles.
+function drawTelegraphs() {
+  let hay = false;
+  for (const e of enemies) if (!e.dead && e.st === 'aim') { hay = true; break; }
+  if (!hay) return;
+  ctx.save();
+  ctx.beginPath(); ctx.arc(CX, CY, sr(0.995), 0, TAU); ctx.clip();
+  for (const e of enemies) {
+    if (e.dead || e.st !== 'aim') continue;
+    const hop = e.hop || 0;
+    const x = sx(e.x), y = sy(e.y) - sr(hop * 0.10), r = sr(e.r) * 1.14;
+    const fright = frenzy > 0;
+    const blink = fright && frenzy < 1.6 && Math.floor(perfT * 8) % 2 === 0;
+    const col = fright ? (blink ? [240, 245, 255] : [70, 120, 235]) : e.T.col;
+    const u = clamp(e.t / Math.max(e.dur, 1e-4), 0, 1);
+    // Carril más angosto y más afinado: la dirección se lee igual con menos tinta encima del
+    // tablero. Cada pieza del dibujo se bajó por separado (ancho, afinado, contorno, filo,
+    // punta y alfas) en vez de escalar todo junto, que habría borrado la punta.
+    const wpx = r * 1.12;
+    ctx.save();
+    if (e.kind === 'caballo') {                      // el caballo no barre: marca el destino
+      ctx.strokeStyle = rgba(col, 0.24 + 0.34 * u);
+      ctx.lineWidth = Math.max(1.2, r * 0.13);
+      ctx.setLineDash([r * 0.30, r * 0.30]);
+      ctx.beginPath(); ctx.arc(sx(e.tx), sy(e.ty), r * (1.42 - 0.46 * u), 0, TAU); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(sx(e.tx), sy(e.ty));
+      ctx.strokeStyle = rgba(col, 0.11 + 0.13 * u); ctx.lineWidth = Math.max(1, r * 0.075); ctx.stroke();
+    } else {
+      const ang = Math.atan2(e.ty - e.syp, e.tx - e.sxp);
+      ctx.translate(x, y); ctx.rotate(ang);
+      const L = hyp(sx(e.tx) - x, sy(e.ty) - y);
+      // Carril AHUSADO hacia el destino + punta de flecha: la forma dice HACIA DÓNDE aun
+      // congelando el frame. Un rectángulo gris plano no comunicaba dirección.
+      const w0 = wpx, w1 = wpx * 0.44;
+      const lane = (len, wA, wB) => {
+        ctx.beginPath();
+        ctx.moveTo(0, -wA); ctx.lineTo(len, -wB); ctx.lineTo(len, wB); ctx.lineTo(0, wA);
+        ctx.closePath();
+      };
+      ctx.fillStyle = rgba(col, 0.042);
+      lane(L, w0, w1); ctx.fill();
+      ctx.fillStyle = rgba(col, 0.12 + 0.12 * u);      // la barra se LLENA: cuándo, no sólo dónde
+      lane(L * u, w0, lerp(w0, w1, u)); ctx.fill();
+      ctx.fillStyle = rgba(col, 0.46 + 0.34 * u);      // filo brillante que avanza
+      ctx.fillRect(L * u - Math.max(1, r * 0.05), -lerp(w0, w1, u), Math.max(1.2, r * 0.10), lerp(w0, w1, u) * 2);
+      ctx.strokeStyle = rgba(col, 0.24 + 0.28 * u); ctx.lineWidth = Math.max(1, r * 0.05);
+      lane(L, w0, w1); ctx.stroke();
+      ctx.beginPath();                                  // punta de flecha en el destino
+      ctx.moveTo(L + w1 * 1.0, 0); ctx.lineTo(L - w1 * 0.45, -w1 * 1.05); ctx.lineTo(L - w1 * 0.45, w1 * 1.05);
+      ctx.closePath();
+      ctx.fillStyle = rgba(col, 0.30 + 0.42 * u); ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.restore();
+}
+
+// Cuerpo de la pieza, en coordenadas locales. Es EXACTAMENTE lo que se dibujaba antes en cada
+// frame; ahora corre una sola vez por (forma, color, tamaño) dentro de `pieceSprite`.
+function drawPieceBody(kind, x, y, r, c0, flash) {
+  const path = () => piecePath(kind, x, y, r);
+  path();
+  // Degradado en el eje de la luz clave, no de arriba a abajo: es la diferencia entre una pieza
+  // iluminada y una pieza con un degradado. Tres paradas — luz, color propio, sombra — porque
+  // con dos el color local desaparece y todo se ve lavado.
+  const g = ctx.createLinearGradient(x + LIGHT.x * r, y + LIGHT.y * r, x - LIGHT.x * r, y - LIGHT.y * r);
+  const lt = k => Math.round(Math.min(255, c0[k] + (255 - c0[k]) * 0.34));
+  g.addColorStop(0, 'rgb(' + lt(0) + ',' + lt(1) + ',' + lt(2) + ')');
+  g.addColorStop(0.46, 'rgb(' + c0[0] + ',' + c0[1] + ',' + c0[2] + ')');
+  g.addColorStop(1, 'rgb(' + Math.round(c0[0] * 0.34) + ',' + Math.round(c0[1] * 0.34) + ',' + Math.round(c0[2] * 0.44) + ')');
+  ctx.fillStyle = g; ctx.fill();
+  bevelShape(path, Math.max(1.5, r * 0.26), flash ? 0.34 : 0.20, 0.30);
+  ctx.strokeStyle = flash ? '#fff' : 'rgba(8,13,24,0.88)';
+  ctx.lineWidth = Math.max(1, r * 0.13); path(); ctx.stroke();
+}
+// Una pieza siempre se ve igual: misma silueta, mismo tamaño, y sólo cuatro estados de color
+// (propio, flash blanco, frenesí azul, frenesí titilando). Así que se hornea y después cuesta un
+// drawImage en vez de cuatro fills, tres strokes, un gradiente y un CLIP.
+function pieceSprite(kind, col, r, flash) {
+  // La SOMBRA entra al sprite. Eran dos elipses por pieza por frame — 28 fills, más que la pieza
+  // misma — y para todo lo que no salta es constante: misma forma, mismo alfa, misma posición
+  // relativa. El caballo queda afuera porque su sombra depende del salto.
+  const conSombra = kind !== 'caballo';
+  const key = 'p|' + kind + '|' + col[0] + ',' + col[1] + ',' + col[2] + '|' + (flash ? 1 : 0) + '|' + Math.round(r);
+  // El bisel y el contorno se salen de ±r, y la sombra llega a 1.16r: 1.42 alcanza.
+  return bakeSprite(key, Math.ceil(r * 1.42), (cx, cy) => {
+    if (conSombra) {
+      if (kind === 'fantasma') groundShadow(cx, cy + r * 0.10, r * 0.86, 0.42);  // flota: tira menos
+      else groundShadow(cx, cy, r, 1);
+    }
+    drawPieceBody(kind, cx, cy, r, col, flash);
+  });
+}
+
 function drawEnemy(e) {
   const hop = e.hop || 0;
   const x = sx(e.x), y = sy(e.y) - sr(hop * 0.10), r = sr(e.r) * 1.14;
@@ -3023,49 +3275,6 @@ function drawEnemy(e) {
     return;
   }
 
-  // ── TELEGRAFÍA: el carril que va a barrer. Es LA información del juego. ──
-  if (e.st === 'aim') {
-    const u = clamp(e.t / Math.max(e.dur, 1e-4), 0, 1);
-    const wpx = r * 1.5;
-    ctx.save();
-    ctx.beginPath(); ctx.arc(CX, CY, sr(0.995), 0, TAU); ctx.clip();
-    if (e.kind === 'caballo') {                      // el caballo no barre: marca el destino
-      ctx.strokeStyle = rgba(col, 0.28 + 0.4 * u);
-      ctx.lineWidth = Math.max(1.5, r * 0.18);
-      ctx.setLineDash([r * 0.35, r * 0.35]);
-      ctx.beginPath(); ctx.arc(sx(e.tx), sy(e.ty), r * (1.5 - 0.5 * u), 0, TAU); ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(sx(e.tx), sy(e.ty));
-      ctx.strokeStyle = rgba(col, 0.14 + 0.16 * u); ctx.lineWidth = Math.max(1, r * 0.1); ctx.stroke();
-    } else {
-      const ang = Math.atan2(e.ty - e.syp, e.tx - e.sxp);
-      ctx.translate(x, y); ctx.rotate(ang);
-      const L = hyp(sx(e.tx) - x, sy(e.ty) - y);
-      // Carril AHUSADO hacia el destino + punta de flecha: la forma dice HACIA DÓNDE aun
-      // congelando el frame. Un rectángulo gris plano no comunicaba dirección.
-      const w0 = wpx, w1 = wpx * 0.52;
-      const lane = (len, wA, wB) => {
-        ctx.beginPath();
-        ctx.moveTo(0, -wA); ctx.lineTo(len, -wB); ctx.lineTo(len, wB); ctx.lineTo(0, wA);
-        ctx.closePath();
-      };
-      ctx.fillStyle = rgba(col, 0.055);
-      lane(L, w0, w1); ctx.fill();
-      ctx.fillStyle = rgba(col, 0.16 + 0.16 * u);      // la barra se LLENA: cuándo, no sólo dónde
-      lane(L * u, w0, lerp(w0, w1, u)); ctx.fill();
-      ctx.fillStyle = rgba(col, 0.55 + 0.4 * u);       // filo brillante que avanza
-      ctx.fillRect(L * u - Math.max(1, r * 0.07), -lerp(w0, w1, u), Math.max(1.5, r * 0.14), lerp(w0, w1, u) * 2);
-      ctx.strokeStyle = rgba(col, 0.30 + 0.35 * u); ctx.lineWidth = Math.max(1, r * 0.07);
-      lane(L, w0, w1); ctx.stroke();
-      ctx.beginPath();                                  // punta de flecha en el destino
-      ctx.moveTo(L + w1 * 1.1, 0); ctx.lineTo(L - w1 * 0.5, -w1 * 1.15); ctx.lineTo(L - w1 * 0.5, w1 * 1.15);
-      ctx.closePath();
-      ctx.fillStyle = rgba(col, 0.35 + 0.5 * u); ctx.fill();
-    }
-    ctx.restore();
-  }
-
-
   // sombra de contacto (vende el salto del caballo)
   if (hop > 0.01) {
     ctx.fillStyle = 'rgba(0,0,0,' + (0.34 * (1 - hop)) + ')';
@@ -3076,39 +3285,23 @@ function drawEnemy(e) {
   const glowA = e.st === 'move' ? 0.75 : e.st === 'aim' ? 0.5 : 0.32;
   bloomPx(x, y, r * 3.0, flash ? [255, 255, 255] : col, glowA);
 
-  // Sombra de contacto: lo que separa una pieza APOYADA en el plato de una calcomanía
-  // pegada encima. El fantasma flota (no toca el fieltro) y por eso tira menos.
-  if (e.kind !== 'fantasma') groundShadow(x, y, r, 1 - hop * 0.55);
-  else groundShadow(x, y + r * 0.10, r * 0.86, 0.42);
+  // Sombra de contacto: lo que separa una pieza APOYADA en el plato de una calcomanía pegada
+  // encima. Para las piezas horneadas viaja DENTRO del sprite; acá quedan sólo las que no se
+  // pueden hornear: el caballo (su sombra depende del salto) y los dos vehículos, que rotan.
+  if (e.kind === 'caballo') groundShadow(x, y, r, 1 - hop * 0.55);
+  else if (e.kind === 'moto' || e.kind === 'tanque') groundShadow(x, y, r, 1);
 
   if (e.kind === 'moto') { drawCycle(e, x, y, r, flash); }
   else if (e.kind === 'tanque') { drawTank(e, x, y, r, flash); }
   else {
     const wob = e.kind === 'fantasma' ? Math.sin(e.bob) * r * 0.07 : 0;
-    ctx.save();
-    ctx.translate(0, wob);
-    const path = () => piecePath(e.kind, x, y, r);
-    path();
-    // Degradado en el eje de la luz clave, no de arriba a abajo: es la diferencia entre una
-    // pieza iluminada y una pieza con un degradado. Tres paradas — luz, color propio, sombra —
-    // porque con dos el color local desaparece y todo se ve lavado.
-    const c0 = flash ? [255, 255, 255] : col;
-    const g = ctx.createLinearGradient(x + LIGHT.x * r, y + LIGHT.y * r, x - LIGHT.x * r, y - LIGHT.y * r);
-    const lt = k => Math.round(Math.min(255, c0[k] + (255 - c0[k]) * 0.34));
-    g.addColorStop(0, 'rgb(' + lt(0) + ',' + lt(1) + ',' + lt(2) + ')');
-    g.addColorStop(0.46, 'rgb(' + c0[0] + ',' + c0[1] + ',' + c0[2] + ')');
-    g.addColorStop(1, 'rgb(' + Math.round(c0[0] * 0.34) + ',' + Math.round(c0[1] * 0.34) + ',' + Math.round(c0[2] * 0.44) + ')');
-    ctx.fillStyle = g; ctx.fill();
-    bevelShape(path, Math.max(1.5, r * 0.26), flash ? 0.34 : 0.20, 0.30);
-    ctx.strokeStyle = flash ? '#fff' : 'rgba(8,13,24,0.88)';
-    ctx.lineWidth = Math.max(1, r * 0.13); path(); ctx.stroke();
-    if (e.kind === 'fantasma') {                     // ojitos que miran hacia donde va
+    blit(pieceSprite(e.kind, flash ? [255, 255, 255] : col, r, flash), x, y + wob);
+    if (e.kind === 'fantasma') {                     // ojitos: MIRAN, así que no se pueden hornear
       const ex = Math.cos(e.ang) * r * 0.16, ey = Math.sin(e.ang) * r * 0.16;
       ctx.fillStyle = frenzy > 0 ? '#7df9ff' : '#0b1120';
-      ctx.beginPath(); ctx.arc(x - r * 0.30 + ex, y - r * 0.24 + ey, r * 0.19, 0, TAU); ctx.fill();
-      ctx.beginPath(); ctx.arc(x + r * 0.30 + ex, y - r * 0.24 + ey, r * 0.19, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x - r * 0.30 + ex, y - r * 0.24 + ey + wob, r * 0.19, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + r * 0.30 + ex, y - r * 0.24 + ey + wob, r * 0.19, 0, TAU); ctx.fill();
     }
-    ctx.restore();
   }
   // barra de vida (sólo si ya le pegaste: si no, es ruido permanente)
   if (alive && e.hp < e.maxHp - 0.01) {
@@ -3149,21 +3342,29 @@ function drawCycle(e, x, y, r, flash) {
   ctx.restore();
 }
 
+function tankHull(c0, r) {
+  const key = 't|' + c0[0] + ',' + c0[1] + ',' + c0[2] + '|' + Math.round(r);
+  return bakeSprite(key, Math.ceil(r * 1.15), (cx, cy) => {
+    const hull = () => roundRectPath(cx - r * 0.92, cy - r * 0.72, r * 1.84, r * 1.44, r * 0.22);
+    const hg = ctx.createLinearGradient(cx + LIGHT.x * r, cy + LIGHT.y * r, cx - LIGHT.x * r, cy - LIGHT.y * r);
+    hg.addColorStop(0, 'rgb(' + Math.round(c0[0] * 0.80) + ',' + Math.round(c0[1] * 0.80) + ',' + Math.round(c0[2] * 0.80) + ')');
+    hg.addColorStop(1, 'rgb(' + Math.round(c0[0] * 0.34) + ',' + Math.round(c0[1] * 0.34) + ',' + Math.round(c0[2] * 0.38) + ')');
+    hull(); ctx.fillStyle = hg; ctx.fill();
+    bevelShape(hull, Math.max(1.5, r * 0.22), 0.22, 0.34);
+    ctx.strokeStyle = 'rgba(8,13,24,0.92)'; ctx.lineWidth = Math.max(1, r * 0.12); hull(); ctx.stroke();
+    ctx.fillStyle = 'rgba(10,16,28,0.75)';                       // orugas
+    ctx.fillRect(cx - r * 0.98, cy - r * 0.82, r * 1.96, r * 0.22);
+    ctx.fillRect(cx - r * 0.98, cy + r * 0.60, r * 1.96, r * 0.22);
+  });
+}
 function drawTank(e, x, y, r, flash) {
   ctx.save();
   ctx.translate(x, y);
   const c0 = flash ? [255, 255, 255] : e.T.col;
-  const hull = () => roundRectPath(-r * 0.92, -r * 0.72, r * 1.84, r * 1.44, r * 0.22);
-  const hg = ctx.createLinearGradient(LIGHT.x * r, LIGHT.y * r, -LIGHT.x * r, -LIGHT.y * r);
-  hg.addColorStop(0, 'rgb(' + Math.round(c0[0] * 0.80) + ',' + Math.round(c0[1] * 0.80) + ',' + Math.round(c0[2] * 0.80) + ')');
-  hg.addColorStop(1, 'rgb(' + Math.round(c0[0] * 0.34) + ',' + Math.round(c0[1] * 0.34) + ',' + Math.round(c0[2] * 0.38) + ')');
-  hull(); ctx.fillStyle = hg; ctx.fill();
-  bevelShape(hull, Math.max(1.5, r * 0.22), 0.22, 0.34);
-  ctx.strokeStyle = 'rgba(8,13,24,0.92)'; ctx.lineWidth = Math.max(1, r * 0.12); hull(); ctx.stroke();
-  // orugas
-  ctx.fillStyle = 'rgba(10,16,28,0.75)';
-  ctx.fillRect(-r * 0.98, -r * 0.82, r * 1.96, r * 0.22);
-  ctx.fillRect(-r * 0.98, r * 0.60, r * 1.96, r * 0.22);
+  // El CASCO no rota — sólo la torreta — así que se hornea entero (con orugas y bisel). Con él
+  // se van los últimos `clip` que quedaban en el render: eran 4 por frame, y clip es lo que peor
+  // le cae a una GPU móvil.
+  blit(tankHull(c0, r), 0, 0);
   ctx.rotate(e.ang);
   ctx.fillStyle = 'rgb(' + c0[0] + ',' + c0[1] + ',' + c0[2] + ')';
   roundRectPath(-r * 0.1, -r * 0.16, r * 1.5, r * 0.32, r * 0.1); ctx.fill();   // cañón
@@ -3578,13 +3779,24 @@ function drawCycleTrails() {
     if (!e.trail || e.trail.length < 2) continue;
     const col = e.dead ? [150, 160, 180] : [255, 150, 60];
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    for (let i = 0; i + 1 < e.trail.length; i++) {
-      const a = e.trail[i], b = e.trail[i + 1];
-      const age = 1 - a.t / CFG.cycle.life;
-      if (age <= 0.02) continue;
-      ctx.strokeStyle = 'rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',' + (0.65 * age).toFixed(3) + ')';
-      ctx.lineWidth = Math.max(1, sr(CFG.cycle.w * 2) * age);
-      ctx.beginPath(); ctx.moveTo(sx(a.x), sy(a.y)); ctx.lineTo(sx(b.x), sy(b.y)); ctx.stroke();
+    // Un stroke POR SEGMENTO eran ~28 por frame. La estela vive 1.5 s, así que cuantizar el
+    // desvanecido en seis pasos no se distingue — y seis polilíneas son seis strokes.
+    const NB = 6;
+    for (let b0 = 0; b0 < NB; b0++) {
+      const lo = b0 / NB, hi = (b0 + 1) / NB, mid = (lo + hi) / 2;
+      if (mid <= 0.02) continue;
+      ctx.strokeStyle = 'rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',' + (0.65 * mid).toFixed(3) + ')';
+      ctx.lineWidth = Math.max(1, sr(CFG.cycle.w * 2) * mid);
+      ctx.beginPath();
+      let abierto = false;
+      for (let i = 0; i + 1 < e.trail.length; i++) {
+        const a = e.trail[i], age = 1 - a.t / CFG.cycle.life;
+        if (age < lo || age >= hi) { abierto = false; continue; }
+        const b = e.trail[i + 1];
+        if (!abierto) { ctx.moveTo(sx(a.x), sy(a.y)); abierto = true; }
+        ctx.lineTo(sx(b.x), sy(b.y));
+      }
+      ctx.stroke();
     }
     // la punta viva brilla: dice de dónde viene el peligro
     if (!e.dead) {
@@ -4063,10 +4275,20 @@ function drawClockHand() {
     ctx.lineTo(-tail * 0.34, w * 0.62);
     ctx.closePath();
   };
-  const ca = Math.cos(-a), sa2 = Math.sin(-a);
+  // Los gradientes de la aguja viven en coordenadas LOCALES (ya rotadas), así que sólo dependen
+  // del ángulo de la luz contrarrotada. Crear tres objetos de gradiente por frame para algo que
+  // gira una vuelta por hora es tirar trabajo: se cuantiza el ángulo en 32 pasos y se cachean.
+  // 11° de escalón en la pasada del brillo no se ven; tres asignaciones por frame sí se pagan.
+  const qa = Math.round(-a / TAU * 32) / 32 * TAU;
+  const ca = Math.cos(qa), sa2 = Math.sin(qa);
   const lx = LIGHT.x * ca - LIGHT.y * sa2, ly = LIGHT.x * sa2 + LIGHT.y * ca;
-  const bg = ctx.createLinearGradient(lx * w * 3, ly * w * 3, -lx * w * 3, -ly * w * 3);
-  bg.addColorStop(0, '#ffe9bd'); bg.addColorStop(0.5, '#e0b463'); bg.addColorStop(1, '#8a6a30');
+  const gk = 'hand|' + Math.round(qa * 1000) + '|' + Math.round(w * 10);
+  let bg = _handGrads.get(gk);
+  if (!bg) {
+    bg = ctx.createLinearGradient(lx * w * 3, ly * w * 3, -lx * w * 3, -ly * w * 3);
+    bg.addColorStop(0, '#ffe9bd'); bg.addColorStop(0.5, '#e0b463'); bg.addColorStop(1, '#8a6a30');
+    _handGrads.set(gk, bg);
+  }
   blade(); ctx.fillStyle = bg; ctx.fill();
   bevelShape(blade, Math.max(1, w * 0.55), 0.30, 0.34, lx, ly);
   ctx.strokeStyle = 'rgba(40,26,8,0.55)'; ctx.lineWidth = Math.max(1, w * 0.18);
@@ -4075,8 +4297,13 @@ function drawClockHand() {
   // Contrapeso: el disco del otro lado del eje. Es lo que hace que la aguja parezca
   // atornillada y no apoyada.
   const cw = () => { ctx.beginPath(); ctx.arc(-tail * 0.62, 0, w * 0.95, 0, TAU); };
-  const cg = ctx.createLinearGradient(lx * w, ly * w, -lx * w, -ly * w);
-  cg.addColorStop(0, '#f0d49a'); cg.addColorStop(1, '#7a5c2a');
+  const ck = 'cw|' + Math.round(qa * 1000) + '|' + Math.round(w * 10);
+  let cg = _handGrads.get(ck);
+  if (!cg) {
+    cg = ctx.createLinearGradient(lx * w, ly * w, -lx * w, -ly * w);
+    cg.addColorStop(0, '#f0d49a'); cg.addColorStop(1, '#7a5c2a');
+    _handGrads.set(ck, cg);
+  }
   cw(); ctx.fillStyle = cg; ctx.fill();
   ctx.strokeStyle = 'rgba(40,26,8,0.55)'; ctx.lineWidth = Math.max(1, w * 0.18); cw(); ctx.stroke();
   ctx.restore();
@@ -4086,9 +4313,16 @@ function drawClockHand() {
   bloomPx(tx, ty, sr(0.05), [255, 200, 110], 0.55);
   ctx.fillStyle = '#ffeec4';
   ctx.beginPath(); ctx.arc(tx, ty, Math.max(1.5, w * 0.55), 0, TAU); ctx.fill();
+  // La tapa del eje no rota ni se mueve: su gradiente es SIEMPRE el mismo mientras no cambie
+  // el tamaño de pantalla.
   const hr = Math.max(2, sr(0.022));
-  const hg = ctx.createRadialGradient(x0 + LIGHT.x * hr * 0.5, y0 + LIGHT.y * hr * 0.5, hr * 0.1, x0, y0, hr);
-  hg.addColorStop(0, '#fff3d4'); hg.addColorStop(0.6, '#c39b55'); hg.addColorStop(1, '#4a3a1c');
+  const hk = 'hub|' + Math.round(hr * 10);
+  let hg = _handGrads.get(hk);
+  if (!hg) {
+    hg = ctx.createRadialGradient(x0 + LIGHT.x * hr * 0.5, y0 + LIGHT.y * hr * 0.5, hr * 0.1, x0, y0, hr);
+    hg.addColorStop(0, '#fff3d4'); hg.addColorStop(0.6, '#c39b55'); hg.addColorStop(1, '#4a3a1c');
+    _handGrads.set(hk, hg);
+  }
   ctx.fillStyle = hg;
   ctx.beginPath(); ctx.arc(x0, y0, hr, 0, TAU); ctx.fill();
 }
@@ -4844,7 +5078,11 @@ function panelRects(n) {
     const total = n * pw + (n - 1) * gap;
     for (let i = 0; i < n; i++) out.push({ x: W / 2 - total / 2 + i * (pw + gap), y: H * 0.53 - ph / 2, w: pw, h: ph });
   } else {
-    const pw = Math.min(W * 0.78, S * 1.0), ph = Math.min(H * 0.115, S * 0.155), gap = H * 0.016;
+    // El hueco NO es decorativo: abajo de cada placa se dibuja la línea de racha (en
+    // `b.y + b.h + S*0.026`). Con `H*0.016` de hueco esa línea caía ENCIMA de la placa siguiente
+    // en vertical. El hueco tiene que ser al menos lo que mide esa línea más su separación.
+    const pw = Math.min(W * 0.78, S * 1.0), ph = Math.min(H * 0.115, S * 0.155);
+    const gap = Math.max(H * 0.016, S * 0.052);
     const total = n * ph + (n - 1) * gap;
     for (let i = 0; i < n; i++) out.push({ x: W / 2 - pw / 2, y: H * 0.53 - total / 2 + i * (ph + gap), w: pw, h: ph });
   }
@@ -4853,7 +5091,11 @@ function panelRects(n) {
 // Naipes: proporción real (ancho/alto ≈ 0.68). Más CHICOS que antes: ocupaban media pantalla.
 function cardRects(n) {
   const S = Math.min(W, H);
-  const cw = Math.min(W * 0.19, S * 0.25), chh = cw / 0.68, gap = cw * 0.16;
+  // `W * 0.19` dejaba los tres naipes ocupando el 63% del ancho: en desktop no se nota porque
+  // manda el tope `S * 0.25`, pero en un teléfono (donde S == W) el que mandaba era el 0.19 y
+  // quedaban chicos, con el texto del efecto ilegible y 37% del ancho sin usar. Subirlo sólo
+  // cambia las pantallas ANGOSTAS — en desktop el tope sigue siendo el mismo de siempre.
+  const cw = Math.min(W * 0.26, S * 0.25), chh = cw / 0.68, gap = cw * 0.16;
   const total = n * cw + (n - 1) * gap;
   const out = [];
   for (let i = 0; i < n; i++) out.push({ x: W / 2 - total / 2 + i * (cw + gap), y: H * 0.50 - chh / 2, w: cw, h: chh });
@@ -5326,6 +5568,7 @@ function loop(now) {
   if (dbgFreeze) dt = 0;
   sndThisFrame = 0;
 
+  syncTouchUI();
   pollInputs(dt);
   game.t += dt;
 
@@ -5404,6 +5647,7 @@ function loop(now) {
   drawThread();
   drawMirror();
   drawOrbs();
+  drawTelegraphs();                    // todos los carriles bajo UN clip, y debajo de las piezas
   for (const e of enemies) if (e.dead) drawEnemy(e);
   for (const e of enemies) if (!e.dead && e.kind !== 'relojero') drawEnemy(e);
   for (const e of enemies) if (!e.dead && e.kind === 'relojero') drawBoss(e);
