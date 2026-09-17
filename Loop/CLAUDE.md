@@ -12,6 +12,27 @@ todo lo que quedó encerrado. Los enemigos son piezas de ajedrez que telegrafía
 la aguja del reloj marca las oleadas, y cada hora elegís **una sola cosa, alternando**:
 una **regla** para la arena o una **carta** (las 5 equipadas forman una mano de póker).
 
+## Cómo se edita este archivo de 5500 líneas
+
+**`LoopWeb/index.html` es la fuente de verdad y lo único que hay en el repo**, igual que el resto
+de los ports: un archivo autocontenido, sin paso de build. Pero editar a mano un HTML de ~5500
+líneas es insostenible, así que durante las sesiones largas se parte en trece archivos
+(`p01_head.html`, `p02_core.js`, … `p13_tail.html`) en un directorio temporal, se parchea ahí y se
+reensambla con un `cat` en ese orden.
+
+**Esos `parts/` NO están versionados y no sobreviven a la sesión.** Cuando esta guía los menciona,
+habla de esa copia de trabajo, no de algo que vayas a encontrar en el repo. Para retomar: volvé a
+partir `index.html` por los comentarios de sección, o editá el monolito directo.
+
+Dos cosas que ese flujo enseñó y conviene repetir:
+
+- **Los parches se aplican con un helper que afirma que el ancla existe Y es única** (`sub()` en
+  Python), nunca con un reemplazo a ciegas. Un ancla ambigua que pisa la ocurrencia equivocada es
+  el error más caro de todos porque no falla: compila y hace otra cosa.
+- **Antes de aplicar, correr el parche contra una COPIA de las partes.** Así se cazó que
+  `wantPointer(false)` colgado de la cadena de `else if` se tragaba las pantallas de muerte y
+  victoria — el juego nunca llegó a tener ese bug.
+
 ## De dónde salió cada cosa
 
 | Origen | Qué aportó | Dónde vive |
