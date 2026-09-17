@@ -291,8 +291,8 @@
   let j1racha = 0, j2racha = 0;
   let j1pulse = 0, j2pulse = 0;    // 1→0: "golpe" visual del marcador al sumar (se nota el punto)
   // PELOTEO: rallyHits = devoluciones seguidas en el peloteo actual (resetea al sacar); bestRally = el mejor del
-  // partido; rallyFlash 0.5→0 = brillo del hito; rallyMilestone = el umbral cruzado que muestra el cartel.
-  let rallyHits = 0, bestRally = 0, rallyFlash = 0, rallyMilestone = 0;
+  // partido; rallyFlash 0.5→0 = brillo del hito en el marco y la red.
+  let rallyHits = 0, bestRally = 0, rallyFlash = 0;
   let records = loadRecords();     // récords por rival (localStorage): { [nombre]: {rally, margin} }
   let newRecordFlag = false;       // true si el último partido batió un récord (lo lee drawOver)
   let showDebug = false;
@@ -366,7 +366,7 @@
     serveCD = SERVE_DELAY;
     fireball = false; firetrail = false; fireTop = false; fireBot = false; fireNet = false;
     ballTrail.length = 0;                              // sin estela cruzando la cancha al sacar
-    rallyHits = 0; rallyFlash = 0; rallyMilestone = 0; // el peloteo arranca de cero en cada saque (bestRally persiste)
+    rallyHits = 0; rallyFlash = 0;                     // el peloteo arranca de cero en cada saque (bestRally persiste)
     prevBx = bx; prevBy = by; rbx = bx; rby = by;      // sin streak de interpolación tras el reset
   }
   function newMatch() {
@@ -577,8 +577,7 @@
     rallyHits++;
     if (rallyHits > bestRally) bestRally = rallyHits;
     if (RALLY_TIERS.includes(rallyHits)) {
-      rallyFlash = 0.5; rallyMilestone = rallyHits;
-      burst(W / 2, H * 0.12, NEON_P1, 10, Math.min(W, H) * 0.5, ballR() * 0.5, 0.5);
+      rallyFlash = 0.5;   // sólo el brillo del marco/red; el cartel y su chispazo se sacaron
     }
   }
 
@@ -1699,8 +1698,8 @@
       brickTimer < 10 ? [255, 120, 120] : [180, 210, 240], W / 2, H * 0.05, s * 0.012, 0.92, 700);
   }
 
-  // HUD de peloteo (sólo modo normal — se llama en esa rama del render): cartel breve "RALLY xN" al cruzar
-  // un hito, y en PRÁCTICA (donde no hay marcador de goles) un contador persistente "rally N · récord M".
+  // HUD de peloteo: en PRÁCTICA (donde no hay marcador de goles) un contador persistente
+  // "rally N · récord M". En partida normal no dibuja nada.
   // Va arriba-centro para no competir con el marcador ni tapar el "Zzz" de la paleta dormida.
   function drawRallyHUD() {
     const s = Math.min(W, H);
@@ -1708,11 +1707,10 @@
       mtext(`rally ${rallyHits} · récord ${bestRally}`, Math.round(Math.min(26, s * 0.032)),
             [150, 210, 245], W / 2, H * 0.06, s * 0.012, 0.9, 700);
     }
-    if (rallyFlash > 0) {                                // hito recién cruzado: cartel que se desvanece
-      const a = rallyFlash / 0.5;
-      mtext(`RALLY x${rallyMilestone}`, Math.round(Math.min(40, s * 0.055)),
-            NEON_P1, W / 2, H * 0.12, s * 0.04 * a, a, 900);
-    }
+    // El cartel "RALLY xN" se sacó: anunciaba el hito de un contador que en partida normal no
+    // se ve en ningún lado (el contador sólo existe en PRÁCTICA), así que aparecía de la nada y
+    // sin consecuencia — el hito no toca ninguna velocidad. Queda el brillo del marco y la red,
+    // que celebra el peloteo sin pedir que interpretes un número.
   }
 
   function drawFireLabels() {

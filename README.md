@@ -30,6 +30,8 @@ the full directory of every web port. Reachable at
 
 | Game | Python | Web |
 |------|--------|-----|
+| **Loop** (arena arcade roguelite) | — | [Loop/LoopWeb](Loop/LoopWeb/index.html) |
+| **Stick Fight** (platformer-brawler sandbox) | — | [StickFight/StickFightWeb](StickFight/StickFightWeb/index.html) |
 | Canicas (marble physics sandbox) | — | [Balls/BallsWeb](Balls/BallsWeb/index.html) |
 | Ajedrez | [Chess](Chess/Chess.py) | [Chess/ChessWeb](Chess/ChessWeb/index.html) |
 | Reloj | [Clock](Clock/Clock.py) | [Clock/ClockWeb](Clock/ClockWeb/index.html) |

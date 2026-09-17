@@ -1,0 +1,2699 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#eee3d4">
+<title>Stick Fight</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden; background: #eee3d4;
+    touch-action: none;
+    user-select: none; -webkit-user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    color: #221e1b;
+  }
+  canvas { position: fixed; inset: 0; display: block; }
+
+  /* ── Hint superior: se desvanece a los 5 s (convención de todos los ports) ── */
+  #hint {
+    position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
+    max-width: 92vw; text-align: center; font-size: 12px; letter-spacing: 0.4px;
+    color: rgba(60,50,44,0.85); text-shadow: 0 1px 2px rgba(255,250,240,0.7);
+    pointer-events: none; z-index: 8; transition: opacity 1.2s; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+  }
+  #hint.off { opacity: 0; }
+
+  /* ── Zona del joystick (mitad izquierda; el 18% superior queda libre para HUD/menú) ──
+     El joystick es DINÁMICO: nace donde apoyás el dedo (factory createJoystick, como CrazyTanks). */
+  #jMove { position: fixed; left: 0; bottom: 0; width: 50%; height: 82%; z-index: 3; touch-action: none; }
+  /* Colchón muerto entre la zona de la palanca y los botones: un toque errado cerca de los
+     botones NO tiene que parir un joystick (sandwich z: zona 3 < muerto 4 < botones 5). */
+  #aimSafe { position: fixed; right: 0; bottom: 0; width: 34%; height: 60%; z-index: 4; touch-action: none; }
+
+  /* ── Botones de acción (columna abajo-derecha): SALTO arriba, PUÑO, PATADA abajo (el más grande) ── */
+  #actBtns {
+    position: fixed; right: calc(14px + env(safe-area-inset-right)); bottom: calc(14px + env(safe-area-inset-bottom));
+    z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 13px;
+  }
+  .abtn {
+    border-radius: 50%; border: 2.5px solid rgba(34,30,27,0.75);
+    background: rgba(244,235,221,0.82);
+    color: #221e1b; font-weight: 900; letter-spacing: 0.5px;
+    cursor: pointer; touch-action: none; padding: 0;
+    box-shadow: 0 3px 0 rgba(34,30,27,0.5);
+    transition: transform 0.06s, box-shadow 0.12s, background 0.08s;
+    font-family: inherit;
+  }
+  .abtn:active, .abtn.on { transform: scale(0.92); }
+  #btnJump   { width: 58px; height: 58px; font-size: 10px; }
+  #btnPunch  {
+    width: 66px; height: 66px; font-size: 11px;
+    border-color: #b06010; color: #b06010;
+  }
+  #btnPunch:active, #btnPunch.on { background: rgba(226,120,30,0.4); }
+  #btnKick   {
+    width: 74px; height: 74px; font-size: 11px;
+    border-color: #a03526; color: #a03526;
+  }
+  #btnKick:active, #btnKick.on { background: rgba(192,57,43,0.35); }
+  #btnJump:active, #btnJump.on { background: rgba(140,160,190,0.35); }
+
+  /* ── Cluster de esquina superior-derecha: pausa / reiniciar / fullscreen / info / salir ── */
+  #padMenu {
+    position: fixed; top: calc(10px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right));
+    z-index: 10; display: flex; gap: 8px;
+  }
+  #padMenu .btn {
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 2px solid rgba(34,30,27,0.6); background: rgba(244,235,221,0.85);
+    color: #221e1b; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+  }
+  #padMenu .btn svg { display: block; width: 15px; height: 15px; pointer-events: none; }
+  #padMenu .btn:active, #padMenu .btn.on { background: rgba(226,120,30,0.35); transform: scale(0.9); }
+  #btnExit { border-color: rgba(240,90,95,0.45) !important; }
+  #btnExit:active { background: rgba(240,90,95,0.3) !important; }
+  /* pausa: ic-pause visible por default; .paused muestra play */
+  #btnPause .ic-play { display: none; }
+  #btnPause.paused .ic-pause { display: none; }
+  #btnPause.paused .ic-play { display: block; }
+  /* fullscreen: ic-exit oculto por default; arcade-shell.js togglea body.fs-on */
+  #btnFs .ic-exit { display: none; }
+  body.fs-on #btnFs .ic-enter { display: none; }
+  body.fs-on #btnFs .ic-exit { display: block; }
+  /* mute: parlante on/off */
+  #btnMute .ic-off { display: none; }
+  #btnMute.muted .ic-on { display: none; }
+  #btnMute.muted .ic-off { display: block; }
+  /* En el menú se esconden los controles de juego (body.inMenu, convención CrazyTanks) */
+  body.inMenu #actBtns, body.inMenu #jMove, body.inMenu #aimSafe { display: none; }
+  body.inMenu #btnPause, body.inMenu #btnReset { display: none; }
+  body.noTouch #actBtns, body.noTouch #jMove, body.noTouch #aimSafe { display: none; }
+
+  /* ── Menú principal (overlay DOM, como los otros ports) ── */
+  #menu {
+    position: fixed; inset: 0; z-index: 9; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 16px;
+    background: transparent; pointer-events: none;   /* el fondo lo dibuja el canvas */
+  }
+  #menu.hidden { display: none; }
+  #menu > * { pointer-events: auto; }
+  #menu h1 {
+    font-size: clamp(34px, 9vmin, 64px); font-weight: 900; letter-spacing: 4px;
+    color: #221e1b; text-shadow: 3px 3px 0 rgba(180,150,140,0.45);
+  }
+  #menu h1 .vs { color: #e2781e; }
+  #menu .sub { font-size: 13px; color: rgba(80,66,58,0.8); letter-spacing: 2px; margin-top: -10px; font-weight: 700; }
+  .selRow { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+  .selRow .opt {
+    padding: 8px 14px; border-radius: 20px; font-size: 12px; font-weight: 900; letter-spacing: 1px;
+    border: 2px solid rgba(34,30,27,0.55); background: rgba(244,235,221,0.85); color: rgba(60,50,44,0.9);
+    cursor: pointer; touch-action: none; font-family: inherit; transition: all 0.12s;
+  }
+  .selRow .opt.sel { background: #e2781e; border-color: #221e1b; color: #fff; box-shadow: 0 2px 0 rgba(34,30,27,0.5); }
+  #btnPlay {
+    margin-top: 6px; padding: 14px 52px; border-radius: 32px; font-size: 20px; font-weight: 900; letter-spacing: 3px;
+    border: 3px solid #221e1b; background: #e2781e; color: #fff;
+    cursor: pointer; touch-action: none; font-family: inherit;
+    box-shadow: 0 4px 0 rgba(34,30,27,0.6);
+    transition: transform 0.08s, box-shadow 0.15s;
+  }
+  #btnPlay:active { transform: scale(0.95) translateY(3px); box-shadow: 0 1px 0 rgba(34,30,27,0.6); }
+  #menuVer { font-size: 10px; color: rgba(90,75,66,0.5); letter-spacing: 1px; margin-top: 8px; }
+
+  /* ── Panel de info (ⓘ): controles + créditos ── */
+  #infoPanel {
+    position: fixed; top: calc(52px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right));
+    z-index: 11; width: min(340px, 86vw); padding: 14px 16px; border-radius: 12px;
+    background: rgba(244,235,221,0.97); border: 2px solid rgba(34,30,27,0.65);
+    font-size: 12px; line-height: 1.65; color: #3a322c;
+    display: none; box-shadow: 0 8px 24px rgba(60,45,35,0.35);
+  }
+  #infoPanel.show { display: block; }
+  #infoPanel b { color: #b06010; }
+  #infoPanel .fps { color: #2e7d32; font-weight: 700; }
+
+  /* ── Panel de tuning (debug, tecla T / triple-tap en la versión del menú) ── */
+  #tunePanel {
+    position: fixed; left: 8px; top: 8px; z-index: 30; width: 250px; max-height: 86vh; overflow-y: auto;
+    background: rgba(8,12,20,0.92); border: 1px solid rgba(140,200,255,0.35); border-radius: 10px;
+    padding: 10px; font-size: 10px; display: none;
+  }
+  #tunePanel.show { display: block; }
+  #tunePanel label { display: block; margin-top: 6px; color: rgba(190,215,235,0.85); }
+  #tunePanel input[type=range] { width: 100%; }
+  #tunePanel .val { color: #a3e635; float: right; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hint"></div>
+
+<!-- ═══ TODO el DOM del juego ANTES del script principal (gotcha de TankWARSWeb:
+     referenciar nodos declarados después = null crash → pantalla negra) ═══ -->
+<div id="jMove" aria-label="mover"></div>
+<div id="aimSafe"></div>
+<div id="actBtns">
+  <button class="abtn" id="btnJump" aria-label="salto">SALTO</button>
+  <button class="abtn" id="btnPunch" aria-label="puño">PUÑO</button>
+  <button class="abtn" id="btnKick" aria-label="patada">PATADA</button>
+</div>
+
+<div id="padMenu">
+  <button class="btn" id="btnPause" aria-label="pausa" title="Pausa (P)"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg></button>
+  <button class="btn" id="btnReset" aria-label="menú" title="Volver al menú"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></button>
+  <button class="btn" id="btnMute" aria-label="sonido" title="Sonido"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg></button>
+  <button class="btn" id="btnFs" aria-label="pantalla completa" title="Pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
+  <button class="btn" id="btnInfo" aria-label="info" title="Info / FPS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg></button>
+  <button class="btn" id="btnExit" aria-label="salir" title="Salir al Arcade"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+</div>
+
+<div id="menu">
+  <h1>STICK<span class="vs">FIGHT</span></h1>
+  <div class="sub">SANDBOX DE PIÑAS Y PLATAFORMAS</div>
+  <div class="selRow" id="rowDiff">
+    <button class="opt" data-d="0">FÁCIL</button>
+    <button class="opt sel" data-d="1">NORMAL</button>
+    <button class="opt" data-d="2">DIFÍCIL</button>
+  </div>
+  <button id="btnPlay">PELEAR</button>
+  <div id="menuVer">v1.0</div>
+</div>
+
+<div id="infoPanel">
+  <b>STICK FIGHT</b> — recorré el nivel, bajá enemigos a piñas y llegá a la SALIDA.<br>
+  <b>Táctil:</b> palanca (mitad izquierda) para moverte · doble-tap de palanca = dash ·
+  SALTO / PUÑO / PATADA · abajo = agacharte.<br>
+  <b>Teclado:</b> A/D o flechas · S agacharte · W o ESPACIO saltar · J puño · K patada · SHIFT dash.<br>
+  <b>Bloqueo:</b> sostené la dirección CONTRARIA al enemigo (abajo+atrás bloquea barridas).<br>
+  <b>Combos:</b> PUÑO×3 = jab–cross–uppercut (lanza) · PUÑO,PUÑO,PATADA = remate con vuelta ·
+  dash+PUÑO = piña con embalada · carrera+PATADA = patada voladora.<br>
+  <b>Trepar:</b> saltá hacia un borde de plataforma para colgarte; hacia adentro o SALTO = subir ·
+  contra una pared deslizás y podés saltar.<br>
+  <span class="fps" id="fpsInfo">FPS: --</span><br>
+  <span style="opacity:0.55">© 2026 Franco Laboranti</span>
+</div>
+
+<div id="tunePanel"></div>
+<script>
+'use strict';
+// ════════════════════════════════════════════════════════════════════════════
+//  STICK FIGHT — fighter 2D de stickmans articulados (port web, sin librerías)
+//  Arquitectura: pose LÓGICA (keytracks nominales → hitboxes deterministas) vs
+//  pose RENDER (springs + IK + ragdoll → dibujo y hurtboxes). Los resortes
+//  suavizan lo que se VE; jamás tocan el frame-data de la pelea.
+// ════════════════════════════════════════════════════════════════════════════
+
+// ─── CONFIG: todas las constantes tuneables en un solo lugar (panel con tecla T) ───
+// Velocidades/aceleraciones en fracciones de S (= H_WORLD wu). Geometría de pelea en CH.
+const CFG = {
+  world: { H: 720, arenaW: 8000, chFrac: 0.34 },
+  move: {
+    // Tuning más responsivo:
+    //  · accel/fric más altos → llega a maxRun en ~0.13s y frena rápido al soltar la palanca.
+    //  · skidLock casi cero → el cambio de dirección se siente instantáneo (antes 60ms de "traba").
+    //  · airAccel casi 2× → control aéreo mucho mejor (podés corregir mid-salto).
+    //  · jumpApex un toque más alto → el salto pica más fuerte al inicio.
+    //  · coyote y jumpBuf un poco más generosos → menos "no me saltó" cuando pedís justo en el borde.
+    maxRun: 0.72, accel: 10.4, fric: 6.5, skidDecel: 12.0, skidMin: 0.4, skidLock: 0.02,
+    airAccel: 2.4, softCap: 0.85, gUp: 1.7, gDown: 2.6, jumpApex: 1.40, jumpCut: 0.45,
+    termVy: 1.6, coyote: 0.13, jumpBuf: 0.18, inputBuf: 0.18, rollConv: 0.40, rollMinVy: 0.8,
+  },
+  // Dash más fluido:
+  //  · wind 0.10→0.04: casi sin "cargar" atrás antes del empuje — arranca al toque.
+  //  · time 0.22→0.20 y dist 0.28→0.34: recorre más en menos tiempo → sensación de "zip".
+  //  · cancelFrom 0.40→0.28: podés cancelar en piña/patada antes → combos con dash más limpios.
+  //  · cd 0.55: cooldown desde que empezaste el dash (impide spam de shift; el "reset" total es
+  //    dash duration + cd = ~0.24 + 0.55 ≈ 0.8s antes del próximo dash).
+  dash: { wind: 0.04, time: 0.20, peak: 0.85, dist: 0.34, cancelFrom: 0.28, tapWin: 0.25, cd: 0.55 },
+  anim: {
+    bob: 0.02, leanGain: 0.10, leanMax: 0.35,
+    breatheHz: 0.4, breatheAmp: 0.03, flinchHl: 0.12, squashT: 0.09,
+  },
+  // ciclo de marcha procedural (apoyo/vuelo por pierna) — EL dial de "correr como humano"
+  gait: { halfBase: 0.30, halfSpd: 0.55, dutyBase: 0.64, dutySpd: 0.24, stepHBase: 0.05, stepHSpd: 0.10 },
+  spr: { hIdle: 0.15, hLoco: 0.11, hAtkStart: 0.045, hStrike: 0.02, hRecov: 0.18, lagMul: 1.4 },
+  feet: { stepT: 0.17, stepApex: 0.08, trigger: 0.85, leadT: 0.12, leadX: 0.06 },
+  rag: { damp: 0.985, iters: 4, blendIn: 0.15, blendOut: 0.30, getupV: 0.05, staggerW: 0.5, staggerK: 14 },
+  fight: {
+    hp: 100, enemyHp: 35, chip: 0.12, blockPush: 0.07, blockstun: 0.16, jugScale: 0.75, jugGrav: 0.15, jugMax: 3,
+    // hitboxes agrandados (+25-30%): las piñas atravesaban al enemigo con los valores viejos,
+    // sobre todo con la nueva velocidad de correr (72% max) que sumaba distancia por frame.
+    kdInvuln: 0.30, hitR: 0.075, hurtHead: 0.12, hurtTorso: 0.115, hurtLegs: 0.10, cancelEnd: 0.5,
+  },
+  // Grab hitbox más estricto: antes te agarrabas de plataformas casi sin querer con grabW=0.30
+  // y grabH=0.36. Ahora hay que apuntar más de cerca al borde para que enganche.
+  climb: { grabW: 0.18, grabH: 0.22, climbT: 0.33, slideCap: 0.25, wjVx: 0.45, wjVy: 0.80, wjBonus: 0.3 },
+  // cámara FPA: sigue al jugador, chiquito en pantalla (frac = alto del muñeco / alto de pantalla)
+  cam: { frac: 0.11, posHl: 0.15, look: 0.22, vDead: 0.18 },
+  juice: {
+    stopL: 0.05, stopM: 0.075, stopH: 0.115, stopKO: 0.17,
+    trL: 0.15, trM: 0.30, trLaunch: 0.50, trKO: 0.75, trDecay: 1.5,
+    shakeOff: 0.02, shakeRot: 0.035, shakeHz: 18, sparkCap: 250, dustCap: 70, dmgCap: 40,
+  },
+  ai: { reactBase: 0.20, thinkMin: 0.15, thinkMax: 0.25, punishMin: 0.13 },
+  perf: { dprCap: 1.5, dtMax: 0.05 },
+};
+const S = CFG.world.H;                       // unidad de movimiento (= alto lógico del mundo)
+const CH = CFG.world.chFrac * S;             // altura del stickman: TODO el esqueleto/combate escala de acá
+
+// ─── Matemática ───
+const PI = Math.PI, TAU = PI * 2;
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+const lerp = (a, b, t) => a + (b - a) * t;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const rndi = (a, b) => Math.floor(rnd(a, b + 1));
+const smoothstep = t => t * t * (3 - 2 * t);
+const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
+const easeInOutCubic = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+const wrapPi = a => { while (a > PI) a -= TAU; while (a < -PI) a += TAU; return a; };
+const arcLerp = (a, b, t) => a + wrapPi(b - a) * t;
+// exp-lerp por semivida: mueve cur hacia target de forma frame-rate-independiente
+const dampHL = (cur, target, hl, dt) => target + (cur - target) * Math.pow(2, -dt / hl);
+// Resorte críticamente amortiguado exacto (Holden). Muta el par {x, v} de un canal.
+const LN2x2 = 2 * Math.LN2;
+function springTo(pose, vel, i, target, hl, dt) {
+  const y = LN2x2 / hl, j0 = pose[i] - target, j1 = vel[i] + j0 * y, e = Math.exp(-y * dt);
+  pose[i] = e * (j0 + j1 * dt) + target;
+  vel[i] = e * (vel[i] - j1 * y * dt);
+}
+// Distancia² de punto a segmento (hit-test de cápsulas barridas)
+function segDist2(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+  let t = L2 > 0 ? ((px - ax) * dx + (py - ay) * dy) / L2 : 0;
+  t = clamp(t, 0, 1);
+  const qx = ax + dx * t - px, qy = ay + dy * t - py;
+  return qx * qx + qy * qy;
+}
+// Distancia² mínima entre dos segmentos (cápsula golpe vs cápsula hurt) — muestreo fino del seg A
+function segSegDist2(ax, ay, bx, by, cx, cy, dx, dy) {
+  let best = Infinity;
+  for (let i = 0; i <= 4; i++) {
+    const t = i / 4, px = ax + (bx - ax) * t, py = ay + (by - ay) * t;
+    const d = segDist2(px, py, cx, cy, dx, dy);
+    if (d < best) best = d;
+  }
+  for (let i = 0; i <= 4; i++) {
+    const t = i / 4, px = cx + (dx - cx) * t, py = cy + (dy - cy) * t;
+    const d = segDist2(px, py, ax, ay, bx, by);
+    if (d < best) best = d;
+  }
+  return best;
+}
+
+// ─── Audio: síntesis WebAudio sin archivos (patrón DonkeyKong + guardas Fireworks) ───
+let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
+const voiceLast = {};                        // cooldown por voz (evita metralleta de blips)
+function audioResume() {
+  if (!AC) {
+    try {
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = AC.createGain(); masterGain.gain.value = muted ? 0 : 1; masterGain.connect(AC.destination);
+    } catch (e) { return; }
+  }
+  if (AC.state === 'suspended') AC.resume().catch(() => {});
+}
+function ac() { return AC && AC.state === 'running' && sndThisFrame < 4; }
+function note(f0, f1, t0, dur, type, vol) {
+  const a = AC; if (!a) return;
+  sndThisFrame++;
+  const o = a.createOscillator(), g = a.createGain();
+  const jit = 1 + rnd(-0.1, 0.1);            // ±10% de pitch para que no suene a máquina
+  o.type = type; o.frequency.setValueAtTime(Math.max(20, f0 * jit), a.currentTime + t0);
+  if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * jit), a.currentTime + t0 + dur);
+  g.gain.setValueAtTime(vol, a.currentTime + t0);
+  g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + t0 + dur);
+  o.connect(g); g.connect(masterGain);
+  o.start(a.currentTime + t0); o.stop(a.currentTime + t0 + dur + 0.02);
+}
+function voice(name, cdMs, fn) {
+  if (!ac()) return;
+  const now = performance.now();
+  if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
+  voiceLast[name] = now; fn();
+}
+const sfx = {
+  whoosh()   { voice('whoosh', 60, () => note(500, 300, 0, 0.05, 'triangle', 0.04)); },
+  hit(d)     {                              // el daño escala volumen y grave (más pesado = más gordo)
+    const k = clamp(d / 12, 0.3, 1);
+    voice('hit', 40, () => note(180 - 60 * k, 90 - 40 * k, 0, 0.06 + 0.06 * k, 'square', 0.05 + 0.05 * k));
+  },
+  heavy()    { voice('heavy', 80, () => { note(140, 50, 0, 0.12, 'sawtooth', 0.09); note(147, 52, 0, 0.12, 'sawtooth', 0.05); }); },
+  block()    { voice('block', 70, () => note(700, 500, 0, 0.04, 'triangle', 0.05)); },
+  launcher() { voice('launch', 120, () => note(300, 60, 0, 0.18, 'sawtooth', 0.09)); },
+  ko()       { voice('ko', 300, () => { note(420, 40, 0, 0.4, 'sawtooth', 0.1); note(210, 30, 0.05, 0.4, 'square', 0.06); }); },
+  jump()     { voice('jump', 90, () => note(330, 540, 0, 0.08, 'square', 0.035)); },
+  dash()     { voice('dash', 120, () => note(240, 480, 0, 0.09, 'triangle', 0.05)); },
+  grab()     { voice('grab', 120, () => note(523, 659, 0, 0.08, 'square', 0.04)); },
+  step()     { voice('step', 130, () => note(90, 70, 0, 0.03, 'triangle', 0.018)); },
+  banner()   { voice('banner', 300, () => { note(392, 0, 0, 0.1, 'square', 0.05); note(523, 0, 0.11, 0.14, 'square', 0.06); }); },
+  win()      { voice('win', 300, () => { note(523, 0, 0, 0.1, 'square', 0.05); note(659, 0, 0.11, 0.1, 'square', 0.05); note(784, 0, 0.22, 0.1, 'square', 0.05); note(1047, 0, 0.33, 0.25, 'square', 0.06); } ); },
+};
+
+// ════════════════ INPUT: struct virtual único (jugador, teclado e IA escriben lo mismo) ════════════════
+const IS_TOUCH = (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches) || 'ontouchstart' in window;
+// mx ∈ [-1,1] mover · my > 0.5 = agacharse · jump/punch/kick = sostenidos · dashPulse = ±1 un frame
+// El jugador escribe inP1; cada ENEMIGO tiene su propio struct (lo escribe su cerebro de IA).
+function newInput() { return { mx: 0, my: 0, jump: false, punch: false, kick: false, dashPulse: 0 }; }
+const inP1 = newInput();
+
+// Desbloqueo de audio en el PRIMER gesto (iOS/Chrome) — a nivel window, fase captura
+window.addEventListener('pointerdown', audioResume, true);
+
+// ── Joystick hand-rolled (factory de CrazyTanksWeb): dinámico, nace donde tocás ──
+function createJoystick(zoneEl, opts) {
+  opts = opts || {};
+  const BASE_R = opts.baseR || 52, KNOB_R = opts.knobR || 30, DEAD = opts.dead || 7, aDead = opts.activeDead || 0;
+  const REST = opts.restMargin || 130;                               // posición de REPOSO: esq inf-izq
+  const out = opts.target || { active: false, x: 0, y: 0, ang: 0, mag: 0 };
+  const base = document.createElement('div'), knob = document.createElement('div');
+  base.style.cssText = 'position:fixed;border-radius:50%;pointer-events:none;z-index:6;display:none;width:' + (BASE_R * 2) + 'px;height:' + (BASE_R * 2) + 'px;margin:' + (-BASE_R) + 'px 0 0 ' + (-BASE_R) + 'px;' +
+    'background:rgba(244,235,221,0.5);border:2px solid rgba(34,30,27,0.5);box-shadow:inset 0 2px 10px rgba(120,95,80,0.25);';
+  knob.style.cssText = 'position:fixed;border-radius:50%;pointer-events:none;z-index:7;display:none;width:' + (KNOB_R * 2) + 'px;height:' + (KNOB_R * 2) + 'px;margin:' + (-KNOB_R) + 'px 0 0 ' + (-KNOB_R) + 'px;' +
+    'background:radial-gradient(circle at 50% 35%,#f3a556,#e2781e 75%);border:2px solid rgba(34,30,27,0.7);box-shadow:0 3px 8px rgba(60,45,35,0.4);';
+  document.body.appendChild(base); document.body.appendChild(knob);
+  let id = null, ox = 0, oy = 0, idleWanted = false;
+  const showRest = () => { const x0 = REST, y0 = window.innerHeight - REST; base.style.left = x0 + 'px'; base.style.top = y0 + 'px'; knob.style.left = x0 + 'px'; knob.style.top = y0 + 'px'; base.style.display = 'block'; knob.style.display = 'block'; };
+  const hideAll = () => { base.style.display = 'none'; knob.style.display = 'none'; };
+  let idleShown = null;
+  out.idle = show => {                                               // lo llama el loop: palanca tenue en reposo durante la pelea
+    idleWanted = show;
+    if (id !== null) { idleShown = null; return; }                   // tocando → manda el dedo
+    if (show === idleShown) return;                                  // sólo tocar el CSSOM cuando CAMBIA
+    idleShown = show;
+    if (show) showRest(); else hideAll();
+  };
+  zoneEl.addEventListener('pointerdown', e => {
+    if (e.pointerType === 'mouse' || id !== null) return;
+    e.preventDefault();
+    id = e.pointerId; ox = e.clientX; oy = e.clientY;
+    try { zoneEl.setPointerCapture(id); } catch (err) {}
+    base.style.left = ox + 'px'; base.style.top = oy + 'px'; base.style.display = 'block';
+    knob.style.left = ox + 'px'; knob.style.top = oy + 'px'; knob.style.display = 'block';
+    out.active = aDead <= 0; out.x = 0; out.y = 0; out.mag = 0;
+  });
+  zoneEl.addEventListener('pointermove', e => {
+    if (e.pointerId !== id) return;
+    let dx = e.clientX - ox, dy = e.clientY - oy;
+    const d = Math.hypot(dx, dy);
+    if (d > BASE_R) { dx = dx / d * BASE_R; dy = dy / d * BASE_R; }   // el nub se clampa al borde
+    knob.style.left = (ox + dx) + 'px'; knob.style.top = (oy + dy) + 'px';
+    out.mag = Math.min(1, d / BASE_R); out.x = dx / BASE_R; out.y = dy / BASE_R;
+    if (d > DEAD) out.ang = Math.atan2(dy, dx);
+    out.active = out.mag > aDead;
+  });
+  const end = e => {
+    if (e.pointerId !== id) return;
+    id = null; out.active = false; out.x = 0; out.y = 0; out.mag = 0;
+    if (idleWanted) showRest(); else hideAll();
+  };
+  zoneEl.addEventListener('pointerup', end);
+  zoneEl.addEventListener('pointercancel', end);
+  zoneEl.addEventListener('lostpointercapture', end);
+  return out;
+}
+const moveStick = { active: false, x: 0, y: 0, ang: 0, mag: 0, idle: () => {} };
+if (IS_TOUCH) createJoystick(document.getElementById('jMove'), { target: moveStick, activeDead: 0.1 });
+else document.body.classList.add('noTouch');
+
+// ── Botones de acción (mantener apretado; pointer events, jamás click) ──
+const btnState = { jump: false, punch: false, kick: false };
+function holdBtn(id, key) {
+  const el = document.getElementById(id);
+  const down = e => { e.preventDefault(); audioResume(); btnState[key] = true; el.classList.add('on'); };
+  const up = () => { btnState[key] = false; el.classList.remove('on'); };
+  el.addEventListener('pointerdown', down);
+  el.addEventListener('pointerup', up);
+  el.addEventListener('pointercancel', up);
+  el.addEventListener('pointerleave', up);
+}
+holdBtn('btnJump', 'jump'); holdBtn('btnPunch', 'punch'); holdBtn('btnKick', 'kick');
+
+// ── Teclado (desktop). P1: A/D/S + W/Espacio + J/K + Shift. P2 (modo 2P): flechas + Numpad1/2 ──
+const keys = {};
+addEventListener('keydown', e => {
+  if (e.repeat) { keys[e.code] = true; return; }
+  keys[e.code] = true;
+  // dash: Shift directo, o doble-tap de A/D (ventana tapWin)
+  if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') inP1.dashPulse = inP1.mx !== 0 ? Math.sign(inP1.mx) : 0;
+  if (e.code === 'KeyA' || e.code === 'KeyD') {
+    const dir = e.code === 'KeyD' ? 1 : -1, now = performance.now();
+    if (kbTapDir === dir && now - kbTapT < CFG.dash.tapWin * 1000) inP1.dashPulse = dir;
+    kbTapDir = dir; kbTapT = now;
+  }
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+let kbTapDir = 0, kbTapT = -1e9;
+
+// dash por palanca: cruce a |x|>0.7 dos veces en la ventana, mismo signo
+let stTapDir = 0, stTapT = -1e9, stArmed = true;
+function pollStickDash() {
+  const x = moveStick.x;
+  if (Math.abs(x) < 0.45) { stArmed = true; return; }
+  if (!stArmed || Math.abs(x) < 0.7) return;
+  stArmed = false;
+  const dir = Math.sign(x), now = performance.now();
+  if (stTapDir === dir && now - stTapT < CFG.dash.tapWin * 1000) inP1.dashPulse = dir;
+  stTapDir = dir; stTapT = now;
+}
+
+// Vuelca palanca+botones+teclado en el struct de P1. Cada frame.
+function pollInputs() {
+  pollStickDash();
+  let mx = 0, my = 0;
+  if (moveStick.active) { mx = clamp(moveStick.x * 1.25, -1, 1); my = moveStick.y; }
+  if (keys.KeyA || keys.ArrowLeft) mx = -1; if (keys.KeyD || keys.ArrowRight) mx = 1;
+  if (keys.KeyS || keys.ArrowDown) my = 1;
+  inP1.mx = mx; inP1.my = my;
+  inP1.jump = !!(btnState.jump || keys.KeyW || keys.Space || keys.ArrowUp);
+  inP1.punch = !!(btnState.punch || keys.KeyJ);
+  inP1.kick = !!(btnState.kick || keys.KeyK);
+}
+// Pointers zombis / pestaña oculta: soltar TODO (evita botones pegados al volver)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    for (const k in keys) keys[k] = false;
+    btnState.jump = btnState.punch = btnState.kick = false;
+    for (const el of document.querySelectorAll('.abtn.on')) el.classList.remove('on');
+  }
+});
+
+// ════════════════ ESQUELETO: 11 DOF autorables, FK a 13 puntos, IK analítica ════════════════
+// Ángulos en radianes RELATIVOS al reposo del hueso padre, autorados mirando a la DERECHA;
+// facing = ±1 espeja la componente x en FK/draw. dy = offset vertical de la pelvis (en CH).
+const J = { torso: 0, head: 1, aLu: 2, aLl: 3, aRu: 4, aRl: 5, lLu: 6, lLl: 7, lRu: 8, lRl: 9, dy: 10 };
+const NJ = 11;
+const JNAMES = ['torso', 'head', 'aLu', 'aLl', 'aRu', 'aRl', 'lLu', 'lLl', 'lRu', 'lRl', 'dy'];
+// Lado IZQUIERDO = lejano (se dibuja atrás, más oscuro) · DERECHO = cercano (adelante). El lead es el derecho.
+const P_ = { pelvis: 0, neck: 1, head: 2, shoL: 3, elbL: 4, hanL: 5, shoR: 6, elbR: 7, hanR: 8, kneL: 9, ftL: 10, kneR: 11, ftR: 12 };
+const NP = 13;
+// Largos de hueso (fracciones de CH) — sanity: piernas 0.39 + torso 0.30 + cuello 0.08 + cabeza 0.20 ≈ 0.97
+const B = {
+  torso: 0.30 * CH, neck: 0.08 * CH, headR: 0.10 * CH,
+  uArm: 0.16 * CH, fArm: 0.15 * CH, thigh: 0.20 * CH, shin: 0.19 * CH,
+  shoOff: 0.025 * CH, hipOff: 0.02 * CH, shoDrop: 0.07 * CH,
+};
+const LEG = B.thigh + B.shin;
+
+// Construye un Float64Array(11) desde un objeto pose {torso:…, aRu:…}; claves ausentes = 0
+function P(o) {
+  const a = new Float64Array(NJ);
+  for (const k in o) a[J[k]] = o[k];
+  return a;
+}
+
+// FK: escribe los 13 puntos del mundo en pts (Float64Array(26)). Cadenas "cuelgan hacia abajo":
+// dirDown(a) = (sin·facing, cos); el torso apunta hacia arriba: dirUp(a) = (sin·facing, −cos).
+function fk(pose, pts, x, y, facing) {
+  const f = facing;
+  const px = x, py = y + pose[J.dy] * CH;
+  pts[0] = px; pts[1] = py;                                          // pelvis
+  const ta = pose[J.torso];
+  const tx = Math.sin(ta) * f, ty = -Math.cos(ta);
+  const nx = px + B.torso * tx, ny = py + B.torso * ty;
+  pts[2] = nx; pts[3] = ny;                                          // cuello (tope del torso)
+  const ha = ta + pose[J.head];
+  pts[4] = nx + (B.neck + B.headR) * Math.sin(ha) * f;               // centro de cabeza
+  pts[5] = ny - (B.neck + B.headR) * Math.cos(ha);
+  // hombros: sobre el torso, apenas bajo el cuello, con offset de profundidad (L atrás, R adelante)
+  const sx = nx - B.shoDrop * tx, sy = ny - B.shoDrop * ty;
+  pts[P_.shoL * 2] = sx - B.shoOff * f; pts[P_.shoL * 2 + 1] = sy;
+  pts[P_.shoR * 2] = sx + B.shoOff * f; pts[P_.shoR * 2 + 1] = sy;
+  // brazos (hijos del torso: heredan su ángulo)
+  for (const [sho, elb, han, ju, jl] of [[P_.shoL, P_.elbL, P_.hanL, J.aLu, J.aLl], [P_.shoR, P_.elbR, P_.hanR, J.aRu, J.aRl]]) {
+    const au = ta + pose[ju], al = au + pose[jl];
+    const ex = pts[sho * 2] + B.uArm * Math.sin(au) * f, ey = pts[sho * 2 + 1] + B.uArm * Math.cos(au);
+    pts[elb * 2] = ex; pts[elb * 2 + 1] = ey;
+    pts[han * 2] = ex + B.fArm * Math.sin(al) * f; pts[han * 2 + 1] = ey + B.fArm * Math.cos(al);
+  }
+  // piernas (hijas de la pelvis: NO heredan la inclinación del torso)
+  for (const [hipOff, kne, ft, ju, jl] of [[-B.hipOff, P_.kneL, P_.ftL, J.lLu, J.lLl], [B.hipOff, P_.kneR, P_.ftR, J.lRu, J.lRl]]) {
+    const au = pose[ju], al = au + pose[jl];
+    const hx = px + hipOff * f;
+    const kx = hx + B.thigh * Math.sin(au) * f, ky = py + B.thigh * Math.cos(au);
+    pts[kne * 2] = kx; pts[kne * 2 + 1] = ky;
+    pts[ft * 2] = kx + B.shin * Math.sin(al) * f; pts[ft * 2 + 1] = ky + B.shin * Math.cos(al);
+  }
+}
+
+// IK analítica de dos huesos (forma cerrada de Juckett): resuelve el punto medio (rodilla/codo)
+// para llegar de (ax,ay) a (tx,ty). bendDir = +1 rodilla hacia adelante (facing), −1 hacia atrás.
+function ik2(ax, ay, tx, ty, l1, l2, bendDir, pts, iMid, iEnd) {
+  const dx = tx - ax, dy = ty - ay;
+  const d = Math.hypot(dx, dy);
+  const dMax = (l1 + l2) * 0.999, dMin = Math.abs(l1 - l2) + 0.001;
+  const dc = clamp(d, dMin, dMax);
+  // degenerado (objetivo EN la cadera): dirección unit hacia abajo, no dividir por ~0
+  const ux = d < 1e-6 ? 0 : dx / d, uy = d < 1e-6 ? 1 : dy / d;
+  const ex2 = ax + ux * dc, ey2 = ay + uy * dc;                      // extremo clampeado al alcance
+  const cosA = clamp((l1 * l1 + dc * dc - l2 * l2) / (2 * l1 * dc), -1, 1);
+  const a1 = Math.acos(cosA);
+  const c = Math.cos(a1 * bendDir), s = Math.sin(a1 * bendDir);      // rotar el unit vector ±a1
+  pts[iMid * 2] = ax + l1 * (ux * c - uy * s);
+  pts[iMid * 2 + 1] = ay + l1 * (ux * s + uy * c);
+  pts[iEnd * 2] = ex2; pts[iEnd * 2 + 1] = ey2;
+}
+
+// ════════════════ POSES autoradas (pocas y marcadas > muchas y tibias) ════════════════
+const POSES = {
+  idle:    P({ torso: 0.06, head: 0.04, aLu: 0.42, aLl: 1.9, aRu: 0.62, aRl: 1.75, lLu: -0.22, lLl: -0.18, lRu: 0.2, lRl: -0.28, dy: 0.025 }),
+  run1:    P({ torso: 0.2, head: -0.04, aLu: -0.5, aLl: 0.85, aRu: 0.65, aRl: 1.25, lLu: -0.42, lLl: -0.95, lRu: 0.58, lRl: -0.5, dy: 0.03 }),
+  run2:    P({ torso: 0.2, head: -0.04, aLu: 0.65, aLl: 1.25, aRu: -0.5, aRl: 0.85, lLu: 0.58, lLl: -0.5, lRu: -0.42, lRl: -0.95, dy: 0.03 }),
+  // Pose de IMPULSO de salto: brazos hacia arriba/atrás (aLu/aRu bien negativos), cuerpo estirado,
+  // piernas casi rectas. Se usa durante los primeros ~0.15s tras despegar → sensación de "pop".
+  jumpPop: P({ torso: -0.04, head: -0.10, aLu: -1.45, aLl: 0.25, aRu: -1.55, aRl: 0.30, lLu: 0.08, lLl: -0.15, lRu: 0.12, lRl: -0.20, dy: -0.06 }),
+  // Pose de ROLL: cuerpo compacto (bolita). Todo doblado a fondo — arms wrapped, knees to chest,
+  // dy alto (bajo al suelo). El giro visual lo aporta `f.rot` desde el estado ROLL.
+  ballRoll: P({ torso: 0.55, head: 0.50, aLu: 1.55, aLl: 2.55, aRu: 1.55, aRl: 2.55, lLu: 0.55, lLl: -2.35, lRu: -0.55, lRl: -2.35, dy: 0.34 }),
+  airRise: P({ torso: 0.14, head: -0.06, aLu: -0.75, aLl: 0.55, aRu: -0.95, aRl: 0.65, lLu: 0.32, lLl: -0.85, lRu: 0.72, lRl: -1.25, dy: 0 }),
+  airApex: P({ torso: 0.08, head: 0, aLu: -0.28, aLl: 0.45, aRu: -0.2, aRl: 0.5, lLu: 0.12, lLl: -0.5, lRu: 0.42, lRl: -0.7, dy: 0 }),
+  airFall: P({ torso: 0.04, head: 0.08, aLu: -1.0, aLl: 0.35, aRu: -1.15, aRl: 0.4, lLu: -0.1, lLl: -0.22, lRu: 0.38, lRl: -0.38, dy: 0 }),
+  skid:    P({ torso: -0.28, head: 0.1, aLu: -0.55, aLl: 0.45, aRu: 0.9, aRl: 0.35, lLu: -0.34, lLl: -0.6, lRu: 0.68, lRl: -0.35, dy: 0.06 }),
+  block:   P({ torso: 0.14, head: 0.1, aLu: 0.72, aLl: 2.05, aRu: 0.95, aRl: 1.9, lLu: -0.25, lLl: -0.22, lRu: 0.22, lRl: -0.3, dy: 0.05 }),
+  blockLo: P({ torso: 0.35, head: 0.12, aLu: 0.7, aLl: 2.0, aRu: 0.95, aRl: 1.85, lLu: -0.35, lLl: -1.5, lRu: 0.5, lRl: -1.7, dy: 0.2 }),
+  crouch:  P({ torso: 0.3, head: 0.06, aLu: 0.4, aLl: 1.7, aRu: 0.6, aRl: 1.6, lLu: -0.4, lLl: -1.6, lRu: 0.55, lRl: -1.75, dy: 0.22 }),
+  hang:    P({ torso: 0.08, head: -0.15, aLu: 2.75, aLl: 0.25, aRu: 2.95, aRl: 0.12, lLu: 0.04, lLl: -0.4, lRu: -0.08, lRl: -0.3, dy: 0 }),
+  getup:   P({ torso: 0.55, head: 0.15, aLu: 0.5, aLl: 1.2, aRu: 0.8, aRl: 1.0, lLu: -0.45, lLl: -1.7, lRu: 0.6, lRl: -1.85, dy: 0.26 }),
+};
+
+// ════════════════ MOVIMIENTOS: puro dato — poses parciales + frame data ════════════════
+// poses: [{p, at (s, absoluto), ease}] · startup/active/recovery en s · kb en S · masc. de joints
+// limb: punto que golpea (cápsula barrida limbPrev→limb) · strike: joints del limb que golpea
+const MASK_PUNCH = [J.torso, J.head, J.aLu, J.aLl, J.aRu, J.aRl];
+const MASK_ALL = [J.torso, J.head, J.aLu, J.aLl, J.aRu, J.aRl, J.lLu, J.lLl, J.lRu, J.lRl, J.dy];
+const MOVES = {
+  // ═══ CADENAS DE COMBO (chain = próximo move si tocás PUÑO durante recovery; chainAlt = PATADA)
+  //  · Puños puros:  jab → cross → hook → uppercut  (4-hit terminado en launcher)
+  //  · Punch → kick: cross → roundhouse → spinkick  ó  hook → spinkick (finish aéreo)
+  //  · Bajas:        jab → sweep → roundhouse → spinkick   (4-hit patadas)
+  //  · Remate:       uppercut → spinkick (patada giratoria en el aire)
+  jab: {
+    poses: [
+      { p: { torso: 0.1, aRu: 0.4, aRl: 1.9, aLu: 0.55, aLl: 1.95 }, at: 0.035, ease: easeOutCubic },
+      { p: { torso: 0.24, head: 0.05, aRu: 1.52, aRl: 0.06, aLu: 0.6, aLl: 2.05 }, at: 0.07, ease: easeOutCubic },   // contacto (autorada 8% pasada)
+      { p: { torso: 0.12, aRu: 0.7, aRl: 1.7, aLu: 0.5, aLl: 1.9 }, at: 0.26, ease: easeInOutCubic },
+    ],
+    startup: 0.07, active: 0.05, recovery: 0.14, dmg: 5, stop: 0.05, kbx: 0.10, kby: 0,
+    hitstun: 0.22, mask: MASK_PUNCH, limb: P_.hanR, strike: [J.aRu, J.aRl],
+    root: { at: 0, time: 0.06, dist: 0.03 }, chain: 'cross', chainAlt: 'sweep', sound: 'hit', trauma: 0.15,
+  },
+  cross: {
+    poses: [
+      { p: { torso: 0.05, aLu: 0.3, aLl: 2.1, aRu: 0.7, aRl: 1.8 }, at: 0.045, ease: easeOutCubic },
+      { p: { torso: 0.42, head: 0.08, aLu: 1.55, aLl: 0.05, aRu: 0.65, aRl: 2.1 }, at: 0.09, ease: easeOutCubic },
+      { p: { torso: 0.15, aLu: 0.5, aLl: 1.9, aRu: 0.6, aRl: 1.8 }, at: 0.34, ease: easeInOutCubic },
+    ],
+    startup: 0.09, active: 0.06, recovery: 0.19, dmg: 8, stop: 0.075, kbx: 0.11, kby: -0.04,
+    hitstun: 0.28, mask: MASK_PUNCH, limb: P_.hanL, strike: [J.aLu, J.aLl],
+    root: { at: 0.02, time: 0.1, dist: 0.05 }, chain: 'hook', chainAlt: 'roundhouse', sound: 'hit', trauma: 0.2,
+  },
+  hook: {
+    // Gancho horizontal (mano der) — variante rápida del uppercut, kb un poco lateral.
+    // Torso rota hacia atrás cargando y suelta cruzado. Encadena a uppercut (finish) o spinkick.
+    poses: [
+      { p: { torso: -0.15, head: -0.05, aRu: 2.15, aRl: 1.85, aLu: 0.55, aLl: 1.9 }, at: 0.05, ease: easeOutCubic },
+      { p: { torso: 0.38, head: 0.08, aRu: 1.55, aRl: 0.05, aLu: 0.5, aLl: 1.95 }, at: 0.11, ease: easeOutCubic },   // contacto (giro cruzado)
+      { p: { torso: 0.14, aRu: 0.65, aRl: 1.75, aLu: 0.55, aLl: 1.9 }, at: 0.36, ease: easeInOutCubic },
+    ],
+    startup: 0.10, active: 0.06, recovery: 0.20, dmg: 10, stop: 0.09, kbx: 0.16, kby: -0.03,
+    hitstun: 0.30, mask: MASK_PUNCH, limb: P_.hanR, strike: [J.aRu, J.aRl],
+    root: { at: 0.02, time: 0.10, dist: 0.06 }, chain: 'uppercut', chainAlt: 'spinkick', sound: 'hit', trauma: 0.25,
+  },
+  uppercut: {
+    poses: [
+      { p: { torso: 0.5, head: 0.1, aRu: -0.5, aRl: 1.3, aLu: 0.6, aLl: 1.9, dy: 0.14 }, at: 0.07, ease: easeInOutCubic },
+      { p: { torso: -0.18, head: -0.12, aRu: 2.55, aRl: 0.25, aLu: 0.55, aLl: 2.0, dy: -0.03 }, at: 0.13, ease: easeOutCubic },
+      { p: { torso: 0.05, aRu: 1.2, aRl: 1.0, aLu: 0.5, aLl: 1.9, dy: 0.02 }, at: 0.52, ease: easeInOutCubic },
+    ],
+    // activa desde ANTES del keyframe de contacto: la barrida del arco (abajo→arriba) también pega
+    startup: 0.10, active: 0.10, recovery: 0.32, dmg: 12, stop: 0.115, kbx: 0.12, kby: -0.75,
+    hitstun: 0.4, mask: MASK_ALL, limb: P_.hanR, strike: [J.aRu, J.aRl], launcher: true,
+    root: { at: 0.02, time: 0.1, dist: 0.09 }, chainAlt: 'spinkick', sound: 'heavy', trauma: 0.5,   // finish: uppercut → spinkick aéreo
+  },
+  roundhouse: {
+    poses: [
+      { p: { torso: 0.28, head: 0.05, aRu: 0.85, aRl: 0.5, aLu: -0.4, aLl: 0.6, lRu: 0.5, lRl: -1.6, lLu: -0.15, lLl: -0.25, dy: 0.06 }, at: 0.08, ease: easeInOutCubic },
+      { p: { torso: -0.42, head: 0.15, aRu: -0.6, aRl: 0.4, aLu: 0.9, aLl: 0.3, lRu: 1.62, lRl: -0.08, lLu: -0.2, lLl: -0.38, dy: 0.04 }, at: 0.145, ease: easeOutCubic },
+      { p: { torso: 0.08, aRu: 0.6, aRl: 1.7, aLu: 0.45, aLl: 1.85, lRu: 0.25, lRl: -0.35, lLu: -0.22, lLl: -0.2, dy: 0.04 }, at: 0.48, ease: easeInOutCubic },
+    ],
+    startup: 0.13, active: 0.07, recovery: 0.28, dmg: 11, stop: 0.09, kbx: 0.30, kby: -0.06,
+    hitstun: 0.32, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true,
+    root: { at: 0.02, time: 0.12, dist: 0.05 }, chainAlt: 'spinkick', sound: 'heavy', trauma: 0.3, reachBonus: true,
+  },
+  sweep: {
+    poses: [
+      { p: { torso: 0.45, aRu: 0.5, aRl: 1.2, aLu: 0.2, aLl: 1.0, lRu: 0.3, lRl: -1.5, lLu: -0.4, lLl: -1.6, dy: 0.2 }, at: 0.06, ease: easeInOutCubic },
+      { p: { torso: 0.55, head: 0.1, aRu: 0.9, aRl: 0.4, aLu: -0.3, aLl: 0.5, lRu: 1.25, lRl: -0.06, lLu: -0.45, lLl: -1.9, dy: 0.24 }, at: 0.13, ease: easeOutCubic },
+      { p: { torso: 0.3, aRu: 0.55, aRl: 1.6, aLu: 0.4, aLl: 1.7, lRu: 0.4, lRl: -1.5, lLu: -0.4, lLl: -1.6, dy: 0.18 }, at: 0.44, ease: easeInOutCubic },
+    ],
+    startup: 0.10, active: 0.06, recovery: 0.28, dmg: 7, stop: 0.07, kbx: 0.12, kby: 0,
+    hitstun: 0.3, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true,
+    low: true, knockdown: true, root: { at: 0.02, time: 0.1, dist: 0.04 }, chainAlt: 'roundhouse', sound: 'hit', trauma: 0.25,
+  },
+  spinkick: {
+    // Patada giratoria — remate de combo. El torso rota 180° cargando y suelta lateral.
+    // Muy damage, KB horizontal grande, alcance extra. Sale como finish desde: hook (K), uppercut
+    // (K), roundhouse (K), o directamente dash+kick.
+    poses: [
+      { p: { torso: 0.15, aRu: 0.5, aRl: 1.7, aLu: 0.5, aLl: 1.7, lRu: 0.35, lRl: -1.4, lLu: -0.2, lLl: -0.3, dy: 0.05 }, at: 0.06, ease: easeInOutCubic },
+      { p: { torso: -0.55, head: 0.2, aRu: -0.5, aRl: 0.3, aLu: 0.9, aLl: 0.35, lRu: 1.7, lRl: -0.03, lLu: -0.25, lLl: -0.42, dy: 0.03 }, at: 0.16, ease: easeOutCubic },
+      { p: { torso: 0.05, aRu: 0.55, aRl: 1.65, aLu: 0.5, aLl: 1.9, lRu: 0.3, lRl: -0.5, lLu: -0.25, lLl: -0.35, dy: 0.04 }, at: 0.5, ease: easeInOutCubic },
+    ],
+    startup: 0.13, active: 0.08, recovery: 0.32, dmg: 14, stop: 0.12, kbx: 0.36, kby: -0.10,
+    hitstun: 0.42, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true,
+    root: { at: 0.02, time: 0.14, dist: 0.06 }, sound: 'heavy', trauma: 0.4, reachBonus: true,
+  },
+  dropkick: {
+    // aérea con compromiso: activa hasta aterrizar (el estado la corta), recovery al caer
+    poses: [
+      { p: { torso: -0.2, aRu: -0.7, aRl: 0.5, aLu: -0.6, aLl: 0.45, lRu: 0.6, lRl: -1.4, lLu: 0.5, lLl: -1.3, dy: 0 }, at: 0.05, ease: easeInOutCubic },
+      { p: { torso: -0.62, head: 0.2, aRu: -0.9, aRl: 0.4, aLu: -0.8, aLl: 0.35, lRu: 1.45, lRl: -0.1, lLu: 1.3, lLl: -0.12, dy: 0 }, at: 0.11, ease: easeOutCubic },
+    ],
+    startup: 0.09, active: 0.5, recovery: 0.2, dmg: 9, stop: 0.09, kbx: 0.28, kby: -0.10,
+    hitstun: 0.34, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true, aerial: true,
+    sound: 'heavy', trauma: 0.3, momentumDmg: true,
+  },
+  airkick: {
+    poses: [
+      { p: { torso: 0.15, aRu: -0.5, aRl: 0.5, aLu: 0.6, aLl: 0.8, lRu: 0.4, lRl: -1.5, lLu: 0.45, lLl: -1.4 }, at: 0.045, ease: easeOutCubic },
+      { p: { torso: 0.3, head: 0.1, aRu: -0.7, aRl: 0.4, aLu: 0.8, aLl: 0.5, lRu: 1.15, lRl: -0.12, lLu: 0.55, lLl: -1.6 }, at: 0.08, ease: easeOutCubic },
+      { p: { torso: 0.1, aRu: -0.3, aRl: 0.5, aLu: 0.4, aLl: 0.7, lRu: 0.5, lRl: -0.8, lLu: 0.3, lLl: -0.9 }, at: 0.3, ease: easeInOutCubic },
+    ],
+    startup: 0.08, active: 0.15, recovery: 0.1, dmg: 9, stop: 0.075, kbx: 0.20, kby: 0.10,
+    hitstun: 0.3, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true, aerial: true,
+    spike: true, sound: 'hit', trauma: 0.25,
+  },
+  airpunch: {
+    poses: [
+      { p: { torso: 0.15, aRu: 0.5, aRl: 1.6, aLu: 0.3, aLl: 1.2 }, at: 0.03, ease: easeOutCubic },
+      { p: { torso: 0.28, aRu: 1.5, aRl: 0.1, aLu: 0.45, aLl: 1.6 }, at: 0.06, ease: easeOutCubic },
+      { p: { torso: 0.1, aRu: 0.6, aRl: 1.4, aLu: 0.35, aLl: 1.3 }, at: 0.2, ease: easeInOutCubic },
+    ],
+    startup: 0.06, active: 0.04, recovery: 0.1, dmg: 5, stop: 0.05, kbx: 0.08, kby: 0,
+    hitstun: 0.2, mask: MASK_PUNCH, limb: P_.hanR, strike: [J.aRu, J.aRl], aerial: true, sound: 'hit', trauma: 0.15,
+  },
+  lunge: {
+    // dash+P: hereda la velocidad del lunge como knockback/daño extra (momentum como recurso)
+    poses: [
+      { p: { torso: 0.15, aLu: 0.2, aLl: 2.15, aRu: 0.7, aRl: 1.8 }, at: 0.04, ease: easeOutCubic },
+      { p: { torso: 0.55, head: 0.1, aLu: 1.6, aLl: 0.04, aRu: 0.6, aRl: 2.1, dy: 0.05 }, at: 0.085, ease: easeOutCubic },
+      { p: { torso: 0.2, aLu: 0.5, aLl: 1.9, aRu: 0.55, aRl: 1.85 }, at: 0.32, ease: easeInOutCubic },
+    ],
+    startup: 0.085, active: 0.06, recovery: 0.18, dmg: 8, stop: 0.075, kbx: 0.2, kby: -0.05,
+    hitstun: 0.3, mask: MASK_PUNCH, limb: P_.hanL, strike: [J.aLu, J.aLl], sound: 'heavy', trauma: 0.3, momentumDmg: true,
+  },
+};
+for (const k in MOVES) { const m = MOVES[k]; m.name = k; m.total = m.startup + m.active + m.recovery; }
+
+// Muestrea el keytrack de un move en el reloj t (s): interpola poses parciales con su ease.
+// pose0 = pose del peleador al ARRANCAR el move (keyframe implícito en t=0: el golpe nace
+// desde donde estaba el cuerpo, nunca desde cero). Escribe en _sampScratch[j] los joints de la máscara.
+const _sampScratch = new Float64Array(NJ);
+function sampleMove(move, t, pose0) {
+  const ps = move.poses;
+  let iNext = ps.length - 1;
+  for (let i = 0; i < ps.length; i++) if (t <= ps[i].at) { iNext = i; break; }
+  const next = ps[iNext];
+  const t0 = iNext > 0 ? ps[iNext - 1].at : 0;
+  const span = Math.max(1e-4, next.at - t0);
+  const k = t >= next.at ? 1 : (next.ease || easeInOutCubic)(clamp((t - t0) / span, 0, 1));
+  const out = _sampScratch;
+  for (const j of move.mask) {
+    const name = JNAMES[j];
+    let a = pose0[j];                                                // valor al inicio del segmento
+    for (let i = iNext - 1; i >= 0; i--) if (ps[i].p[name] !== undefined) { a = ps[i].p[name]; break; }
+    const b = next.p[name] !== undefined ? next.p[name] : a;         // clave ausente = sostener
+    out[j] = arcLerp(a, b, k);
+  }
+  return out;
+}
+
+// ════════════════ FIGHTER: estado + física + capas de pose + ragdoll ════════════════
+const STAND = LEG * 0.98;                    // altura nominal de pelvis sobre el piso (rodilla apenas flexionada)
+const ST = {                                  // estados (strings cortos, legibles en el panel debug)
+  IDLE: 'idle', RUN: 'run', SKID: 'skid', JUMP: 'jump', FALL: 'fall', DASH: 'dash', ROLL: 'roll',
+  ATTACK: 'atk', BLOCKSTUN: 'bstun', HITSTUN: 'hstun', LAUNCHED: 'launch', KNOCKDOWN: 'kd',
+  GETUP: 'getup', HANG: 'hang', CLIMB: 'climb', WALLSLIDE: 'wslide', KO: 'ko',
+};
+// listas de estados hoisteadas (evita alocar arrays en el hot path, ~20/frame si van inline)
+const ACT_STATES = [ST.IDLE, ST.RUN, ST.SKID];
+const NOCTL_STATES = [ST.ATTACK, ST.DASH, ST.ROLL, ST.HITSTUN, ST.BLOCKSTUN, ST.LAUNCHED, ST.KNOCKDOWN, ST.GETUP, ST.HANG, ST.CLIMB, ST.KO];
+const GAIT_STATES = [ST.IDLE, ST.RUN, ST.SKID, ST.ATTACK, ST.BLOCKSTUN];
+const COYOTE_STATES = [ST.FALL, ST.RUN, ST.IDLE];
+const LOCO_H_STATES = [ST.RUN, ST.JUMP, ST.FALL, ST.DASH, ST.SKID, ST.WALLSLIDE, ST.LAUNCHED];
+const NOGUARD_STATES = [ST.ATTACK, ST.DASH, ST.HITSTUN, ST.LAUNCHED, ST.KNOCKDOWN, ST.GETUP, ST.ROLL];
+const IK_STATES = [ST.IDLE, ST.RUN, ST.SKID, ST.ATTACK, ST.BLOCKSTUN, ST.GETUP];
+// pares de constraint del ragdoll (rest length se toma de los puntos al activarlo)
+const RAG_BONES = [
+  [P_.pelvis, P_.neck], [P_.neck, P_.head], [P_.neck, P_.shoL], [P_.neck, P_.shoR],
+  [P_.shoL, P_.elbL], [P_.elbL, P_.hanL], [P_.shoR, P_.elbR], [P_.elbR, P_.hanR],
+  [P_.pelvis, P_.kneL], [P_.kneL, P_.ftL], [P_.pelvis, P_.kneR], [P_.kneR, P_.ftR],
+];
+const RAG_STIFF = [[P_.pelvis, P_.head]];    // anti-plegado: cabeza no se mete en la pelvis
+
+class Fighter {
+  constructor(x, color, colorDark, input) {
+    this.x = x; this.y = 0; this.vx = 0; this.vy = 0; this.facing = 1;
+    this.color = color; this.colorDark = colorDark;
+    this.input = input; this.prevIn = { jump: false, punch: false, kick: false };
+    this.buffer = [];                        // {act, dir, t} — 160 ms de gracia para todo
+    this.state = ST.IDLE; this.stateT = 0; this.T = rnd(0, 9);       // T = reloj de respiración (desfasado por peleador)
+    this.grounded = true; this.surf = null; this.coyoteT = 0; this.dropT = 0;
+    this.atk = null; this.atkClock = 0; this.atkHit = false; this.atkBlocked = false; this.atkPose0 = new Float64Array(NJ);
+    this.atkHitSet = new Set();                                       // defensores golpeados en el swing actual (permite multi-hit)
+    this.gaitPhase = 0; this.rot = 0; this.leanAx = 0; this.prevVx = 0;
+    this.squashT = 9; this.squashAmt = 0;
+    this.targetPose = new Float64Array(NJ); this.poseCur = new Float64Array(NJ); this.poseVel = new Float64Array(NJ);
+    this.poseCur.set(POSES.idle); this.targetPose.set(POSES.idle);
+    this.logicPts = new Float64Array(NP * 2); this.logicPtsPrev = new Float64Array(NP * 2);
+    this.renderPts = new Float64Array(NP * 2); this.renderPtsPrev = new Float64Array(NP * 2);
+    this.hArr = new Float64Array(NJ);
+    this.feet = [
+      { px: x - 0.12 * CH, py: 0, planted: true, stepT: 1, fromX: 0, fromY: 0 },
+      { px: x + 0.12 * CH, py: 0, planted: true, stepT: 1, fromX: 0, fromY: 0 },
+    ];
+    this.rag = { pts: new Float64Array(NP * 2), prev: new Float64Array(NP * 2), rest: new Float64Array(RAG_BONES.length), stiffRest: 0, w: 0, on: false };
+    this.hp = CFG.fight.hp; this.wins = 0;
+    this.hitstopT = 0; this.pendKbx = 0; this.pendKby = 0; this.pendKb = false;
+    this.stun = 0; this.flinchW = 0; this.flinchDir = 1; this.hitFlash = 0;
+    this.juggle = 0; this.combo = 0; this.comboT = 0; this.kdT = 0; this.invuln = 0;
+    this.ledge = null; this.climbFrom = null; this.wallSide = 0; this.lastDashDir = 0; this.dashT = 9;
+    this.dashCdT = 0;                                                 // cooldown del dash (bloquea nuevo dash mientras > 0)
+    this.foe = null; this.dead = false;
+    fk(this.targetPose, this.renderPts, x, 0, 1);
+    this.renderPtsPrev.set(this.renderPts); this.logicPts.set(this.renderPts); this.logicPtsPrev.set(this.renderPts);
+  }
+
+  // ── entrada: edges → buffer (160 ms). El buffer se consume cuando se abre una ventana legal ──
+  readInput(dt) {
+    const i = this.input, p = this.prevIn;
+    for (const b of this.buffer) b.t += dt;
+    while (this.buffer.length && this.buffer[0].t > CFG.move.inputBuf) this.buffer.shift();
+    if (i.jump && !p.jump) this.buffer.push({ act: 'jump', dir: 0, t: 0 });
+    if (i.punch && !p.punch) this.buffer.push({ act: 'punch', dir: 0, t: 0 });
+    if (i.kick && !p.kick) this.buffer.push({ act: 'kick', dir: 0, t: 0 });
+    if (i.dashPulse) { this.buffer.push({ act: 'dash', dir: i.dashPulse, t: 0 }); i.dashPulse = 0; }
+    p.jump = i.jump; p.punch = i.punch; p.kick = i.kick;
+  }
+  consume(act) {
+    for (let k = this.buffer.length - 1; k >= 0; k--)
+      if (this.buffer[k].act === act) return this.buffer.splice(k, 1)[0];
+    return null;
+  }
+  hasBuf(act) { return this.buffer.some(b => b.act === act); }
+
+  // ── update por frame. dt = dt REAL; el freeze de hitstop anula el dt de simulación ──
+  update(dt) {
+    this.hitstopT = Math.max(0, this.hitstopT - dt);
+    const simDt = this.hitstopT > 0 ? 0 : dt;
+    this.T += dt;
+    this.comboT -= dt; if (this.comboT <= 0) this.combo = 0;
+    this.hitFlash = Math.max(0, this.hitFlash - dt);
+    this.invuln = Math.max(0, this.invuln - dt);
+    this.flinchW *= Math.pow(2, -dt / CFG.anim.flinchHl);
+    this.renderPtsPrev.set(this.renderPts);
+    this.readInput(dt);                      // SIEMPRE en dt real: un tap dentro del freeze no se pierde (queda en el buffer)
+    if (simDt > 0) {
+      // knockback pendiente: se aplica cuando SUELTA el freeze (el golpe "empuja" al descongelar)
+      if (this.pendKb) {
+        this.vx = this.pendKbx;
+        // kby=0 no debe FRENAR la caída de una víctima aérea (quedaba flotando)
+        this.vy = this.pendKby !== 0 ? this.pendKby : (this.grounded ? 0 : this.vy);
+        this.pendKb = false;
+      }
+      this.stepState(simDt);
+      this.physics(simDt);
+    }
+    this.buildPose(simDt);
+    this.logicPtsPrev.set(this.logicPts);
+    fk(this.targetPose, this.logicPts, this.x, this.y, this.facing);
+    if (simDt > 0) this.springs(simDt);
+    fk(this.poseCur, this.renderPts, this.x, this.y, this.facing);
+    if (this.rot) { rotPts(this.logicPts, this.x, this.y, this.rot * this.facing); rotPts(this.renderPts, this.x, this.y, this.rot * this.facing); }
+    this.feetIK(simDt);                      // TAMBIÉN con dt=0: si no, durante el hitstop las piernas vuelven a la pose cruda
+    this.armIK();
+    this.updateRagdoll(simDt);
+  }
+
+  // ── máquina de estados + consumo de buffer ──
+  stepState(dt) {
+    this.stateT += dt;
+    const i = this.input, foe = this.foe;
+    const canAct = ACT_STATES.includes(this.state);
+    // facing: CERCA de un enemigo se le da la cara (permite bloquear caminando para atrás);
+    // lejos, el cuerpo apunta hacia donde te movés (regla sandbox — antes quedaba clavado sin foe)
+    if (canAct) this.updateFacing(i, foe);
+    switch (this.state) {
+      case ST.IDLE: case ST.RUN: case ST.SKID: {
+        if (this.state === ST.SKID && this.stateT < CFG.move.skidLock) break;   // lock breve del derrape
+        if (this.tryGroundActions()) break;
+        const runng = Math.abs(this.vx) > 0.1 * CFG.move.maxRun * S;
+        this.state = runng ? ST.RUN : ST.IDLE;
+        break;
+      }
+      case ST.JUMP: case ST.FALL: {
+        if (this.vy > 0) this.state = ST.FALL;
+        this.updateFacing(i, foe);                                    // en el aire también se gira (plataformero)
+        // acciones aéreas
+        if (this.consume('punch')) { this.startMove('airpunch'); break; }
+        if (this.consume('kick')) { this.startMove('airkick'); break; }
+        this.tryLedgeGrab();
+        this.tryWallSlide();
+        break;
+      }
+      case ST.DASH: {
+        this.dashT = this.stateT;
+        const frac = this.stateT / (CFG.dash.wind + CFG.dash.time);
+        if (frac >= CFG.dash.cancelFrom) {
+          if (this.consume('punch')) { this.startMove('lunge'); break; }
+          if (this.consume('kick')) { this.startDropkick(); break; }
+        }
+        if (frac >= 1) this.state = ST.IDLE;
+        break;
+      }
+      case ST.ROLL: {
+        this.rot = this.facing >= 0 ? TAU * smoothstep(clamp(this.stateT / 0.38, 0, 1)) : TAU * smoothstep(clamp(this.stateT / 0.38, 0, 1));
+        if (this.stateT >= 0.38) { this.rot = 0; this.state = ST.IDLE; }
+        break;
+      }
+      case ST.ATTACK: {
+        const m = this.atk;
+        this.atkClock += dt;
+        // dropkick: la ventana activa dura hasta ATERRIZAR (alto compromiso)
+        if (m.name === 'dropkick' && this.grounded && this.atkClock > m.startup)
+          this.atkClock = Math.max(this.atkClock, m.startup + 0.5);  // corta a recovery al tocar el piso
+        // cancel SOLO con contacto (hit o block), desde el 1er frame activo hasta 50% del recovery
+        const canCancel = (this.atkHit || this.atkBlocked) &&
+          this.atkClock >= m.startup && this.atkClock <= m.startup + m.active + m.recovery * CFG.fight.cancelEnd;
+        if (canCancel) {
+          if (m.chain && this.consume('punch')) { this.startMove(m.chain); break; }
+          if (m.chainAlt && this.consume('kick')) { this.startMove(m.chainAlt); break; }
+        }
+        if (this.atkClock >= m.total) { this.atk = null; this.state = this.grounded ? ST.IDLE : ST.FALL; }
+        break;
+      }
+      case ST.BLOCKSTUN: case ST.HITSTUN: {
+        this.stun -= dt;
+        if (this.stun <= 0) this.state = this.grounded ? ST.IDLE : ST.FALL;
+        break;
+      }
+      case ST.LAUNCHED: break;               // termina al tocar el piso (physics → KNOCKDOWN)
+      case ST.KNOCKDOWN: {
+        this.kdT -= dt;
+        const v = this.ragSpeed();
+        if (this.kdT <= 0 && v < CFG.rag.getupV * S) {
+          // levantarse: el root salta a la pelvis del ragdoll; tech-roll si hay dirección sostenida
+          this.x = clamp(this.rag.pts[0], ARENA.pad, ARENA.w - ARENA.pad);
+          const g = groundAt(this.x, this.rag.pts[1] + STAND);
+          this.y = g.y - STAND; this.surf = g.s; this.grounded = true; this.vx = 0; this.vy = 0;
+          this.state = ST.GETUP; this.stateT = 0; this.invuln = 0.45; this.juggle = 0;
+          if (Math.abs(i.mx) > 0.4) { this.vx = Math.sign(i.mx) * 0.35 * S; }   // tech-roll
+        }
+        break;
+      }
+      case ST.GETUP: {
+        if (this.stateT >= 0.32) this.state = ST.IDLE;
+        break;
+      }
+      case ST.HANG: {
+        const L = this.ledge;
+        if (!L) { this.state = ST.FALL; break; }
+        if (this.stateT > 0.15) {
+          // hacia la plataforma = subir; -L.side es la dirección DEL borde hacia la plataforma
+          if (this.consume('jump') || i.my < -0.4 || (i.mx * -L.side > 0.4)) { this.startClimb(); break; }
+          // ABAJO = soltarse cayendo LIMPIO (sin empujón lateral). Antes empujaba hacia afuera
+          // del borde y el chabón se caía del mapa cuando no había piso bajo la plataforma.
+          if (i.my > 0.5) {
+            this.ledge = null; this.state = ST.FALL;
+            this.vx = 0; this.vy = 0.05 * S;
+            break;
+          }
+          // Alejándose EXPLÍCITO (empujaste la palanca lejos del borde) → sí lo tiramos afuera.
+          if (i.mx * -L.side < -0.4) {
+            this.ledge = null; this.state = ST.FALL;
+            this.vx = L.side * 0.1 * S; this.vy = 0.05 * S;
+            break;
+          }
+          if (this.consume('kick') || this.consume('punch')) {        // soltarse pateando (empuja AFUERA del borde)
+            this.ledge = null; this.vx = L.side * 0.12 * S; this.vy = -0.15 * S; this.grounded = false;
+            this.startMove('airkick'); break;
+          }
+        }
+        break;
+      }
+      case ST.CLIMB: {
+        if (this.stateT >= CFG.climb.climbT) {
+          const L = this.climbFrom;
+          this.x = L.x - L.side * 0.16 * CH; this.y = L.y - STAND;   // termina ARRIBA de la plataforma
+          this.grounded = true; this.surf = L.surf; this.state = ST.IDLE; this.ledge = null;
+          this.replantFeet();
+        }
+        break;
+      }
+      case ST.WALLSLIDE: {
+        if (this.grounded || this.vy < 0 || this.input.mx * this.wallSide < 0.2) { this.state = this.grounded ? ST.IDLE : ST.FALL; break; }
+        if (this.consume('jump')) {                                   // wall-jump: SUMA velocidad (regla FPA)
+          const bonus = CFG.climb.wjBonus * Math.abs(this.vy) / S;
+          this.vx = -this.wallSide * CFG.climb.wjVx * S;
+          this.vy = -(CFG.climb.wjVy + bonus) * S;
+          this.facing = -this.wallSide; this.state = ST.JUMP; this.grounded = false;
+          sfx.jump(); spawnDust(this.x + this.wallSide * 0.1 * CH, this.y, 5);
+        }
+        break;
+      }
+      case ST.KO: break;
+    }
+  }
+
+  updateFacing(i, foe) {
+    // rango de "cara al enemigo" = 1.1·CH: a distancia de pelea real (los golpes llegan a ~0.6·CH)
+    // bloqueás retrocediendo, pero pasás corriendo al lado de uno y el cuerpo sigue a TU movimiento
+    const nearFoe = foe && !foe.dead && Math.abs(foe.x - this.x) < 1.1 * CH && Math.abs(foe.y - this.y) < 1.2 * CH;
+    if (nearFoe) {
+      const d = foe.x - this.x;
+      if (Math.abs(d) > 0.05 * CH) this.facing = Math.sign(d);
+    } else if (Math.abs(i.mx) > 0.3) {
+      this.facing = Math.sign(i.mx);                                  // el input manda (gira ya, sin esperar a que vx cruce 0)
+    } else if (Math.abs(this.vx) > 0.08 * S) {
+      this.facing = Math.sign(this.vx);
+    }
+  }
+  tryGroundActions() {
+    const i = this.input;
+    // dash (doble-tap de palanca / Shift). Con cooldown: si dashCdT > 0, se consume el input
+    // igual (para no acumular buffers) pero no arranca — feedback: silencio.
+    const d = this.consume('dash');
+    if (d && d.dir) {
+      if (this.dashCdT > 0) return false;                             // en cooldown
+      this.state = ST.DASH; this.stateT = 0; this.lastDashDir = d.dir; this.facing = this.foe ? this.facing : d.dir;
+      // Total del dash + cd → tiempo antes de que se pueda volver a dashear.
+      this.dashCdT = CFG.dash.wind + CFG.dash.time + CFG.dash.cd;
+      sfx.dash(); this.recordGhosts = true;
+      return true;
+    }
+    // abajo+salto sobre plataforma one-way = bajarse (ANTES de que el salto se consuma como salto)
+    if (i.my > 0.5 && this.surf && this.surf.oneway && this.consume('jump')) {
+      this.grounded = false; this.surf = null; this.dropT = 0.28; this.y += 4;
+      this.unplantFeet(); this.state = ST.FALL; this.stateT = 0;
+      return true;
+    }
+    if (this.consume('jump')) { this.doJump(); return true; }
+    if (this.consume('punch')) { this.startMove(this.dashT < 0.25 ? 'lunge' : 'jab'); return true; }
+    if (this.consume('kick')) {
+      if (i.my > 0.5) this.startMove('sweep');
+      else if (Math.abs(this.vx) > 0.55 * CFG.move.maxRun * S) this.startDropkick();
+      else this.startMove('roundhouse');
+      return true;
+    }
+    return false;
+  }
+  doJump() {
+    this.vy = -Math.sqrt(2 * CFG.move.gUp * S * CFG.move.jumpApex * CH);
+    this.grounded = false; this.state = ST.JUMP; this.stateT = 0; this.coyoteT = 9;
+    this.unplantFeet(); sfx.jump(); spawnDust(this.x, this.y + STAND, 4);
+  }
+  startMove(name) {
+    const m = MOVES[name];
+    this.atkPose0.set(this.targetPose);
+    this.atk = m; this.atkClock = 0; this.atkHit = false; this.atkBlocked = false;
+    if (this.atkHitSet) this.atkHitSet.clear(); else this.atkHitSet = new Set();
+    this.state = ST.ATTACK; this.stateT = 0;
+    if (m.unplantR) { this.feet[1].planted = false; }
+    sfx.whoosh();
+  }
+  startDropkick() {
+    this.vy = -0.45 * S; this.vx = clamp(this.vx * 1.12, -1.1 * S, 1.1 * S);
+    this.grounded = false; this.unplantFeet();
+    this.startMove('dropkick');
+  }
+  startClimb() {
+    const L = this.ledge;
+    this.climbFrom = L; this.state = ST.CLIMB; this.stateT = 0;
+    this.climbX0 = this.x; this.climbY0 = this.y;
+    sfx.grab();
+  }
+
+  // ── física de plataformas (fake, estilo Borne: se integra directo, cero solver) ──
+  physics(dt) {
+    const i = this.input, mv = CFG.move;
+    const wasGrounded = this.grounded, vyPrev = this.vy;
+    const noCtl = NOCTL_STATES.includes(this.state);
+    this.dropT = Math.max(0, this.dropT - dt); this.dashT += dt;
+    if (this.dashCdT > 0) this.dashCdT -= dt;                         // cooldown del dash cuenta hacia abajo
+
+    if (this.state === ST.HANG) { this.vx = 0; this.vy = 0; this.prevVx = 0; this.leanAx = 0; return; }
+    if (this.state === ST.CLIMB) {                                    // root por Bezier: sube y entra
+      const L = this.climbFrom, t = smoothstep(clamp(this.stateT / CFG.climb.climbT, 0, 1));
+      const x1 = L.x - L.side * 0.16 * CH, y1 = L.y - STAND;
+      const cx = this.climbX0 * 0.35 + x1 * 0.65, cy = Math.min(this.climbY0, y1) - 0.22 * CH;
+      const u = 1 - t;
+      this.x = u * u * this.climbX0 + 2 * u * t * cx + t * t * x1;
+      this.y = u * u * this.climbY0 + 2 * u * t * cy + t * t * y1;
+      this.vx = 0; this.vy = 0; this.prevVx = 0; this.leanAx = 0; return;
+    }
+    if (this.state === ST.KNOCKDOWN || this.state === ST.KO) { this.vx = 0; this.vy = 0; this.prevVx = 0; this.leanAx = 0; return; }   // manda el ragdoll
+
+    // ── control horizontal ──
+    if (!noCtl && this.grounded) {
+      const want = clamp(i.mx, -1, 1) * mv.maxRun * S;
+      const revers = want !== 0 && Math.sign(want) !== Math.sign(this.vx) && Math.abs(this.vx) > mv.skidMin * mv.maxRun * S;
+      if (revers && this.state !== ST.SKID) {                        // derrape con estado explícito
+        this.state = ST.SKID; this.stateT = 0; this.unplantFeet();
+        spawnDust(this.x - Math.sign(this.vx) * 0.1 * CH, this.y + STAND, 6); sfx.step();
+      }
+      if (this.state === ST.SKID) {
+        this.vx -= Math.sign(this.vx) * mv.skidDecel * S * dt;
+        if (Math.abs(this.vx) < 0.05 * S || Math.sign(this.vx) === Math.sign(want)) this.state = want ? ST.RUN : ST.IDLE;
+      } else if (want !== 0) {
+        // acelerar SOLO por debajo del tope (si no, el equilibrio accel-vs-drag quedaba 65% arriba)
+        if (Math.abs(this.vx) < mv.maxRun * S || Math.sign(this.vx) !== Math.sign(want))
+          this.vx += Math.sign(want) * mv.accel * S * dt;
+        // por encima del tope (dash/roll con embalada): drag suave hasta volver a maxRun
+        const over = Math.abs(this.vx) - mv.maxRun * S;
+        if (over > 0) this.vx -= Math.sign(this.vx) * over * 4 * dt;
+      } else {
+        this.vx *= Math.exp(-mv.fric * dt);                          // fricción exponencial
+        if (Math.abs(this.vx) < 2) this.vx = 0;
+      }
+    } else if (!noCtl && !this.grounded) {
+      // Control aéreo con TOPE: antes se sumaba accel sin cap → si mantenías izq/der en aire, la
+      // velocidad crecía sin límite y quedaba raro. Ahora respetamos el mismo tope que en piso
+      // multiplicado por softCap (aire un toque más lento). Igual dejamos crecer si venís con
+      // embalada (dash aéreo, launch) — sólo drag suave hasta bajar al cap.
+      const airMax = mv.softCap * mv.maxRun * S;
+      const want = clamp(i.mx, -1, 1);
+      if (want !== 0) {
+        if (Math.abs(this.vx) < airMax || Math.sign(this.vx) !== Math.sign(want))
+          this.vx += want * mv.airAccel * S * dt;
+        const over = Math.abs(this.vx) - airMax;
+        if (over > 0) this.vx -= Math.sign(this.vx) * over * 2.5 * dt;
+      }
+    } else if (this.state === ST.ATTACK && this.grounded) {
+      this.vx *= Math.exp(-mv.fric * 1.6 * dt);                      // los golpes frenan (root motion aparte)
+    } else if ((this.state === ST.HITSTUN || this.state === ST.BLOCKSTUN) && this.grounded) {
+      this.vx *= Math.exp(-mv.fric * 0.9 * dt);
+    }
+
+    // ── envelopes de root motion (dash / golpes): gemelo suave, jerk cero en los bordes ──
+    // OJO: el envelope es una VELOCIDAD instantánea — se suma a la integración, no a vx (acumularía)
+    let rootVx = 0;
+    if (this.state === ST.DASH) this.vx = lungeVel(this.stateT, CFG.dash.wind, CFG.dash.time, CFG.dash.dist * S) * this.lastDashDir;
+    if (this.state === ST.ATTACK && this.atk.root && this.grounded)
+      rootVx = lungeVel(this.atkClock - this.atk.root.at, 0, this.atk.root.time, this.atk.root.dist * S) * this.facing;
+
+    // ── gravedad asimétrica + corte de salto ──
+    if (!this.grounded) {
+      const rising = this.vy < 0;
+      let g = (rising ? mv.gUp : mv.gDown) * S;
+      if (this.state === ST.LAUNCHED) g *= 1 + CFG.fight.jugGrav * this.juggle;
+      if (rising && this.state === ST.JUMP && !i.jump) this.vy *= Math.pow(mv.jumpCut, dt * 60 / 10);   // soltar = salto corto
+      this.vy = Math.min(this.vy + g * dt, mv.termVy * S);
+    } else this.coyoteT = 0;
+    if (!this.grounded) this.coyoteT += dt;
+
+    // ── integrar + resolver piso/plataformas/paredes ──
+    const feetPrev = this.y + STAND;
+    this.x += (this.vx + rootVx) * dt; this.y += this.vy * dt;
+    const feetNow = this.y + STAND;
+    this.wallSide = 0;
+    if (this.x < ARENA.pad) { this.x = ARENA.pad; this.vx = Math.max(0, this.vx); this.wallSide = -1; }
+    if (this.x > ARENA.w - ARENA.pad) { this.x = ARENA.w - ARENA.pad; this.vx = Math.min(0, this.vx); this.wallSide = 1; }
+
+    if (this.grounded) {
+      // sigo arriba de mi superficie? (me caí del borde → coyote)
+      const s = this.surf;
+      if (!s || this.x < s.x - 2 || this.x > s.x + s.w + 2) { this.grounded = false; this.surf = null; }
+      else this.y = s.y - STAND;
+      // (el drop-through de plataformas one-way vive en tryGroundActions, antes de consumir el salto)
+    }
+    if (!this.grounded && this.vy >= 0) {
+      for (const s of ARENA.surfs) {
+        if (s.oneway && this.dropT > 0) continue;
+        if (this.x < s.x || this.x > s.x + s.w) continue;
+        if (feetPrev <= s.y + 2 && feetNow >= s.y) {
+          this.y = s.y - STAND; this.vy = 0; this.grounded = true; this.surf = s;
+          this.onLand(vyPrev);
+          break;
+        }
+      }
+    }
+    // coyote-jump: me caí hace poquito y tenía el salto en el buffer
+    if (!this.grounded && this.coyoteT < mv.coyote && COYOTE_STATES.includes(this.state) && this.consume('jump')) {
+      this.grounded = true; this.doJump();
+    }
+    if (!this.grounded && ACT_STATES.includes(this.state)) { this.state = ST.FALL; this.stateT = 0; this.unplantFeet(); }
+    // aceleración suavizada → lean del torso
+    const ax = (this.vx - this.prevVx) / Math.max(dt, 1e-4);
+    this.leanAx = dampHL(this.leanAx, ax, 0.09, dt);
+    this.prevVx = this.vx;
+    if (this.grounded && GAIT_STATES.includes(this.state)) {
+      // fase por DISTANCIA recorrida (ley FPA). El ciclo completo mide 2·half/duty:
+      // con esa relación exacta, el pie en apoyo queda CLAVADO en el mundo (cero patinaje).
+      const sp2 = this.strideParams(Math.min(1, Math.abs(this.vx) / (CFG.move.maxRun * S)));
+      this.gaitPhase += Math.abs(this.vx) * dt / (2 * sp2.half / sp2.duty);
+    }
+  }
+  onLand(vyImpact) {
+    this.squashT = 0; this.squashAmt = clamp(vyImpact / (1.2 * S), 0, 1);
+    this.replantFeet();
+    if (vyImpact > 0.3 * S) { spawnDust(this.x, this.y + STAND, 3 + Math.floor(this.squashAmt * 6)); sfx.step(); }
+    if (this.state === ST.LAUNCHED) {                                 // impacto → ragdoll en el piso
+      this.enterKnockdown(this.vx * 0.6, -Math.abs(vyImpact) * 0.25);
+      return;
+    }
+    if (this.state === ST.JUMP || this.state === ST.FALL) {
+      // roll al caer con abajo sostenido y velocidad
+      if (this.input.my > 0.5 && vyImpact > CFG.move.rollMinVy * S) {
+        this.state = ST.ROLL; this.stateT = 0;
+        this.vx = this.facing * CFG.move.rollConv * vyImpact;
+        this.invuln = 0.2; this.recordGhosts = true;
+      } else this.state = Math.abs(this.vx) > 0.1 * S ? ST.RUN : ST.IDLE;
+      this.stateT = 0;
+    }
+    if (this.hasBuf('jump') && [ST.IDLE, ST.RUN].includes(this.state)) { this.consume('jump'); this.doJump(); }   // jump buffer
+  }
+
+  // ── trepado ──
+  tryLedgeGrab() {
+    if (this.vy < -0.35 * S || this.invuln > 0) return;              // agarra cerca del ápice o cayendo (generosidad > realismo)
+    for (const L of ARENA.ledges) {
+      // rect de agarre delante/encima de la cabeza, entrando hacia el borde
+      const hx = this.x - L.side * 0.1 * CH, hy = this.y - 0.55 * CH;   // "cabeza" aproximada
+      if (Math.abs(hx - L.x) < CFG.climb.grabW * CH && hy > L.y - CFG.climb.grabH * CH && hy < L.y + CFG.climb.grabH * CH * 1.4) {
+        const towards = this.vx * -L.side > -0.05 * S || this.input.mx * -L.side > 0.2;
+        if (!towards) continue;
+        this.ledge = L; this.state = ST.HANG; this.stateT = 0;
+        this.x = L.x + L.side * 0.13 * CH; this.y = L.y + 0.52 * CH;
+        this.vx = 0; this.vy = 0; this.facing = -L.side; this.grounded = false; this.unplantFeet();
+        sfx.grab();
+        return;
+      }
+    }
+  }
+  tryWallSlide() {
+    if (this.wallSide === 0 || this.vy <= 0) return;
+    if (this.input.mx * this.wallSide > 0.2) {
+      this.state = ST.WALLSLIDE; this.stateT = 0; this.facing = this.wallSide;
+    }
+  }
+
+  // ═══ CAPAS DE POSE (a: locomoción · b: keytrack del golpe · c: aditivas) ═══
+  buildPose(dt) {
+    const tp = this.targetPose;
+    if (this.state !== ST.ROLL) this.rot = 0;                         // un golpe a mitad de roll no deja el cuerpo girado
+
+    // (a) base de locomoción
+    this.baseLoco(tp);
+    // (b) keytrack del ataque (overwrite enmascarado con peso)
+    if (this.state === ST.ATTACK) {
+      const m = this.atk, t = this.atkClock;
+      const wIn = clamp(t / 0.06, 0, 1);
+      const recStart = m.startup + m.active + m.recovery * 0.7;
+      const wOut = t > recStart ? 1 - clamp((t - recStart) / (m.total - recStart), 0, 1) : 1;
+      const w = Math.min(wIn, wOut);
+      const smp = sampleMove(m, t, this.atkPose0);
+      for (const j of m.mask) tp[j] = arcLerp(tp[j], smp[j], w);
+    }
+    // (c) aditivas
+    const lean = clamp((this.leanAx / S) * CFG.anim.leanGain, -CFG.anim.leanMax, CFG.anim.leanMax) * this.facing;
+    tp[J.torso] += lean;
+    if (this.flinchW > 0.01) {                                        // flinch: golpe reciente
+      const d = this.flinchDir * this.facing;                        // dir del golpe en espacio local
+      tp[J.torso] += 0.35 * d * this.flinchW;
+      tp[J.head] += 0.5 * d * this.flinchW;
+      tp[J.aLu] -= 0.3 * this.flinchW; tp[J.aRu] -= 0.3 * this.flinchW;   // brazos aflojan
+    }
+    this.squashT += dt;
+    if (this.squashT < CFG.anim.squashT * 2) {                        // squash de aterrizaje
+      const k = Math.sin(PI * clamp(this.squashT / (CFG.anim.squashT * 2), 0, 1));
+      tp[J.dy] += 0.16 * this.squashAmt * k;
+      tp[J.lLl] -= 0.5 * this.squashAmt * k; tp[J.lRl] -= 0.5 * this.squashAmt * k;
+      tp[J.lLu] += 0.25 * this.squashAmt * k; tp[J.lRu] += 0.25 * this.squashAmt * k;
+    }
+  }
+  baseLoco(tp) {
+    const st = this.state;
+    if (st === ST.HANG) { tp.set(POSES.hang); this.hangSway(tp); return; }
+    if (st === ST.CLIMB) { tp.set(POSES.crouch); tp[J.torso] = 0.5; return; }
+    if (st === ST.GETUP) { tp.set(POSES.getup); return; }
+    if (st === ST.SKID) { tp.set(POSES.skid); return; }
+    // ROLL usa la pose de bolita — cuerpo compacto que rueda (spin lo aporta f.rot en drawFighter).
+    if (st === ST.ROLL) { tp.set(POSES.ballRoll); return; }
+    if (st === ST.DASH) { tp.set(POSES.run1); tp[J.torso] += 0.25; return; }
+    if (st === ST.WALLSLIDE) { tp.set(POSES.airFall); tp[J.torso] = 0.3; return; }
+    if (st === ST.BLOCKSTUN) { tp.set(this.input.my > 0.5 ? POSES.blockLo : POSES.block); return; }
+    if (st === ST.LAUNCHED) { tp.set(POSES.airRise); tp[J.torso] -= 0.4; return; }
+    if (!this.grounded) {                                             // aire: pop → rise → apex → fall
+      // Al arrancar el salto (primeros ~0.15s) mostramos jumpPop — cuerpo estirado con brazos
+      // hacia arriba, para que se sienta el "impulso". Después blendea hacia airRise como antes.
+      if (st === ST.JUMP && this.stateT < 0.15) {
+        const k = smoothstep(this.stateT / 0.15);
+        blendPose(POSES.jumpPop, POSES.airRise, k, tp);
+        return;
+      }
+      const v = this.vy / (0.5 * S);
+      if (v < 0) blendPose(POSES.airRise, POSES.airApex, smoothstep(clamp(v + 1, 0, 1)), tp);
+      else blendPose(POSES.airApex, POSES.airFall, smoothstep(clamp(v, 0, 1)), tp);
+      return;
+    }
+    const guard = this.guarding();
+    if (guard) { tp.set(this.input.my > 0.5 ? POSES.blockLo : POSES.block); return; }
+    if (this.input.my > 0.5 && [ST.IDLE, ST.RUN].includes(st)) { tp.set(POSES.crouch); return; }
+    const spd = Math.abs(this.vx) / (CFG.move.maxRun * S);
+    if (spd < 0.12) {                                                 // idle + respiración
+      tp.set(POSES.idle);
+      const b = Math.sin(this.T * TAU * CFG.anim.breatheHz);
+      tp[J.torso] += CFG.anim.breatheAmp * b;
+      tp[J.aLu] += 0.02 * Math.sin(this.T * TAU * CFG.anim.breatheHz - 0.7);
+      tp[J.aRu] += 0.02 * Math.sin(this.T * TAU * CFG.anim.breatheHz - 0.9);
+    } else {                                                          // run: ping-pong por fase de gait
+      const k = 0.5 - 0.5 * Math.cos(TAU * this.gaitPhase);
+      blendPose(POSES.run1, POSES.run2, k, tp);
+      tp[J.torso] += 0.15 * spd * (Math.sign(this.vx) * this.facing || 1);   // lean CON la velocidad (no sólo con la aceleración)
+      tp[J.dy] += CFG.anim.bob * Math.abs(Math.sin(TAU * this.gaitPhase)) * spd;
+      // caminar despacio = menos amplitud de brazos
+      if (spd < 0.5) { tp[J.aLu] = lerp(POSES.idle[J.aLu], tp[J.aLu], spd * 2); tp[J.aRu] = lerp(POSES.idle[J.aRu], tp[J.aRu], spd * 2); tp[J.aLl] = lerp(POSES.idle[J.aLl], tp[J.aLl], spd * 2); tp[J.aRl] = lerp(POSES.idle[J.aRl], tp[J.aRl], spd * 2); }
+    }
+  }
+  guarding() {                                                        // bloqueo = sostener ATRÁS (sin botón)
+    if (!this.foe || !this.grounded) return false;
+    if (NOGUARD_STATES.includes(this.state)) return false;
+    const away = Math.sign(this.x - this.foe.x);
+    return away !== 0 && this.input.mx * away > 0.3 && this.foeThreat();
+  }
+  foeThreat() {                                                       // pose de guardia sólo si el rival amenaza
+    const f = this.foe;
+    return f && (f.state === ST.ATTACK || f.state === ST.DASH) && Math.abs(f.x - this.x) < 1.6 * CH;
+  }
+  hangSway(tp) {
+    const s = Math.sin(this.T * TAU * 0.7);
+    tp[J.lLu] += 0.05 * s; tp[J.lRu] += 0.05 * Math.sin(this.T * TAU * 0.7 - 0.9);
+    tp[J.torso] += 0.02 * s;
+  }
+
+  // ── resortes críticamente amortiguados por canal; la tabla de semividas ES el dial de "sueltitud" ──
+  springs(dt) {
+    const h = this.hArr, sp = CFG.spr;
+    let base = sp.hIdle;
+    if (LOCO_H_STATES.includes(this.state)) base = sp.hLoco;
+    for (let j = 0; j < NJ; j++) h[j] = base;
+    if (this.state === ST.ATTACK) {
+      const m = this.atk, t = this.atkClock;
+      const phase = t < m.startup ? 0 : t < m.startup + m.active ? 1 : 2;
+      const hAtk = phase === 0 ? sp.hAtkStart : phase === 1 ? sp.hAtkStart : sp.hRecov;
+      for (const j of m.mask) h[j] = hAtk;
+      if (phase === 1) for (const j of m.strike) h[j] = sp.hStrike;  // el limb que pega CONVERGE al frame-data
+      h[J.dy] = Math.min(h[J.dy], 0.06);
+    }
+    // cabeza y mano libre siempre van más atrás (overlapping action gratis)
+    h[J.head] *= sp.lagMul;
+    if (!(this.state === ST.ATTACK && this.atk.strike.includes(J.aLl))) h[J.aLl] = Math.max(h[J.aLl], base * sp.lagMul);
+    if (this.state === ST.CLIMB || this.state === ST.GETUP) for (let j = 0; j < NJ; j++) h[j] = 0.08;
+    for (let j = 0; j < NJ; j++) {
+      // los ángulos son continuos (arcLerp en target): resortear el delta envuelto evita vueltas de 2π
+      const tgt = this.poseCur[j] + wrapPi(this.targetPose[j] - this.poseCur[j]);
+      springTo(this.poseCur, this.poseVel, j, j === J.dy ? this.targetPose[j] : tgt, h[j], dt);
+    }
+  }
+
+  // ── IK de piernas + plantado de pies (vende TODO el peso) ──
+  unplantFeet() { this.feet[0].planted = false; this.feet[1].planted = false; }
+  replantFeet() {
+    const g = this.surf ? this.surf.y : this.y + STAND;
+    for (let k = 0; k < 2; k++) {
+      const f = this.feet[k];
+      let px = this.renderPts[(k === 0 ? P_.ftL : P_.ftR) * 2];
+      // tras un teleport (reset de round) los renderPts todavía apuntan a la posición vieja:
+      // si el pie quedó lejos del cuerpo, plantar directo en la stance
+      if (Math.abs(px - this.x) > 0.35 * CH) px = this.x + (k === 0 ? -0.12 : 0.13) * CH * this.facing;
+      f.px = px; f.py = g; f.planted = true; f.stepT = 1;
+    }
+  }
+  // parámetros de zancada en función de la velocidad (compartidos entre physics y feetIK)
+  strideParams(spdFrac) {
+    const g = CFG.gait;
+    return {
+      half: LEG * (g.halfBase + g.halfSpd * spdFrac),                 // medio paso (el pie viaja ±half alrededor de la cadera)
+      duty: g.dutyBase - g.dutySpd * spdFrac,                         // correr = menos fracción de apoyo
+      stepH: CH * (g.stepHBase + g.stepHSpd * spdFrac),               // altura del arco del pie en vuelo
+    };
+  }
+  feetIK(dt) {
+    if (!this.grounded || !IK_STATES.includes(this.state)) return;
+    if (this.state === ST.ATTACK && this.atk.aerial) return;
+    const gy = this.surf ? this.surf.y : this.y + STAND;
+    const spd = Math.abs(this.vx);
+    const spdFrac = Math.min(1, spd / (CFG.move.maxRun * S));
+    // ¿ciclo de marcha? (desplazándose de verdad; golpear en el lugar usa stance plantada)
+    const gait = spd > 0.12 * CFG.move.maxRun * S && (this.state === ST.RUN || this.state === ST.IDLE || this.state === ST.SKID);
+    const { half, duty, stepH } = this.strideParams(spdFrac);
+    const dir = Math.sign(this.vx) || this.facing;
+    // objetivo de stance: lead adelante, rear atrás (del lado del facing)
+    const stanceX = [this.x - this.facing * 0.13 * CH, this.x + this.facing * 0.14 * CH];
+    const pelX = this.renderPts[0], pelY = this.renderPts[1];
+    for (let k = 0; k < 2; k++) {
+      const f = this.feet[k], other = this.feet[1 - k];
+      const kneeI = k === 0 ? P_.kneL : P_.kneR, footI = k === 0 ? P_.ftL : P_.ftR;
+      if (this.state === ST.ATTACK && this.atk.unplantR && k === 1) continue;   // pierna que patea: manda el keytrack
+      let tx, ty;
+      if (gait) {
+        // ── CICLO PROCEDURAL DE MARCHA: apoyo (el pie queda CLAVADO en el mundo y la cadera
+        //    pasa por encima) + vuelo (arco hacia adelante con rodilla). La fase avanza por
+        //    DISTANCIA recorrida, así el pie en apoyo tiene derivada 0 en mundo → cero patinaje.
+        const ph = (this.gaitPhase + (k === 0 ? 0 : 0.5)) % 1;
+        const hipX = this.x + (k === 0 ? -1 : 1) * B.hipOff * this.facing;
+        if (ph < duty) {                                              // apoyo: de adelante (+half) hacia atrás (−half)
+          const u = ph / duty;
+          tx = hipX + dir * half * (1 - 2 * u); ty = gy;
+          if (!f.planted && spd > 0.25 * S) sfx.step();               // contacto del talón
+          f.planted = true;
+        } else {                                                      // vuelo: arco de atrás hacia adelante
+          const u = (ph - duty) / (1 - duty);
+          tx = hipX + dir * half * (2 * u - 1);
+          ty = gy - stepH * Math.sin(PI * u);
+          f.planted = false;
+        }
+        f.px = tx; f.py = ty; f.stepT = 1;                            // struct coherente para la transición a stance
+      } else {
+        // ── parado / golpeando: pies plantados con micro-ajuste a la stance ──
+        if (!f.planted && (other.planted || k === 0)) {               // ambos sueltos → arranca el izq (sin deadlock)
+          f.fromX = this.renderPts[footI * 2]; f.fromY = this.renderPts[footI * 2 + 1];
+          f.px = stanceX[k]; f.py = gy; f.planted = true; f.stepT = 0;
+        }
+        if (!f.planted) continue;
+        if (f.stepT >= 1 && other.planted && other.stepT >= 1 && Math.abs(f.px - stanceX[k]) > 0.16 * CH) {
+          f.fromX = f.px; f.fromY = f.py;                             // acomodarse a la stance con un pasito
+          f.px = stanceX[k]; f.py = gy; f.stepT = 0;
+        }
+        tx = f.px; ty = f.py;
+        if (f.stepT < 1) {                                            // pasito de acomode en Bezier
+          f.stepT = Math.min(1, f.stepT + dt / CFG.feet.stepT);
+          const t = easeInOutCubic(f.stepT), u = 1 - t;
+          const cx2 = (f.fromX + f.px) / 2, cy2 = Math.min(f.fromY, f.py) - CFG.feet.stepApex * CH * 0.5;
+          tx = u * u * f.fromX + 2 * u * t * cx2 + t * t * f.px;
+          ty = u * u * f.fromY + 2 * u * t * cy2 + t * t * f.py;
+        }
+      }
+      // IK en AMBOS esqueletos (los hitboxes de piernas también son deterministas)
+      // bendDir = -facing: con y-abajo del canvas, rotar +θ es horario → -facing pone la rodilla ADELANTE
+      ik2(pelX + (k === 0 ? -1 : 1) * B.hipOff * this.facing, pelY, tx, ty, B.thigh, B.shin, -this.facing, this.renderPts, kneeI, footI);
+      ik2(this.logicPts[0] + (k === 0 ? -1 : 1) * B.hipOff * this.facing, this.logicPts[1], tx, ty, B.thigh, B.shin, -this.facing, this.logicPts, kneeI, footI);
+    }
+  }
+  // manos IK: colgado (ambas al borde) y trepada (fijas hasta el 60%)
+  armIK() {
+    if (this.state !== ST.HANG && this.state !== ST.CLIMB) return;
+    const L = this.state === ST.HANG ? this.ledge : this.climbFrom;
+    if (!L) return;
+    if (this.state === ST.CLIMB && this.stateT / CFG.climb.climbT > 0.6) return;
+    const sway = Math.sin(this.T * TAU * 0.7) * 0.015 * CH;
+    for (const [sho, elb, han, off] of [[P_.shoL, P_.elbL, P_.hanL, -0.035], [P_.shoR, P_.elbR, P_.hanR, 0.035]]) {
+      const tx = L.x + off * CH * -L.side, ty = L.y + (off < 0 ? 0.02 : -0.01) * CH + (off < 0 ? sway : -sway) * 0.4;
+      ik2(this.renderPts[sho * 2], this.renderPts[sho * 2 + 1], tx, ty, B.uArm, B.fArm, -this.facing, this.renderPts, elb, han);
+    }
+  }
+
+  // ═══ RAGDOLL verlet (KO / knockdown / lanzado al caer) ═══
+  enterKnockdown(ix, iy) {
+    this.state = ST.KNOCKDOWN; this.stateT = 0; this.kdT = 0.55; this.invuln = CFG.fight.kdInvuln;
+    this.startRagdoll(ix, iy);
+  }
+  startRagdoll(impX, impY) {
+    const r = this.rag;
+    r.on = true; r.w = 0;
+    r.pts.set(this.renderPts);
+    for (let k = 0; k < NP * 2; k++) r.prev[k] = this.renderPts[k] - (this.renderPts[k] - this.renderPtsPrev[k]);   // hereda momentum
+    // impulso al torso/cabeza (el golpe que lo tiró)
+    r.prev[P_.head * 2] -= (impX || 0) * 0.016; r.prev[P_.head * 2 + 1] -= (impY || 0) * 0.016;
+    r.prev[P_.neck * 2] -= (impX || 0) * 0.012; r.prev[P_.neck * 2 + 1] -= (impY || 0) * 0.012;
+    for (let b = 0; b < RAG_BONES.length; b++) {
+      const [a2, b2] = RAG_BONES[b];
+      r.rest[b] = Math.hypot(r.pts[a2 * 2] - r.pts[b2 * 2], r.pts[a2 * 2 + 1] - r.pts[b2 * 2 + 1]);
+    }
+    r.stiffRest = Math.hypot(r.pts[P_.pelvis * 2] - r.pts[P_.head * 2], r.pts[P_.pelvis * 2 + 1] - r.pts[P_.head * 2 + 1]);
+  }
+  ragSpeed() {
+    const r = this.rag;
+    return Math.hypot(r.pts[0] - r.prev[0], r.pts[1] - r.prev[1]) / Math.max(this.ragDt || 1 / 60, 1e-4);   // wu/s reales
+  }
+  updateRagdoll(dt) {
+    const r = this.rag;
+    const want = this.state === ST.KNOCKDOWN || this.state === ST.KO;
+    if (want && !r.on) this.startRagdoll(0, 0);
+    if (!want && this.state !== ST.GETUP) { r.on = false; r.w = 0; return; }
+    if (!r.on) return;
+    // peso de mezcla: entra en KD/KO, sale en GETUP
+    r.w = this.state === ST.GETUP
+      ? Math.max(0, 1 - this.stateT / CFG.rag.blendOut)
+      : Math.min(1, r.w + dt / CFG.rag.blendIn);
+    if (dt > 0 && this.state !== ST.GETUP) {
+      this.ragDt = dt;
+      const g = (CFG.move.gDown * 0.9) * S * dt * dt;
+      const damp = Math.pow(CFG.rag.damp, dt * 60);                   // amortiguación independiente del refresh (120 Hz)
+      for (let p2 = 0; p2 < NP; p2++) {
+        const ix = p2 * 2, iy = ix + 1;
+        const px2 = r.pts[ix], py2 = r.pts[iy];
+        r.pts[ix] += (px2 - r.prev[ix]) * damp;
+        r.pts[iy] += (py2 - r.prev[iy]) * damp + g;
+        r.prev[ix] = px2; r.prev[iy] = py2;
+      }
+      for (let it = 0; it < CFG.rag.iters; it++) {
+        for (let b = 0; b < RAG_BONES.length; b++) {
+          const [aI, bI] = RAG_BONES[b];
+          relaxPair(r.pts, aI, bI, r.rest[b], 1);
+        }
+        relaxPair(r.pts, P_.pelvis, P_.head, r.stiffRest, 0.35);      // semi-rígido anti-plegado
+        // piso + paredes por proyección con fricción; cada parte descansa a SU altura
+        // (la cabeza sobre su radio, el resto sobre el grosor del trazo) — sin esto el cuerpo queda chato
+        for (let p2 = 0; p2 < NP; p2++) {
+          const ix = p2 * 2, iy = ix + 1;
+          const rest = p2 === P_.head ? B.headR * 0.9 : (p2 === P_.pelvis || p2 === P_.neck ? 0.045 * CH : 0.025 * CH);
+          const g2 = groundAt(r.pts[ix], r.pts[iy]);
+          if (r.pts[iy] > g2.y - rest) { r.pts[iy] = g2.y - rest; r.prev[ix] = lerp(r.prev[ix], r.pts[ix], 0.35); }
+          r.pts[ix] = clamp(r.pts[ix], ARENA.pad * 0.4, ARENA.w - ARENA.pad * 0.4);
+        }
+      }
+    }
+    // mezclar hacia renderPts
+    if (r.w >= 1) this.renderPts.set(r.pts);
+    else for (let k = 0; k < NP * 2; k++) this.renderPts[k] = lerp(this.renderPts[k], r.pts[k], r.w);
+  }
+
+  // hurtboxes desde el esqueleto RENDER (esquivar moviéndote esquiva de verdad)
+  // devuelve [x1,y1,x2,y2,r] por cápsula (círculo = ambos extremos iguales)
+  hurtboxes(out) {
+    const p2 = this.renderPts, ft = CFG.fight;
+    const sh = this.state === ST.ROLL ? 0.6 : 1;
+    out[0][0] = p2[P_.head * 2]; out[0][1] = p2[P_.head * 2 + 1]; out[0][2] = p2[P_.head * 2]; out[0][3] = p2[P_.head * 2 + 1]; out[0][4] = ft.hurtHead * CH * sh;
+    out[1][0] = p2[0]; out[1][1] = p2[1]; out[1][2] = p2[P_.neck * 2]; out[1][3] = p2[P_.neck * 2 + 1]; out[1][4] = ft.hurtTorso * CH * sh;
+    const mfx = (p2[P_.ftL * 2] + p2[P_.ftR * 2]) / 2, mfy = (p2[P_.ftL * 2 + 1] + p2[P_.ftR * 2 + 1]) / 2;
+    out[2][0] = p2[0]; out[2][1] = p2[1]; out[2][2] = mfx; out[2][3] = mfy; out[2][4] = ft.hurtLegs * CH * sh;
+    return out;
+  }
+}
+
+// velocidad del envelope "lunge": pullback suave (wind) + empuje sin²  (integral = dist)
+function lungeVel(t, wind, time, dist) {
+  if (t < 0) return 0;
+  if (t < wind) return -0.35 * (dist / Math.max(0.02, time / 2)) * Math.sin(PI * t / wind) * 0.25;
+  const tt = t - wind;
+  if (tt < time) { const peak = dist / (time / 2); const s = Math.sin(PI * tt / time); return peak * s * s; }
+  return 0;
+}
+function blendPose(a, b, k, out) { for (let j = 0; j < NJ; j++) out[j] = arcLerp(a[j], b[j], k); }
+function rotPts(pts, cx, cy, ang) {
+  const c = Math.cos(ang), s = Math.sin(ang);
+  for (let p2 = 0; p2 < NP; p2++) {
+    const ix = p2 * 2, iy = ix + 1, dx = pts[ix] - cx, dy = pts[iy] - cy;
+    pts[ix] = cx + dx * c - dy * s; pts[iy] = cy + dx * s + dy * c;
+  }
+}
+// empuje de cuerpos (regla fighting game: no se atraviesa al rival caminando; saltando por arriba sí)
+const SEP_STATES = [ST.IDLE, ST.RUN, ST.SKID, ST.ATTACK, ST.BLOCKSTUN, ST.HITSTUN, ST.DASH, ST.GETUP, ST.JUMP, ST.FALL];
+function separateBodies(a, b) {
+  if (!SEP_STATES.includes(a.state) || !SEP_STATES.includes(b.state)) return;
+  if (Math.abs(a.y - b.y) > 0.6 * CH) return;                        // uno está claramente arriba del otro
+  const minD = 0.24 * CH, dx = b.x - a.x, ad = Math.abs(dx);         // clinch corto: el uppercut tiene que llegar
+  if (ad >= minD) return;
+  const dir = dx !== 0 ? Math.sign(dx) : (a.facing || 1);
+  const push = (minD - ad) / 2;
+  a.x = clamp(a.x - dir * push, ARENA.pad, ARENA.w - ARENA.pad);
+  b.x = clamp(b.x + dir * push, ARENA.pad, ARENA.w - ARENA.pad);
+}
+function relaxPair(pts, aI, bI, rest, k) {
+  const ax = aI * 2, ay = ax + 1, bx = bI * 2, by = bx + 1;
+  let dx = pts[bx] - pts[ax], dy = pts[by] - pts[ay];
+  let d = Math.hypot(dx, dy) || 1e-6;
+  const diff = (d - rest) / d * 0.5 * k;
+  pts[ax] += dx * diff; pts[ay] += dy * diff;
+  pts[bx] -= dx * diff; pts[by] -= dy * diff;
+}
+
+// ════════════════ COMBATE: cápsula barrida (lógica) vs hurtboxes (render) ════════════════
+const _hurtScratch = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]];
+function resolveCombat(att, def) {
+  // Multi-hit: en vez de un solo boolean `atkHit`, usamos un Set de defensores YA golpeados este
+  // swing. Así una piña puede alcanzar a varios enemigos pegados en el mismo movimiento (uno cada
+  // uno, no re-chipa al mismo). `att.atkHit` se sigue seteando (lo usa la lógica de chain como
+  // "hubo al menos un hit").
+  if (att.state !== ST.ATTACK || att.hitstopT > 0 || att.dead || def.dead) return;
+  if (att.atkHitSet && att.atkHitSet.has(def)) return;
+  const m = att.atk, t = att.atkClock;
+  if (t < m.startup || t > m.startup + m.active) return;
+  if (def.invuln > 0 || def.state === ST.KNOCKDOWN || def.state === ST.GETUP || def.state === ST.KO) return;
+  const ax = att.logicPtsPrev[m.limb * 2], ay = att.logicPtsPrev[m.limb * 2 + 1];
+  const bx = att.logicPts[m.limb * 2], by = att.logicPts[m.limb * 2 + 1];
+  const hitR = CFG.fight.hitR * CH * (m.reachBonus ? 1.35 : 1);
+  const hbs = def.hurtboxes(_hurtScratch);
+  let hit = false, cx2 = bx, cy2 = by;
+  for (const hb of hbs) {
+    const rr = hitR + hb[4];
+    if (segSegDist2(ax, ay, bx, by, hb[0], hb[1], hb[2], hb[3]) < rr * rr) { hit = true; cx2 = (bx + hb[0]) / 2; cy2 = (by + hb[1]) / 2; break; }
+  }
+  if (!hit) return;
+  const dir = Math.sign(def.x - att.x) || att.facing;
+
+  // ── bloqueo: sostener ATRÁS (parado bloquea altos; agachado bloquea barridas) ──
+  const away = Math.sign(def.x - att.x);
+  const defCanBlock = def.grounded && ![ST.ATTACK, ST.DASH, ST.HITSTUN, ST.LAUNCHED, ST.ROLL, ST.JUMP, ST.FALL].includes(def.state)
+    && def.input.mx * away > 0.3;
+  const crouched = def.input.my > 0.5;
+  const blocks = defCanBlock && (m.low ? crouched : (m.aerial ? !crouched : true));
+  if (blocks) {
+    att.atkBlocked = true;
+    att.atkHit = true;                                                // hubo contacto (para chains)
+    if (att.atkHitSet) att.atkHitSet.add(def);                        // este defensor ya no recibe re-chip en este swing
+    const chip = Math.max(1, Math.round(m.dmg * CFG.fight.chip));
+    def.hp = Math.max(1, def.hp - chip);
+    def.state = ST.BLOCKSTUN; def.stateT = 0; def.stun = CFG.fight.blockstun + m.dmg * 0.004;
+    def.pendKb = true; def.pendKbx = dir * CFG.fight.blockPush * S * 3; def.pendKby = 0;
+    att.vx -= dir * CFG.fight.blockPush * S * 2;
+    att.hitstopT = def.hitstopT = 0.04;
+    spawnSparks(cx2, cy2, 5, [90, 110, 140], dir); sfx.block();
+    addDmgNum(cx2, cy2 - 0.1 * CH, chip, false, true);
+    return;
+  }
+
+  // ── daño (escala de juggle + bonus de embalada) ──
+  att.atkHit = true;
+  if (att.atkHitSet) att.atkHitSet.add(def);                          // sólo este defensor queda "usado"; otros pegados adentro del arco todavía pueden recibir
+  let dmg = m.dmg;
+  if (m.momentumDmg) dmg += Math.floor(Math.abs(att.vx) / (0.2 * S)) * 3;
+  if (def.state === ST.LAUNCHED) { dmg = Math.max(1, Math.round(dmg * Math.pow(CFG.fight.jugScale, def.juggle))); def.juggle++; }
+  def.hp -= dmg;
+  att.combo++; att.comboT = 1.4;
+
+  const stop = def.hp <= 0 ? CFG.juice.stopKO : m.stop;
+  att.hitstopT = Math.max(att.hitstopT, stop); def.hitstopT = Math.max(def.hitstopT, stop);
+  def.pendKb = true;
+  def.flinchW = 1; def.flinchDir = dir; def.hitFlash = 0.1;
+  addTrauma(m.trauma || 0.2);
+  spawnSparks(cx2, cy2, 6 + Math.min(8, Math.round(dmg * 0.8)), att.color, dir);
+  addDmgNum(cx2, cy2 - 0.12 * CH, dmg, dmg >= 10, false);
+  if (m.sound === 'heavy') sfx.heavy(); else sfx.hit(dmg);
+  if (m.launcher) sfx.launcher();
+
+  // ── K.O. ──
+  if (def.hp <= 0) {
+    def.hp = 0; def.state = ST.KO; def.stateT = 0;
+    def.pendKb = false;
+    // Knockback FUERTE tipo Smash: sale volando hacia atrás con arco. Antes se plegaba en el
+    // mismo lugar. Horizontal ×3.5 con base +0.50 y vertical ×2.5 con base -0.55 dan un vuelo
+    // visible que aterriza a ~2-3 CH de distancia.
+    def.startRagdoll(dir * (m.kbx + 0.50) * S * 3.5, (m.kby - 0.55) * S * 2.5);
+    def.grounded = false;
+    addTrauma(CFG.juice.trKO); sfx.ko();
+    onKO(att, def);
+    return;
+  }
+  // ── reacción ──
+  const kvx = dir * m.kbx * S + (m.momentumDmg ? att.vx * 0.35 : 0);
+  let kvy = m.kby * S;
+  if (m.spike && !def.grounded) kvy = 0.85 * S;
+  def.pendKbx = kvx; def.pendKby = kvy;
+  if (m.launcher || (def.state === ST.LAUNCHED && kvy < 0)) {
+    def.state = ST.LAUNCHED; def.stateT = 0; def.grounded = false; def.unplantFeet();
+    if (def.juggle > CFG.fight.jugMax) { def.pendKby = Math.abs(kvy) * 0.5; }
+  } else if (m.knockdown && def.grounded) {
+    def.pendKb = false; def.enterKnockdown(dir * m.kbx * S * 1.6, -0.28 * S);
+  } else if (def.state === ST.LAUNCHED) {
+    // sigue en el aire (juggle)
+  } else {
+    def.state = ST.HITSTUN; def.stateT = 0; def.stun = m.hitstun;
+    if (!def.grounded) def.stun += 0.1;
+  }
+  def.atk = null;
+}
+
+// ════════════════ EFECTOS (motitas de tinta — nada aditivo: sobre papel claro el 'lighter' se lava) ════════════════
+const sparks = [], dusts = [], dmgNums = [], smears = [], ghosts = [];
+let trauma = 0;
+function addTrauma(x) { trauma = Math.min(1, trauma + x); }
+const _glowCache = new Map();                                         // (queda para compat de context-loss)
+function spawnSparks(x, y, n, col, dirBias) {
+  for (let k = 0; k < n && sparks.length < CFG.juice.sparkCap; k++) {
+    const a = rnd(-PI, PI), sp = rnd(0.15, 0.7) * S;
+    sparks.push({
+      x, y, vx: Math.cos(a) * sp + (dirBias || 0) * 0.3 * S, vy: Math.sin(a) * sp - 0.15 * S,
+      t: 0, life: rnd(0.25, 0.5), r: rnd(0.01, 0.022) * CH, col,
+    });
+  }
+}
+function spawnDust(x, y, n) {
+  for (let k = 0; k < n && dusts.length < CFG.juice.dustCap; k++)
+    dusts.push({ x: x + rnd(-0.06, 0.06) * CH, y: y - rnd(0, 0.03) * CH, vx: rnd(-0.1, 0.1) * S, vy: rnd(-0.12, -0.02) * S, t: 0, life: rnd(0.3, 0.6), r: rnd(0.02, 0.05) * CH });
+}
+function addDmgNum(x, y, val, crit, chip) {
+  if (dmgNums.length >= CFG.juice.dmgCap) dmgNums.shift();
+  dmgNums.push({ x: x + rnd(-0.04, 0.04) * CH, y, val, t: 0, crit, chip });
+}
+function addSmear(f) {
+  const m = f.atk; if (!m) return;
+  const rootI = m.strike[0] === J.lRu || m.strike[0] === J.lLu ? P_.pelvis : (m.limb === P_.hanL ? P_.shoL : P_.shoR);
+  smears.push({
+    x1: f.renderPts[rootI * 2], y1: f.renderPts[rootI * 2 + 1],
+    x2: f.renderPts[m.limb * 2], y2: f.renderPts[m.limb * 2 + 1],
+    x3: f.renderPtsPrev[m.limb * 2], y3: f.renderPtsPrev[m.limb * 2 + 1],
+    t: 0, col: f.color,
+  });
+  if (smears.length > 24) smears.shift();
+}
+function updateEffects(dt) {
+  for (let k = sparks.length - 1; k >= 0; k--) {
+    const p2 = sparks[k]; p2.t += dt;
+    if (p2.t > p2.life) { sparks.splice(k, 1); continue; }
+    p2.vy += 1.4 * S * dt; p2.x += p2.vx * dt; p2.y += p2.vy * dt;
+  }
+  for (let k = dusts.length - 1; k >= 0; k--) {
+    const p2 = dusts[k]; p2.t += dt;
+    if (p2.t > p2.life) { dusts.splice(k, 1); continue; }
+    p2.x += p2.vx * dt; p2.y += p2.vy * dt; p2.vx *= 0.95;
+  }
+  for (let k = dmgNums.length - 1; k >= 0; k--) {
+    const n = dmgNums[k]; n.t += dt;
+    if (n.t > 0.9) dmgNums.splice(k, 1);
+  }
+  for (let k = smears.length - 1; k >= 0; k--) { smears[k].t += dt; if (smears[k].t > 0.13) smears.splice(k, 1); }
+  for (let k = ghosts.length - 1; k >= 0; k--) { ghosts[k].t += dt; if (ghosts[k].t > 0.3) ghosts.splice(k, 1); }
+  trauma = Math.max(0, trauma - CFG.juice.trDecay * dt);
+}
+let _ghostAccum = 0;
+function recordGhosts(fighters, dt) {
+  _ghostAccum += dt;
+  if (_ghostAccum < 0.02) return;
+  _ghostAccum = 0;
+  for (const f of fighters) {
+    if (f.state !== ST.DASH && f.state !== ST.ROLL) continue;
+    ghosts.push({ pts: Float64Array.from(f.renderPts), t: 0, col: f.color });
+    if (ghosts.length > 12) ghosts.shift();
+  }
+}
+
+// ════════════════ DIBUJO a tinta sobre papel (estilo Fancy Pants) ════════════════
+function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+function seg(pts, aI, bI, w2) {
+  ctx.lineWidth = w2;
+  ctx.beginPath(); ctx.moveTo(pts[aI * 2], pts[aI * 2 + 1]); ctx.lineTo(pts[bI * 2], pts[bI * 2 + 1]); ctx.stroke();
+}
+function circle(x, y, r) { ctx.beginPath(); ctx.arc(x, y, Math.max(0.1, r), 0, TAU); ctx.fill(); }
+function drawStick(f, pts, alpha) {
+  const flash = f.hitFlash > 0;
+  const ink = flash ? '#e74c3c' : INK;
+  const inkFar = flash ? '#e74c3c' : '#4d463f';                      // lado lejano apenas más claro (profundidad)
+  const wT = 0.052 * CH, wU = 0.044 * CH, wL = 0.036 * CH;
+  // Paleta de ropa (todos los luchadores tienen shirt/pants/shoes con su color).
+  const shirt     = flash ? '#e74c3c' : (f.shirt     || '#3b3f4b');
+  const shirtDark = flash ? '#8f1a12' : (f.shirtDark || '#252831');
+  const shoeCol   = flash ? '#3b1a13' : (f.shoe      || '#1a1614');
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.globalAlpha = alpha;
+  // ── lado LEJANO (brazo + pierna al fondo, más muted) ──
+  // Brazo: sleeve de la camisa (upper) + piel/tinta (lower).
+  ctx.strokeStyle = shirtDark; seg(pts, P_.shoL, P_.elbL, wU * 0.95);
+  ctx.strokeStyle = inkFar; seg(pts, P_.elbL, P_.hanL, wL * 0.85);
+  ctx.fillStyle = inkFar; circle(pts[P_.hanL * 2], pts[P_.hanL * 2 + 1], 0.026 * CH);
+  // Pierna: pantalón (upper) + tinta (shin) + zapato.
+  ctx.strokeStyle = flash ? '#8f1a12' : (f.pantsDark || '#4d463f');
+  seg(pts, P_.pelvis, P_.kneL, wU * 1.25);
+  ctx.strokeStyle = inkFar; seg(pts, P_.kneL, P_.ftL, wL * 0.9);
+  ctx.fillStyle = shoeCol;
+  ctx.beginPath();
+  ctx.ellipse(pts[P_.ftL * 2] + f.facing * 0.008 * CH, pts[P_.ftL * 2 + 1], 0.052 * CH, 0.028 * CH, 0, 0, TAU);
+  ctx.fill();
+  // ── torso: spine + CAMISA como polígono coloreado ──
+  ctx.strokeStyle = ink; ctx.fillStyle = ink;
+  seg(pts, P_.pelvis, P_.neck, wT);
+  // Camisa (parche coloreado desde los hombros hasta la pelvis). Se dibuja DESPUÉS del spine
+  // así lo cubre casi entero; el culote (pantalón) va encima abajo — se ve como cintura.
+  {
+    const plx = pts[P_.pelvis * 2],     ply = pts[P_.pelvis * 2 + 1];
+    const nx  = pts[P_.neck * 2],       ny  = pts[P_.neck * 2 + 1];
+    const slx = pts[P_.shoL * 2],       sly = pts[P_.shoL * 2 + 1];
+    const srx = pts[P_.shoR * 2],       sry = pts[P_.shoR * 2 + 1];
+    // Ancho de cintura chico, hombros amplios → silueta de camisa.
+    const wx = (nx - plx) * 0.08, wy = (ny - ply) * 0.08;
+    const waistL_x = plx - 0.05 * CH * -Math.sin(0) + wx * -1;    // fudge
+    ctx.fillStyle = shirt;
+    ctx.strokeStyle = shirtDark;
+    ctx.lineWidth = 0.014 * CH;
+    ctx.beginPath();
+    ctx.moveTo(slx, sly);                                             // hombro izq
+    ctx.lineTo(plx - 0.055 * CH, ply);                                // cintura izq
+    ctx.lineTo(plx + 0.055 * CH, ply);                                // cintura der
+    ctx.lineTo(srx, sry);                                             // hombro der
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    // Cuello: pequeño arco oscuro entre neck y shoulders (rompe la planidad).
+    ctx.strokeStyle = shirtDark; ctx.lineWidth = 0.02 * CH;
+    ctx.beginPath();
+    ctx.moveTo(slx + (nx - slx) * 0.35, sly + (ny - sly) * 0.35);
+    ctx.lineTo(srx + (nx - srx) * 0.35, sry + (ny - sry) * 0.35);
+    ctx.stroke();
+  }
+  if (f.pants) { ctx.fillStyle = flash ? '#e74c3c' : f.pants; circle(pts[0], pts[1], 0.055 * CH); }   // culote/cinturón
+  // ── cabeza: papel + contorno a tinta + pelo (varios estilos) + ojo ──
+  const hx = pts[P_.head * 2], hy = pts[P_.head * 2 + 1];
+  ctx.fillStyle = flash ? '#ffd9cf' : (f.skin || '#f4ebdd');
+  circle(hx, hy, B.headR * 0.98);
+  ctx.strokeStyle = ink; ctx.lineWidth = 0.02 * CH;
+  ctx.beginPath(); ctx.arc(hx, hy, B.headR * 0.98, 0, TAU); ctx.stroke();
+  drawHair(f, hx, hy, ink);
+  ctx.fillStyle = f.eyeCol || ink;
+  circle(hx + f.facing * B.headR * 0.5, hy - B.headR * 0.12, B.headR * 0.15);
+  if (f.angry) {                                                      // ceja enojada corta, justo sobre el ojo
+    ctx.strokeStyle = ink; ctx.lineWidth = 0.02 * CH;
+    ctx.beginPath();
+    ctx.moveTo(hx + f.facing * B.headR * 0.28, hy - B.headR * 0.46);
+    ctx.lineTo(hx + f.facing * B.headR * 0.66, hy - B.headR * 0.3);
+    ctx.stroke();
+  }
+  // Gorro/sombrero opcional (para diferenciar enemigos).
+  if (f.hat) drawHat(f, hx, hy, ink);
+  // ── lado CERCANO (brazo + pierna al frente, plenos) ──
+  ctx.strokeStyle = shirt; seg(pts, P_.shoR, P_.elbR, wU * 1.05);
+  ctx.strokeStyle = ink; seg(pts, P_.elbR, P_.hanR, wL);
+  ctx.fillStyle = ink; circle(pts[P_.hanR * 2], pts[P_.hanR * 2 + 1], 0.03 * CH);
+  ctx.strokeStyle = flash ? '#e74c3c' : (f.pants || ink); seg(pts, P_.pelvis, P_.kneR, wU * 1.3);
+  ctx.strokeStyle = ink; seg(pts, P_.kneR, P_.ftR, wL * 1.05);
+  ctx.fillStyle = shoeCol;
+  ctx.beginPath();
+  ctx.ellipse(pts[P_.ftR * 2] + f.facing * 0.010 * CH, pts[P_.ftR * 2 + 1], 0.06 * CH, 0.032 * CH, 0, 0, TAU);
+  ctx.fill();
+  ctx.globalAlpha = 1;
+}
+
+// Estilos de pelo — cada luchador tiene f.hairStyle ∈ {'plain','spiky','ponytail','mohawk','bald'}
+// (o `f.hair` como truthy legacy → 'plain'). El pelo se peina con la velocidad para dar vida.
+function drawHair(f, hx, hy, ink) {
+  const style = f.hairStyle || (f.hair ? 'plain' : null);
+  if (!style || style === 'bald') return;
+  const flash = f.hitFlash > 0;
+  const hairCol = flash ? '#e74c3c' : (f.hairCol || ink);
+  const sway = clamp(-f.vx / S * 0.9, -0.8, 0.8) - f.facing * 0.85;
+  ctx.strokeStyle = hairCol; ctx.fillStyle = hairCol;
+  if (style === 'plain') {
+    ctx.lineWidth = 0.022 * CH;
+    for (let k = 0; k < 3; k++) {
+      const a = -PI / 2 + sway * 0.55 + (k - 1) * 0.24;
+      const bx = hx + Math.cos(a) * B.headR * 0.92, by = hy + Math.sin(a) * B.headR * 0.92;
+      ctx.beginPath(); ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(a + sway * 0.35) * 0.088 * CH, by + Math.sin(a + sway * 0.35) * 0.088 * CH);
+      ctx.stroke();
+    }
+  } else if (style === 'spiky') {
+    // Puntas grandes hacia arriba con leve inclinación por vel
+    ctx.lineWidth = 0.024 * CH;
+    for (let k = 0; k < 5; k++) {
+      const a = -PI / 2 + (k - 2) * 0.32 + sway * 0.4;
+      const bx = hx + Math.cos(a) * B.headR * 0.94, by = hy + Math.sin(a) * B.headR * 0.94;
+      ctx.beginPath(); ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(a) * 0.14 * CH, by + Math.sin(a) * 0.14 * CH - 0.02 * CH);
+      ctx.stroke();
+    }
+  } else if (style === 'ponytail') {
+    // Cabeza cubierta + cola atrás
+    ctx.beginPath();
+    ctx.arc(hx - f.facing * B.headR * 0.05, hy - B.headR * 0.55, B.headR * 0.9, PI, 0);
+    ctx.fill();
+    ctx.lineWidth = 0.032 * CH;
+    const px = hx - f.facing * B.headR * 0.85, py = hy - B.headR * 0.15;
+    ctx.beginPath();
+    ctx.moveTo(px, py);
+    ctx.quadraticCurveTo(px - f.facing * 0.06 * CH + sway * 0.06 * CH, py + 0.09 * CH,
+                         px - f.facing * 0.03 * CH + sway * 0.10 * CH, py + 0.19 * CH);
+    ctx.stroke();
+  } else if (style === 'mohawk') {
+    // Cresta central grande
+    ctx.lineWidth = 0.028 * CH;
+    for (let k = 0; k < 4; k++) {
+      const a = -PI / 2 + (k - 1.5) * 0.16 + sway * 0.3;
+      const bx = hx + Math.cos(a) * B.headR * 0.9, by = hy + Math.sin(a) * B.headR * 0.9;
+      const len = 0.14 * CH + (1 - Math.abs(k - 1.5) / 2) * 0.06 * CH;
+      ctx.beginPath(); ctx.moveTo(bx, by);
+      ctx.lineTo(bx + Math.cos(a) * len, by + Math.sin(a) * len);
+      ctx.stroke();
+    }
+  }
+}
+
+// Gorro/sombrero: forma trapezoidal arriba de la cabeza, coloreada por f.hatCol.
+function drawHat(f, hx, hy, ink) {
+  const flash = f.hitFlash > 0;
+  const col = flash ? '#e74c3c' : (f.hatCol || '#4a3f2b');
+  const R = B.headR;
+  ctx.fillStyle = col; ctx.strokeStyle = ink; ctx.lineWidth = 0.018 * CH;
+  ctx.beginPath();
+  ctx.moveTo(hx - R * 1.15, hy - R * 0.55);
+  ctx.lineTo(hx + R * 1.15, hy - R * 0.55);
+  ctx.lineTo(hx + R * 0.75, hy - R * 1.35);
+  ctx.lineTo(hx - R * 0.75, hy - R * 1.35);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  // Banda oscura
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 0.024 * CH;
+  ctx.beginPath();
+  ctx.moveTo(hx - R * 1.10, hy - R * 0.60);
+  ctx.lineTo(hx + R * 1.10, hy - R * 0.60);
+  ctx.stroke();
+}
+function drawStickPass(pts, wT, wU, wL) {                             // esqueleto simple (fantasmas del dash)
+  seg(pts, P_.pelvis, P_.neck, wT);
+  seg(pts, P_.shoL, P_.elbL, wU); seg(pts, P_.elbL, P_.hanL, wL);
+  seg(pts, P_.shoR, P_.elbR, wU); seg(pts, P_.elbR, P_.hanR, wL);
+  seg(pts, P_.pelvis, P_.kneL, wU); seg(pts, P_.kneL, P_.ftL, wL);
+  seg(pts, P_.pelvis, P_.kneR, wU); seg(pts, P_.kneR, P_.ftR, wL);
+  ctx.beginPath(); ctx.arc(pts[P_.head * 2], pts[P_.head * 2 + 1], B.headR, 0, TAU); ctx.stroke();
+}
+function drawFighter(f) {
+  // sombra blanda en el piso (vende la altura del salto)
+  const g = groundAt(f.x, f.y + 10);
+  const h2 = clamp(1 - (g.y - (f.y + STAND)) / (1.6 * CH), 0, 1);
+  if (h2 > 0.05) {
+    ctx.fillStyle = 'rgba(120,100,88,' + (0.22 * h2).toFixed(3) + ')';
+    ctx.beginPath();
+    ctx.ellipse(f.x, g.y + 6, 0.3 * CH * (0.5 + 0.5 * h2), 0.05 * CH, 0, 0, TAU);
+    ctx.fill();
+  }
+  let ox = 0, oy = 0;
+  if (f.hitstopT > 0 && f.flinchW > 0.5) { ox = rnd(-1, 1) * 0.015 * CH; oy = rnd(-1, 1) * 0.01 * CH; }
+  if (ox || oy) { ctx.save(); ctx.translate(ox, oy); }
+  drawStick(f, f.renderPts, f.dead ? 0.75 : 1);
+  if (ox || oy) ctx.restore();
+}
+function drawEffectsUnder() {
+  for (const g of ghosts) {
+    const a = lerp(0.25, 0.05, g.t / 0.3);
+    ctx.strokeStyle = rgba(g.col, a);
+    ctx.lineCap = 'round';
+    drawStickPass(g.pts, 0.045 * CH, 0.038 * CH, 0.03 * CH);
+  }
+}
+function drawEffects() {
+  for (const s of smears) {
+    const a = 0.22 * (1 - s.t / 0.13);
+    ctx.fillStyle = rgba(s.col, a);
+    ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.lineTo(s.x3, s.y3); ctx.closePath(); ctx.fill();
+  }
+  for (const d of dusts) {
+    const a = 0.3 * (1 - d.t / d.life);
+    ctx.fillStyle = 'rgba(150,128,108,' + a.toFixed(3) + ')';
+    circle(d.x, d.y, d.r * (1 + d.t * 2));
+  }
+  for (const p2 of sparks) {                                          // motitas de tinta, sin composite
+    const a = 1 - p2.t / p2.life;
+    ctx.fillStyle = rgba(p2.col, a * 0.85);
+    circle(p2.x, p2.y, p2.r * (0.6 + 0.4 * a));
+  }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (const n of dmgNums) {
+    const pop = n.t < 0.15 ? easeOutCubic(n.t / 0.15) * 1.25 : 1.25 - 0.25 * clamp((n.t - 0.15) / 0.2, 0, 1);
+    const a = n.t > 0.55 ? 1 - (n.t - 0.55) / 0.35 : 1;
+    const size = Math.round((n.crit ? 0.16 : 0.11) * CH * pop);
+    ctx.font = '900 ' + size + 'px system-ui,sans-serif';
+    ctx.fillStyle = n.chip ? 'rgba(110,125,150,' + a.toFixed(3) + ')' : n.crit ? 'rgba(226,120,30,' + a.toFixed(3) + ')' : 'rgba(40,35,30,' + a.toFixed(3) + ')';
+    ctx.fillText(n.val, n.x, n.y - n.t * 0.35 * CH);
+  }
+}
+
+// ════════════════ ARENA-NIVEL (sandbox: recorrés el nivel bajando enemigos, la salida está ARRIBA
+// en la torre final — hay que trepar para llegar). Mapa 8000×~1700 con secciones escalonadas
+// y una torre vertical alternada al final. ════════════════
+const ARENA = (() => {
+  const w = CFG.world.arenaW, floorY = 620;
+  const surfs = [
+    { x: -200, y: floorY, w: w + 400, oneway: false },               // piso principal
+
+    // — Sección A: entrada — 2 escalones bien espaciados
+    { x: 500,  y: floorY - 200, w: 240, oneway: true },
+    { x: 960,  y: floorY - 380, w: 240, oneway: true },
+
+    // — Sección B: puentes en diagonal (ruta baja + alta)
+    { x: 1520, y: floorY - 240, w: 260, oneway: true },
+    { x: 2020, y: floorY - 420, w: 260, oneway: true },
+
+    // — Sección C: gap con arco (2 saltos)
+    { x: 2620, y: floorY - 300, w: 240, oneway: true },
+    { x: 3020, y: floorY - 480, w: 240, oneway: true },
+
+    // — Sección D: pirámide (subir escalonado)
+    { x: 3560, y: floorY - 280, w: 260, oneway: true },
+    { x: 4000, y: floorY - 480, w: 260, oneway: true },
+    { x: 4440, y: floorY - 680, w: 260, oneway: true },
+
+    // — Sección E: zigzag mid-air
+    { x: 4960, y: floorY - 460, w: 240, oneway: true },
+    { x: 5400, y: floorY - 260, w: 240, oneway: true },
+
+    // — Sección F: TORRE final (zigzag vertical hasta la salida ARRIBA).
+    //   Steps de ~240 px entre plataformas → cómodo para el salto (apex ~415 px de rise).
+    { x: 6000, y: floorY - 220, w: 280, oneway: true },
+    { x: 6480, y: floorY - 460, w: 260, oneway: true },
+    { x: 6000, y: floorY - 700, w: 260, oneway: true },
+    { x: 6480, y: floorY - 940, w: 260, oneway: true },
+    { x: 6000, y: floorY - 1180, w: 260, oneway: true },
+    { x: 6480, y: floorY - 1420, w: 260, oneway: true },
+    { x: 6000, y: floorY - 1620, w: 500, oneway: true },              // plataforma tope (salida)
+  ];
+  const ledges = [];
+  for (let i = 1; i < surfs.length; i++) {
+    const s = surfs[i];
+    ledges.push({ x: s.x, y: s.y, side: -1, surf: s });              // esquina izq (se cuelga desde afuera-izq)
+    ledges.push({ x: s.x + s.w, y: s.y, side: 1, surf: s });
+  }
+  // Salida ahora ARRIBA de la torre: hay que trepar la sección F para completar el nivel.
+  const topSurf = surfs[surfs.length - 1];
+  const exit = { x: topSurf.x + topSurf.w / 2, y: topSurf.y };
+  return { w, floorY, surfs, ledges, exit, pad: 0.15 * CH, topY: floorY - 1700 };
+})();
+function groundAt(x, y) {
+  let by = ARENA.floorY, bs = ARENA.surfs[0];
+  for (let i = 1; i < ARENA.surfs.length; i++) {
+    const s = ARENA.surfs[i];
+    if (x >= s.x && x <= s.x + s.w && s.y >= y - 2 && s.y < by) { by = s.y; bs = s; }
+  }
+  return { y: by, bs: bs, s: bs };
+}
+
+// ════════════════ FONDO estilo Fancy Pants: papel + sombras de hojas + terreno a tinta ════════════════
+// Paleta papel/tinta
+const PAPER = '#eee3d4', PAPER_DARK = 'rgba(196,163,152,0.4)';
+const ROCK = '#a9b9ce', ROCK_DARK = '#8ba0ba', ROCK_LIGHT = '#dbe6f2', INK = '#221e1b';
+let bgCanvas = null, terrainCanvas = null, bgK = 1, terrK = 1;
+const BG_W = ARENA.w + 1200, BG_H = 2200, BG_X0 = -600, BG_Y0 = ARENA.floorY - 1900;
+// sombras de hojas gigantes sobre el papel (parallax lento) — formas de lente con puntas
+function bakeBg() {
+  bgK = Math.min(0.6, Math.sqrt(2.0e6 / (BG_W * BG_H)));
+  if (!bgCanvas) bgCanvas = document.createElement('canvas');
+  bgCanvas.width = Math.ceil(BG_W * bgK); bgCanvas.height = Math.ceil(BG_H * bgK);
+  const c2 = bgCanvas.getContext('2d');
+  c2.setTransform(bgK, 0, 0, bgK, -BG_X0 * bgK, -BG_Y0 * bgK);
+  let seed = 13;
+  const rndS = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  c2.fillStyle = PAPER_DARK;
+  for (let k = 0; k < 26; k++) {                                     // hojas: dos arcos cuadráticos punta a punta
+    const cx = BG_X0 + rndS() * BG_W, cy = BG_Y0 + rndS() * BG_H;
+    const len = 500 + rndS() * 900, wid = 90 + rndS() * 170, ang = rndS() * TAU;
+    const dx = Math.cos(ang), dy = Math.sin(ang), px = -dy, py = dx;
+    const x1 = cx - dx * len / 2, y1 = cy - dy * len / 2, x2 = cx + dx * len / 2, y2 = cy + dy * len / 2;
+    c2.beginPath();
+    c2.moveTo(x1, y1);
+    c2.quadraticCurveTo(cx + px * wid, cy + py * wid, x2, y2);
+    c2.quadraticCurveTo(cx - px * wid, cy - py * wid, x1, y1);
+    c2.fill();
+  }
+}
+// terreno world-space horneado UNA vez: roca azulada, contorno a tinta, rayones blancos
+function bakeTerrain() {
+  const TW = ARENA.w + 800, TH = 2100, TX0 = -400, TY0 = ARENA.floorY - 1850;
+  terrK = Math.min(0.75, Math.sqrt(2.6e6 / (TW * TH)));
+  if (!terrainCanvas) terrainCanvas = document.createElement('canvas');
+  terrainCanvas.width = Math.ceil(TW * terrK); terrainCanvas.height = Math.ceil(TH * terrK);
+  terrainCanvas._x0 = TX0; terrainCanvas._y0 = TY0; terrainCanvas._w = TW; terrainCanvas._h = TH;
+  const c2 = terrainCanvas.getContext('2d');
+  c2.setTransform(terrK, 0, 0, terrK, -TX0 * terrK, -TY0 * terrK);
+  let seed = 29;
+  const rndS = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  c2.lineCap = 'round'; c2.lineJoin = 'round';
+  const inkW = 7, scratch = (x, y, w2, h2, n) => {                   // rayones blancos tipo lápiz
+    c2.strokeStyle = 'rgba(235,243,250,0.5)'; c2.lineWidth = 3.5;
+    for (let k = 0; k < n; k++) {
+      const sx = x + rndS() * w2, sy = y + rndS() * h2, ln = 20 + rndS() * 60, an = -0.5 + rndS() * 1;
+      c2.beginPath(); c2.moveTo(sx, sy); c2.lineTo(sx + Math.cos(an) * ln, sy + Math.sin(an) * ln); c2.stroke();
+    }
+  };
+  const slab = (x, y, w2, h2, wobble) => {                           // bloque de roca con borde ondulado a mano
+    c2.beginPath();
+    const pts = [];
+    const steps = Math.max(4, Math.round(w2 / 90));
+    for (let k = 0; k <= steps; k++) pts.push([x + w2 * k / steps, y + (k === 0 || k === steps ? 0 : (rndS() - 0.5) * wobble)]);
+    c2.moveTo(pts[0][0], pts[0][1]);
+    for (const [px, py] of pts) c2.lineTo(px, py);
+    c2.lineTo(x + w2 + (rndS() - 0.5) * wobble, y + h2); c2.lineTo(x + (rndS() - 0.5) * wobble, y + h2);
+    c2.closePath();
+    c2.fillStyle = ROCK; c2.fill();
+    c2.strokeStyle = INK; c2.lineWidth = inkW; c2.stroke();
+    // sombreado inferior + luz superior
+    c2.fillStyle = 'rgba(60,75,100,0.25)'; c2.fillRect(x + 6, y + h2 * 0.55, w2 - 12, h2 * 0.45 - 6);
+    c2.strokeStyle = 'rgba(240,247,255,0.75)'; c2.lineWidth = 4;
+    c2.beginPath(); c2.moveTo(x + 10, y + 6); c2.lineTo(x + w2 - 10, y + 6); c2.stroke();
+    scratch(x, y, w2, Math.min(h2, 260), Math.max(3, Math.round(w2 / 110)));
+  };
+  // piso (bloque gigante hasta abajo del encuadre)
+  slab(-400, ARENA.floorY, ARENA.w + 800, 640, 10);
+  // plataformas: losas flotantes con borde rasgado abajo (como la isla del resorte de FPA)
+  for (let i = 1; i < ARENA.surfs.length; i++) {
+    const s = ARENA.surfs[i];
+    slab(s.x, s.y, s.w, 34, 8);
+    // jirones colgando
+    c2.fillStyle = ROCK_DARK; c2.strokeStyle = INK; c2.lineWidth = inkW * 0.7;
+    c2.beginPath();
+    c2.moveTo(s.x + 14, s.y + 34);
+    for (let k = 0; k < 4; k++) {
+      const fx = s.x + 14 + (s.w - 28) * (k + 0.5) / 4;
+      c2.lineTo(fx, s.y + 34 + 16 + rndS() * 26); c2.lineTo(fx + (s.w - 28) / 8, s.y + 34);
+    }
+    c2.closePath(); c2.fill(); c2.stroke();
+    // ticks en las esquinas trepables
+    c2.fillStyle = 'rgba(240,200,90,0.9)';
+    c2.fillRect(s.x - 3, s.y - 3, 9, 6); c2.fillRect(s.x + s.w - 6, s.y - 3, 9, 6);
+  }
+  // paredes laterales
+  slab(-420, ARENA.topY - 300, 420, ARENA.floorY - ARENA.topY + 950, 0);
+  slab(ARENA.w, ARENA.topY - 300, 420, ARENA.floorY - ARENA.topY + 950, 0);
+  // puerta de SALIDA (marco a tinta + cartel)
+  const ex = ARENA.exit.x, ey = ARENA.exit.y;
+  c2.fillStyle = '#5b4a3a'; c2.strokeStyle = INK; c2.lineWidth = inkW;
+  c2.beginPath();
+  c2.moveTo(ex - 55, ey); c2.lineTo(ex - 55, ey - 150);
+  c2.arc(ex, ey - 150, 55, PI, 0);
+  c2.lineTo(ex + 55, ey); c2.closePath(); c2.fill(); c2.stroke();
+  c2.fillStyle = '#2e2620';
+  c2.beginPath(); c2.arc(ex + 28, ey - 78, 7, 0, TAU); c2.fill();    // picaporte
+  c2.fillStyle = INK; c2.textAlign = 'center'; c2.font = '900 40px system-ui,sans-serif';
+  c2.fillText('SALIDA', ex, ey - 235);
+  c2.strokeStyle = INK; c2.lineWidth = 5;
+  c2.beginPath(); c2.moveTo(ex - 40, ey - 218); c2.lineTo(ex + 40, ey - 218); c2.stroke();
+}
+let paperGrad = null;
+function drawPaper() {                                                // base de papel plana (screen-space)
+  ctx.fillStyle = PAPER; ctx.fillRect(0, 0, W, H);
+}
+function drawWorld() {
+  if (!terrainCanvas) return;
+  ctx.drawImage(terrainCanvas, terrainCanvas._x0, terrainCanvas._y0, terrainCanvas._w, terrainCanvas._h);
+}
+
+// ════════════════ CÁMARA: sigue al JUGADOR, chiquito en pantalla (escala FPA) ════════════════
+const cam = { x: 400, y: ARENA.floorY - 1.2 * CH, z: 0.3 };
+function updateCam(dt, p) {
+  const z = CFG.cam.frac * H / CH;                                    // el personaje mide frac·H en pantalla, fijo
+  let fx = p.x + p.vx * CFG.cam.look + p.facing * 0.6 * CH;           // adelantarse hacia donde mira/corre
+  const dead = CFG.cam.vDead * H / z;
+  let ty = cam.y;
+  const py = p.y;
+  if (py < cam.y - dead * 0.5) ty = py + dead * 0.5;
+  if (py > cam.y + dead * 0.35) ty = py - dead * 0.35;
+  cam.z = dampHL(cam.z, z, 0.25, dt);
+  cam.x = dampHL(cam.x, fx, CFG.cam.posHl, dt);
+  cam.y = dampHL(cam.y, ty, CFG.cam.posHl * 1.6, dt);
+  const hw = W / (2 * cam.z), hh = H / (2 * cam.z);
+  cam.x = clamp(cam.x, -250 + hw, ARENA.w + 250 - hw);
+  cam.y = Math.min(cam.y, ARENA.floorY + 240 - hh);
+}
+let shakeX = 0, shakeY = 0, shakeR = 0;
+function updateShake(t) {
+  const s = trauma * trauma;
+  const f = CFG.juice.shakeHz;
+  shakeX = CFG.juice.shakeOff * Math.min(W, H) * s * (Math.sin(t * f * TAU) + 0.6 * Math.sin(t * f * 1.37 * TAU));
+  shakeY = CFG.juice.shakeOff * Math.min(W, H) * s * (Math.cos(t * f * 0.91 * TAU) + 0.6 * Math.sin(t * f * 1.53 * TAU));
+  shakeR = CFG.juice.shakeRot * s * Math.sin(t * f * 1.11 * TAU);
+}
+function applyCam(parX, parY) {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.translate(W / 2 + shakeX, H / 2 + shakeY);
+  ctx.rotate(shakeR);
+  ctx.scale(cam.z, cam.z);
+  ctx.translate(-cam.x * parX - (1 - parX) * ARENA.w / 2, -cam.y * parY - (1 - parY) * (ARENA.floorY - 380));
+}
+
+// ════════════════ HUD sandbox: vida del jugador + contador de K.O. + flecha a la salida ════════════════
+const hud = { chip: CFG.fight.hp, chipT: 9, hpPrev: CFG.fight.hp };
+function drawHUD(dt, p) {
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const bw = 0.22 * W, bh = Math.max(9, 0.02 * H), x0 = 14, y0 = 46;
+  if (p.hp < hud.hpPrev) hud.chipT = 0;
+  hud.hpPrev = p.hp;
+  hud.chipT += dt;
+  if (hud.chipT > 0.5) hud.chip = dampHL(hud.chip, p.hp, 0.25, dt);
+  const frac = clamp(p.hp / CFG.fight.hp, 0, 1), cfrac = clamp(hud.chip / CFG.fight.hp, 0, 1);
+  ctx.fillStyle = 'rgba(238,227,212,0.85)';
+  ctx.fillRect(x0 - 3, y0 - 3, bw + 6, bh + 6);
+  ctx.fillStyle = 'rgba(120,90,80,0.45)';
+  ctx.fillRect(x0, y0, bw * cfrac, bh);
+  ctx.fillStyle = 'hsl(' + lerp(4, 112, frac).toFixed(0) + ',65%,45%)';
+  ctx.fillRect(x0, y0, bw * frac, bh);
+  ctx.strokeStyle = INK; ctx.lineWidth = 2.5;
+  ctx.strokeRect(x0 - 3, y0 - 3, bw + 6, bh + 6);
+  // contador de bajados
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.font = '900 ' + Math.max(13, Math.round(0.032 * H)) + 'px system-ui,sans-serif';
+  ctx.fillStyle = INK;
+  ctx.fillText('K.O.  ' + game.kos + '/' + enemies.length, x0, y0 + bh + 8);
+  // flecha a la salida cuando está fuera de pantalla
+  const exitScreenX = (ARENA.exit.x - cam.x) * cam.z + W / 2;
+  if (exitScreenX > W - 20 && game.state === 'play') {
+    const ay = H * 0.35, ax = W - 26;
+    ctx.fillStyle = 'rgba(34,30,27,0.75)';
+    ctx.beginPath(); ctx.moveTo(ax + 14, ay); ctx.lineTo(ax - 8, ay - 12); ctx.lineTo(ax - 8, ay + 12); ctx.closePath(); ctx.fill();
+  }
+  // combo del jugador
+  if (p.combo >= 2 && p.comboT > 0) {
+    const pop = p.comboT > 1.2 ? 1 + (1.4 - p.comboT) * 3 : 1;
+    ctx.font = '900 ' + Math.round(0.045 * H * pop) + 'px system-ui,sans-serif';
+    ctx.fillStyle = 'rgba(226,120,30,' + clamp(p.comboT, 0, 1).toFixed(2) + ')';
+    ctx.fillText(p.combo + ' GOLPES', x0, y0 + bh + 8 + 0.045 * H);
+  }
+}
+// barras de vida sobre la cabeza de enemigos lastimados (world-space, llamar con cámara puesta)
+function drawEnemyBars() {
+  for (const e of enemies) {
+    if (e.dead || e.hp >= e.maxHp) continue;
+    const x = e.renderPts[P_.head * 2], y = e.renderPts[P_.head * 2 + 1] - 0.28 * CH;
+    const w2 = 0.5 * CH, h2 = 0.045 * CH;
+    ctx.fillStyle = 'rgba(238,227,212,0.9)';
+    ctx.fillRect(x - w2 / 2 - 2, y - 2, w2 + 4, h2 + 4);
+    ctx.fillStyle = '#c0392b';
+    ctx.fillRect(x - w2 / 2, y, w2 * clamp(e.hp / e.maxHp, 0, 1), h2);
+    ctx.strokeStyle = INK; ctx.lineWidth = 2;
+    ctx.strokeRect(x - w2 / 2 - 2, y - 2, w2 + 4, h2 + 4);
+  }
+}
+function drawBanner() {
+  if (!game.banner) return;
+  const t = game.bannerT;
+  const inT = 0.18, life = game.bannerLife;
+  const pop = t < inT ? easeOutCubic(t / inT) : t > life - 0.25 ? 1 - (t - (life - 0.25)) / 0.25 : 1;
+  if (pop <= 0) return;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const size = 0.11 * H * (0.8 + 0.2 * pop);
+  ctx.font = '900 ' + size.toFixed(1) + 'px system-ui,sans-serif';
+  ctx.globalAlpha = clamp(pop, 0, 1);
+  ctx.fillStyle = 'rgba(90,70,60,0.35)';
+  ctx.fillText(game.banner, W / 2 + 3, H * 0.34 + 3);
+  ctx.fillStyle = game.bannerCol || INK;
+  ctx.fillText(game.banner, W / 2, H * 0.34);
+  if (game.bannerSub) {
+    ctx.font = '700 ' + (size * 0.34).toFixed(1) + 'px system-ui,sans-serif';
+    ctx.fillStyle = INK;
+    ctx.fillText(game.bannerSub, W / 2, H * 0.34 + size * 0.75);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ════════════════ FLUJO sandbox: menú → nivel → (te bajan → respawn) → salida ════════════════
+const game = {
+  state: 'menu', diff: 1, t: 0, kos: 0, levelT: 0,
+  banner: '', bannerT: 0, bannerLife: 0, bannerCol: '', bannerSub: '',
+  paused: false, mode: 'sandbox',
+};
+function setBanner(txt, life, col, sub) { game.banner = txt; game.bannerT = 0; game.bannerLife = life; game.bannerCol = col || INK; game.bannerSub = sub || ''; sfx.banner(); }
+function resetFighter(f, x) {
+  f.hp = f.maxHp; f.x = x; f.vx = 0; f.vy = 0;
+  const g = groundAt(x, -1e4);
+  f.y = g.y - STAND; f.surf = g.s; f.grounded = true;
+  f.state = ST.IDLE; f.stateT = 0; f.atk = null; f.rot = 0; f.juggle = 0; f.combo = 0; f.stun = 0;
+  f.hitstopT = 0; f.pendKb = false; f.rag.on = false; f.rag.w = 0; f.invuln = 0; f.ledge = null;
+  f.buffer.length = 0; f.dead = false; f.leanAx = 0; f.prevVx = 0;
+  f.poseCur.set(POSES.idle); f.poseVel.fill(0);
+  fk(f.poseCur, f.renderPts, f.x, f.y, f.facing);
+  f.replantFeet();
+}
+function startMatch() {
+  game.kos = 0; game.levelT = 0;
+  resetFighter(P1, 180); P1.facing = 1;
+  for (const e of enemies) { resetFighter(e, e.spawnX); e.facing = -1; e.brain = newBrain(); }
+  hud.chip = hud.hpPrev = CFG.fight.hp; hud.chipT = 9;
+  sparks.length = 0; dmgNums.length = 0; smears.length = 0; ghosts.length = 0;
+  trauma = 0;
+  cam.x = 400; cam.y = ARENA.floorY - 1.2 * CH;
+  game.state = 'intro'; game.t = 0;
+  setBanner('¡DALE!', 0.9, '#e2781e');
+  document.getElementById('menu').classList.add('hidden');
+  document.body.classList.remove('inMenu');
+}
+function onKO(att, def) {
+  if (def === P1) {
+    game.state = 'dead'; game.t = 0;
+    setBanner('TE BAJARON…', 1.6, '#c0392b');
+  } else {
+    def.dead = true;
+    game.kos++;
+    addTrauma(0.25);
+    if (game.kos === enemies.length) setBanner('¡LIMPIO!', 1.4, '#e2781e', 'andá a la SALIDA →');
+  }
+}
+function stepGameFlow(dt) {
+  game.t += dt;
+  if (game.banner) { game.bannerT += dt; if (game.bannerT > game.bannerLife) game.banner = ''; }
+  switch (game.state) {
+    case 'intro':
+      if (game.t > 0.9) { game.state = 'play'; game.t = 0; }
+      break;
+    case 'play':
+      game.levelT += dt;
+      // ¿llegó a la salida? (pisando, cerca de la puerta)
+      // Bug fix: la salida ahora está ARRIBA de la torre (y muy negativo). El check anterior
+      // (exit.y - P1.y - STAND < 60) daba TRUE en el piso porque exit.y - anything_bigger es < 60
+      // siempre. Usamos |diferencia| para exigir que estés EN el mismo nivel del exit (± 60 px).
+      if (P1.grounded && Math.abs(P1.x - ARENA.exit.x) < 70 && Math.abs(ARENA.exit.y - P1.y - STAND) < 60) {
+        game.state = 'win'; game.t = 0;
+        const secs = Math.round(game.levelT);
+        setBanner('¡NIVEL COMPLETADO!', 4, '#2e7d32', 'K.O. ' + game.kos + '/' + enemies.length + ' · ' + secs + ' s');
+        sfx.win();
+      }
+      break;
+    case 'dead':
+      if (game.t > 1.7) {                                             // respawn: los enemigos bajados SIGUEN bajados
+        resetFighter(P1, 180); P1.facing = 1;
+        hud.chip = hud.hpPrev = CFG.fight.hp;
+        game.state = 'play'; game.t = 0;
+      }
+      break;
+    case 'win':
+      if (game.t > 4.2) showMenu();
+      break;
+  }
+}
+function showMenu() {
+  game.state = 'menu';
+  game.paused = false; document.getElementById('btnPause').classList.remove('paused');
+  document.getElementById('menu').classList.remove('hidden');
+  document.body.classList.add('inMenu');
+  for (const f of [P1, ...enemies]) {                                 // reset incondicional (volver a mitad de golpe crasheaba)
+    f.state = ST.IDLE; f.stateT = 0; f.rag.on = false; f.rag.w = 0; f.rot = 0;
+    f.atk = null; f.stun = 0; f.combo = 0; f.hitstopT = 0; f.pendKb = false;
+    f.ledge = null; f.invuln = 0; f.buffer.length = 0;
+  }
+  game.banner = '';
+}
+
+// ── wiring del menú ──
+{
+  const el = document.getElementById('rowDiff');
+  el.addEventListener('pointerdown', e => {
+    const b = e.target.closest('.opt'); if (!b) return;
+    e.preventDefault();
+    for (const o of el.querySelectorAll('.opt')) o.classList.remove('sel');
+    b.classList.add('sel');
+    game.diff = +b.dataset.d;
+  });
+}
+document.getElementById('btnPlay').addEventListener('pointerdown', e => { e.preventDefault(); audioResume(); startMatch(); });
+document.getElementById('btnPause').addEventListener('pointerdown', e => {
+  e.preventDefault();
+  if (game.state === 'menu') return;
+  game.paused = !game.paused;
+  document.getElementById('btnPause').classList.toggle('paused', game.paused);
+});
+addEventListener('keydown', e => { if (e.code === 'KeyP' && game.state !== 'menu') { game.paused = !game.paused; document.getElementById('btnPause').classList.toggle('paused', game.paused); } });
+document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); game.paused = false; showMenu(); });
+
+// ════════════════ IA: un CEREBRO por enemigo, escribe el mismo struct de input que la palanca ════════════════
+// Percepción honesta: lee un snapshot del jugador de hace reactionMs (jamás el estado actual).
+const ARCHS = [
+  { name: 'PELEADOR', pref: 1.05, aggr: 0.55, reactMul: 1.0, blockP: 0.55, comboDrop: 0.30, kickBias: 0.42, jumpy: 0.3, feint: 0.15 },
+  { name: 'MATÓN', pref: 0.8, aggr: 0.82, reactMul: 1.15, blockP: 0.30, comboDrop: 0.24, kickBias: 0.62, jumpy: 0.18, feint: 0.07 },
+  { name: 'TÉCNICO', pref: 1.35, aggr: 0.42, reactMul: 0.9, blockP: 0.80, comboDrop: 0.18, kickBias: 0.36, jumpy: 0.25, feint: 0.25 },
+  { name: 'ACRÓBATA', pref: 1.1, aggr: 0.6, reactMul: 1.0, blockP: 0.45, comboDrop: 0.34, kickBias: 0.55, jumpy: 0.85, feint: 0.12 },
+];
+function newBrain() {
+  return {
+    arch: ARCHS[rndi(0, ARCHS.length - 1)], snaps: [], tick: rnd(0, 0.25), mx: 0, my: 0,
+    hold: { jump: 0, punch: 0, kick: 0 }, blockUntil: 0, t: rnd(0, 9),
+    blockStreak: 0, lastChain: '', campT: 0, engaged: false,
+  };
+}
+function aiReaction(br) {                                             // la dificultad SOLO toca reacción/bloqueo/drop
+  return [0.34, 0.20, 0.15][game.diff] * br.arch.reactMul;
+}
+function aiPress(br, k, dur) { br.hold[k] = Math.max(br.hold[k], dur || 0.06); }
+function aiThink(me, dt) {
+  const br = me.brain, foe = me.foe, i = me.input;
+  if (!br || me.dead) return;
+  br.t += dt;
+  // salidas por default: sostener lo decidido en el último tick
+  for (const k in br.hold) { br.hold[k] -= dt; i[k] = br.hold[k] > 0; }
+  i.mx = br.mx; i.my = br.my;
+  if (!foe || foe.dead) { br.mx = 0; br.my = 0; return; }
+
+  const gap = Math.abs(foe.x - me.x), dir = Math.sign(foe.x - me.x) || 1;
+  // ── aggro con histéresis: lejos = quedarse tranquilo en su zona ──
+  if (!br.engaged) {
+    if (gap < 3.2 * CH && Math.abs(foe.y - me.y) < 2.2 * CH) br.engaged = true;
+    else { br.mx = 0; br.my = 0; return; }
+  } else if (gap > 7 * CH) { br.engaged = false; br.mx = 0; return; }
+
+  // snapshot del jugador (ring ~0.6 s) → vista RETRASADA
+  br.snaps.push({ t: br.t, x: foe.x, y: foe.y, state: foe.state, atk: foe.atk ? foe.atk.name : '', atkT: foe.atkClock, grounded: foe.grounded });
+  while (br.snaps.length > 40) br.snaps.shift();
+  const cut = br.t - aiReaction(br);
+  let v = br.snaps[0];
+  for (let k = br.snaps.length - 1; k >= 0; k--) if (br.snaps[k].t <= cut) { v = br.snaps[k]; break; }
+
+  if ([ST.HITSTUN, ST.LAUNCHED, ST.KNOCKDOWN, ST.KO, ST.BLOCKSTUN].includes(me.state)) {
+    br.mx = 0; br.my = Math.random() < 0.5 ? 1 : 0;                  // a veces tech-roll direccional
+    if (me.state === ST.KNOCKDOWN) br.mx = Math.sign(me.x - foe.x) || 1;
+    return;
+  }
+  if (me.state === ST.HANG) { if (me.stateT > 0.25) aiPress(br, 'jump'); return; }
+
+  const away = -dir;
+  const kickReach = 0.58 * CH, punchReach = 0.42 * CH;
+  const prefD = br.arch.pref * kickReach;
+
+  // ── DEFEND (interrumpe el tick): el jugador tiró algo y ya lo VI ──
+  if (v.state === ST.ATTACK && v.atk && MOVES[v.atk] && gap < kickReach * 1.5) {
+    const m = MOVES[v.atk];
+    if (v.atkT < m.startup + m.active) {
+      if (br.t > br.blockUntil && Math.random() < br.arch.blockP * [0.6, 1, 1.25][game.diff]) {
+        // anti-frustración: la misma cadena bloqueada 2 veces seguidas, después la dejo pasar
+        if (br.lastChain === v.atk && br.blockStreak >= 2) { br.blockStreak = 0; br.blockUntil = br.t + 0.6; }
+        else {
+          br.mx = away; br.my = m.low ? 1 : 0;
+          if (br.lastChain === v.atk) br.blockStreak++; else { br.blockStreak = 1; br.lastChain = v.atk; }
+          return;
+        }
+      } else br.blockUntil = br.t + 0.3;
+    }
+  }
+  // ── PRESSURE: conecté → seguir la cadena (con prob de soltarla) ──
+  if (me.state === ST.ATTACK) {
+    const m = me.atk;
+    if ((me.atkHit || me.atkBlocked) && m.chain && Math.random() > br.arch.comboDrop * [1.5, 1, 0.6][game.diff] * 0.5) {
+      if (m.chainAlt && Math.random() < br.arch.kickBias * 0.5) aiPress(br, 'kick');
+      else aiPress(br, 'punch');
+    }
+    return;
+  }
+
+  br.tick -= dt;
+  if (br.tick > 0) return;
+  br.tick = rnd(CFG.ai.thinkMin, CFG.ai.thinkMax);
+
+  // ── PUNISH: lo veo en recovery al alcance ──
+  if (v.state === ST.ATTACK && v.atk && MOVES[v.atk]) {
+    const m = MOVES[v.atk], rec = m.total - v.atkT;
+    if (v.atkT > m.startup + m.active && rec > CFG.ai.punishMin && gap < kickReach) {
+      br.mx = dir * 0.8;
+      if (gap < punchReach) aiPress(br, 'punch'); else aiPress(br, 'kick');
+      return;
+    }
+  }
+  // ── OKI: jugador tirado ──
+  if ([ST.KNOCKDOWN, ST.GETUP, ST.LAUNCHED].includes(v.state)) {
+    br.mx = gap > prefD * 0.8 ? dir * 0.7 : -dir * 0.5;
+    if (Math.random() < br.arch.aggr * 0.4 && gap < kickReach) aiPress(br, Math.random() < 0.5 ? 'punch' : 'kick');
+    return;
+  }
+  // ── CHASE: el jugador campea arriba ──
+  if (foe.y < me.y - 0.6 * CH && foe.grounded) br.campT += br.tick; else br.campT = 0;
+  if (br.campT > 1.5) {
+    br.mx = dir;
+    if (me.grounded && Math.abs(foe.x - me.x) < 1.4 * CH) aiPress(br, 'jump', 0.3);
+    return;
+  }
+  // ── NEUTRAL / APPROACH / STRIKE ──
+  if (gap > prefD * 1.25) {
+    br.mx = dir;
+    if (Math.random() < br.arch.aggr * 0.35 && gap > prefD * 1.8 && me.grounded) i.dashPulse = dir;
+    if (Math.random() < br.arch.jumpy * 0.25 && me.grounded) aiPress(br, 'jump', 0.25);
+  } else if (gap < prefD * 0.55 && Math.random() > br.arch.aggr) {
+    br.mx = away * 0.7;
+  } else if (Math.random() < br.arch.aggr * 0.9) {
+    br.mx = dir * 0.4;
+    if (Math.random() < br.arch.feint) { br.mx = dir; br.tick = 0.12; return; }   // finta
+    if (!me.grounded) { aiPress(br, 'kick'); return; }
+    if (Math.random() < br.arch.kickBias) {
+      if (gap > kickReach * 0.9 && Math.random() < 0.4) { i.dashPulse = dir; aiPress(br, 'kick', 0.3); }
+      else if (Math.random() < 0.25) { br.my = 1; aiPress(br, 'kick'); }
+      else aiPress(br, 'kick');
+    } else {
+      if (gap > punchReach && Math.random() < 0.35) { i.dashPulse = dir; aiPress(br, 'punch', 0.3); }
+      else aiPress(br, 'punch');
+    }
+  } else {
+    br.mx = (Math.random() < 0.5 ? 1 : -1) * dir * 0.5;
+    br.my = 0;
+  }
+}
+
+// ════════════════ CANVAS + RESIZE + PÉRDIDA DE CONTEXTO (trío de Pong, obligatorio) ════════════════
+const canvas = document.getElementById('c');
+let ctx = canvas.getContext('2d');
+let W = 0, H = 0, dpr = 1, sizeValid = false;
+let ctxLost = false;
+canvas.addEventListener('contextlost', e => { e.preventDefault(); ctxLost = true; });
+canvas.addEventListener('contextrestored', () => {
+  ctxLost = false;
+  bgCanvas = null; terrainCanvas = null; _glowCache.clear(); sparks.length = 0;   // los bakes se fueron con el contexto
+  resize();
+  bakeBg(); bakeTerrain();
+});
+// los bakes son world-space (no dependen de W/H): se hornean UNA vez, no en cada resize
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, CFG.perf.dprCap);
+  W = window.innerWidth; H = window.innerHeight;
+  if (!W || !H) { sizeValid = false; return; }                       // iframe oculto (Arcade): saltear frames
+  sizeValid = true;
+  canvas.width = Math.round(W * dpr); canvas.height = Math.round(H * dpr);
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+}
+// sin listener de 'resize': el loop re-polla innerWidth/Height cada frame (el rotate a veces ni dispara el evento)
+
+// ════════════════ PANEL DE TUNING (tecla T / triple-tap en la versión del menú) ════════════════
+const TUNE = [
+  ['gait.halfBase', 0.2, 0.45], ['gait.halfSpd', 0.2, 0.7], ['gait.dutyBase', 0.5, 0.75], ['gait.dutySpd', 0.1, 0.4],
+  ['gait.stepHBase', 0.02, 0.1], ['gait.stepHSpd', 0.03, 0.16],
+  ['spr.hIdle', 0.05, 0.3], ['spr.hLoco', 0.05, 0.25], ['spr.hAtkStart', 0.02, 0.08], ['spr.hStrike', 0.01, 0.05],
+  ['spr.hRecov', 0.08, 0.3], ['spr.lagMul', 1, 2],
+  ['move.maxRun', 0.4, 0.85], ['move.accel', 2, 5], ['move.fric', 3, 8], ['move.gUp', 1.2, 2.5], ['move.gDown', 1.8, 4],
+  ['move.jumpApex', 0.9, 1.6], ['move.airAccel', 0.8, 2],
+  ['dash.dist', 0.15, 0.45], ['dash.time', 0.14, 0.32],
+  ['anim.leanGain', 0.03, 0.25], ['anim.bob', 0.005, 0.05],
+  ['cam.frac', 0.1, 0.3], ['cam.posHl', 0.06, 0.3], ['cam.look', 0, 0.4],
+  ['juice.shakeOff', 0, 0.05], ['fight.hitR', 0.03, 0.09],
+];
+function cfgGet(path) { const [a, b] = path.split('.'); return CFG[a][b]; }
+function cfgSet(path, v) { const [a, b] = path.split('.'); CFG[a][b] = v; }
+let tuneBuilt = false;
+function toggleTune() {
+  const el = document.getElementById('tunePanel');
+  if (!tuneBuilt) {
+    tuneBuilt = true;
+    let html = '<b style="color:#8fdcff">TUNING (en vivo)</b>';
+    TUNE.forEach((t, i) => {
+      html += '<label>' + t[0] + '<span class="val" id="tv' + i + '">' + cfgGet(t[0]) + '</span></label>' +
+        '<input type="range" id="ts' + i + '" min="' + t[1] + '" max="' + t[2] + '" step="' + ((t[2] - t[1]) / 100) + '" value="' + cfgGet(t[0]) + '">';
+    });
+    html += '<label style="margin-top:10px">H = hit/hurtboxes · G = cámara lenta · Y = dump poses</label>';
+    el.innerHTML = html;
+    TUNE.forEach((t, i) => {
+      document.getElementById('ts' + i).addEventListener('input', e => {
+        cfgSet(t[0], +e.target.value);
+        document.getElementById('tv' + i).textContent = (+e.target.value).toFixed(3);
+      });
+    });
+  }
+  el.classList.toggle('show');
+}
+addEventListener('keydown', e => {
+  if (e.code === 'KeyT') toggleTune();
+  if (e.code === 'KeyH') dbgBoxes = !dbgBoxes;
+  if (e.code === 'KeyG') dbgSlow = !dbgSlow;
+  if (e.code === 'KeyY') console.log('P1 pose', Array.from(P1.poseCur).map(v => +v.toFixed(3)), 'state', P1.state, 'gaitPhase', P1.gaitPhase.toFixed(2));
+});
+let dbgBoxes = false, dbgSlow = false, dbgFreeze = false;            // dbgFreeze: congela la sim (QA saca fotos)
+{ // triple-tap en la versión del menú abre el panel (mobile)
+  let taps = 0, tapT = 0;
+  document.getElementById('menuVer').addEventListener('pointerdown', () => {
+    const now = performance.now();
+    taps = now - tapT < 450 ? taps + 1 : 1; tapT = now;
+    if (taps >= 3) { taps = 0; toggleTune(); }
+  });
+}
+function drawDebugBoxes(f) {
+  const hbs = f.hurtboxes(_hurtScratch);
+  ctx.lineWidth = 1.5 / cam.z;
+  ctx.strokeStyle = 'rgba(30,160,80,0.8)';
+  for (const hb of hbs) {
+    ctx.beginPath(); ctx.arc(hb[0], hb[1], hb[4], 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.arc(hb[2], hb[3], hb[4], 0, TAU); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(hb[0], hb[1]); ctx.lineTo(hb[2], hb[3]); ctx.stroke();
+  }
+  if (f.state === ST.ATTACK) {
+    const m = f.atk, t = f.atkClock;
+    if (t >= m.startup && t <= m.startup + m.active) {
+      ctx.strokeStyle = 'rgba(200,40,40,0.9)';
+      ctx.beginPath(); ctx.arc(f.logicPts[m.limb * 2], f.logicPts[m.limb * 2 + 1], CFG.fight.hitR * CH * (m.reachBonus ? 1.35 : 1), 0, TAU); ctx.stroke();
+    }
+  }
+}
+
+// ════════════════ INIT: jugador + enemigos ════════════════
+// Jugador: outfit "aventurero" (camisa celeste, pantalón azul marino, pelo plain).
+const P1 = new Fighter(180, [90, 165, 220], null, inP1);
+P1.isPlayer = true;
+P1.pants = '#1f3a68'; P1.pantsDark = '#132648';
+P1.shirt = '#4a90e2'; P1.shirtDark = '#2a5d99';
+P1.shoe  = '#2b1e12';
+P1.hairStyle = 'plain'; P1.hairCol = '#3b2517';
+P1.maxHp = CFG.fight.hp;
+
+// Enemigos: 9 con outfits/pelo/gorro variados, distribuidos por el mapa nuevo (8000 wide).
+const ENEMY_LOADOUTS = [
+  { x: 800,  shirt: '#c0392b', shirtDark: '#7a2018', pants: '#3a2320', pantsDark: '#231412', shoe: '#1a1210', hairStyle: 'spiky',    hairCol: '#241812' },
+  { x: 1750, shirt: '#27ae60', shirtDark: '#166135', pants: '#2c3d4a', pantsDark: '#182530', shoe: '#0f0e0c', hairStyle: 'plain',    hairCol: '#2b1a10' },
+  { x: 2800, shirt: '#8e44ad', shirtDark: '#5b2b70', pants: '#241a2c', pantsDark: '#160e1a', shoe: '#100a12', hairStyle: 'bald',     hat: true, hatCol: '#3a2f1e' },
+  { x: 3700, shirt: '#e67e22', shirtDark: '#a25211', pants: '#3d2617', pantsDark: '#24160c', shoe: '#1a1108', hairStyle: 'mohawk',   hairCol: '#1a1108' },
+  { x: 4700, shirt: '#f1c40f', shirtDark: '#9b8006', pants: '#2b2b2b', pantsDark: '#141414', shoe: '#0f0f0f', hairStyle: 'ponytail', hairCol: '#1c1310' },
+  { x: 5550, shirt: '#16a085', shirtDark: '#0b6659', pants: '#242d34', pantsDark: '#131a20', shoe: '#100e0c', hairStyle: 'spiky',    hairCol: '#3a2a1c' },
+  { x: 6200, shirt: '#d35400', shirtDark: '#8a3200', pants: '#2a1e17', pantsDark: '#18110c', shoe: '#0f0a08', hairStyle: 'bald',     hat: true, hatCol: '#5a2f1a' },
+  { x: 7000, shirt: '#7f8c8d', shirtDark: '#4a5556', pants: '#2c2c2c', pantsDark: '#161616', shoe: '#0e0e0e', hairStyle: 'plain',    hairCol: '#4a3220' },
+  { x: 7700, shirt: '#c0392b', shirtDark: '#7a2018', pants: '#1a1a1a', pantsDark: '#0e0e0e', shoe: '#080808', hairStyle: 'mohawk',   hairCol: '#080808' },
+];
+const enemies = [];
+for (const L of ENEMY_LOADOUTS) {
+  const e = new Fighter(L.x, [70, 60, 55], null, newInput());
+  e.spawnX = L.x; e.maxHp = CFG.fight.enemyHp; e.hp = e.maxHp;
+  e.angry = true; e.eyeCol = '#c0392b'; e.foe = P1; e.facing = -1; e.brain = newBrain();
+  e.shirt = L.shirt; e.shirtDark = L.shirtDark;
+  e.pants = L.pants; e.pantsDark = L.pantsDark;
+  e.shoe  = L.shoe;
+  e.hairStyle = L.hairStyle; e.hairCol = L.hairCol;
+  if (L.hat) { e.hat = true; e.hatCol = L.hatCol; }
+  enemies.push(e);
+}
+const allFighters = [P1, ...enemies];
+for (const f of allFighters) {
+  const g = groundAt(f.x, -1e4);
+  f.y = g.y - STAND; f.surf = g.s; f.grounded = true;
+  f.replantFeet();
+}
+document.body.classList.add('inMenu');
+window.SF = { P1, enemies, CFG, game, cam, MOVES, POSES, ST, simT: 0, get inP1() { return inP1; } };
+
+document.getElementById('hint').textContent = IS_TOUCH
+  ? 'palanca = moverte · doble-tap = dash · bajá enemigos a piñas y llegá a la SALIDA →'
+  : 'A/D mover · W saltar · S agacharte · J puño · K patada · SHIFT dash · llegá a la SALIDA →';
+setTimeout(() => document.getElementById('hint').classList.add('off'), 5000);
+
+function zeroIn(i) { i.mx = 0; i.my = 0; i.jump = false; i.punch = false; i.kick = false; i.dashPulse = 0; }
+let lastT = performance.now(), fpsSm = 60, frameFlip = false;
+let lastW = 0, lastH = 0, rafPend = false;
+// el rAF se agenda con dedupe: loop() también puede llamarse "a mano" (QA headless) sin duplicar la cadena
+function scheduleRaf() { if (rafPend) return; rafPend = true; requestAnimationFrame(t => { rafPend = false; loop(t); }); }
+function loop(now) {
+  scheduleRaf();
+  if (ctxLost) { lastT = now; return; }
+  if (window.innerWidth !== lastW || window.innerHeight !== lastH) { lastW = window.innerWidth; lastH = window.innerHeight; resize(); }
+  if (!sizeValid) { lastT = now; return; }
+  let dt = clamp((now - lastT) / 1000, 0, CFG.perf.dtMax);
+  lastT = now;
+  SF.simT += dt;
+  fpsSm = fpsSm * 0.95 + (1 / Math.max(dt, 1e-4)) * 0.05;
+  if (dbgSlow) dt *= 0.2;
+  if (dbgFreeze) dt = 0;
+  sndThisFrame = 0;
+
+  pollInputs();
+  const inPlay = game.state === 'play';
+  if (!inPlay && game.state !== 'intro') zeroIn(inP1);               // en intro se puede empezar a caminar
+  if (!game.paused) {
+    stepGameFlow(dt);
+    // foe del jugador: enemigo vivo más cercano (para auto-facing y guardia)
+    let best = null, bd = 5 * CH;
+    for (const e of enemies) {
+      if (e.dead) continue;
+      const d = Math.abs(e.x - P1.x) + Math.abs(e.y - P1.y) * 0.5;
+      if (d < bd) { bd = d; best = e; }
+    }
+    P1.foe = best;
+    for (const e of enemies) {
+      if (inPlay && !e.dead) aiThink(e, dt);
+      else if (!inPlay) zeroIn(e.input);
+    }
+    P1.update(dt);
+    for (const e of enemies) e.update(dt);
+    for (const e of enemies) separateBodies(P1, e);
+    for (let a = 0; a < enemies.length; a++)
+      for (let b = a + 1; b < enemies.length; b++) separateBodies(enemies[a], enemies[b]);
+    if (inPlay) {
+      frameFlip = !frameFlip;                                        // orden alternado: trades sin sesgo
+      for (const e of enemies) {
+        if (e.dead) continue;
+        if (frameFlip) { resolveCombat(P1, e); resolveCombat(e, P1); }
+        else { resolveCombat(e, P1); resolveCombat(P1, e); }
+      }
+    }
+    for (const f of allFighters)
+      if (f.state === ST.ATTACK && f.hitstopT <= 0 && f.atkClock >= f.atk.startup && f.atkClock <= f.atk.startup + f.atk.active) addSmear(f);
+    recordGhosts(allFighters, dt);
+    updateEffects(dt);
+    updateCam(dt, P1);
+    updateShake(now / 1000);
+  }
+
+  // ── render: papel (screen) → sombras de hojas (parallax) → terreno (world) → juego ──
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawPaper();
+  if (bgCanvas) {
+    applyCam(0.45, 0.85);
+    ctx.drawImage(bgCanvas, BG_X0, BG_Y0, BG_W, BG_H);
+  }
+  applyCam(1, 1);
+  drawWorld();
+  drawEffectsUnder();
+  for (const e of enemies) if (e.dead) drawFighter(e);               // los bajados quedan tirados, detrás
+  for (const e of enemies) if (!e.dead) drawFighter(e);
+  drawFighter(P1);
+  drawEnemyBars();
+  drawEffects();
+  if (dbgBoxes) { drawDebugBoxes(P1); for (const e of enemies) drawDebugBoxes(e); }
+  if (game.state !== 'menu') drawHUD(game.paused ? 0 : dt, P1);
+  drawBanner();
+  if (game.paused) {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.fillStyle = 'rgba(238,227,212,0.6)'; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '900 ' + (0.09 * H).toFixed(0) + 'px system-ui,sans-serif';
+    ctx.fillStyle = INK; ctx.fillText('PAUSA', W / 2, H / 2);
+  }
+  moveStick.idle(IS_TOUCH && inPlay && !game.paused);
+}
+// tap para saltear la pantalla de nivel completado — a nivel window (las zonas táctiles tapan el canvas)
+window.addEventListener('pointerdown', () => { if (game.state === 'win' && game.t > 1) showMenu(); });
+
+resize();
+bakeBg();
+bakeTerrain();
+scheduleRaf();
+</script>
+<script src="../../Arcade/arcade-shell.js" data-orient="landscape"></script>
+<script>
+  // Script de cola (guardado): info/FPS + mute. Corre después de todo el DOM y del shell.
+  (function () {
+    const panel = document.getElementById('infoPanel');
+    const btn = document.getElementById('btnInfo');
+    if (btn && panel) btn.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      panel.classList.toggle('show');
+      btn.classList.toggle('on', panel.classList.contains('show'));
+    });
+    const fEl = document.getElementById('fpsInfo');
+    let frames = 0, t0 = performance.now();
+    (function tick() {
+      frames++;
+      const now = performance.now();
+      if (now - t0 >= 500) {
+        if (panel && panel.classList.contains('show') && fEl) fEl.textContent = 'FPS: ' + Math.round(frames * 1000 / (now - t0));
+        frames = 0; t0 = now;
+      }
+      requestAnimationFrame(tick);
+    })();
+    const bm = document.getElementById('btnMute');
+    if (bm) bm.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      muted = !muted;                                   // let global del script principal
+      if (masterGain) masterGain.gain.value = muted ? 0 : 1;
+      bm.classList.toggle('muted', muted);
+    });
+  })();
+</script>
+</body>
+</html>
