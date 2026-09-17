@@ -12,6 +12,82 @@ todo lo que quedó encerrado. Los enemigos son piezas de ajedrez que telegrafía
 la aguja del reloj marca las oleadas, y cada hora elegís **una sola cosa, alternando**:
 una **regla** para la arena o una **carta** (las 5 equipadas forman una mano de póker).
 
+## Playtest 2026-09-17 (tarde)
+
+### El joystick se comía la tira de la mano — y sólo en APAISADO
+
+`elementFromPoint` sobre el centro de la tira devolvía `jMove`. La zona mide 52 % × 84 %, y con
+`H` chico —que es lo que pasa en apaisado, que es **como está registrado Loop en el Arcade**— ese
+84 % trepa hasta el HUD. En vertical no pasa. Regla: cuando una zona táctil se define en
+PORCENTAJE de pantalla, hay que probarla en las dos orientaciones; el mismo número tapa cosas
+distintas según cuál sea el lado corto.
+
+La solución no es achicar la zona (empeora el control, que es lo que se quería arreglar): el
+joystick **pregunta** si el punto pertenece a algo tocable del HUD (`hudTap`) y le cede el toque.
+Vive en `p04_input` y no adentro del joystick, para que cualquier zona futura consulte lo mismo.
+
+**Ojo al verificarlo**: el arreglo actúa a nivel de EVENTO, así que `elementFromPoint` **sigue**
+devolviendo `jMove` y no prueba nada. Hay que despachar un `pointerdown` de verdad y mirar la
+conducta. Y `moveStick.active` tampoco sirve como señal — el joystick lo prende recién al salir
+de la zona muerta. La señal honesta es mandar un `pointermove` y ver si la palanca respondió.
+
+### El Simón ya no castiga
+
+Franco: *"que la penalización venga dada orgánicamente de perder el beneficio extra"*. Se fue todo:
+no hay sector rojo, no hay perder por quedarse parado, no hay vencimiento. La secuencia espera
+hasta que la completes o hasta que el cambio de hora se lleve la regla. Volvió la **pista** del
+sector que toca (arriba sigue sin mostrarse nada).
+
+El principio: **un castigo explícito encima de perder el premio es cobrar dos veces por la misma
+decisión.** Si el minijuego es opcional, no completarlo ya es la consecuencia.
+
+### El panel del mazo LISTA las manos
+
+Mostraba sólo la mano actual, en un tamaño ilegible en mobile. Pero la pregunta del jugador no es
+"qué tengo" —eso lo ve en las cartas— sino **"qué me conviene armar"**. Ahora lista las ocho con
+su efecto y marca la actual: deja de ser un cartel de estado y pasa a ser un motivo.
+
+### El frenesí cura
+
+*"Es mucha la presión de no recibir daño."* El frenesí ya es la recompensa del ta-te-ti y ya te
+hace intocable: sumarle curación lo vuelve LA ventana de recuperarse sin inventar un sistema
+nuevo, y le da una segunda razón para ir a cerrar la línea.
+
+`CFG.frenzy.healFrac` va como **fracción de la barra**, no como HP/s. Con un número fijo, a más
+vida máxima (cartas de VIGOR) la curación se volvería insignificante — el mismo error que ya
+tuvieron el bucle, el pulso y la orbe: daño fijo contra vida que escala. Se cobra en tandas de
+~1/9 de barra porque `healPlayer` saca un número flotante por llamada y a 60 fps serían sesenta
+numeritos por segundo.
+
+### Resolución adaptativa en vez de bajar la calidad a mano
+
+`autoDpr` mide la MEDIANA del frame (no el promedio: un solo frame largo no puede mover la
+decisión) y ajusta `dprScale`. Histéresis 17.5 ms / 13.5 ms para que no bombee, y enfriamiento de
+2.5 s porque cada cambio llama a `resize()` y eso re-hornea todo — **si el remedio produce el
+síntoma, no es remedio**. En un equipo que llega a 60 no baja nunca.
+
+Trampa aritmética que casi se me pasa: el piso `dprMin / base` puede quedar **por encima de 1** en
+un equipo con `devicePixelRatio` 1, y entonces "bajar" terminaría SUBIENDO la escala. Va acotado
+con `Math.min(1, ...)`.
+
+### Un invariante no puede depender del ORDEN
+
+`ORB-SPD: v=3.08 contra un tope de 1.75` volvió después de darlo por arreglado. El primer intento
+puso el clamp después de los pares orbe-orbe, pero el problema nunca fue ese lugar puntual: hay
+**cinco** cosas que empujan orbes (pares, péndulos, bengalas, el tirón del frenesí, las
+campanadas) y varias corren DESPUÉS de `updateOrbs` — `frenzyBurst` las empuja con +1.4.
+
+`clampOrbSpeeds()` es ahora la última palabra de `stepSim`, cuando ya empujó todo el mundo.
+
+**Un invariante que depende de en qué orden corran las cosas, o de cuántas veces por frame corran,
+no es un invariante.** Se aplica una vez, al final.
+
+### Y borrar por rango se lleva vecinos
+
+Sacar el cartel de hora borrando de `function drawIntro` hasta `function onCanvasTap` se llevó
+puesta `drawEndScreen`, que vivía en el medio. Lo cazó la regresión (`drawEndScreen is not
+defined`), no yo. Cuando se borra un bloque por rango, hay que mirar qué hay adentro del rango.
+
 ## El costo que no dependía de nada (2026-09-17)
 
 Franco, después de la pasada anterior: *"está un poco lento todavía y eso que al principio sin

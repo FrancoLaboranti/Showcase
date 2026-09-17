@@ -234,7 +234,13 @@ const CFG = {
             // veinte chispas y treinta se ven casi igual, y lo que cuesta es el relleno de
             // píxeles — justo lo que escasea en un móvil. No se toca ni la resolución ni
             // ningún efecto: sólo cuántas partículas tiene un golpe.
-            sparkMul: 1 },
+            sparkMul: 1,
+            // Resolución adaptativa. `dprMin` es hasta dónde puede bajar la escala del lienzo
+            // cuando el equipo no llega al presupuesto; `msDown`/`msUp` son la histéresis en
+            // milisegundos por frame (57 fps y 74 fps), y `dprHold` el enfriamiento entre
+            // cambios — cada cambio re-hornea todo, así que hacerlo seguido sería el remedio
+            // produciendo el síntoma.
+            dprMin: 1.05, msDown: 17.5, msUp: 13.5, dprHold: 2.5 },
   arena:  { gridN: 9, rimLoss: 0.94, rimPush: 3.2 },
 
   player: {
@@ -355,7 +361,11 @@ const CFG = {
   // FRENESÍ: no huyen, los ATRAÉS. `pull` es a propósito más lento que la velocidad propia
   // de una pieza: no los mueve por su cuenta, los escora hacia vos. Sos invulnerable, y al
   // terminar sale una onda gratis.
-  frenzy: { time: 6.5, pull: 0.19, burstR: 0.70, burstDmg: 40 },
+  // `healFrac`: fracción de la barra que devuelve un frenesí COMPLETO. Va como fracción y no
+  // como HP/s para que valga lo mismo con cartas de VIGOR encima — si fuera fijo, a más vida
+  // máxima la curación se volvería insignificante (el mismo error que ya tuvieron el bucle,
+  // el pulso y la orbe: daño fijo contra vida que escala).
+  frenzy: { time: 6.5, pull: 0.19, burstR: 0.70, burstDmg: 40, healFrac: 1 / 3 },
 
   // PÉNDULOS. `g` es la gravedad del péndulo: ω = sqrt(g/largo), o sea que el período sale de
   // acá y del LARGO de cada uno. Antes había un ω fijo de 5.4 rad/s para todos: período 1.16 s,
@@ -569,8 +579,12 @@ canvas.addEventListener('contextrestored', () => {
 // Origen del canvas en la página. Se refresca en `resize()` y NO en cada movimiento del mouse:
 // getBoundingClientRect fuerza recálculo de layout, y el hover lo pediría ~60 veces por segundo.
 let cvLeft = 0, cvTop = 0;
+// Escala de resolución que aplica el afinador automático (1 = nitidez plena).
+// Vive afuera de `resize()` porque `resize()` corre también por cambios de tamaño de ventana y no
+// tiene que pisar lo que el afinador ya decidió.
+let dprScale = 1;
 function resize() {
-  dpr = Math.min(window.devicePixelRatio || 1, CFG.perf.dprCap);
+  dpr = Math.min(window.devicePixelRatio || 1, CFG.perf.dprCap) * dprScale;
   W = window.innerWidth; H = window.innerHeight;
   if (!W || !H) { sizeValid = false; return; }        // iframe oculto en el Arcade → saltear el frame
   sizeValid = true;
@@ -794,14 +808,14 @@ function panel(x, y, w, h, r, accent, glow) {
   ctx.stroke();
 }
 // Texto que se achica hasta entrar en `maxW` (los nombres largos de carta se salían del marco)
-function txtFit(s, x, y, px, maxW, col, weight) {
+function txtFit(s, x, y, px, maxW, col, weight, align) {
   let f = px;
   for (let i = 0; i < 8; i++) {
     ctx.font = (weight || 700) + ' ' + Math.round(f) + 'px ' + FONT;
     if (ctx.measureText(s).width <= maxW || f < 6) break;
     f *= 0.9;
   }
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = col; ctx.fillText(s, x, y);
 }
 const fmt = n => Math.round(n).toLocaleString('en-US');
@@ -1034,6 +1048,11 @@ function createJoystick(zoneEl, opts) {
   zoneEl.addEventListener('pointerdown', e => {
     if (e.pointerType === 'mouse' || id !== null) return;
     e.preventDefault();
+    // EL HUD MANDA. La zona del joystick ocupa 52% x 84% y en APAISADO ese 84% trepa hasta el
+    // HUD: la tira de la mano quedaba medio tapada y no se podía abrir el mazo. Achicar la zona
+    // empeoraría el control, así que en vez de eso se pregunta si el punto pertenece a algo
+    // tocable del HUD; si sí, el toque se le pasa al canvas y no nace ninguna palanca.
+    if (hudTap(e.clientX, e.clientY)) return;
     id = e.pointerId; ox = e.clientX; oy = e.clientY;
     try { zoneEl.setPointerCapture(id); } catch (err) {}
     base.style.left = ox + 'px'; base.style.top = oy + 'px'; base.style.display = 'block';
@@ -1102,6 +1121,15 @@ addEventListener('keydown', e => {
   if (e.code === 'Space' || e.code.startsWith('Arrow')) e.preventDefault();
 });
 addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ¿Este toque cae sobre algo tocable del HUD? Entonces no es movimiento: es interacción.
+// Vive acá (y no adentro del joystick) para que cualquier zona táctil futura consulte lo mismo.
+function hudTap(clientX, clientY) {
+  if (game.state !== 'play' || game.paused || game.showHand) return false;
+  const x = clientX - cvLeft, y = clientY - cvTop;
+  if (hand.length && handStripRect && hitRect(handStripRect, x, y)) { onCanvasTap(x, y); return true; }
+  return false;
+}
 
 // ¿La pantalla actual es de SELECCIÓN? Entonces el dedo no mueve: elige.
 // Se escribe la clase SÓLO cuando cambia — tocar classList cada frame es una escritura al CSSOM
@@ -2443,17 +2471,6 @@ function updateOrbs(dt) {
       const v = resolveOrbPair(orbs[a], orbs[b]);
       if (v > MICRO_BOUNCE * 2) { sfx.clack(v); spawnSparks((orbs[a].x + orbs[b].x) / 2, (orbs[a].y + orbs[b].y) / 2, 1, [190, 220, 255], 0.3); }
     }
-  // EL TOPE SE VUELVE A APLICAR DESPUÉS DE LOS PARES.
-  // El clamp de arriba vive dentro del bucle por orbe, y `resolveOrbPair` corre DESPUÉS: el
-  // impulso de un choque encadenado se iba sin tope hasta el frame siguiente. Con dos subpasos
-  // no se notaba — el segundo subpaso lo clampeaba dentro del mismo frame — así que el agujero
-  // estaba TAPADO POR EL COSTO, no cerrado; al bajar a un subpaso salió a la luz (medido v=3.08
-  // con el tope en 1.75). Un tope que depende de cuántas veces por frame corra la física no es
-  // un tope.
-  for (const o of orbs) {
-    const s2 = hyp(o.vx, o.vy);
-    if (s2 > cap) { o.vx = o.vx / s2 * cap; o.vy = o.vy / s2 * cap; }
-  }
 }
 
 // Cuerpo de la orbe: esfera con la luz clave + rebote en el borde opuesto. Igual que las piezas,
@@ -2476,6 +2493,22 @@ function orbSprite(col, r) {
     ctx.beginPath(); ctx.arc(cx, cy, r * 0.90, ab - 0.85, ab + 0.85); ctx.stroke();
   });
 }
+// EL TOPE DE VELOCIDAD, COMO ÚLTIMA PALABRA DEL PASO DE SIMULACIÓN.
+// Estaba adentro del bucle de `updateOrbs`, y eso lo dejaba a merced del ORDEN: `resolveOrbPair`
+// corre después de ese bucle, y `updatePendulums`, `updateFlares` y el tirón del frenesí corren
+// después de `updateOrbs` entero. Todos empujan orbes, y sus empujones se iban sin tope hasta el
+// frame siguiente. Con dos subpasos no se veía — el segundo los clampeaba dentro del mismo
+// frame — así que el agujero estaba TAPADO POR EL COSTO, no cerrado (medido v=3.08 contra 1.75).
+// Un invariante que depende de en qué orden corran las cosas, o de cuántas veces por frame
+// corran, no es un invariante: se aplica UNA vez, al final, cuando ya empujó todo el mundo.
+function clampOrbSpeeds() {
+  const cap = CFG.orb.maxSpd;
+  for (const o of orbs) {
+    const s = hyp(o.vx, o.vy);
+    if (s > cap) { o.vx = o.vx / s * cap; o.vy = o.vy / s * cap; }
+  }
+}
+
 function drawOrbs() {
   for (const o of orbs) {
     const x = sx(o.x), y = sy(o.y), r = sr(o.r);
@@ -3699,16 +3732,31 @@ function addScore(n, wx, wy, col) {
 
 // ════════════════ FRENESÍ (energizante de Pac-Man, ganado con el ta-te-ti) ════════════════
 let frenzy = 0;
+let frenzyHealAcc = 0;
 function startFrenzy(t) {
   frenzy = Math.max(frenzy, t);
+  frenzyHealAcc = 0;
   screenFlash(0.25, [125, 249, 255]);
   addRing(P.x, P.y, 0.03, 0.55, 0.5, [125, 249, 255], 0.010);
   sfx.frenzy();
 }
 function updateFrenzy(dt) {
   if (frenzy <= 0) return;
+  const antes = frenzy;
   frenzy = Math.max(0, frenzy - dt);
-  if (frenzy === 0) frenzyBurst();                    // el cierre siempre paga
+  // ── EL FRENESÍ CURA ──
+  // Reparte `healFrac` de la barra a lo largo del frenesí, prorrateado por el tiempo que pasó de
+  // verdad: si se extiende, cura lo mismo por segundo.
+  // Se ACUMULA y se cobra en tandas porque `healPlayer` saca un número flotante por llamada, y a
+  // 60 fps serían sesenta numeritos por segundo. Con tandas de ~1/9 de barra salen tres o cuatro
+  // en todo el frenesí: se ve que te estás curando sin taparte la pantalla.
+  if (P.alive && game.state === 'play') {
+    frenzyHealAcc += P.hpMax * CFG.frenzy.healFrac * ((antes - frenzy) / Math.max(0.01, CFG.frenzy.time));
+    if (frenzyHealAcc >= P.hpMax * 0.11 || (frenzy === 0 && frenzyHealAcc > 0.5)) {
+      healPlayer(frenzyHealAcc); frenzyHealAcc = 0;
+    }
+  }
+  if (frenzy === 0) { frenzyHealAcc = 0; frenzyBurst(); }   // el cierre siempre paga
 }
 // Onda de regalo al terminar: cobra lo que el imán no alcanzó a traerte.
 function frenzyBurst() {
@@ -3936,14 +3984,10 @@ function simonFlash(sec, dur) {
 }
 
 // Perder la ronda. Sale por dos puertas: se te acabó el tiempo, o te plantaste donde no era.
-function failSimon() {
-  simon.phase = 'off'; simon.cool = 6; simon.bad = 0.8;
-  simon.wrongSec = -1; simon.wrongT = 0;
-  note(150, 80, 0, 0.22, 'sawtooth', 0.06, 0);
-  note(110, 55, 0.1, 0.30, 'square', 0.05, 0);
-  screenFlash(0.14, [255, 70, 90]);
-  addTrauma(0.18);
-}
+// (Acá vivía `failSimon`. Ya no se puede fallar: no hay sector rojo, no hay perder por quedarse
+// parado y no hay vencimiento. Si no completás la secuencia, no pasa nada — te quedaste sin la
+// resonancia, y ESA es toda la penalización. Un castigo explícito encima de perder el premio es
+// cobrar dos veces por la misma decisión.)
 
 function updateSimon(dt) {
   if (!RULE.simon) { simon.phase = 'off'; return; }
@@ -3973,24 +4017,11 @@ function updateSimon(dt) {
   }
   if (simon.phase !== 'input' || !P.alive) return;
   simon.t += dt;
-  if (simon.t > 6 + simon.seq.length * 3.0) { failSimon(); return; }   // se venció el tiempo
   const sec = sectorAt(P.x, P.y);
   if (hyp(P.x, P.y) > 0.99) return;
-  // ── SECTOR EQUIVOCADO ──
-  // No alcanza con PISARLO: hay que QUEDARSE. Cambiar de sector reinicia el contador, así que
-  // cruzar dos celdas para llegar a la tercera no acumula; plantarse en una sola, sí. El sector
-  // se va tiñendo de rojo mientras corre el reloj: el aviso se ve, no hace falta explicarlo.
-  if (sec !== simon.seq[simon.idx]) {
-    // ACUMULA mientras no estés en el sector correcto. Antes se reiniciaba al cambiar de celda,
-    // así que moviéndote entre celdas equivocadas nunca perdías: con eso era casi imposible
-    // fallar. Lo único que lo pone a cero ahora es ACERTAR el sector que toca.
-    simon.wrongSec = sec;
-    const spf = clamp(hyp(P.vx, P.vy) / Math.max(0.2, CFG.player.maxSpd * P.spdMul), 0, 1);
-    simon.wrongT += dt * (1 - 0.70 * spf);           // yendo a fondo suma poco, quieto suma todo
-    if (simon.wrongT >= CFG.simon.wrongT) { failSimon(); return; }
-    return;
-  }
-  simon.wrongSec = -1; simon.wrongT = 0;
+  // SIN CASTIGO. Pisar el sector equivocado no hace nada: la secuencia espera. Lo único que
+  // la termina es completarla, o el cambio de hora que se lleva la regla entera.
+  if (sec !== simon.seq[simon.idx]) return;
   {
     simonFlash(sec, 0.45);
     simon.idx++;
@@ -4015,7 +4046,6 @@ function updateSimon(dt) {
       run.simons++;
       unlockAch('simon');
       simon.phase = 'off'; simon.cool = 7;
-      simon.wrongSec = -1; simon.wrongT = 0;
     }
   }
 }
@@ -4043,9 +4073,15 @@ function drawSimon() {
   if (demo) {
     if (simon.lit >= 0 && simon.litT > 0) paint(simon.lit, 0.22 + 0.34 * (simon.litT / 0.34), true);
   } else {
-    // DE MEMORIA. Antes se pintaba el sector que venía y los ya hechos, y arriba estaba la
-    // secuencia entera en puntitos: con eso no había nada que recordar. Lo único que queda es
-    // el destello de confirmación cuando acertás.
+    // LA PISTA VUELVE. Se había sacado para que hubiera algo que recordar, pero el minijuego ya
+    // no castiga: lo único en juego es ganar resonancia o no ganarla. Con eso, esconder el
+    // objetivo no agrega tensión — agrega que no se entienda qué hay que hacer. Arriba no se
+    // muestra nada: la secuencia se lee EN EL PLATO, que es donde estás mirando.
+    const sig = simon.seq[simon.idx];
+    if (sig !== undefined) {
+      const pulso = 0.5 + 0.5 * Math.sin(perfT * 3.4);
+      paint(sig, 0.14 + 0.10 * pulso, true);
+    }
     if (simon.lit >= 0 && simon.litT > 0) paint(simon.lit, 0.30 * (simon.litT / 0.45), true);
     // PREPARATE: el primer sector late fuerte y un aro se cierra sobre él. Cuando termina de
     // cerrarse, empieza a contar — así ves si ya estabas parado encima o si tenés que salir.
@@ -4672,7 +4708,7 @@ function nextHour() {
   trimOrbs();
   if (orbs.length < 4) for (let i = orbs.length; i < 4; i++) spawnOrbRim();
   if (game.hour >= CFG.clock.hours) { spawnBoss(); }
-  game.state = 'play'; game.t = 0; game.banner = 2.1;
+  game.state = 'play'; game.t = 0;
   sfx.hour();
 }
 
@@ -4858,7 +4894,14 @@ function drawHUD() {
   if (hourRule) { txtG(hourRule.name, W - pad, ry, S * TS.sub, C.vio, 'right', 700); ry += S * 0.031; }
   if (run.brave > 0) { txtG('STREAK x' + braveMul().toFixed(2), W - pad, ry, S * TS.sub, C.gold, 'right', 700); ry += S * 0.029; }
   if (RULE.scoreMul > 1.001) { txtG('POINTS x' + RULE.scoreMul.toFixed(2), W - pad, ry, S * 0.021, '#8ee36b', 'right', 700); ry += S * 0.029; }
-  if (run.resonance > 0) txtG('RESONANCE x' + run.resonance, W - pad, ry, S * TS.sub, C.vio, 'right', 700);
+  if (run.resonance > 0) {
+    txtG('RESONANCE x' + run.resonance, W - pad, ry, S * TS.sub, C.vio, 'right', 700);
+    ry += S * 0.022;
+    // Qué hace, en chiquito y debajo. El número solo no dice nada: "x3" no es información
+    // hasta que sabés de qué.
+    txt('thread +' + Math.round(run.resonance * 6) + '%  ·  loop +' + Math.round(run.resonance * 8) + '%',
+        W - pad, ry, S * 0.0145, C.inkFaint, 'right', 500);
+  }
 
   // ── Mano de póker ──
   if (hand.length) drawHandStrip(pad + S * 0.100, pad + S * (run.combo >= 2 ? 0.178 : 0.118), S * 0.037, false);
@@ -5088,10 +5131,25 @@ function drawHandPanel() {
       drawCard(W / 2 - total / 2 + i * (cw + gap), H * 0.47 - chh / 2, cw, chh, hand[i], { mark: inHand(i) });
     // Sólo el dato duro: la mano y qué da. Sin explicaciones ni pie de "cerrar" — se cierra
     // tocando en cualquier lado, y averiguarlo cuesta un toque.
-    if (run.handIdx > 0) {
-      txtG(HAND_BONUS[run.handIdx].name, W / 2, H * 0.755, S * TS.title, C.goldHi);
-      txtG(handDesc(), W / 2, H * 0.810, S * TS.sub, C.green, 'center', 700);
+  }
+  // ── LA TABLA DE MANOS ──
+  // Antes esto mostraba SÓLO la mano actual, en un tamaño que en mobile era ilegible. Pero la
+  // pregunta del jugador no es "qué tengo" — eso ya lo ve en las cartas — sino "qué me conviene
+  // armar". Listarlas todas, con la actual marcada, convierte el panel en un motivo para buscar
+  // una jugada en vez de un cartel de estado.
+  const fs = Math.max(S * 0.0155, Math.min(S * 0.021, H * 0.023));
+  const paso = fs * 1.62;
+  const y0 = H * 0.615;
+  const colN = W / 2 - S * 0.015, colD = W / 2 + S * 0.015;
+  for (let i = 1; i < HAND_BONUS.length; i++) {
+    const y = y0 + (i - 1) * paso;
+    const act = i === run.handIdx;
+    if (act) {                                        // la fila actual, sobre una chapa
+      ctx.fillStyle = 'rgba(232,180,74,0.14)';
+      roundRectPath(colN - S * 0.30, y - paso * 0.46, S * 0.62, paso * 0.92, paso * 0.26); ctx.fill();
     }
+    txtFit(HAND_BONUS[i].name, colN, y, fs, S * 0.28, act ? C.goldHi : C.inkFaint, act ? 800 : 600, 'right');
+    txtFit(HAND_BONUS[i].desc, colD, y, fs, S * 0.32, act ? C.green : C.inkDim, act ? 700 : 400, 'left');
   }
 }
 
@@ -5399,32 +5457,9 @@ function pill(b, label, on, col, S) {
 // ════════════════ CARTEL DE HORA ════════════════
 // Placa compacta arriba, no un cartelón centrado. Dice regla + qué aparece, con el color de
 // la regla como identidad. Antes tapaba media pantalla.
-function drawIntro() {
-  const S = Math.min(W, H), t = 2.1 - game.banner;      // tiempo TRANSCURRIDO del cartel
-  const a = t < 0.25 ? t / 0.25 : t > 1.6 ? Math.max(0, (2.1 - t) / 0.5) : 1;
-  const slide = (1 - easeOutCubic(clamp(t / 0.4, 0, 1))) * -S * 0.08;
-  const boss = game.bossFight;
-  const col = boss ? C.crimHi : hourRule ? C.vio : C.ice;
-  const bw = Math.min(W * 0.58, S * 0.90), bh = S * (boss ? 0.15 : 0.165);
-  const bx = W / 2 - bw / 2, by = H * 0.20 + slide;
-  ctx.globalAlpha = a;
-  panel(bx, by, bw, bh, S * 0.014, col, 0.06);
-  // cinta de color a la izquierda: identidad de la regla de un vistazo
-  ctx.save();
-  roundRectPath(bx, by, bw, bh, S * 0.014); ctx.clip();
-  ctx.fillStyle = col; ctx.fillRect(bx, by, S * 0.007, bh);
-  ctx.restore();
-
-  txtG('HOUR ' + game.hour, bx + bw * 0.5, by + bh * 0.26, S * 0.038, C.goldHi);
-  if (boss) {
-    txtG('THE WATCHMAKER IS WAITING', bx + bw * 0.5, by + bh * 0.70, S * TS.title, col);
-  } else {
-    const nm = hourRule ? hourRule.name : 'CLEAR HOUR';
-    txtFit(nm, bx + bw * 0.5, by + bh * 0.55, S * 0.031, bw * 0.86, col, 700);
-    if (hourRule) txtFit(hourRule.desc, bx + bw * 0.5, by + bh * 0.72, S * TS.body, bw * 0.88, C.inkDim, 500);
-  }
-  ctx.globalAlpha = 1;
-}
+// (Acá vivía `drawIntro`, el cartelón de inicio de hora. Se fue: tapaba media pantalla para
+// decir algo que ya dicen la descripción de la regla al elegirla y el indicador permanente de la
+// columna derecha. Un aviso que repite información visible es ruido, por lindo que sea.)
 
 function drawEndScreen(won) {
   const S = Math.min(W, H);
@@ -5462,6 +5497,7 @@ function drawEndScreen(won) {
 }
 
 // ════════════════ Ruteo de input por pantalla ════════════════
+
 function onCanvasTap(lx, ly) {
   if (game.state === 'menu') {
     const R = menuRects();
@@ -5567,6 +5603,7 @@ function stepSim(dt) {
   updateSimon(dt);
   updateCombo(dt);
   updateFrenzy(dt);
+  clampOrbSpeeds();                                  // última palabra: ya empujaron todos
   // ¿Cayó el jefe? La hora 12 termina cuando muere, no cuando da la vuelta la aguja.
   if (game.bossFight && !enemies.some(e => e.kind === 'relojero' && !e.dead)) {
     game.bossFight = false;
@@ -5580,6 +5617,39 @@ function stepSim(dt) {
   return true;
 }
 
+// ════════════════ RESOLUCIÓN ADAPTATIVA ════════════════
+// Lo único grande que queda por bajar es el relleno de píxeles, y la palanca es la resolución del
+// lienzo. En un equipo que llega a 60 esto no baja NUNCA y el juego se ve igual que siempre; en
+// uno que no llega, cambia nitidez por fluidez — el canje correcto, porque un juego de reflejos
+// a 50 fps se juega peor de lo que se ve.
+const _fps = new Float32Array(40);
+let _fpsN = 0, _dprCd = 0;
+function autoDpr(dt) {
+  // Los frames de arranque, los de después de una pausa y los que el navegador recorta mienten.
+  if (dt <= 0.002 || dt >= CFG.perf.dtMax) return;
+  _fps[_fpsN % _fps.length] = dt * 1000;
+  _fpsN++;
+  if (_dprCd > 0) { _dprCd -= dt; return; }
+  if (_fpsN < _fps.length) return;
+  // MEDIANA, no promedio: un solo frame largo (una recolección, el sistema haciendo otra cosa)
+  // no puede mover la decisión.
+  const orden = Array.from(_fps).sort((a, b) => a - b);
+  const med = orden[orden.length >> 1];
+  const P = CFG.perf;
+  // El piso nunca puede quedar por ENCIMA de 1: en un equipo con devicePixelRatio 1 el cociente
+  // daría 1.05 y "bajar" terminaría SUBIENDO la escala. (Lo pensé mal la primera vez.)
+  const base = Math.min(window.devicePixelRatio || 1, P.dprCap);
+  const piso = Math.min(1, P.dprMin / base);
+  let nuevo = dprScale;
+  if (med > P.msDown) nuevo = Math.max(piso, dprScale - 0.12);
+  else if (med < P.msUp && dprScale < 1) nuevo = Math.min(1, dprScale + 0.08);
+  if (Math.abs(nuevo - dprScale) < 0.005) return;
+  dprScale = nuevo;
+  _dprCd = P.dprHold;                                 // re-hornear es un tirón: no seguido
+  _fpsN = 0;
+  resize();
+}
+
 function loop(now) {
   scheduleRaf();
   if (ctxLost) { lastT = now; return; }
@@ -5591,6 +5661,7 @@ function loop(now) {
   let dt = clamp((now - lastT) / 1000, 0, CFG.perf.dtMax);
   lastT = now;
   perfT += dt; QA.simT += dt;
+  autoDpr(dt);
   if (dbgSlow) dt *= 0.2;
   if (dbgFreeze) dt = 0;
   sndThisFrame = 0;
@@ -5604,7 +5675,6 @@ function loop(now) {
   if (hitstop > 0) { hitstop = Math.max(0, hitstop - dt); simDt = 0; }
   if (game.paused || game.showHand) simDt = 0;   // el panel del stack es para leer, no para jugar
 
-  if (game.banner > 0) game.banner = Math.max(0, game.banner - dt);
   if (game.state === 'menu' || game.state === 'over' || game.state === 'win') {
     // Modo atracción: los orbes siguen rebotando y la aguja sigue girando detrás del
     // overlay. Un menú con la arena congelada se ve muerto.
@@ -5708,7 +5778,6 @@ function loop(now) {
   drawFloaters();
 
   if (game.state === 'play') drawHUD();
-  if (game.banner > 0 && game.state === 'play') drawIntro();   // overlay, ya no congela nada
   // El cursor de mano sólo vive en las pantallas de elección, y cada una lo prende al dibujar lo
   // que está apuntado. Para el resto se apaga acá: si no, queda pegado después de elegir.
   if (game.state !== 'rule' && game.state !== 'card' && game.state !== 'slot') wantPointer(false);
