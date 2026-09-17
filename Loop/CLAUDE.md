@@ -12,6 +12,65 @@ todo lo que quedó encerrado. Los enemigos son piezas de ajedrez que telegrafía
 la aguja del reloj marca las oleadas, y cada hora elegís **una sola cosa, alternando**:
 una **regla** para la arena o una **carta** (las 5 equipadas forman una mano de póker).
 
+## Pasada de ASIGNACIONES (2026-09-17, noche)
+
+Hasta acá siempre había medido operaciones de canvas. Nunca **asignaciones** — y en un móvil el
+recolector se paga en tirones, o sea que la basura constante es justo lo que produce los picos
+hacia abajo. Seis fuentes, y **tres las había metido yo optimizando**:
+
+| dónde | qué hacía | ahora |
+|---|---|---|
+| `autoDpr` | `Array.from(40).sort()` **en cada frame** | typed array reusado, evalúa cada `dprEvery` |
+| cachés de sprite | armaba la clave concatenando strings por pieza/orbe/obús **por frame** | el sprite se recuerda en la entidad y se compara un NÚMERO |
+| chispas | un string `rgba(...)` por chispa por frame (~50) | `globalAlpha` + color cacheado por valor |
+| drafts | `hand.concat()` + `evalHand` (con `map`+`sort`) por carta **por frame** | se calcula al ABRIR |
+| viñeta de vida baja | gradiente nuevo + dos strings por frame | gradiente cacheado + `globalAlpha` |
+| cierre del jefe | `enemies.some(e => …)` = un closure por frame | bucle plano |
+
+**Lección de método, la más cara de la sesión: un perfilador que no mide algo no dice que sea
+barato — dice que no lo mide.** Pasó dos veces seguidas: primero con la construcción de paths (el
+hilo era el 34 % del render y no aparecía), ahora con las asignaciones. Y las dos veces la mitad
+de lo que encontré lo había introducido yo en la pasada anterior "optimizando". Cada optimización
+hay que medirla con la vara que corresponde a lo que toca.
+
+### Cachear por VALOR, no por identidad
+
+El caché de strings de color arrancó con un `WeakMap` sobre el array de color. No servía: casi
+todos los llamados a `spawnSparks` pasan un literal nuevo (`[120,170,230]`), así que la referencia
+nunca se repite. La clave es el color empaquetado en un entero — buscar con un número no asigna
+nada, que es todo el punto del ejercicio.
+
+### Lo que NO se encontró
+
+Nada significativo en física, animaciones ni "elementos fuera de pantalla": el juego tiene UNA
+arena y todo lo que existe está a la vista, así que no hay culling que hacer. Post-processing son
+sólo las dos viñetas. Vale registrarlo para no volver a buscar ahí.
+
+## La curación del frenesí va de a 1 HP
+
+Mismo total (`healFrac` = 1/3 de la barra) y mismo tiempo; cambia el GRANO. Medido: con 100 de
+vida máxima son 33 ticks de exactamente 1 HP repartidos en 6.30 s de los 6.5; con 220, **74 ticks**
+— más ticks, no ticks más gordos, que es lo que hace que la fracción sea la unidad correcta.
+El `while` que los entrega tiene tope de 4 por frame para que un frame largo no dispare una ráfaga.
+
+## El mismo layout no sirve para las dos orientaciones
+
+La tabla de jugadas del panel del mazo va a la IZQUIERDA en apaisado (donde sobra ancho): no se
+come alto y los naipes crecen. En VERTICAL va abajo, porque ahí lo escaso es el ancho y una
+columna lateral les robaba más de lo que les liberaba — medido, dejaba las cartas **19 % más
+chicas** que antes. Es el mismo patrón que ya había aparecido con `panelRects`: cuando una medida
+sale de `min(fracción_de_W, fracción_de_S)`, en cada orientación manda una distinta.
+
+## Resolución de mobile: base fija, adaptativo sólo como red
+
+`CFG.perf.dprMobile = 1.4` es con lo que ARRANCA un táctil y lo que mantiene: una resolución
+estable se siente mejor que uná que se mueve sola a mitad de partida. `dprCeil` es además el
+TECHO del afinador, así que lo adaptativo sólo puede bajar, nunca subir por encima de la base.
+Verificado para devicePixelRatio 1 / 1.5 / 2 / 2.625 / 3 / 4: todos los de 1.5 o más quedan
+exactos en 1.40, y el de 1x se queda en 1.00 porque no se puede renderizar por encima de lo
+nativo (`dprMin` acota cuánto puede BAJAR el afinador, no la resolución nativa — mi primer
+chequeo confundía las dos cosas y marcaba un falso positivo).
+
 ## Playtest 2026-09-17 (tarde)
 
 ### El joystick se comía la tira de la mano — y sólo en APAISADO

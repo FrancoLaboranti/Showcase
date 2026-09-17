@@ -240,7 +240,17 @@ const CFG = {
             // milisegundos por frame (57 fps y 74 fps), y `dprHold` el enfriamiento entre
             // cambios — cada cambio re-hornea todo, así que hacerlo seguido sería el remedio
             // produciendo el síntoma.
-            dprMin: 1.05, msDown: 17.5, msUp: 13.5, dprHold: 2.5 },
+            // `dprMobile` es la resolución de lienzo con la que ARRANCA un táctil, y la que
+            // mantiene: un valor fijo y estable se siente mejor que uno que se mueve solo, y a
+            // 1.4 la pérdida de nitidez no se aprecia contra lo que se gana en relleno de
+            // píxeles. Lo adaptativo queda sólo como red para equipos lentos y NUNCA puede
+            // subir por encima de esta base.
+            dprMobile: 1.4,
+            dprMin: 1.05, msDown: 17.5, msUp: 13.5, dprHold: 2.5,
+            // Cada cuántos frames se evalúa el afinador. Antes miraba en TODOS: ordenar 40
+            // muestras por frame para decidir algo que cambia dos veces por segundo es basura
+            // pura para el recolector.
+            dprEvery: 30 },
   arena:  { gridN: 9, rimLoss: 0.94, rimPush: 3.2 },
 
   player: {
@@ -583,6 +593,10 @@ let cvLeft = 0, cvTop = 0;
 // Vive afuera de `resize()` porque `resize()` corre también por cambios de tamaño de ventana y no
 // tiene que pisar lo que el afinador ya decidió.
 let dprScale = 1;
+// Techo de `dprScale`. En escritorio es 1 (nitidez plena). En táctil lo baja `p04_input` a la
+// resolución base de mobile, y el afinador automático no puede pasarlo: la base es una decisión,
+// no un punto de partida del que subir.
+let dprCeil = 1;
 function resize() {
   dpr = Math.min(window.devicePixelRatio || 1, CFG.perf.dprCap) * dprScale;
   W = window.innerWidth; H = window.innerHeight;
@@ -593,7 +607,7 @@ function resize() {
   // margen para el HUD: arriba vive la barra de la hora, abajo los controles
   PXR = Math.min(W * 0.455, (H - Math.min(H * 0.12, 84)) * 0.5);   // la esfera ocupa ~88% del alto
   CX = W / 2; CY = H / 2 + Math.min(H * 0.035, 22);
-  bgGrad = null; vigGrad = null;
+  bgGrad = null; vigGrad = null; lowGrad = null;
   clearBakes();                                       // los sprites dependen de PXR
   const cr = canvas.getBoundingClientRect();
   cvLeft = cr.left; cvTop = cr.top;
@@ -644,6 +658,20 @@ const C = {
 const TS = { display: 0.062, title: 0.030, sub: 0.021, body: 0.0165, cap: 0.0125 };
 const INK = C.ink;
 function rgba(c, a) { return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')'; }
+// `rgb(...)` opaco, cacheado POR VALOR y no por identidad de array: casi todos los llamados a
+// `spawnSparks` pasan un literal nuevo (`[120,170,230]`), así que un caché por referencia no
+// acertaría nunca. La clave es el color empaquetado en un entero — buscar con un número no
+// asigna nada, que es todo el punto del ejercicio.
+const _colCache = new Map();
+function colKey(c) { return (c[0] << 16) | (c[1] << 8) | c[2]; }
+function colStrK(k) {
+  let s = _colCache.get(k);
+  if (s === undefined) {
+    s = 'rgb(' + ((k >> 16) & 255) + ',' + ((k >> 8) & 255) + ',' + (k & 255) + ')';
+    _colCache.set(k, s);
+  }
+  return s;
+}
 function circleW(x, y, r) { ctx.beginPath(); ctx.arc(sx(x), sy(y), Math.max(0.2, sr(r)), 0, TAU); }
 function fillCircleW(x, y, r, col) { ctx.fillStyle = col; circleW(x, y, r); ctx.fill(); }
 
@@ -911,16 +939,23 @@ function drawEffects() {
     ctx.globalAlpha = 1;
   }
   ctx.globalCompositeOperation = 'lighter';
+  // El color se pasa por `globalAlpha` y no rearmando un string `rgba(...)` por chispa: eran
+  // ~50 strings nuevos por frame, y en un móvil la basura constante es lo que produce los
+  // tirones. El string de color se cachea por color cuantizado (mismo truco que `glowSprite`).
+  let ultK = -1;
   for (const p of sparks) {
     const a = 1 - p.t / p.life;
     const rr = Math.max(0.5, sr(p.r * (0.4 + a * 0.9)));
-    ctx.fillStyle = rgba(p.col, a * 0.9);
+    const k = colKey(p.col);
+    if (k !== ultK) { ctx.fillStyle = colStrK(k); ultK = k; }
+    ctx.globalAlpha = a * 0.9;
     // Una chispa mide uno a tres píxeles. A ese tamaño, en aditivo y en movimiento, un cuadrado
     // y un círculo son el mismo pixel — pero `arc` hay que teselarlo y `fillRect` no necesita
     // ni construir el path. Las pocas grandes siguen redondas, que ahí sí se nota.
     if (rr < 2.4) ctx.fillRect(sx(p.x) - rr, sy(p.y) - rr, rr * 2, rr * 2);
     else { ctx.beginPath(); ctx.arc(sx(p.x), sy(p.y), rr, 0, TAU); ctx.fill(); }
   }
+  ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
 }
 // Números y popups viven en screen-space: no deben rotar con el shake ni escalar con el zoom.
@@ -1085,7 +1120,14 @@ function createJoystick(zoneEl, opts) {
   return out;
 }
 // Escalón táctil. Se decide UNA vez, acá, y no se vuelve a preguntar por frame.
-if (IS_TOUCH) { CFG.perf.sparkMul = 0.62; CFG.perf.sparkCap = 190; CFG.perf.dustCap = 90; }
+if (IS_TOUCH) {
+  CFG.perf.sparkMul = 0.62; CFG.perf.sparkCap = 190; CFG.perf.dustCap = 90;
+  // RESOLUCIÓN BASE DE MOBILE. Arranca acá y se queda: una resolución fija se siente mejor que
+  // una que se mueve sola a mitad de partida. `dprCeil` es además el techo del afinador.
+  const baseDpr = Math.min(window.devicePixelRatio || 1, CFG.perf.dprCap);
+  dprCeil = Math.min(1, CFG.perf.dprMobile / baseDpr);
+  dprScale = dprCeil;
+}
 const moveStick = { active: false, x: 0, y: 0, mag: 0, idle: () => {}, soltar: () => {} };
 if (IS_TOUCH) createJoystick(document.getElementById('jMove'), { target: moveStick, activeDead: 0.06 });
 else document.body.classList.add('noTouch');
@@ -1275,7 +1317,7 @@ function sectorBoost() { return P.alive && sectors[sectorAt(P.x, P.y)] === 1; }
 // es un solo drawImage por frame. Dibujar 60 marcas + 81 celdas + números en cada frame
 // costaba ~300 llamadas de path; esto cuesta 1.
 let dialCv = null, dialX = 0, dialY = 0, dialS = 0;
-let bgGrad = null, vigGrad = null;
+let bgGrad = null, vigGrad = null, lowGrad = null;   // lowGrad: aviso de vida baja
 
 // Grano de fieltro. Un mosaico chico de ruido que se repite: cuesta un fill en vez de miles
 // de rectangulitos, y es lo que le saca al plato el aspecto de degradado de Illustrator.
@@ -2476,6 +2518,9 @@ function updateOrbs(dt) {
 // Cuerpo de la orbe: esfera con la luz clave + rebote en el borde opuesto. Igual que las piezas,
 // se ve siempre igual, así que se hornea. El radio se cuantiza al píxel: cada orbe nace con un
 // radio propio (rnd 0.85-1.25), pero a nivel de pixel eso son un puñado de tamaños distintos.
+// Paletas constantes: antes se construían los cinco arrays EN CADA FRAME, por orbe.
+const ORB_CARGA = [255, 210, 63];
+const ORB_TONO = [[130, 190, 255], [170, 160, 255], [130, 230, 220], [200, 170, 240]];
 function orbSprite(col, r) {
   const key = 'o|' + col[0] + ',' + col[1] + ',' + col[2] + '|' + Math.round(r);
   return bakeSprite(key, Math.ceil(r) + 2, (cx, cy) => {
@@ -2513,9 +2558,13 @@ function drawOrbs() {
   for (const o of orbs) {
     const x = sx(o.x), y = sy(o.y), r = sr(o.r);
     const ch = o.charge > 0;
-    const col = ch ? [255, 210, 63] : [[130, 190, 255], [170, 160, 255], [130, 230, 220], [200, 170, 240]][o.hue];
+    const col = ch ? ORB_CARGA : ORB_TONO[o.hue];
     bloomPx(x, y, r * (ch ? 4.2 : 2.2), col, ch ? 0.65 : 0.16);
-    blit(orbSprite(col, r), x, y);
+    // Mismo criterio que las piezas: el sprite se recuerda en la orbe y la clave sólo se arma
+    // cuando cambia el estado (cargada o no) o el tamaño en pantalla.
+    const est = ch ? 4 : o.hue;
+    if (o._sprE !== est || o._sprR !== r) { o._spr = orbSprite(col, r); o._sprE = est; o._sprR = r; }
+    blit(o._spr, x, y);
     if (ch) {                                        // aro de carga que se achica con el timer
       ctx.strokeStyle = 'rgba(255,235,150,' + (0.45 + 0.35 * Math.sin(perfT * 12)) + ')';
       ctx.lineWidth = Math.max(1, r * 0.2);
@@ -2587,6 +2636,7 @@ function updateShells(dt) {
 // convierte en una mezcla normal: sobre el fieltro oscuro casi no se nota, pero cuando el obús
 // cruza algo brillante deja de sumar y se ve distinto. El glow se queda dinámico; lo que se
 // hornea es el cuerpo, que es opaco y se compone igual de las dos formas.
+const SHELL_MIO = [255, 210, 63], SHELL_ENE = [255, 110, 80];
 function shellSprite(col, r) {
   const key = 's|' + col[0] + ',' + col[1] + ',' + col[2] + '|' + Math.round(r);
   return bakeSprite(key, Math.ceil(r) + 2, (cx, cy) => {
@@ -2599,7 +2649,7 @@ function shellSprite(col, r) {
 function drawShells() {
   for (const s of shells) {
     const x = sx(s.x), y = sy(s.y), r = sr(s.r);
-    const col = s.mine ? [255, 210, 63] : [255, 110, 80];
+    const col = s.mine ? SHELL_MIO : SHELL_ENE;
     // estela corta hacia atrás (glow barato, sin shadowBlur). Eran TRES blits por obús — con
     // ocho obuses, 32 por frame para un adorno que nadie mira de a uno. Con dos se lee igual.
     const m = hyp(s.vx, s.vy) || 1;
@@ -3282,6 +3332,7 @@ function drawTelegraphs() {
 
 // Cuerpo de la pieza, en coordenadas locales. Es EXACTAMENTE lo que se dibujaba antes en cada
 // frame; ahora corre una sola vez por (forma, color, tamaño) dentro de `pieceSprite`.
+const BLANCO = [255, 255, 255];                      // constante: no asignar un array por frame
 function drawPieceBody(kind, x, y, r, c0, flash) {
   const path = () => piecePath(kind, x, y, r);
   path();
@@ -3355,7 +3406,16 @@ function drawEnemy(e) {
   else if (e.kind === 'tanque') { drawTank(e, x, y, r, flash); }
   else {
     const wob = e.kind === 'fantasma' ? Math.sin(e.bob) * r * 0.07 : 0;
-    blit(pieceSprite(e.kind, flash ? [255, 255, 255] : col, r, flash), x, y + wob);
+    // El sprite se RECUERDA en la pieza. `pieceSprite` arma una clave por concatenación y busca
+    // en un Map, y eso corría por pieza EN CADA FRAME: catorce strings y catorce búsquedas por
+    // frame para resolver algo que cambia sólo cuando la pieza parpadea o entra el frenesí.
+    // El estado de color son cuatro casos, así que se compara un NÚMERO en vez de un string.
+    const est = flash ? 1 : (fright ? (blink ? 3 : 2) : 0);
+    if (e._sprE !== est || e._sprR !== r) {
+      e._spr = pieceSprite(e.kind, flash ? BLANCO : col, r, flash);
+      e._sprE = est; e._sprR = r;
+    }
+    blit(e._spr, x, y + wob);
     if (e.kind === 'fantasma') {                     // ojitos: MIRAN, así que no se pueden hornear
       const ex = Math.cos(e.ang) * r * 0.16, ey = Math.sin(e.ang) * r * 0.16;
       ctx.fillStyle = frenzy > 0 ? '#7df9ff' : '#0b1120';
@@ -3752,9 +3812,15 @@ function updateFrenzy(dt) {
   // en todo el frenesí: se ve que te estás curando sin taparte la pantalla.
   if (P.alive && game.state === 'play') {
     frenzyHealAcc += P.hpMax * CFG.frenzy.healFrac * ((antes - frenzy) / Math.max(0.01, CFG.frenzy.time));
-    if (frenzyHealAcc >= P.hpMax * 0.11 || (frenzy === 0 && frenzyHealAcc > 0.5)) {
-      healPlayer(frenzyHealAcc); frenzyHealAcc = 0;
-    }
+    // DE A 1 HP. El total y la duración no cambian — cambia el GRANO: en vez de tres tandas
+    // gordas, un goteo. `healPlayer` saca un número por llamada, así que de a uno se lee como
+    // curación continua en vez de tres golpes sueltos.
+    // El `while` tiene tope porque con mucha vida máxima un frame largo puede acumular varios
+    // puntos de una, y no queremos que un tirón dispare una ráfaga de números.
+    let ticks = 0;
+    while (frenzyHealAcc >= 1 && ticks++ < 4) { healPlayer(1); frenzyHealAcc -= 1; }
+    // Al terminar el frenesí se entrega lo que quedó suelto, para que el total sea exacto.
+    if (frenzy === 0 && frenzyHealAcc > 0) { healPlayer(frenzyHealAcc); frenzyHealAcc = 0; }
   }
   if (frenzy === 0) { frenzyHealAcc = 0; frenzyBurst(); }   // el cierre siempre paga
 }
@@ -4767,9 +4833,18 @@ function chooseRule(i) {
   sfx.ui();
   afterDraft();
 }
+// Proyección de cada opción: qué jugada quedaría si la agarrás. Se calcula UNA vez al abrir el
+// draft y no en cada frame. `evalHand` hace un `map` y un `sort` por llamada, y el dibujo la
+// pedía por carta por frame: nueve arrays nuevos por frame para un dato que no cambia mientras
+// la pantalla está abierta.
+function calcCardProj() {
+  game.cardProj = game.cardChoices.map(c =>
+    hand.length < HAND_MAX ? evalHand(hand.concat([c])) : bestProjection(c));
+}
 function openCardDraft() {
   toasts.length = 0;                                  // el cartel de fin de hora pisaba el título
   game.cardChoices = drawCardChoices(3);
+  calcCardProj();
   game.state = 'card'; game.t = 0;
 }
 function skipCard() { game.pendingCard = null; sfx.ui(); afterDraft(); }
@@ -4784,6 +4859,9 @@ function chooseCard(i) {
     afterDraft();
   } else {
     game.pendingCard = c;
+    // Misma idea: la proyección por hueco se calcula acá y no en cada frame del selector, que
+    // hacía `hand.slice()` cinco veces por frame más el `map`+`sort` de `evalHand` adentro.
+    game.slotProj = hand.map((_, k) => { const t = hand.slice(); t[k] = c; return evalHand(t); });
     game.state = 'slot'; game.t = 0;
   }
 }
@@ -5123,33 +5201,44 @@ function drawHandStrip(cx, cy, cw, big) {
 function drawHandPanel() {
   const S = Math.min(W, H);
   dimArena(0.88);
-  txtG('YOUR HAND', W / 2, H * 0.13, S * TS.title, C.goldHi);
+  // ── Dónde va la tabla de jugadas ──
+  // A la IZQUIERDA cuando hay ancho de sobra (apaisado, que es como está registrado Loop en el
+  // Arcade): así no se come alto y los naipes crecen, que era el objetivo.
+  // ABAJO en vertical, porque ahí lo escaso es el ANCHO: una columna lateral le roba a las
+  // cartas más de lo que les libera, y medido las dejaba 19% más chicas que antes. El mismo
+  // layout no puede ser el correcto para las dos orientaciones.
+  const land = W > H * 1.15;
+  const listW = land ? Math.min(W * 0.30, S * 0.42) : 0;
+  const cardsX = listW + (W - listW) / 2;
+
+  txtG('YOUR HAND', cardsX, H * (land ? 0.115 : 0.13), S * TS.title, C.goldHi);
   if (hand.length) {
-    const cw = Math.min(W * 0.155, S * 0.21), chh = cw / 0.68, gap = cw * 0.14;
+    const cw = land ? Math.min((W - listW) * 0.165, S * 0.255) : Math.min(W * 0.155, S * 0.21);
+    const chh = cw / 0.68, gap = cw * 0.14;
     const total = hand.length * cw + (hand.length - 1) * gap;
+    const cy = H * (land ? 0.52 : 0.44);
     for (let i = 0; i < hand.length; i++)
-      drawCard(W / 2 - total / 2 + i * (cw + gap), H * 0.47 - chh / 2, cw, chh, hand[i], { mark: inHand(i) });
-    // Sólo el dato duro: la mano y qué da. Sin explicaciones ni pie de "cerrar" — se cierra
-    // tocando en cualquier lado, y averiguarlo cuesta un toque.
+      drawCard(cardsX - total / 2 + i * (cw + gap), cy - chh / 2, cw, chh, hand[i], { mark: inHand(i) });
   }
-  // ── LA TABLA DE MANOS ──
-  // Antes esto mostraba SÓLO la mano actual, en un tamaño que en mobile era ilegible. Pero la
-  // pregunta del jugador no es "qué tengo" — eso ya lo ve en las cartas — sino "qué me conviene
-  // armar". Listarlas todas, con la actual marcada, convierte el panel en un motivo para buscar
-  // una jugada en vez de un cartel de estado.
-  const fs = Math.max(S * 0.0155, Math.min(S * 0.021, H * 0.023));
-  const paso = fs * 1.62;
-  const y0 = H * 0.615;
-  const colN = W / 2 - S * 0.015, colD = W / 2 + S * 0.015;
+
+  // Cada jugada en DOS líneas (nombre arriba, efecto abajo). En la columna angosta una sola
+  // línea obligaría a achicar la letra hasta lo ilegible, que es justo lo que había que arreglar.
+  const x0 = land ? S * 0.026 : W * 0.5 - S * 0.30;
+  const ancho = land ? listW - S * 0.046 : S * 0.60;
+  const fsN = Math.max(S * 0.0155, Math.min(S * 0.019, H * 0.021));
+  const fsD = fsN * 0.82;
+  const paso = (fsN + fsD) * 1.30;
+  const y0 = land ? H * 0.5 - (HAND_BONUS.length - 1) * paso / 2 + paso * 0.5 : H * 0.70;
   for (let i = 1; i < HAND_BONUS.length; i++) {
     const y = y0 + (i - 1) * paso;
     const act = i === run.handIdx;
-    if (act) {                                        // la fila actual, sobre una chapa
-      ctx.fillStyle = 'rgba(232,180,74,0.14)';
-      roundRectPath(colN - S * 0.30, y - paso * 0.46, S * 0.62, paso * 0.92, paso * 0.26); ctx.fill();
+    if (act) {
+      ctx.fillStyle = 'rgba(232,180,74,0.15)';
+      roundRectPath(x0 - S * 0.012, y - paso * 0.44, ancho + S * 0.024, paso * 0.88, paso * 0.22);
+      ctx.fill();
     }
-    txtFit(HAND_BONUS[i].name, colN, y, fs, S * 0.28, act ? C.goldHi : C.inkFaint, act ? 800 : 600, 'right');
-    txtFit(HAND_BONUS[i].desc, colD, y, fs, S * 0.32, act ? C.green : C.inkDim, act ? 700 : 400, 'left');
+    txtFit(HAND_BONUS[i].name, x0, y - fsD * 0.52, fsN, ancho, act ? C.goldHi : C.inkFaint, act ? 800 : 600, 'left');
+    txtFit(HAND_BONUS[i].desc, x0, y + fsN * 0.52, fsD, ancho, act ? C.green : C.inkDim, act ? 600 : 400, 'left');
   }
 }
 
@@ -5299,7 +5388,7 @@ function drawCardDraft() {
     drawCard(-b.w / 2, -b.h / 2, b.w, b.h, c, { hover: hv });
     ctx.globalAlpha = 1;
     ctx.restore();
-    const proj = hand.length < HAND_MAX ? evalHand(hand.concat([c])) : bestProjection(c);
+    const proj = game.cardProj ? game.cardProj[i] : 0;
     if (proj > run.handIdx && inT > 0.6)
       txtFit('\u2192 ' + HAND_BONUS[proj].name, b.x + b.w / 2, b.y + b.h + S * 0.034,
         S * TS.sub, b.w * 0.96, C.green, 700);
@@ -5345,8 +5434,7 @@ function drawSlotPick() {
     const hv = hoverAt(i, hov);
     drawCard(b.x, b.y - hv * S * 0.014, b.w, b.h, h0, { mini: true, hover: hv });
     txtFit(h0.up.name, b.x + b.w / 2, b.y + b.h * 0.52 - hv * S * 0.014, b.w * 0.155, b.w * 0.86, '#2a2620', 900);
-    const t = hand.slice(); t[i] = c;
-    const proj = evalHand(t);
+    const proj = game.slotProj ? game.slotProj[i] : 0;
     const better = proj > run.handIdx, worse = proj < run.handIdx;
     // Acotada al ancho de la ranura mas el hueco que la separa de la vecina. Sin tope,
     // "THREE OF A KIND" se montaba encima de la etiqueta de al lado.
@@ -5605,7 +5693,13 @@ function stepSim(dt) {
   updateFrenzy(dt);
   clampOrbSpeeds();                                  // última palabra: ya empujaron todos
   // ¿Cayó el jefe? La hora 12 termina cuando muere, no cuando da la vuelta la aguja.
-  if (game.bossFight && !enemies.some(e => e.kind === 'relojero' && !e.dead)) {
+  // Bucle plano: `enemies.some(e => ...)` crea un closure nuevo POR FRAME mientras dura la
+  // pelea, para una pregunta que se responde con tres líneas y cero asignaciones.
+  let bossVivo = false;
+  if (game.bossFight) {
+    for (const e of enemies) if (!e.dead && e.kind === 'relojero') { bossVivo = true; break; }
+  }
+  if (game.bossFight && !bossVivo) {
     game.bossFight = false;
     addScore(30000 * comboMul() * P.greedMul, 0, 0, '#8ee36b');
     for (let i = 0; i < 6; i++) addRing(rnd(-0.6, 0.6), rnd(-0.6, 0.6), 0.02, 0.5, 0.9, [255, 220, 140], 0.01);
@@ -5622,7 +5716,7 @@ function stepSim(dt) {
 // lienzo. En un equipo que llega a 60 esto no baja NUNCA y el juego se ve igual que siempre; en
 // uno que no llega, cambia nitidez por fluidez — el canje correcto, porque un juego de reflejos
 // a 50 fps se juega peor de lo que se ve.
-const _fps = new Float32Array(40);
+const _fps = new Float32Array(40), _fpsOrd = new Float32Array(40);
 let _fpsN = 0, _dprCd = 0;
 function autoDpr(dt) {
   // Los frames de arranque, los de después de una pausa y los que el navegador recorta mienten.
@@ -5631,18 +5725,24 @@ function autoDpr(dt) {
   _fpsN++;
   if (_dprCd > 0) { _dprCd -= dt; return; }
   if (_fpsN < _fps.length) return;
+  // SÓLO CADA `dprEvery` FRAMES. Antes esto corría en TODOS: un `Array.from` y un `sort` de 40
+  // elementos por frame — asignación y O(n log n) constantes — para decidir algo que puede
+  // decidirse dos veces por segundo. Optimizar midiendo mal sale caro.
+  if (_fpsN % CFG.perf.dprEvery !== 0) return;
   // MEDIANA, no promedio: un solo frame largo (una recolección, el sistema haciendo otra cosa)
-  // no puede mover la decisión.
-  const orden = Array.from(_fps).sort((a, b) => a - b);
-  const med = orden[orden.length >> 1];
+  // no puede mover la decisión. El arreglo de trabajo se reusa entre llamadas.
+  _fpsOrd.set(_fps); _fpsOrd.sort();
+  const med = _fpsOrd[_fpsOrd.length >> 1];
   const P = CFG.perf;
   // El piso nunca puede quedar por ENCIMA de 1: en un equipo con devicePixelRatio 1 el cociente
   // daría 1.05 y "bajar" terminaría SUBIENDO la escala. (Lo pensé mal la primera vez.)
   const base = Math.min(window.devicePixelRatio || 1, P.dprCap);
-  const piso = Math.min(1, P.dprMin / base);
+  const piso = Math.min(dprCeil, P.dprMin / base);
   let nuevo = dprScale;
   if (med > P.msDown) nuevo = Math.max(piso, dprScale - 0.12);
-  else if (med < P.msUp && dprScale < 1) nuevo = Math.min(1, dprScale + 0.08);
+  // Sólo recupera hasta `dprCeil`: en táctil ese techo es la resolución base elegida, así que
+  // el afinador es una RED para equipos lentos y no algo que ande cambiando la nitidez sola.
+  else if (med < P.msUp && dprScale < dprCeil) nuevo = Math.min(dprCeil, dprScale + 0.08);
   if (Math.abs(nuevo - dprScale) < 0.005) return;
   dprScale = nuevo;
   _dprCd = P.dprHold;                                 // re-hornear es un tirón: no seguido
@@ -5770,10 +5870,19 @@ function loop(now) {
   }
   // Aviso de vida baja: viñeta roja que late. Se lee sin mirar la barra.
   if (game.state === 'play' && P.alive && P.hp / P.hpMax < 0.3) {
+    // El gradiente se arma UNA vez y la intensidad va por `globalAlpha`. Antes se creaba un
+    // gradiente nuevo MÁS dos strings en cada frame — y justo cuando estás por morir, que es
+    // cuando menos se puede perder un frame. La geometría no cambia salvo por resize, así que
+    // se invalida ahí junto con el resto de lo cacheado.
+    if (!lowGrad) {
+      lowGrad = ctx.createRadialGradient(CX, CY, Math.min(W, H) * 0.3, CX, CY, Math.max(W, H) * 0.7);
+      lowGrad.addColorStop(0, 'rgba(255,40,70,0)');
+      lowGrad.addColorStop(1, 'rgba(255,40,70,1)');
+    }
     const a = (0.3 - P.hp / P.hpMax) / 0.3 * (0.22 + 0.14 * Math.sin(perfT * 5));
-    const g = ctx.createRadialGradient(CX, CY, Math.min(W, H) * 0.3, CX, CY, Math.max(W, H) * 0.7);
-    g.addColorStop(0, 'rgba(255,40,70,0)'); g.addColorStop(1, 'rgba(255,40,70,' + a.toFixed(3) + ')');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = lowGrad; ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
   }
   drawFloaters();
 
