@@ -2043,89 +2043,109 @@ function killPlayer() {
 }
 
 // ════════════════ DIBUJO del hilo y la canica ════════════════
+// ── Búferes del dibujo del hilo ──
+// Eran cinco `new Array(n)` por frame (~1000 números con el hilo largo) más un suavizado de siete
+// taps por punto. A 60 fps eso es basura constante para el recolector, y en un móvil el
+// recolector se paga en tirones. Viven entre frames y crecen por duplicación.
+let _tIdx = new Int32Array(0), _tPx = new Float32Array(0), _tPy = new Float32Array(0);
+let _tHw = new Float32Array(0), _tNx = new Float32Array(0), _tNy = new Float32Array(0);
+function _tGrow(n) {
+  if (_tPx.length >= n) return;
+  let c = Math.max(64, _tPx.length || 64);
+  while (c < n) c *= 2;
+  _tIdx = new Int32Array(c); _tPx = new Float32Array(c); _tPy = new Float32Array(c);
+  _tHw = new Float32Array(c); _tNx = new Float32Array(c); _tNy = new Float32Array(c);
+}
+
 function drawThread() {
   const n = thread.length;
   if (n < 2) return;
-  const px = new Array(n), py = new Array(n);
-  for (let i = 0; i < n; i++) { px[i] = sx(thread[i].x); py[i] = sy(thread[i].y); }
-  // Path SUAVE: cuadráticas por los puntos medios (técnica de smoothPath en CrazyTanks).
-  // Con la soga ya no hay esquinas, pero la curva le saca el último resto de "polilínea".
-  const trace = (i0, i1) => {
-    ctx.beginPath();
-    ctx.moveTo(px[i0], py[i0]);
-    for (let i = i0 + 1; i < i1; i++) ctx.quadraticCurveTo(px[i], py[i], (px[i] + px[i + 1]) / 2, (py[i] + py[i + 1]) / 2);
-    ctx.lineTo(px[i1], py[i1]);
-  };
+  // ── DECIMADO ADAPTATIVO ──
+  // Los puntos están a `spacing` unidades, o sea `spacing * PXR` píxeles: ~4.8 en un monitor y
+  // ~2.3 en un teléfono. Mandar un vértice cada 2 px es tirar resolución que nadie ve, y el hilo
+  // era el 34% del render por esto. El paso se elige para que los vértices queden a ~5.5 px: en
+  // desktop da 1 (no cambia nada) y en pantallas chicas da 2. La SIMULACIÓN no se toca — esto es
+  // sólo cuántos vértices se dibujan.
+  const segPx = Math.max(0.35, sr(CFG.thread.spacing));
+  const step = Math.max(1, Math.round(5.5 / segPx));
+  _tGrow(Math.ceil(n / step) + 2);
+  let m = 0;
+  for (let i = 0; i < n - 1; i += step) _tIdx[m++] = i;
+  _tIdx[m++] = n - 1;                                 // la cabeza SIEMPRE entra: es donde mirás
+  if (m < 2) return;
+
   // ── PINCELADA ──
   // Se dibuja como una CINTA RELLENA, no como una línea con grosor. Con strokes por tramos
-  // siempre quedaba el escalón entre capas; un polígono relleno tiene silueta continua, que
-  // es como se ve un trazo de pincel. El color va en rodajas que COMPARTEN sus vértices de
-  // borde: al ser opacas y coincidir exacto, no hay costura.
+  // siempre quedaba el escalón entre capas; un polígono relleno tiene silueta continua, que es
+  // como se ve un trazo de pincel. El color va en rodajas que COMPARTEN sus vértices de borde:
+  // al ser opacas y coincidir exacto, no hay costura.
   //
-  // Y lo que de verdad lo hace ver pintado: el ancho de cada punto es el que tenía la MANO
-  // al apoyarlo (`thread[i].w`). Lento = trazo gordo, rápido = trazo fino. Con ancho
-  // constante siempre iba a parecer una línea dibujada, por más degradado que le pusiera.
-  const hw = new Array(n), nx2 = new Array(n), ny2 = new Array(n);
-  for (let i = 0; i < n; i++) {
-    const pa = thread[Math.max(0, i - 1)], pb = thread[Math.min(n - 1, i + 1)];
+  // Y lo que de verdad lo hace ver pintado: el ancho de cada punto es el que tenía la MANO al
+  // apoyarlo (`thread[i].w`). Lento = trazo gordo, rápido = trazo fino.
+  const wBase = sr(CFG.thread.width * CFG.thread.drawMul) * 0.5;
+  for (let j = 0; j < m; j++) {
+    const i = _tIdx[j];
+    const p = thread[i];
+    _tPx[j] = sx(p.x); _tPy[j] = sy(p.y);
+    // La tangente se toma contra los vecinos DIBUJADOS: es la normal del polígono que de verdad
+    // se traza, así que la cinta no se abre en las curvas al decimar.
+    const pa = thread[Math.max(0, i - step)], pb = thread[Math.min(n - 1, i + step)];
     let tx = pb.x - pa.x, ty = pb.y - pa.y;
-    const m = hyp(tx, ty) || 1; tx /= m; ty /= m;
-    nx2[i] = -ty; ny2[i] = tx;
-    const u = i / (n - 1);
-    let wa = 0, wn = 0;                              // suavizado: si no, el ancho tiembla
-    for (let k = -3; k <= 3; k++) { const j = i + k; if (j >= 0 && j < n) { wa += (thread[j].w || 1); wn++; } }
-    // Afinado CONTINUO de la cola a la cabeza. Antes el perfil apenas variaba (0.55 → 1.17) y
-    // encima los últimos 14 puntos se iban a cero de golpe: el trazo se veía parejo y de
-    // repente cortado. Ahora un solo smoothstep de `tailW` a 1 recorre el hilo entero.
-    hw[i] = sr(CFG.thread.width * CFG.thread.drawMul * lerp(CFG.thread.tailW, 1, smoothstep(u)) * (wa / wn)) * 0.5;
+    const mm = hyp(tx, ty) || 1; tx /= mm; ty /= mm;
+    _tNx[j] = -ty; _tNy[j] = tx;
+    let wa = 0, wn = 0;                               // suavizado: si no, el ancho tiembla
+    for (let k = -3; k <= 3; k++) { const q = i + k; if (q >= 0 && q < n) { wa += (thread[q].w || 1); wn++; } }
+    // Afinado CONTINUO de la cola a la cabeza: un solo smoothstep de `tailW` a 1 sobre el índice
+    // ORIGINAL, así el perfil es idéntico dibuje los puntos que dibuje.
+    _tHw[j] = wBase * lerp(CFG.thread.tailW, 1, smoothstep(i / (n - 1))) * (wa / wn);
   }
-  const slice = (i0, i1) => {
+
+  // Path SUAVE: cuadráticas por los puntos medios (técnica de smoothPath en CrazyTanks).
+  const trace = (a, b) => {
     ctx.beginPath();
-    ctx.moveTo(px[i0] + nx2[i0] * hw[i0], py[i0] + ny2[i0] * hw[i0]);
-    for (let i = i0 + 1; i <= i1; i++) ctx.lineTo(px[i] + nx2[i] * hw[i], py[i] + ny2[i] * hw[i]);
-    for (let i = i1; i >= i0; i--) ctx.lineTo(px[i] - nx2[i] * hw[i], py[i] - ny2[i] * hw[i]);
+    ctx.moveTo(_tPx[a], _tPy[a]);
+    for (let j = a + 1; j < b; j++) ctx.quadraticCurveTo(_tPx[j], _tPy[j], (_tPx[j] + _tPx[j + 1]) / 2, (_tPy[j] + _tPy[j + 1]) / 2);
+    ctx.lineTo(_tPx[b], _tPy[b]);
+  };
+  const slice = (a, b) => {
+    ctx.beginPath();
+    ctx.moveTo(_tPx[a] + _tNx[a] * _tHw[a], _tPy[a] + _tNy[a] * _tHw[a]);
+    for (let j = a + 1; j <= b; j++) ctx.lineTo(_tPx[j] + _tNx[j] * _tHw[j], _tPy[j] + _tNy[j] * _tHw[j]);
+    for (let j = b; j >= a; j--) ctx.lineTo(_tPx[j] - _tNx[j] * _tHw[j], _tPy[j] - _tNy[j] * _tHw[j]);
     ctx.closePath();
   };
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-  // RESPLANDOR, no funda. Antes eran DOS bandas translúcidas anchas encima de la cinta: el halo
-  // a 5× su ancho y una capa de "raqueta" a 4.6× sobre la cabeza. Juntas se leían como una
-  // envoltura gris semitransparente pegada al trazo — justo lo que molestaba. Ahora el brillo
-  // abraza la cinta (2×) y es mucho más tenue: se nota como neón, no como una segunda forma.
+  // RESPLANDOR, no funda: el brillo abraza la cinta (2×) y es tenue. Se lee como neón, no como
+  // una segunda forma pegada al trazo.
   ctx.globalCompositeOperation = 'lighter';
-  // Seis capas de resplandor para una cinta de 20 px de largo en pantalla es más de lo que el ojo
-  // separa; con cuatro el degradé del neón se ve igual y son dos strokes menos por frame.
   const HH = 4;
   for (let k = 0; k < HH; k++) {
-    const i0 = Math.floor(k * (n - 1) / HH), i1 = Math.floor((k + 1) * (n - 1) / HH);
-    if (i1 <= i0) continue;
+    const a = Math.floor(k * (m - 1) / HH), b = Math.floor((k + 1) * (m - 1) / HH);
+    if (b <= a) continue;
     const u = (k + 0.5) / HH;
     ctx.strokeStyle = 'rgba(90,190,255,' + (0.02 + 0.07 * u).toFixed(3) + ')';
-    ctx.lineWidth = Math.max(1.5, hw[Math.floor((i0 + i1) / 2)] * CFG.thread.glow);
-    trace(i0, i1); ctx.stroke();
+    ctx.lineWidth = Math.max(1.5, _tHw[(a + b) >> 1] * CFG.thread.glow);
+    trace(a, b); ctx.stroke();
   }
   ctx.globalCompositeOperation = 'source-over';
   // Cuerpo: rodajas opacas que comparten vértices (violeta apagado → cian caliente).
-  // Las rodajas son el degradé violeta→cian del cuerpo. El tope estaba en 18: a esa cantidad
-  // cada rodaja mide un par de píxeles y el salto de color entre vecinas es invisible. Con 13 el
-  // degradé se ve idéntico y son cinco fills menos por frame con el hilo largo.
-  const CH = clamp(Math.round(n / 9), 6, 13);
+  const CH = clamp(Math.round(m / 9), 6, 13);
   for (let k = 0; k < CH; k++) {
-    const i0 = Math.floor(k * (n - 1) / CH), i1 = Math.floor((k + 1) * (n - 1) / CH);
-    if (i1 <= i0) continue;
+    const a = Math.floor(k * (m - 1) / CH), b = Math.floor((k + 1) * (m - 1) / CH);
+    if (b <= a) continue;
     const u = (k + 0.5) / CH;
-    const r = Math.round(lerp(126, 190, u)), g = Math.round(lerp(88, 249, u)), b = Math.round(lerp(228, 255, u));
-    ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + b + ')';
-    slice(i0, i1); ctx.fill();
+    const r = Math.round(lerp(126, 190, u)), g = Math.round(lerp(88, 249, u)), bb = Math.round(lerp(228, 255, u));
+    ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + bb + ')';
+    slice(a, b); ctx.fill();
   }
-  // Donde le pegaron, brilla un instante (la vibración ya la hace la física).
-  // Un golpe enciende varios puntos vecinos y cada uno pedía su blit: medidos 18 por frame para
-  // lo que el ojo lee como TRES destellos. Se sube el umbral y se topea: se ve igual.
+  // Donde le pegaron, brilla un instante (la vibración ya la hace la física). Un golpe enciende
+  // varios puntos vecinos y cada uno pedía su blit: se sube el umbral y se topea.
   let destellos = 0;
-  for (let i = 0; i < n - 1 && destellos < 4; i++) {
-    const p = thread[i];
+  for (let j = 0; j < m - 1 && destellos < 4; j++) {
+    const p = thread[_tIdx[j]];
     if (p.hitT <= 0.30) continue;
-    bloomPx(px[i], py[i], sr(0.034) * p.hitT, [190, 250, 255], 0.5 * p.hitT);
-    destellos++; i += 2;                              // el vecino inmediato es el mismo golpe
+    bloomPx(_tPx[j], _tPy[j], sr(0.034) * p.hitT, [190, 250, 255], 0.5 * p.hitT);
+    destellos++; j += 2;                              // el vecino inmediato es el mismo golpe
   }
 }
 
@@ -2423,6 +2443,17 @@ function updateOrbs(dt) {
       const v = resolveOrbPair(orbs[a], orbs[b]);
       if (v > MICRO_BOUNCE * 2) { sfx.clack(v); spawnSparks((orbs[a].x + orbs[b].x) / 2, (orbs[a].y + orbs[b].y) / 2, 1, [190, 220, 255], 0.3); }
     }
+  // EL TOPE SE VUELVE A APLICAR DESPUÉS DE LOS PARES.
+  // El clamp de arriba vive dentro del bucle por orbe, y `resolveOrbPair` corre DESPUÉS: el
+  // impulso de un choque encadenado se iba sin tope hasta el frame siguiente. Con dos subpasos
+  // no se notaba — el segundo subpaso lo clampeaba dentro del mismo frame — así que el agujero
+  // estaba TAPADO POR EL COSTO, no cerrado; al bajar a un subpaso salió a la luz (medido v=3.08
+  // con el tope en 1.75). Un tope que depende de cuántas veces por frame corra la física no es
+  // un tope.
+  for (const o of orbs) {
+    const s2 = hyp(o.vx, o.vy);
+    if (s2 > cap) { o.vx = o.vx / s2 * cap; o.vy = o.vy / s2 * cap; }
+  }
 }
 
 // Cuerpo de la orbe: esfera con la luz clave + rebote en el borde opuesto. Igual que las piezas,
@@ -2657,25 +2688,25 @@ function drawMineCells() {
   // está HUNDIDA — filo claro del lado de la luz, oscuro del contrario. Las que están encendidas
   // del todo comparten alfa, así que sus filos se acumulan en un path y salen de a un stroke en
   // vez de dos POR CELDA (eran ~42 strokes por frame).
-  ctx.lineWidth = lw;
+  // Los filos son BARRAS, no polilíneas trazadas. Una línea de un píxel y un rectángulo de un
+  // píxel se ven igual, pero `fillRect` no construye path: eran seis comandos de path por celda
+  // (~125 por frame) y ahora son cero.
   if (llenas) {
-    ctx.beginPath();
+    ctx.fillStyle = 'rgba(0,0,0,0.300)';
     for (let r = 0; r < GN; r++) for (let c = 0; c < GN; c++) {
       if (cellLit(c, r) < 0.995) continue;
       const X = sx(-1 + c * CELL), Y = sy(-1 + r * CELL);
-      ctx.moveTo(X + S - lw / 2, Y); ctx.lineTo(X + S - lw / 2, Y + S - lw / 2); ctx.lineTo(X, Y + S - lw / 2);
+      ctx.fillRect(X + S - lw, Y, lw, S);             // derecha, en sombra
+      ctx.fillRect(X, Y + S - lw, S, lw);             // abajo, en sombra
     }
-    ctx.strokeStyle = 'rgba(0,0,0,0.300)'; ctx.stroke();
     for (const conNum of [true, false]) {
-      ctx.beginPath();
-      let hay = false;
+      ctx.fillStyle = conNum ? 'rgba(165,220,255,0.340)' : 'rgba(150,235,185,0.140)';
       for (let r = 0; r < GN; r++) for (let c = 0; c < GN; c++) {
         if (cellLit(c, r) < 0.995 || (mineCountAt(c, r) > 0) !== conNum) continue;
         const X = sx(-1 + c * CELL), Y = sy(-1 + r * CELL);
-        ctx.moveTo(X + lw / 2, Y + S); ctx.lineTo(X + lw / 2, Y + lw / 2); ctx.lineTo(X + S, Y + lw / 2);
-        hay = true;
+        ctx.fillRect(X, Y, lw, S);                    // izquierda, del lado de la luz
+        ctx.fillRect(X, Y, S, lw);                    // arriba, del lado de la luz
       }
-      if (hay) { ctx.strokeStyle = conNum ? 'rgba(165,220,255,0.340)' : 'rgba(150,235,185,0.140)'; ctx.stroke(); }
     }
   }
   // ── 3. LAS QUE SE ESTÁN APAGANDO ── una por una, para no cuantizar el desvanecido. Son pocas.
@@ -2683,15 +2714,11 @@ function drawMineCells() {
     const a = cellLit(c, r);
     if (a <= 0.001 || a >= 0.995) continue;
     const X = sx(-1 + c * CELL), Y = sy(-1 + r * CELL), n = mineCountAt(c, r);
-    ctx.strokeStyle = 'rgba(0,0,0,' + (0.30 * a).toFixed(3) + ')';
-    ctx.beginPath();
-    ctx.moveTo(X + S - lw / 2, Y); ctx.lineTo(X + S - lw / 2, Y + S - lw / 2); ctx.lineTo(X, Y + S - lw / 2);
-    ctx.stroke();
-    ctx.strokeStyle = n > 0 ? 'rgba(165,220,255,' + (0.34 * a).toFixed(3) + ')'
-                            : 'rgba(150,235,185,' + (0.14 * a).toFixed(3) + ')';
-    ctx.beginPath();
-    ctx.moveTo(X + lw / 2, Y + S); ctx.lineTo(X + lw / 2, Y + lw / 2); ctx.lineTo(X + S, Y + lw / 2);
-    ctx.stroke();
+    ctx.fillStyle = 'rgba(0,0,0,' + (0.30 * a).toFixed(3) + ')';
+    ctx.fillRect(X + S - lw, Y, lw, S); ctx.fillRect(X, Y + S - lw, S, lw);
+    ctx.fillStyle = n > 0 ? 'rgba(165,220,255,' + (0.34 * a).toFixed(3) + ')'
+                          : 'rgba(150,235,185,' + (0.14 * a).toFixed(3) + ')';
+    ctx.fillRect(X, Y, lw, S); ctx.fillRect(X, Y, S, lw);
   }
 }
 // Los números son INFORMACIÓN DEL TABLERO, no feedback de golpe — y esa distinción se paga con
@@ -5594,9 +5621,15 @@ function loop(now) {
   }
   else if (game.state === 'play' && simDt > 0) {
     // Subpasos acotados: a 2 u/s un orbe avanza 4 radios en un frame de 50 ms y podría
-    // atravesar el hilo. El test barrido ya lo cubre, pero los subpasos mantienen
-    // estables además los rebotes orbe-orbe encadenados.
-    const steps = Math.min(3, Math.max(1, Math.ceil(simDt / (1 / 70))));
+    // atravesar el hilo. El test barrido ya lo cubre, pero los subpasos mantienen estables
+    // además los rebotes orbe-orbe encadenados.
+    //
+    // El umbral estaba en 1/70, y eso significaba que a 60 fps SIEMPRE daba 2: la simulación
+    // entera — soga incluida, que son ~950 operaciones vectoriales por pasada — corría dos veces
+    // por frame en el caso normal. Con 1/50 el frame de 60 fps entra en UN subpaso y el segundo
+    // aparece recién por debajo de 50 fps, que es donde hace falta de verdad. El trabajo por
+    // SEGUNDO en un equipo lento no cambia; lo que se va es el doble gasto cuando todo va bien.
+    const steps = Math.min(3, Math.max(1, Math.ceil(simDt / (1 / 50))));
     const sd = simDt / steps;
     for (let i = 0; i < steps; i++) if (!stepSim(sd)) break;
   }

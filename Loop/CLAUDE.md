@@ -12,6 +12,75 @@ todo lo que quedó encerrado. Los enemigos son piezas de ajedrez que telegrafía
 la aguja del reloj marca las oleadas, y cada hora elegís **una sola cosa, alternando**:
 una **regla** para la arena o una **carta** (las 5 equipadas forman una mano de póker).
 
+## El costo que no dependía de nada (2026-09-17)
+
+Franco, después de la pasada anterior: *"está un poco lento todavía y eso que al principio sin
+mucho en pantalla"*. **Esa frase es el diagnóstico**: si cuesta igual con la arena vacía, lo caro
+no es por objeto — es POR FRAME FIJO, y todo lo optimizado antes escalaba con la cantidad de
+objetos. Cuando alguien reporta lentitud, la primera pregunta útil es *¿con qué escala?*
+
+### El perfilador tenía un agujero
+
+Contaba `fill`, `stroke`, `clip`, gradientes y `drawImage` — pero **no la construcción de paths**.
+`moveTo`/`lineTo`/`quadraticCurveTo` son trabajo de CPU por vértice y no aparecían por ningún
+lado. Al agregarlos:
+
+    34.2%  drawThread   412 comandos de path por frame
+
+El hilo tiene hasta 195 puntos y se recorre tres veces (una pasada de resplandor con cuadráticas
+más la cinta rellena, que va de ida y de vuelta). **Estaba siempre ahí**, con o sin enemigos. Es
+decir: el mayor gasto del render nunca había aparecido en el perfil, y era justo el que explicaba
+el síntoma. Un perfilador que no mide algo no dice que sea barato — dice que no lo mide.
+
+### Las dos correcciones
+
+**1. Decimado adaptativo del dibujo.** Los puntos están a `CFG.thread.spacing` (0.010 u), que en
+pantalla es `spacing * PXR`: ~4.8 px en un monitor y ~2.3 px en un teléfono. Mandar un vértice
+cada 2 px es tirar resolución que ningún ojo ve. El paso se calcula para que los vértices queden a
+~5.5 px, así que da 1 en desktop (no cambia nada) y 2 en pantallas chicas — el recorte cae solo
+donde hace falta. **La simulación sigue con todos los puntos**: esto es sólo cuántos vértices se
+mandan a dibujar. 412 → 214 comandos, y en una curva cerrada no se ve facetado.
+
+Detalle que importa: la tangente se toma contra los vecinos **dibujados** (`i ± step`), no contra
+los originales. Si no, la normal no corresponde al polígono que de verdad se traza y la cinta se
+abre en las curvas.
+
+**2. La simulación corría DOS VECES por frame.** `steps = min(3, max(1, ceil(simDt / (1/70))))`:
+con `1/70`, un frame de 60 fps da `ceil(1.167) = 2` **siempre**. O sea que la soga entera — medidas
+713 resoluciones de restricción + 237 integraciones por frame con la arena vacía — se resolvía dos
+veces en el caso normal. Con `1/50` el frame de 60 fps entra en un subpaso y el segundo aparece
+recién por debajo de 50 fps. El trabajo por SEGUNDO en un equipo lento no cambia; lo que se va es
+el doble gasto cuando todo va bien.
+
+Verificado antes de darlo por bueno, porque los subpasos existen para algo: **tunneling 0/50** con
+hilo quieto (5 velocidades × 2 timesteps) y **0/56** con hilo en movimiento, 14/14 rebotando.
+
+### Bajar el costo destapó un bug que el costo tapaba
+
+Al pasar a un subpaso, `frenzy50` marcó **ORB-SPD: v=3.08 con el tope en 1.75**. No lo rompió el
+cambio: lo *reveló*. El clamp de velocidad vive DENTRO del bucle por orbe de `updateOrbs`, y
+`resolveOrbPair` corre **después** de ese bucle — así que el impulso de un choque encadenado se
+iba sin tope hasta el frame siguiente. Con dos subpasos, el segundo lo clampeaba dentro del mismo
+frame y el agujero nunca se veía.
+
+O sea: **el tope estaba tapado por el costo, no cerrado.** Un tope que depende de cuántas veces
+por frame corra la física no es un tope. Se arregla aplicándolo también después de resolver los
+pares, no volviendo a los dos subpasos.
+
+Tercera vez en este proyecto que aparece la misma forma: algo defensivo (un `|| 1`, un subpaso de
+más, un `chk` que comparte el error con el código que audita) **oculta** el problema en vez de
+delatarlo. Cuando una optimización rompe un test, vale la pena preguntarse si lo rompió o si lo
+destapó.
+
+### Y de paso
+
+- Cinco `new Array(n)` por frame en `drawThread` (~1000 números) pasaron a `Float32Array` que viven
+  entre frames. A 60 fps eso era basura constante para el recolector, y en un móvil el recolector
+  se paga en tirones.
+- Los filos de las celdas de mina pasaron de polilíneas trazadas a `fillRect`: una línea de un
+  píxel y un rectángulo de un píxel se ven igual, pero `fillRect` no construye path (eran ~125
+  comandos por frame, ahora cero).
+
 ## Pasada MOBILE (2026-09-16) — medir antes de tocar
 
 Franco reportó FPS bajos en teléfono. Lo primero fue un **perfilador**, no una corazonada:
