@@ -1210,4 +1210,228 @@ queda congelada aunque los timers corran. El loop está preparado para bombearse
   de a una; `afk` prueba el jugador quieto durante horas (la explosión de damas); `leak` cuenta
   orbes que atraviesan el hilo sin rebotar; `closes` mide cierres variando las perillas.
 
+**Agujero encontrado el 2026-09-18: `ALL` no era la lista de escenarios, era una lista a mano.**
+`SCENARIOS` tenia 47 definidos y `ALL` nombraba 35. Los DOCE que faltaban eran justo los mas
+nuevos - `boss`, `barriles`, `hudfijo`, `fkill`, `feedback`, `dprbase`, `heal`, `handtouch`,
+`touchsel`, `feel`, y los dos de hoy - o sea que `python qa2.py` a secas jamas los corria y solo
+se ejecutaban nombrandolos a mano el dia que se escribieron. Ya estan todos en `ALL`. **Cuando se
+agrega un escenario hay que agregarlo a `ALL` en el mismo movimiento**, o nace muerto: pasa una
+vez y despues no vuelve a correr nunca.
+
+Agregados el 2026-09-18: **`peon`** (el peon come en diagonal y avanza derecho; elige celdas A MANO
+y no al azar, porque lo que se prueba es una regla determinista - con posiciones sorteadas pasaria
+por casualidad la mitad de las veces) y **`obus`** (24 obuses cruzando un hilo de 112 puntos desde
+todos los angulos: ninguno puede cambiar de bando, y uno tiene que llegar igual al jugador con el
+hilo en el medio).
+
+## Playtest 2026-09-18 - el peon decide, y el hilo deja de ser un paraguas
+
+### El hilo ya no para los obuses
+
+`updateShells` reflejaba el obus que cruzara el hilo y le cambiaba de bando: en el papel era la
+fusion Pong + Tank Wars, y era la idea que mas me gustaba de todo el modulo. En la mano no
+funcionaba, y la razon es puramente geometrica: el hilo mide casi un plato de largo y va
+ARRASTRANDO detras tuyo, asi que tapa un arco enorme en todo momento. El obus rebotaba SIEMPRE.
+Franco lo dijo en una linea: "imposible que te hagan algo asi". Un tanque que no puede pegarte no
+es un enemigo - es un dispensador de proyectiles propios.
+
+Ahora el obus ATRAVIESA el hilo y lo unico que se hace con el es esquivarlo. El ORBE sigue
+rebotando, y esa asimetria es la regla, no una inconsistencia: **el orbe es de la mesa y lo podes
+hacer tuyo; el obus es de quien lo disparo.**
+
+Se fueron con el rebote: `run.reflects`, el logro `devolver` ('10 shells returned'), el campo
+`deflCd` del obus y el `px/py` que solo usaba el barrido. Los logros son solo toasts (no hay
+pantalla que los liste), asi que sacar una clave de `ACH` no rompe nada.
+
+### El peon: avanza derecho, come en diagonal
+
+Era la unica pieza del tablero sin decision - apuntaba al centro y caminaba. Y es justo la pieza
+de ajedrez con la regla mas particular de todas, y la mas facil de leer desde afuera.
+
+`pawnLane(e, c, r, pc, pr)` (en `p08_enemies.js`, arriba de `pickLane`) decide UNA vez, al elegir
+carril, antes de telegrafiar:
+
+- `adelante` = hacia el centro del plato, reducido al eje dominante. Ahi es donde el peon corona.
+- Las dos diagonales de captura salen de `adelante` mismo: la perpendicular de un eje es su par
+  invertido (`p = [f[1], f[0]]`), asi que con `f=(1,0)` dan `(1,1)` y `(1,-1)`.
+- Si el jugador esta PARADO en una de esas dos casillas, va por ahi. Captura de ajedrez: una
+  casilla, en diagonal, y solo si hay algo que comer. Si no, avanza.
+
+Se evalua una sola vez a proposito. Entre la decision y el golpe hay medio segundo de telegrafia
+(`aim: 0.50`), y ese medio segundo es la salida del jugador. Un peon que recalculara te
+PERSEGUIRIA, y perseguir no es lo que hace un peon: un peon te castiga por haberte quedado parado
+en el lugar equivocado. Y es determinista, no sorteado - si sorteara, la regla dejaria de ser una
+regla y el jugador no podria hacer nada con ella salvo tener suerte.
+
+`e.pawnBite` marca la captura y `drawTelegraphs` pinta ese carril en CARMESI en vez del blanco
+hueso del peon. Sin eso la regla existiria solo en el codigo: el jugador veria un peon moverse
+raro y no sabria que fue por donde estaba parado.
+
+### El naipe estaba corrido, y el motivo era la rotacion
+
+La cinta del palo se le montaba al palo de la esquina de abajo. Mirando los numeros sueltos no
+cerraba: la cinta iba de `bh*0.700` a `0.792` y el RANGO de esa esquina esta en `0.875`. Lo que
+faltaba ver es que esa esquina se dibuja con `rotate(PI)`, asi que su palo, que en coordenadas
+locales va `+0.097` POR DEBAJO del rango, en pantalla cae `0.097` POR ENCIMA: `bh*0.778`, justo
+adentro de la cinta.
+
+**Leccion general: en un bloque rotado 180 grados, todo desplazamiento local invierte su signo en
+pantalla.** Cualquier calculo de colision de layout tiene que hacerse en coordenadas de pantalla,
+no en las del bloque.
+
+La franja util del naipe va de `0.257` (pie de la esquina de arriba) a `0.743` (techo de la de
+abajo, que es su PALO y no su rango). El bloque de contenido estaba centrado en `0.585`. Subio
+`0.085` ENTERO, sin tocar los espacios internos - lo que estaba bien adentro sigue igual - y la
+cinta ademas se angosto de `0.66` a `0.58` de ancho, porque sus tapas redondas llegaban a
+`0.83*bw` y el palo de la esquina vive en `0.820`. Que dos cosas no se toquen por tres pixeles no
+es que no se toquen.
+
+### El Relojero, con mas vida
+
+De 2600 a 4400. La pelea estaba ARREGLADA (la ventana del nucleo abierto, la armadura de 0.30 a
+0.55, el tope de invocaciones) y con eso se paso de largo: de peaje imposible a tramite. Lo que
+sobraba era DURACION, no dificultad - el compas leer/esquivar/castigar esta donde tiene que estar,
+solo que se acababa antes de que llegaras a jugarlo dos veces. Por eso se movio la vida y NADA
+MAS: tocar `armor` o `openDmg` volveria a mover el sentimiento de la pelea.
+
+### El caracter `.` del medio
+
+Franco: "eliminalos de todo el juego, no los quiero ver". Se fue de los textos que se dibujan y
+tambien de los comentarios, para que no vuelva a colarse copiando una linea vieja. El reemplazo se
+eligio por caso, no uno solo para todos: coma donde separa dos estadisticas (`'Score +20%, Damage
++10%'`), raya donde encabeza (`'ACHIEVEMENT - X'`), y nada en el eslogan del menu, donde el aire
+alcanza.
+
+### El boton de INFO se escribe contra el CODIGO, no contra la memoria
+
+Seguia diciendo que las cartas llegan alternando con las reglas. Eso dejo de ser cierto hace
+rato: **la REGLA es por calendario (todas las horas) y la CARTA es por PUNTAJE** (`CARD_SCORE`,
+`nextCardAt`, `cardsDue`), y el draft se abre en el momento en que cruzas el umbral, en plena
+hora. Tambien decia que al jefe "solo los bucles le hacen dano completo", cuando hoy la armadura
+es 0.55 y la ventana del nucleo abierto multiplica por 3.
+
+**Regla de la casa: el panel de info es documentacion de usuario y envejece igual que cualquier
+otra. Cada vez que cambie una mecanica hay que abrirlo.** Lo que dice hoy, verificado contra el
+codigo: rueda de reglas por hora, cartas por puntaje con reemplazo cuando la mano esta llena,
+frenesi una vez por hora que cura un tercio de la barra, y que el hilo NO para los obuses.
+
+## El barril tiene que ser un BARRIL, no una esfera con rayitas
+
+Franco: "no se distinguen bien por su tamano y parecen otro tipo de orbe mas que un barril". El
+problema no era el tamano. Estaba dibujado como una ESFERA que rotaba sobre si misma, y una esfera
+con dos rayitas es una orbe con dos rayitas.
+
+Un barril que rueda por el piso, **visto desde arriba**, es otra cosa:
+
+- Su **eje es perpendicular al viaje**. Rueda hacia adelante, asi que el cilindro esta acostado
+  cruzado: la silueta es mas larga a lo ancho que a lo largo del movimiento, y esa proporcion sola
+  ya dice hacia donde va. No hace falta ninguna flecha.
+- Es **mas gordo en el medio de su largo**. Esa panza es lo que separa un barril de una lata.
+- **NO GIRA EN EL PLANO DE LA PANTALLA.** Esto era el error de fondo. El eje de rotacion de un
+  barril que rueda hacia vos es horizontal, o sea perpendicular a la camara: en pantalla la
+  silueta no se mueve nada. Rotar el sprite en el plano es una moneda bailando, no un barril.
+- Entonces se ve que rueda por las **duelas**: las tablas corren a lo largo del eje y giran con la
+  superficie, asi que en pantalla barren de un borde al otro. Los **aros** de metal estan en
+  planos perpendiculares al eje y se quedan quietos. **Duelas que barren + aros quietos = rueda.**
+  Es el truco de la rueda de carreta en animacion vieja.
+
+`spin` (un angulo de pantalla) paso a ser `roll` (la fase de la SUPERFICIE). Y **se fue el
+horneado**: existia porque el sprite rotaba, pero ahora la silueta es fija y lo que cambia son las
+duelas, asi que un bake se regeneraria entero en cada frame — seria mas caro, no mas barato. Son
+tres barriles como mucho y solo con la regla puesta. La luz SI se contra-rota (como la moto, la
+aguja y la torreta): el barril no gira en el plano, entonces su brillo se queda donde esta la luz
+de la escena.
+
+`CFG.barrel.r` (0.048 -> 0.058) es el radio de COLISION y queda a proposito entre los dos semiejes
+del dibujo (0.075 a lo ancho, 0.048 en el sentido del viaje). Con una silueta alargada un circulo
+es siempre un compromiso; que caiga del lado generoso para el jugador es la decision.
+
+## EL LUCHADOR (StickFight) — el primer enemigo que se acerca y se compromete
+
+StickFight no habia aportado **ni una** mecanica. Lo que tenia para dar es lo que faltaba: en la
+arena habia cuatro maneras de que algo te amenazara — carril telegrafiado (piezas), persecucion
+(fantasma), proyectil (tanque, barriles) y estela (moto) — y **ninguna entra a distancia de un
+brazo y se queda ahi**.
+
+Camina hasta vos, planta los pies y tira una tanda de tres: jab, jab, envion. **Mientras pega no
+se mueve**, y esa es toda la contrajugada. El envion llega casi al doble que un jab (0.200 contra
+0.115), asi que retroceder un poquito no alcanza: o salis de verdad, o comes el ultimo.
+
+Tres cosas que encontro la QA y que valen mas que el enemigo:
+
+1. **Se plantaba aunque estuviera de espaldas.** Durante la preparacion gira LENTO a proposito
+   (para que se lo pueda juquear por un costado), asi que no alcanzaba a corregir medio giro y
+   tiraba la tanda al aire. Pasa de verdad en partida: un bucle o un pulso lo empujan. El arreglo
+   no es un caso especial sino una condicion — si no esta encarado sigue CAMINANDO, que es el
+   estado donde gira rapido, y se acomoda solo.
+2. **El puno flotante hacia que abrazarlo fuera la defensa perfecta.** Como disco en la punta del
+   brazo, el envion golpeaba un ANILLO (entre 0.140 y 0.260) y no tocaba nada adentro de 0.140.
+   Cuanto mas cerca, menos te pegaba el golpe mas grande — exactamente al reves. **El arreglo no
+   es mover numeros: es que la prueba de impacto describa lo que se ve.** Un brazo que se estira
+   barre desde el cuerpo hasta la punta, asi que el impacto va contra el SEGMENTO cuerpo->puno.
+   El escenario paso de 2 golpes de 3 a pegado, a 3 de 3, sin tocar un solo alcance.
+3. **Una figura de palo pone mucha menos tinta que una silueta llena del mismo radio**, asi que al
+   mismo `r` que una pieza se lee bastante mas chica. Se dibuja a 1.3 veces el radio de colision
+   (el radio de colision NO se toca: lo que hay que corregir es cuanto OCUPA en pantalla). Y las
+   proporciones importan mas que el tamano: con la cabeza compitiendo con el tronco, todo el medio
+   queda hecho un nudo y solo se entiende la pose que estira el brazo.
+
+La marcha es procedural, no una tabla de cuadros: el pie describe una elipse — avanza levantado,
+vuelve apoyado — y la rodilla sale de doblar hacia adelante segun cuanto se acorto la pierna. El
+ciclo avanza con lo que AVANZA el muneco, no con el reloj: si lo frenan, cojea mas lento en vez de
+patinar. **Un ciclo de marcha se lee por la SEPARACION de los pies, no por el balanceo del
+cuerpo.** Tinta clara sobre el fieltro, que es el look de StickFight dado vuelta (alla era tinta
+sobre papel).
+
+El telegrafo no es un carril sino un ARCO de alcance que se llena mientras el brazo se recoge, y
+desaparece cuando el puno sale: para cuando se ve el puno ya no hay nada que decidir. Mismo idioma
+que el carril de una pieza — la forma dice donde, el llenado dice cuando.
+
+## La vida del jefe se MIDE, no se estima
+
+Dos intentos a ojo fallaron seguidos: 2600 y 4400, los dos "muy facil". A la tercera se hizo el
+escenario `bossdps`, que barre orbitas alrededor del jefe y mide cuanto dano por segundo se le
+puede meter de verdad. Resultado a la hora 12:
+
+    mejor orbita (radio 0.20, apenas por afuera del jefe)     74 /s
+    lo mismo con mano de dano (x1.7)                         163 /s
+    + acertando la ventana del nucleo abierto (techo)        273 /s
+
+Con 4400 eso es una pelea de **dieciseis segundos**. No es que el jefe fuera facil: es que no
+llegaba a pasar. Se paso a **12000** — 44s al techo, ~60s a un jugador bueno pero no perfecto.
+
+**Por que la intuicion se queda tan corta acá:** el nucleo abierto multiplica por 3 y esta abierto
+el 40% del compas, y encima a la hora 12 el jugador llega con mano armada. Dos multiplicadores
+encimados sobre una base que ya escala con la hora. Cualquier numero elegido a ojo va a errar por
+un factor, no por un margen.
+
+**La primera version de `bossdps` media mal, y el error es la pelea entera.** Modelaba al jugador
+experto como el que gira PEGADO al jefe y rapido: dio 4/s con 38 bucles cerrados, contra 64/s con
+solo 15 bucles del que gira lejos y lento. El que cerraba MAS bucles hacia MENOS dano. La razon es
+geometrica: **un bucle lastima lo que queda ADENTRO**, y girar pegado cierra bucles chiquitos al
+lado tuyo que no contienen al jefe. El jefe mide 0.15 de radio; la tecnica es girar por afuera de
+eso. La version corregida barre radios en vez de adivinar cual es el optimo — cuando no sabes cual
+es la tecnica buena, no la supongas, barrela.
+
+**Lo que NO se toco, a pedido de Franco:** la ventana del nucleo abierto y que las agujas no
+bateen las orbes. Son lo que hizo que la pelea se sintiera una pelea. Un jefe que se defiende
+menos tiene que aguantar mas; eso no es un parche, es la consecuencia.
+
+## qa2.py: el archivo temporal lleva el PID
+
+`QA_HTML` era un nombre fijo (`_qa2.html`). Dos corridas de QA a la vez se pisan: una escribe su
+escenario, la otra lo sobreescribe, y el Chrome de la primera termina corriendo el escenario de la
+segunda. **Paso de verdad** — en un informe aparecio `### ruleclean` con las notas de `bossdps`.
+
+Lo grave no es la colision sino que es INVISIBLE: no falla, MIENTE. Un escenario reporta BAD(0)
+sobre codigo que nunca ejecuto. Ahora `QA_HTML` incluye `os.getpid()`.
+
+## Lo que sigue en hold (2026-09-18)
+
+Franco descarto las propuestas para **CrazyTanks** (la aguja como rival en una carrera; los
+portales del borde) y **Hangman** (la cuenta regresiva dibujada e irreversible). Quedan sin
+representacion mecanica y **no hay que implementar nada para esos dos hasta que el lo pida**. El
+analisis de por que Hangman no encaja sigue valiendo: su mecanica ES un cuestionario, y un
+cuestionario en un juego de reflejos siempre se va a sentir como lo que se sintio.
+
 Ver [../CLAUDE.md](../CLAUDE.md) para las convenciones compartidas de los ports web.

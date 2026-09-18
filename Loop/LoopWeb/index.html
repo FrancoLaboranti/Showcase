@@ -126,6 +126,10 @@
   #infoPanel {
     position: fixed; top: calc(50px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right));
     z-index: 11; width: min(380px, 88vw); max-height: 76vh; overflow-y: auto;
+    /* `html, body` llevan `touch-action: none` para que el dedo sobre el lienzo no arrastre la
+       pagina. La propiedad no se hereda, asi que esto ya deberia poder desplazarse - pero es
+       gratis declararlo y no depender de como cada navegador arma la cadena del gesto. */
+    touch-action: pan-y; overscroll-behavior: contain;
     padding: 15px 17px; border-radius: 14px;
     background: rgba(10,16,28,0.97); border: 1px solid rgba(125,249,255,0.3);
     font-size: 12.5px; line-height: 1.62; color: #c6d6ec; font-weight: 300;
@@ -136,6 +140,17 @@
   #infoPanel .g { color: #ffd23f; font-weight: 700; }
   #infoPanel .fps { color: #8ee36b; font-weight: 700; }
   #infoPanel hr { border: 0; border-top: 1px solid rgba(160,200,245,0.14); margin: 9px 0; }
+  /* APAISADO EN TELEFONO: aca lo escaso es el ALTO. Una columna de 380 px en una pantalla
+     acostada son tres pantallas y media de scroll con medio ancho de aire al costado. El doble
+     de ancho corta los renglones a la mitad. Franco juega asi, en apaisado. */
+  @media (orientation: landscape) and (max-height: 560px) {
+    #infoPanel {
+      width: min(680px, 94vw); max-height: 88vh;
+      top: calc(42px + env(safe-area-inset-top));
+      font-size: 11.5px; line-height: 1.52; padding: 12px 15px;
+    }
+    #infoPanel hr { margin: 7px 0; }
+  }
 
   /* ── Panel de tuning (debug, tecla T) ── */
   #tunePanel {
@@ -175,42 +190,50 @@
 <div id="tunePanel"></div>
 
 <div id="infoPanel">
-  <b>LOOP</b> — you are a marble dragging a thread of light across a clock face.<br>
+  <b>LOOP</b> &mdash; you are a marble dragging a thread of light across a clock face.<br>
   <hr>
-  <b>The thread is everything.</b> It deflects orbs like a Pong paddle. Anything it bounces
-  turns <span class="g">CHARGED</span> and damages enemies.<br>
+  <b>The thread is everything.</b> It deflects <b>orbs</b> like a Pong paddle. Anything it
+  bounces turns <span class="g">CHARGED</span> and damages enemies.<br>
   <b>Swing the head</b> of the thread and the orb flies where you are moving. Near the tail it
-  just bounces.<br>
+  just bounces. It does <b>not</b> stop enemy shells &mdash; those you dodge.<br>
   <b>Cross your own thread</b> to close a <b>LOOP</b>. Everything inside takes the hit.
   <b>Tighter loop = more damage. Bigger loop = more points.</b><br>
   <hr>
   <b>Claim sectors:</b> each of the nine sectors has a <span class="g">diamond</span> at its
   center. Loop around a diamond to claim that sector. <b>Three in a row = TIC-TAC-TOE</b>,
-  which triggers <b>FRENZY</b>: the board clears, enemies are dragged toward your hand, you are
-  untouchable and you kill them on contact for double points. A shockwave fires when it ends.<br>
+  which triggers <b>FRENZY</b> once per hour: the board clears, enemies are dragged toward you,
+  you are untouchable, you kill on contact for double points and you heal back a third of your
+  bar. A shockwave fires when it ends.<br>
   <hr>
-  <b>Touch:</b> stick on the left half · <b>DASH</b> (invulnerable lunge that pulls the thread
-  straight — the tool for closing loops) · <b>PULSE</b> (shockwave that shoves everything away).<br>
-  <b>Keys:</b> WASD / arrows · <b>SPACE</b> or <b>SHIFT</b> dash · <b>E</b> pulse ·
-  <b>P</b> pause · <b>H</b> inspect your hand · <b>1 2 3</b> pick · <b>T</b> tuning panel.<br>
+  <b>Touch:</b> stick on the left half. <b>DASH</b> is an invulnerable lunge that pulls the
+  thread straight &mdash; the tool for closing loops. <b>PULSE</b> is a shockwave that shoves
+  everything away.<br>
+  <b>Keys:</b> WASD / arrows, <b>SPACE</b> or <b>SHIFT</b> dash, <b>E</b> pulse,
+  <b>P</b> pause, <b>H</b> inspect your hand, <b>T</b> tuning panel.<br>
   <hr>
   <b>The clock runs the show.</b> One sweep of the hand is one <b>HOUR</b>. It drops enemies
   from its tip and chimes at 12, 3, 6 and 9, sending a shockwave from the center.<br>
-  Every hour you get <b>one</b> choice, alternating: a new <b>RULE</b> for the arena, or a new
-  <b>CARD</b> for your build. Five cards make a <b>poker hand</b> — pairs, straights and
-  flushes grant passives.<br>
-  <b>Survive 12 hours</b> and bring down <b>THE WATCHMAKER</b>. Its armor shrugs off orbs:
-  only loops closed around it do full damage.<br>
+  <b>Every hour ends with a RULE</b> &mdash; three on offer, one for the hour to come. The
+  bolder the rule you take, the higher your <span class="g">STREAK</span> multiplier. It only
+  ever goes up, so the question is how much you can stomach, never what is safe.<br>
+  <b>Cards are bought with score</b>, not with hours: cross a threshold and the draft opens
+  right there, mid-fight. Five cards make a <b>poker hand</b> &mdash; pairs, straights and
+  flushes grant passives. Once the hand is full every new card is a <b>replacement</b>, and
+  that is where the poker actually starts.<br>
+  <hr>
+  <b>Survive 12 hours</b> and bring down <b>THE WATCHMAKER</b>. Its armor halves everything
+  except a loop closed around it. Watch the beat: it winds up, then its core <b>opens</b>
+  &mdash; while open it cannot hurt you and it takes <b>triple</b> damage.<br>
   <hr>
   <span class="fps" id="fpsInfo">FPS: --</span><br>
-  <span style="opacity:0.5">© 2026 Franco Laboranti</span>
+  <span style="opacity:0.5">&copy; 2026 Franco Laboranti</span>
 </div>
 
 <script>
 'use strict';
 // ════════════════════════════════════════════════════════════════════════════
 //  BUCLE — arena arcade roguelite
-//  Franco Laboranti · 2026
+//  Franco Laboranti - 2026
 //
 //  Sos una canica que arrastra un HILO de luz por la esfera de un reloj.
 //  El hilo desvía orbes (Pong/Canicas) y, al cruzarse consigo mismo, CIERRA UN
@@ -295,8 +318,8 @@ const CFG = {
   // SOGA: el hilo es una cadena Verlet con FRICCIÓN POR EDAD. Un punto fresco desliza y
   // hace látigo detrás de la canica; uno viejo se pega a la mesa y queda donde lo apoyaste.
   // Así la parte cercana SE MUEVE (que es lo que pedía Franco) y la lejana sostiene el bucle.
-  //   hlFresh/hlOld: semivida de la velocidad (s) según edad · massOld: cuánto pesa un punto
-  //   apoyado frente a uno fresco en las restricciones · settleT: en cuánto se "apoya".
+  //   hlFresh/hlOld: semivida de la velocidad (s) según edad - massOld: cuánto pesa un punto
+  //   apoyado frente a uno fresco en las restricciones - settleT: en cuánto se "apoya".
   //   anchorFresh/anchorOld: fuerza (1/s) con que un punto vuelve a donde fue APOYADO. Sin el
   //   ancla, la soga acorta las curvas por adentro y la cabeza nunca vuelve a cruzarla: cero
   //   bucles (medido). Con ancla, hace látigo y después se ASIENTA sobre el camino real.
@@ -371,7 +394,19 @@ const CFG = {
   // `spd0/spd1` es el rango de velocidad — variables pero parecidas, para que se lean como una
   // tanda y no como cinco proyectiles distintos. A 0.7 u/s cruzar el plato lleva ~2.9 s: da
   // tiempo a leerlo y salir del camino.
-  barrel: { n: 3, cd: 2.2, spd0: 0.58, spd1: 0.86, r: 0.048, dmg: 21, hitCd: 0.22, dmgE: 26 },
+  // `r` es el radio de COLISION, y queda a proposito entre los dos semiejes del dibujo (0.075 a
+  // lo ancho del eje, 0.048 en el sentido del viaje): pega un poco antes de lo que se ve de
+  // costado y un poco despues de lo que se ve de frente. Con una silueta alargada, un circulo es
+  // siempre un compromiso; que el compromiso caiga del lado generoso para el jugador es la
+  // decision. Subio de 0.048 a 0.058 porque el barril crecio.
+  barrel: { n: 3, cd: 2.2, spd0: 0.58, spd1: 0.86, r: 0.058, dmg: 21, hitCd: 0.22, dmgE: 26 },
+
+  // EL LUCHADOR. `enter` es a que distancia planta los pies: con el jab a 0.115 y el radio del
+  // puno en 0.030, entrar a 0.145 quiere decir que el primer jab llega si te quedaste, y que el
+  // envion (0.200) te alcanza igual si retrocediste apenas. `wind` es la preparacion, el unico
+  // momento en que se lo puede leer y salir; `rest` es lo que tarda en volver a caminar despues
+  // de la tanda, y es la ventana para pegarle sin riesgo.
+  fighter: { enter: 0.145, wind: 0.40, rest: 0.80, fistR: 0.030 },
 
   cycle:  { n: 2, spd: 0.60, life: 1.5, step: 0.045, turn: 1.5, turnRate: 4.2, dmg: 14, hitCd: 0.7, w: 0.011 },
 
@@ -560,6 +595,9 @@ const sfx = {
   hit(d)      { const k = clamp(d / 20, 0.25, 1); voice('hit', 34, () => { note(200 - 70 * k, 90, 0, 0.07 + 0.05 * k, 'square', 0.045 + 0.04 * k); }); },
   hurt()      { voice('hurt', 220, () => { note(320, 70, 0, 0.26, 'sawtooth', 0.11); noiseHit(0.16, 0.07, 400, 0.7); }); },
   kill()      { voice('kill', 55, () => { note(420, 90, 0, 0.16, 'square', 0.06); noiseHit(0.12, 0.05, 700, 0.9); }); },
+  // Silbido del golpe: ruido corto y grave para el envion, agudo y seco para el jab. Que suenen
+  // distinto es parte de la lectura - se escucha cual de los tres viene.
+  swing(big)  { voice('swing', 55, () => noiseHit(big ? 0.13 : 0.06, big ? 0.075 : 0.035, big ? 240 : 620, big ? 1.7 : 0.9)); },
   shot()      { voice('shot', 55, () => note(520, 200, 0, 0.06, 'square', 0.033)); },
   chime(q)    { voice('chime', 150, () => { const f = [523.25, 392, 329.63, 261.63][q & 3]; note(f, 0, 0, 0.85, 'sine', 0.10, 0); note(f * 2, 0, 0, 0.42, 'sine', 0.045, 0); note(f * 0.5, 0, 0, 1.1, 'sine', 0.05, 0); }); },
   hour()      { voice('hour', 400, () => [392, 523, 659].forEach((f, i) => note(f, 0, i * 0.1, 0.3, 'triangle', 0.07, 0))); },
@@ -572,7 +610,7 @@ const sfx = {
   ui()        { voice('ui', 40, () => note(880, 0, 0, 0.03, 'square', 0.03)); },
   frenzy()    { voice('frenzy', 400, () => { note(660, 1320, 0, 0.3, 'square', 0.07); note(330, 660, 0.05, 0.35, 'triangle', 0.05); }); },
 };
-// ════════════════ CANVAS · RESIZE · PÉRDIDA DE CONTEXTO ════════════════
+// ════════════════ CANVAS - RESIZE - PÉRDIDA DE CONTEXTO ════════════════
 // El trío de context-loss es obligatorio en este repo: en el Arcade todos los juegos
 // viven en iframes del MISMO renderer y el techo de canvas de iOS hace que el navegador
 // tire el contexto del que está de fondo. Sin recuperación queda pantalla negra.
@@ -886,7 +924,7 @@ function spawnMotes(x, y, n, col) {
 function addRing(x, y, r0, r1, life, col, w) {
   rings.push({ x, y, r0, r1, t: 0, life: life || 0.45, col, w: w || 0.006 });
 }
-// kind: 0 = daño tuyo · 1 = daño tuyo ESPECIAL (bucle ceñido, embestida, orbe) · 2 = curación
+// kind: 0 = daño tuyo - 1 = daño tuyo ESPECIAL (bucle ceñido, embestida, orbe) - 2 = curación
 //       3 = daño RECIBIDO
 function addDmg(x, y, v, kind) {
   if (dmgNums.length >= CFG.perf.dmgCap) dmgNums.shift();
@@ -969,8 +1007,8 @@ function drawEffects() {
 //
 // DAÑO y PUNTOS se confundían (Franco: "no entiendo bien diferenciar uno del otro"), porque
 // eran el mismo número flotando con otro color. Ahora son dos lenguajes distintos:
-//   · DAÑO   = número pelado, sin adorno. Vive en el mundo.
-//   · PUNTOS = siempre con "+", dentro de una CHAPA oscura con borde. Se lee como UI.
+//   - DAÑO   = número pelado, sin adorno. Vive en el mundo.
+//   - PUNTOS = siempre con "+", dentro de una CHAPA oscura con borde. Se lee como UI.
 // Referencia de "golpe grande": lo que pega un bucle ceñido a esta altura de la partida. El
 // tamaño del número se mide contra esto, así que un 40 en la hora 1 impresiona y en la hora 11
 // es rutina — que es exactamente como se siente jugando.
@@ -1265,9 +1303,9 @@ canvas.addEventListener('pointerdown', e => {
 });
 // ════════════════ ARENA: la esfera del reloj ════════════════
 // Tres grillas superpuestas sobre el MISMO círculo de radio 1, cada una con su rol:
-//   · GRILLA DE AJEDREZ (9×9) — sobre la que se mueven las piezas enemigas.
-//   · SECTORES 3×3        — el tablero de ta-te-ti que se reclama cerrando bucles.
-//   · MINUTERO 60 marcas  — puramente decorativo, y la referencia de lectura del reloj.
+//   - GRILLA DE AJEDREZ (9×9) — sobre la que se mueven las piezas enemigas.
+//   - SECTORES 3×3        — el tablero de ta-te-ti que se reclama cerrando bucles.
+//   - MINUTERO 60 marcas  — puramente decorativo, y la referencia de lectura del reloj.
 const GN = CFG.arena.gridN;                          // 9 columnas/filas de ajedrez
 const CELL = 2 / GN;
 const cellX = c => -1 + (c + 0.5) * CELL;            // centro de la celda c (0..GN-1)
@@ -1279,7 +1317,7 @@ const cellOk = (c, r) => c >= 0 && c < GN && r >= 0 && r < GN && (cellX(c) ** 2 
 
 // ── Sectores 3×3 (ta-te-ti) ──
 const SECT_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-const sectors = new Array(9).fill(0);                 // 0 libre · 1 reclamado
+const sectors = new Array(9).fill(0);                 // 0 libre - 1 reclamado
 const sectorT = new Array(9).fill(0);                 // animación de reclamo
 // Acá viven DOS cosas distintas que conviene no mezclar:
 //
@@ -1564,9 +1602,9 @@ function drawVignette() {
 // El rombo se dibuja DESPUÉS de la aguja, pero eso solo no alcanzaba: era un contorno hueco al
 // 42% y justo abajo, en el centro, está el eje del reloj — un disco dorado LLENO y más grande.
 // El del medio desaparecía. Tres cosas lo arreglan, y sirven en los nueve:
-//   · un DISCO OSCURO de fondo, que lo recorta de lo que haya debajo (aguja, eje, plato);
-//   · relleno propio además del contorno, para que no compita como línea contra líneas;
-//   · más opacidad y más grosor.
+//   - un DISCO OSCURO de fondo, que lo recorta de lo que haya debajo (aguja, eje, plato);
+//   - relleno propio además del contorno, para que no compita como línea contra líneas;
+//   - más opacidad y más grosor.
 function drawSectorTargets() {
   if (!game.sectorsOpen) return;                      // fuera de la ventana no hay blancos
   for (let i = 0; i < 9; i++) {
@@ -1625,8 +1663,8 @@ function drawSectors(dt) {
   ctx.restore();
 }
 // ════════════════ EL JUGADOR: canica + HILO ════════════════
-// Todo el juego cuelga de tres verbos: MOVERSE (deja hilo) · DESVIAR (el hilo es una
-// paleta de Pong) · CERRAR (cruzar tu propio hilo encierra un área y la detona).
+// Todo el juego cuelga de tres verbos: MOVERSE (deja hilo) - DESVIAR (el hilo es una
+// paleta de Pong) - CERRAR (cruzar tu propio hilo encierra un área y la detona).
 // El hilo es una polilínea de puntos con presupuesto de LARGO, no de cantidad: así el
 // alcance del bucle es el mismo a cualquier velocidad y framerate.
 
@@ -1817,7 +1855,7 @@ function closeLoop(cross, bx, by) {
   for (let i = 0; i < poly.length; i += 2) { mx += poly[i]; my += poly[i + 1]; }
   mx /= poly.length / 2; my /= poly.length / 2;
 
-  // ── LA regla de diseño: bucle CHICO = daño · bucle GRANDE = puntos ──
+  // ── LA regla de diseño: bucle CHICO = daño - bucle GRANDE = puntos ──
   // Sin esto el juego sería "barré la cancha con un círculo enorme" y no habría skill.
   const tight = clamp(Math.sqrt(0.17 / Math.max(area, 0.004)), 0.55, 3.3);
   // `* scaleHp()` es lo que impide que el bucle se devalúe: la vida enemiga crece con la hora
@@ -1849,7 +1887,7 @@ function closeLoop(cross, bx, by) {
   const claimed = claimSectorsIn(poly);
 
   // ── Score ──
-  // area·900 premia los bucles grandes; el combo multiplica; la codicia (♦) escala.
+  // area-900 premia los bucles grandes; el combo multiplica; la codicia (♦) escala.
   if (hits || charged || claimed || area > 0.05) addCombo(CFG.combo.perLoop);
   const pts = Math.round(area * 900 * comboMul() * P.greedMul * RULE.scoreMul);
   addScore(pts, mx, my, isTight ? '#ffd23f' : '#7df9ff');
@@ -2331,7 +2369,7 @@ function drawPlayer() {
   ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
   ctx.restore();
 }
-// ════════════════ ORBES · PROYECTILES · MINAS ════════════════
+// ════════════════ ORBES - PROYECTILES - MINAS ════════════════
 // Los orbes son el recurso central: neutros rebotan lindo, pero al cruzar tu hilo quedan
 // CARGADOS (dorados) y matan. Física hand-rolled — matter.js sería 80 KB para resolver
 // un par círculo-círculo, y encima hay que pelearle las unidades px/step.
@@ -2619,47 +2657,26 @@ function drawOrbs() {
 }
 
 // ════════════════ Proyectiles enemigos ════════════════
-// Clave del diseño: un proyectil que cruza tu hilo NO se destruye — se REFLEJA y cambia
-// de bando. Devolverle el obús al tanque es la fusión Pong + Tank Wars que el juego busca.
+// Los obuses ATRAVIESAN el hilo. Ver arriba de `updateShells` por qué dejaron de rebotar.
+// `mine` queda igual porque el pulso y otras cosas todavía pueden cambiarles el bando.
 function spawnShell(x, y, vx, vy, dmg, kind) {
-  shells.push({ x, y, vx, vy, dmg, kind: kind || 0, mine: false, r: 0.016, t: 0, deflCd: 0, dead: false });
+  shells.push({ x, y, vx, vy, dmg, kind: kind || 0, mine: false, r: 0.016, t: 0, dead: false });
 }
 function updateShells(dt) {
   for (let i = shells.length - 1; i >= 0; i--) {
     const s = shells[i];
     s.t += dt;
-    const px = s.x, py = s.y;
     s.x += s.vx * dt; s.y += s.vy * dt;
 
     if (hyp(s.x, s.y) > 1.02 || s.t > 6 || s.dead) { shells.splice(i, 1); continue; }
 
-    // Reflexión en el hilo
-    if (s.deflCd > 0) s.deflCd -= dt;
-    else if (thread.length > 1) {
-      const rad = s.r + CFG.thread.width;
-      for (let k = 0; k < thread.length - 1; k++) {
-        const p1 = thread[k], p2 = thread[k + 1];
-        if (segSegT(px, py, s.x, s.y, p1.x, p1.y, p2.x, p2.y) < 0 &&
-            segDist2(s.x, s.y, p1.x, p1.y, p2.x, p2.y) > rad * rad) continue;
-        let tx = p2.x - p1.x, ty = p2.y - p1.y;
-        const m = hyp(tx, ty) || 1; tx /= m; ty /= m;
-        let nx = -ty, ny = tx;
-        if (s.vx * nx + s.vy * ny > 0) { nx = -nx; ny = -ny; }
-        const vn = s.vx * nx + s.vy * ny;
-        s.vx = (s.vx - 2 * vn * nx) * 1.35; s.vy = (s.vy - 2 * vn * ny) * 1.35;
-        s.mine = true;                                 // ¡cambió de bando!
-        s.dmg *= 2.2;                                  // y pega MUCHO más fuerte de vuelta
-        s.deflCd = 0.1; s.t = 0;
-        kickThread(k, -nx, -ny, CFG.rope.hitKick * 1.4);
-        sfx.tight();
-        spawnSparks(s.x, s.y, 8, [255, 210, 63], 0.7);
-        addTrauma(0.07);
-        run.reflects++;
-        if (run.reflects === 1) toast('SENT IT BACK', '#ffd23f');
-        if (run.reflects === 10) unlockAch('devolver');
-        break;
-      }
-    }
+    // EL HILO NO PARA LOS OBUSES. Antes los reflejaba y les cambiaba de bando, que en el papel
+    // era la fusión Pong + Tank Wars. En la mano no: el hilo arrastra casi un plato de largo, así
+    // que tapaba un arco enorme y el obús rebotaba SIEMPRE. El tanque no podía tocarte una sola
+    // vez. Un enemigo que no puede pegarte no es un enemigo, y encima el rebote le regalaba al
+    // jugador un proyectil propio por cada disparo recibido.
+    // El ORBE sigue rebotando, y esa asimetría es a propósito: el orbe es de la mesa y lo podés
+    // hacer tuyo; el obús es de quien lo disparó y lo único que se hace con él es esquivarlo.
     if (s.mine) {
       for (const e of enemies) {
         if (e.dead || hyp(e.x - s.x, e.y - s.y) > e.r + s.r) continue;
@@ -2788,8 +2805,8 @@ function updateMines(dt) {
   }
 }
 // El buscaminas se dibuja en DOS pasadas, y esa separación es el arreglo:
-//   · drawMineCells() va con el fondo — son las casillas destapadas.
-//   · drawMineMarks() va ARRIBA DE TODO lo vivo — los números y las minas.
+//   - drawMineCells() va con el fondo — son las casillas destapadas.
+//   - drawMineMarks() va ARRIBA DE TODO lo vivo — los números y las minas.
 // Estaban las dos abajo, así que el carril de telegrafía de una pieza (que se pinta con
 // alpha alto) y la aguja tapaban justo la información que el modo te pide leer. Y la casilla
 // se pintaba a alpha 0.05, o sea invisible: el número quedaba flotando sin nada que lo
@@ -2917,14 +2934,14 @@ function drawMineMarks() {
 }
 // ════════════════ ENEMIGOS ════════════════
 // Dos familias de movimiento y nada más — la legibilidad es todo en una arena chica:
-//   · DESLIZANTES (piezas de ajedrez): esperan → TELEGRAFÍAN un carril → embisten.
+//   - DESLIZANTES (piezas de ajedrez): esperan → TELEGRAFÍAN un carril → embisten.
 //     No te persiguen: te amenazan un espacio. Aprendés a leer el tablero, no a correr.
-//   · LIBRES (tanque, fantasma): se mueven continuo. El tanque dispara obuses que podés
-//     devolverle con el hilo; el fantasma atraviesa el hilo (por eso da miedo).
+//   - LIBRES (tanque, fantasma): se mueven continuo. El tanque dispara obuses que podés
+//     esquivarlo (el hilo ya no lo para); el fantasma atraviesa el hilo (por eso da miedo).
 const enemies = [];
 
 // Arquetipos como filas de datos (patrón Snake/TankWARS): agregar un enemigo = una fila.
-// `fam`: 's' deslizante · 'f' libre.  `steps`: cuántas celdas recorre la embestida.
+// `fam`: 's' deslizante - 'f' libre.  `steps`: cuántas celdas recorre la embestida.
 const ETYPES = {
   peon:   { fam: 's', hp: 26,  r: 0.040, dmg: 9,  wait: [1.15, 1.75], aim: 0.50, spd: 0.85, steps: 1, score: 90,  col: [225, 228, 240], dirs: 'toC' },
   torre:  { fam: 's', hp: 62,  r: 0.052, dmg: 17, wait: [1.30, 2.00], aim: 0.72, spd: 2.35, steps: 9, score: 260, col: [255, 130, 120], dirs: 'orth' },
@@ -2933,12 +2950,17 @@ const ETYPES = {
   dama:   { fam: 's', hp: 190, r: 0.066, dmg: 21, wait: [1.05, 1.55], aim: 0.60, spd: 2.6,  steps: 9, score: 900, col: [255, 200, 90],  dirs: 'all' },
   tanque: { fam: 'f', hp: 150, r: 0.062, dmg: 14, wait: [1.5, 2.2],   aim: 0,    spd: 0.20, steps: 0, score: 620, col: [160, 190, 140] },
   fantasma:{fam: 'f', hp: 40,  r: 0.046, dmg: 12, wait: [0, 0],       aim: 0,    spd: 0.44, steps: 0, score: 340, col: [190, 210, 255] },
+  // fam 'k' = LUCHADOR (StickFight): camina hasta la distancia de un brazo y tira una tanda de
+  // tres. Es el único que pelea de cerca. Vida de gama media a propósito: si fuera de papel el
+  // jugador lo borraría antes de tener que aprenderle la tanda, que es TODO lo que aporta.
+  luchador:{fam: 'k', hp: 84,  r: 0.044, dmg: 16, wait: [0, 0],       aim: 0,    spd: 0.50, steps: 0, score: 430, col: [238, 234, 222] },
   // fam 'm' = MOTO (regla TRON): anda derecho, dobla en ángulo recto y deja estela que quema.
   moto:   { fam: 'm', hp: 78,  r: 0.036, dmg: 15, wait: [0, 0],       aim: 0,    spd: 0.80, steps: 0, score: 480, col: [255, 150, 60] },
 };
 // Nombre para mostrar: el aviso de inicio de hora dice QUÉ va a aparecer.
 const ENAME = { peon: 'PAWNS', torre: 'ROOKS', alfil: 'BISHOPS', caballo: 'KNIGHTS',
-                dama: 'QUEENS', tanque: 'TANKS', fantasma: 'GHOSTS', moto: 'RIDERS', relojero: 'THE WATCHMAKER' };
+                dama: 'QUEENS', tanque: 'TANKS', fantasma: 'GHOSTS', moto: 'RIDERS',
+                luchador: 'BRAWLERS', relojero: 'THE WATCHMAKER' };
 const ORTH = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const DIAG = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
 const LJMP = [[1, 2], [2, 1], [2, -1], [1, -2], [-1, -2], [-2, -1], [-2, 1], [-1, 2]];
@@ -2974,7 +2996,11 @@ function spawnEnemy(kind, x, y) {
     st: 'wait', t: rnd(0, 0.5), dur: rnd(T.wait[0], T.wait[1]) * scaleCd(),
     dx: 0, dy: 0, sxp: 0, syp: 0, tx: 0, ty: 0,      // carril de embestida (start/target)
     kx: 0, ky: 0,                                     // knockback
-    hurtT: 0, chip: 0, ang: 0, bob: rnd(0, TAU), fireCd: rnd(0.5, 1.5),
+    hurtT: 0, chip: 0, pawnBite: 0,
+    // Estado del LUCHADOR. Va en el literal compartido y no agregado despues sólo para los
+    // luchadores: si la mitad de las piezas tuviera una forma de objeto distinta, el motor
+    // dejaría de poder tratarlas todas igual y cada acceso pasaría a ser una búsqueda.
+    fs: 'walk', ft: 0, combo: 0, hitDone: false, gait: 0, ang: 0, bob: rnd(0, TAU), fireCd: rnd(0.5, 1.5),
     knock(ax, ay) { this.kx += ax; this.ky += ay; },
   };
   enemies.push(e);
@@ -3025,6 +3051,31 @@ function killEnemy(e) {
 // ── Elegir un carril de embestida ──
 // Se sesga hacia el jugador pero NUNCA se garantiza: una pieza que siempre apunta justo
 // donde estás no se puede leer, sólo esquivar de casualidad. Sesgo, no puntería.
+// ── EL CARRIL DEL PEÓN ──
+// Avanza derecho, come en diagonal. Devuelve UNA dirección de grilla, ya decidida.
+// `adelante` es hacia el centro del plato, que es donde el peón corona; se reduce al eje
+// dominante para que sea una dirección de ajedrez y no un rumbo cualquiera.
+function pawnLane(e, c, r, pc, pr) {
+  const a = Math.atan2(-e.y, -e.x);
+  const f = Math.abs(Math.cos(a)) > Math.abs(Math.sin(a))
+    ? [Math.sign(Math.cos(a)) || 1, 0]
+    : [0, Math.sign(Math.sin(a)) || 1];
+  // Las dos diagonales de captura salen de `adelante` mismo: con f=(1,0) son (1,1) y (1,-1);
+  // con f=(0,-1) son (1,-1) y (-1,-1). La perpendicular de un eje es su par invertido.
+  const p = [f[1], f[0]];
+  for (const sg of [1, -1]) {
+    const d = [f[0] + p[0] * sg, f[1] + p[1] * sg];
+    // CAPTURA DE AJEDREZ: una casilla, en diagonal, y sólo si el jugador está PARADO ahí.
+    // Eso es lo que hace que "estar cerca" no alcance — hay que estar cerca Y del lado malo.
+    if (c + d[0] === pc && r + d[1] === pr && cellOk(c + d[0], r + d[1])) {
+      e.pawnBite = 1;                                // lo usa la telegrafía para pintarlo distinto
+      return d;
+    }
+  }
+  e.pawnBite = 0;
+  return f;
+}
+
 function pickLane(e) {
   const c = colOf(e.x), r = rowOf(e.y);
   const pc = colOf(P.x), pr = rowOf(P.y);
@@ -3033,11 +3084,7 @@ function pickLane(e) {
   else if (e.T.dirs === 'diag') dirs = DIAG;
   else if (e.T.dirs === 'all') dirs = ORTH.concat(DIAG);
   else if (e.T.dirs === 'L') dirs = LJMP;
-  else {                                             // peón: siempre hacia el centro
-    const a = Math.atan2(-e.y, -e.x);
-    const d = [Math.abs(Math.cos(a)) > Math.abs(Math.sin(a)) ? [Math.sign(Math.cos(a)), 0] : [0, Math.sign(Math.sin(a))]];
-    dirs = d;
-  }
+  else dirs = [pawnLane(e, c, r, pc, pr)];           // peón: avanza derecho, come en diagonal
   // puntaje: alineación con el jugador + algo de ruido
   let best = null, bestS = -1e9;
   for (const d of dirs) {
@@ -3091,6 +3138,7 @@ function updateEnemies(dt) {
     if (e.T.fam === 's') updateSlider(e, dt);
     else if (e.T.fam === 'b') updateBoss(e, dt);
     else if (e.T.fam === 'm') updateCycle(e, dt);
+    else if (e.T.fam === 'k') updateFighter(e, dt);
     else if (e.kind === 'tanque') updateTank(e, dt);
     else updateGhost(e, dt);
 
@@ -3206,7 +3254,7 @@ function promotePawn(e) {
   }
   q.hp = q.maxHp;
   const big = kind === 'dama';
-  toast('PROMOTED · ' + (ENAME[kind] || kind).replace(/S$/, ''), big ? '#ff6b81' : '#ff9f43');
+  toast('PROMOTED \u2014 ' + (ENAME[kind] || kind).replace(/S$/, ''), big ? '#ff6b81' : '#ff9f43');
   addRing(e.x, e.y, 0.02, big ? 0.5 : 0.34, big ? 0.6 : 0.45, q.T.col, big ? 0.014 : 0.010);
   screenFlash(big ? 0.22 : 0.12, q.T.col);
   addTrauma(big ? 0.3 : 0.18);
@@ -3243,6 +3291,78 @@ function updateTank(e, dt) {
 // Fantasma: objetivo estilo Pinky (4 celdas ADELANTE del jugador, no encima) → te corta
 // el paso en vez de seguirte la cola. Atraviesa el hilo: no lo podés frenar, lo tenés que
 // encerrar. Durante el frenesí huye y se come.
+// ════════════════ EL LUCHADOR (StickFight) ════════════════
+// Camina, planta los pies y tira TRES: jab, jab, envion. Mientras pega no se mueve.
+// `d` es la duracion del golpe; `a0`/`a1` la fraccion de esa duracion en que el puno esta AFUERA
+// (antes de `a0` se esta recogiendo, y eso es el telegrafo); `reach` el alcance en unidades de
+// mundo, `dmg` el multiplicador sobre el dano base y `kn` cuanto te lleva puesto.
+// El envion llega casi al doble que un jab: retroceder un poquito no te salva, y eso es lo que
+// obliga a salir de verdad en vez de bailar en el lugar.
+const GOLPES = [
+  { d: 0.30, a0: 0.55, a1: 0.76, reach: 0.115, dmg: 0.50, kn: 0.30, big: 0 },
+  { d: 0.30, a0: 0.50, a1: 0.72, reach: 0.115, dmg: 0.50, kn: 0.30, big: 0 },
+  { d: 0.66, a0: 0.60, a1: 0.82, reach: 0.200, dmg: 1.30, kn: 1.70, big: 1 },
+];
+function updateFighter(e, dt) {
+  const slowK = e.slow ? 0.6 : 1; e.slow = 0;
+  const dx = P.x - e.x, dy = P.y - e.y, d = hyp(dx, dy);
+  // En frenesi deja de amenazar, igual que las piezas dejan de telegrafiar: la tanda se corta y
+  // solo camina. Que durante el frenesi no pase NADA amenazante es la regla de la casa.
+  if (frenzy > 0 && e.fs !== 'walk') { e.fs = 'walk'; e.ft = 0; e.combo = 0; e.hitDone = false; }
+
+  if (e.fs === 'walk') {
+    e.ang = arcLerp(e.ang, Math.atan2(dy, dx), Math.min(1, dt * 3.4));
+    const sp = e.T.spd * (RULE.enemySpd || 1) * slowK * (frenzy > 0 ? 0.8 : 1);
+    e.x += Math.cos(e.ang) * sp * dt; e.y += Math.sin(e.ang) * sp * dt;
+    // El ciclo de marcha avanza con lo que AVANZA, no con el reloj: si lo frenan, cojea más
+    // lento en vez de patinar en el lugar.
+    e.gait += sp * dt * 11;
+    // Se planta sólo si YA está encarado. Si no, sigue caminando — que es el estado donde gira
+    // rápido — hasta estarlo. Durante la preparación gira LENTO a propósito, para que se lo pueda
+    // juquear, así que plantarse de espaldas era tirar la tanda entera al aire. Pasa de verdad:
+    // un bucle o un pulso lo empujan y queda mirando al vacío.
+    if (frenzy <= 0 && d < CFG.fighter.enter && Math.abs(wrapPi(Math.atan2(dy, dx) - e.ang)) < 0.75) {
+      e.fs = 'wind'; e.ft = 0; e.combo = 0; e.hitDone = false;
+    }
+  } else if (e.fs === 'wind') {
+    // Todavía gira, pero LENTO. Se lo puede juquear por un costado y hacerle errar el primero;
+    // lo que no se puede es quedarse quieto adelante.
+    e.ang = arcLerp(e.ang, Math.atan2(dy, dx), Math.min(1, dt * 1.1));
+    e.ft += dt;
+    if (e.ft >= CFG.fighter.wind) { e.fs = 'hit'; e.ft = 0; }
+  } else if (e.fs === 'hit') {
+    const g = GOLPES[e.combo] || GOLPES[0];
+    const antes = e.ft; e.ft += dt;
+    const u = e.ft / g.d;
+    if (!e.hitDone && antes / g.d < g.a0 && u >= g.a0) sfx.swing(g.big);
+    if (!e.hitDone && u >= g.a0 && u <= g.a1) {
+      const fx2 = e.x + Math.cos(e.ang) * g.reach, fy2 = e.y + Math.sin(e.ang) * g.reach;
+      // EL BRAZO ES UN SEGMENTO, no un puño flotante: barre desde el cuerpo hasta la punta y se
+      // come todo lo que esté en el camino, que es lo que se ve en el dibujo. Con un disco en la
+      // punta el golpe era un ANILLO (el envión pegaba entre 0.140 y 0.260 y NO pegaba adentro),
+      // así que abrazar al muñeco era la defensa perfecta contra su golpe más grande.
+      const rr = (P.r + CFG.fighter.fistR) ** 2;
+      if (P.alive && segDist2(P.x, P.y, e.x, e.y, fx2, fy2) < rr) {
+        e.hitDone = true;
+        hurtPlayer(e.T.dmg * scaleDmg() * g.dmg, fx2, fy2);
+        P.vx += Math.cos(e.ang) * g.kn; P.vy += Math.sin(e.ang) * g.kn;
+        spawnSparks(fx2, fy2, g.big ? 12 : 7, [255, 225, 195], g.big ? 1.1 : 0.7);
+        addTrauma(g.big ? 0.30 : 0.12);
+        if (g.big) { addPunch(0.022); addHitstop(CFG.juice.hitstop * 0.5); }
+      }
+    }
+    if (u >= 1) {
+      e.ft = 0; e.hitDone = false; e.combo++;
+      if (e.combo >= GOLPES.length) { e.fs = 'rest'; e.combo = 0; }
+    }
+  } else {
+    // El descanso escala con la cadencia de la hora, como el de las piezas: a la hora 11 se
+    // recupera más rápido. Es la única perilla del luchador que sube con la dificultad.
+    e.ft += dt;
+    if (e.ft >= CFG.fighter.rest * scaleCd()) { e.fs = 'walk'; e.ft = 0; }
+  }
+}
+
 function updateGhost(e, dt) {
   let tx, ty;
   if (frenzy > 0) { tx = P.x; ty = P.y; }             // en frenesí simplemente viene a tu mano
@@ -3320,17 +3440,26 @@ function piecePath(kind, x, y, r) {
 // clip. Efecto lateral bienvenido: las piezas quedan siempre por encima de los carriles.
 function drawTelegraphs() {
   let hay = false;
-  for (const e of enemies) if (!e.dead && e.st === 'aim') { hay = true; break; }
+  for (const e of enemies) if (!e.dead && (e.st === 'aim' || e.T.fam === 'k')) { hay = true; break; }
   if (!hay) return;
   ctx.save();
   ctx.beginPath(); ctx.arc(CX, CY, sr(0.995), 0, TAU); ctx.clip();
   for (const e of enemies) {
-    if (e.dead || e.st !== 'aim') continue;
+    if (e.dead) continue;
+    // El luchador no tiene carril: tiene ALCANCE. Se dibuja el arco al que va a llegar el golpe
+    // que viene, llenandose mientras el brazo se recoge. Mismo idioma que el carril de una pieza:
+    // la forma dice donde, el llenado dice cuando.
+    if (e.T.fam === 'k') { drawFighterTell(e); continue; }
+    if (e.st !== 'aim') continue;
     const hop = e.hop || 0;
     const x = sx(e.x), y = sy(e.y) - sr(hop * 0.10), r = sr(e.r) * 1.14;
     const fright = frenzy > 0;
     const blink = fright && frenzy < 1.6 && Math.floor(perfT * 8) % 2 === 0;
-    const col = fright ? (blink ? [240, 245, 255] : [70, 120, 235]) : e.T.col;
+    // PEÓN QUE COME: su carril va en carmesí. Sin esto la regla nueva existiría sólo en el
+    // código — el jugador vería un peón moverse raro y no sabría que fue por estar parado donde
+    // estaba. En frenesí manda el azul de siempre, que ahí no hay amenaza que marcar.
+    const col = fright ? (blink ? [240, 245, 255] : [70, 120, 235])
+                       : e.pawnBite ? [255, 107, 129] : e.T.col;
     const u = clamp(e.t / Math.max(e.dur, 1e-4), 0, 1);
     // Carril más angosto y más afinado: la dirección se lee igual con menos tinta encima del
     // tablero. Cada pieza del dibujo se bajó por separado (ancho, afinado, contorno, filo,
@@ -3445,10 +3574,11 @@ function drawEnemy(e) {
   // encima. Para las piezas horneadas viaja DENTRO del sprite; acá quedan sólo las que no se
   // pueden hornear: el caballo (su sombra depende del salto) y los dos vehículos, que rotan.
   if (e.kind === 'caballo') groundShadow(x, y, r, 1 - hop * 0.55);
-  else if (e.kind === 'moto' || e.kind === 'tanque') groundShadow(x, y, r, 1);
+  else if (e.kind === 'moto' || e.kind === 'tanque' || e.kind === 'luchador') groundShadow(x, y, r, 1);
 
   if (e.kind === 'moto') { drawCycle(e, x, y, r, flash); }
   else if (e.kind === 'tanque') { drawTank(e, x, y, r, flash); }
+  else if (e.kind === 'luchador') { drawFighter(e, x, y, r, flash, col); }
   else {
     const wob = e.kind === 'fantasma' ? Math.sin(e.bob) * r * 0.07 : 0;
     // El sprite se RECUERDA en la pieza. `pieceSprite` arma una clave por concatenación y busca
@@ -3476,6 +3606,131 @@ function drawEnemy(e) {
     ctx.fillStyle = 'hsl(' + Math.round(110 * f) + ',85%,56%)';
     ctx.fillRect(x - w / 2, by2, w * f, h);
   }
+}
+
+// ── ARCO DE ALCANCE DEL LUCHADOR ──
+// No es un carril: es hasta dónde llega el golpe que viene. Se llena mientras el brazo se recoge
+// y desaparece en el instante en que el puño sale — para cuando se ve el puño, ya no hay nada que
+// decidir.
+function drawFighterTell(e) {
+  if (e.fs !== 'wind' && e.fs !== 'hit') return;
+  const g = e.fs === 'wind' ? GOLPES[0] : (GOLPES[e.combo] || GOLPES[0]);
+  const u = e.fs === 'wind' ? clamp(e.ft / CFG.fighter.wind, 0, 1)
+                            : clamp(e.ft / (g.d * g.a0), 0, 1);
+  if (u >= 1) return;
+  const x = sx(e.x), y = sy(e.y), rr = sr(g.reach + CFG.fighter.fistR);
+  const w = 0.44 + 0.22 * g.big;
+  ctx.strokeStyle = 'rgba(255,107,129,' + (0.10 + 0.34 * u).toFixed(3) + ')';
+  ctx.lineWidth = Math.max(1.2, sr(0.006 + 0.008 * g.big));
+  ctx.beginPath(); ctx.arc(x, y, rr, e.ang - w, e.ang + w); ctx.stroke();
+  // el filo que avanza: dice CUÁNTO falta sin necesitar una barra aparte
+  ctx.strokeStyle = 'rgba(255,150,165,' + (0.30 + 0.45 * u).toFixed(3) + ')';
+  ctx.beginPath(); ctx.arc(x, y, rr, e.ang - w, e.ang - w + 2 * w * u); ctx.stroke();
+}
+
+// ── EL LUCHADOR ──
+// Figura de palo, de pie, en tinta CLARA sobre el fieltro: el look de StickFight dado vuelta
+// (allá era tinta sobre papel). La marcha es procedural: el pie describe una elipse - avanza
+// levantado, vuelve apoyado - y la rodilla sale de doblar hacia adelante según cuánto se acortó
+// la pierna. Es lo mismo que hacía StickFight.py con sus fases de apoyo y vuelo, reducido a lo
+// que se distingue a este tamaño.
+// El brazo que pega apunta al MUNDO, no al muñeco: se dibuja en la posición de pantalla del puño
+// real, así que lo que ves es exactamente lo que golpea.
+function drawFighter(e, x, y, r0, flash, col) {
+  // Una figura de palo pone MUCHA menos tinta que una silueta llena del mismo radio, así que al
+  // mismo tamaño que una pieza se lee más chica de lo que mide. Se dibuja a 1.3 veces. El radio
+  // de COLISIÓN no se toca: lo que había que corregir es cuánto ocupa en pantalla.
+  const r = r0 * 1.30;
+  const ph = e.gait;
+  const face = Math.cos(e.ang) >= 0 ? 1 : -1;
+  const pega = e.fs === 'hit';
+  const g = pega ? (GOLPES[e.combo] || GOLPES[0]) : null;
+  const u = g ? clamp(e.ft / g.d, 0, 1) : 0;
+  // Extensión del brazo que pega: negativa mientras se recoge, 1 cuando el puño está afuera, y
+  // de vuelta a 0 al recuperarse. Un solo número describe todo el golpe.
+  let ext = 0;
+  if (g) {
+    if (u < g.a0) ext = -0.42 * (u / g.a0);
+    else if (u < g.a1) ext = lerp(-0.42, 1, (u - g.a0) / Math.max(0.01, g.a1 - g.a0));
+    else ext = 1 - (u - g.a1) / Math.max(0.01, 1 - g.a1);
+  }
+  // Se agacha para el envión y se planta durante la preparación: el cuerpo también telegrafía.
+  const carga = e.fs === 'wind' ? clamp(e.ft / CFG.fighter.wind, 0, 1) : 0;
+  const bob = (e.fs === 'walk' ? -Math.abs(Math.sin(ph)) * 0.07 : 0) + carga * 0.07;
+  // Proporciones: tronco 0.74·r, piernas 0.74·r, cabeza 0.24·r de radio. Una figura de palo se
+  // lee por sus LARGOS — con la cabeza compitiendo con el tronco (como estaba) todo el medio
+  // queda hecho un nudo y sólo se entiende la pose que estira el brazo.
+  const hipY = y + r * (0.12 + bob), shoY = y - r * (0.62 - bob), pie = y + r * 0.86;
+  const hx = x + face * r * 0.06 * (pega ? 1 - ext * 0.5 : 1);
+
+  ctx.save();
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+  // Una sola ruta con todo el esqueleto, trazada dos veces: primero gruesa y oscura (la despega
+  // del fieltro) y después fina y clara. Dos strokes en vez de ocho.
+  const esqueleto = () => {
+    ctx.beginPath();
+    // torso
+    ctx.moveTo(hx, hipY); ctx.lineTo(x, shoY);
+    // piernas
+    for (let k = 0; k < 2; k++) {
+      const p = ph + k * PI;
+      const cam = e.fs === 'walk' ? 1 : 0.18;         // quieto: apenas separa los pies
+      // Un ciclo de marcha se lee por la SEPARACIÓN de los pies, no por el balanceo del cuerpo:
+      // con los pies juntos, camine lo que camine se ve flotando.
+      const fx2 = x + face * Math.cos(p) * r * 0.52 * cam;
+      const fy2 = pie - Math.max(0, Math.sin(p)) * r * 0.36 * cam;
+      // Rodilla: punto medio empujado HACIA ADELANTE. Cuanto más corta quedó la pierna respecto
+      // de su largo natural, más dobla — que es de dónde sale la sensación de peso.
+      const largo = hyp(fx2 - hx, fy2 - hipY) || 1;
+      const dobla = clamp(1 - largo / (r * 0.84), 0, 1);
+      const kx = (hx + fx2) / 2 + face * r * (0.10 + dobla * 0.26);
+      const ky = (hipY + fy2) / 2;
+      ctx.moveTo(hx, hipY); ctx.lineTo(kx, ky); ctx.lineTo(fx2, fy2);
+    }
+    // brazos
+    for (let k = 0; k < 2; k++) {
+      const pega2 = pega && k === 0;
+      let px2, py2;
+      if (pega2) {                                    // el que golpea apunta al mundo
+        px2 = sx(e.x + Math.cos(e.ang) * g.reach * ext);
+        py2 = sy(e.y + Math.sin(e.ang) * g.reach * ext) - r * 0.18;
+      } else {
+        const p = ph + PI * (k + 1) + (e.fs === 'walk' ? 0 : PI * 0.5);
+        const cam = e.fs === 'walk' ? 1 : 0.35;
+        px2 = x + face * Math.cos(p) * r * 0.30 * cam + face * r * 0.06;
+        py2 = shoY + r * (0.42 - carga * 0.10);
+      }
+      const ex2 = (x + px2) / 2 - face * r * (pega2 ? 0.04 : 0.12);
+      const ey2 = (shoY + py2) / 2 + r * 0.06;
+      ctx.moveTo(x, shoY); ctx.lineTo(ex2, ey2); ctx.lineTo(px2, py2);
+    }
+  };
+
+  const tinta = flash ? BLANCO : col;
+  ctx.strokeStyle = 'rgba(6,10,20,0.70)'; ctx.lineWidth = Math.max(2, r * 0.30);
+  esqueleto(); ctx.stroke();
+  // Trazo fino: dos miembros que se cruzan tienen que seguir leyéndose como dos, no fundirse.
+  ctx.strokeStyle = rgba(tinta, 0.95); ctx.lineWidth = Math.max(1.2, r * 0.155);
+  esqueleto(); ctx.stroke();
+
+  // Cabeza: relleno oscuro con anillo claro. A este tamaño un círculo lleno se convertía en un
+  // punto y el muñeco perdía la cara; el anillo lo mantiene legible.
+  const cy2 = shoY - r * 0.28;
+  ctx.fillStyle = 'rgba(9,14,24,0.92)';
+  ctx.beginPath(); ctx.arc(x + face * r * 0.05, cy2, r * 0.24, 0, TAU); ctx.fill();
+  ctx.strokeStyle = rgba(tinta, 0.95); ctx.lineWidth = Math.max(1.2, r * 0.12);
+  ctx.beginPath(); ctx.arc(x + face * r * 0.05, cy2, r * 0.24, 0, TAU); ctx.stroke();
+
+  // El puño, cuando está afuera: un nudo brillante. Es lo que hay que estar mirando.
+  if (pega && ext > 0.45) {
+    const fx3 = sx(e.x + Math.cos(e.ang) * g.reach * ext);
+    const fy3 = sy(e.y + Math.sin(e.ang) * g.reach * ext) - r * 0.18;
+    bloomPx(fx3, fy3, r * (0.9 + g.big * 0.7), [255, 190, 150], 0.5 * ext);
+    ctx.fillStyle = 'rgba(255,240,225,0.95)';
+    ctx.beginPath(); ctx.arc(fx3, fy3, r * (0.18 + 0.08 * g.big), 0, TAU); ctx.fill();
+  }
+  ctx.restore();
 }
 
 // Cuña apuntando a donde va. Se lee la DIRECCIÓN de un vistazo, que es lo único que importa
@@ -3599,8 +3854,8 @@ const RULES = [
 // Antes se apilaban toda la run y para la hora 7 tenías péndulos + minas + espejo +
 // resonancia + pirotecnia simultáneos: imposible de leer, y Franco lo dijo tal cual
 // ("en cierto punto no entiendo nada"). El reparto de responsabilidades quedó así:
-//   · CARTAS  = tu build, se acumulan.
-//   · REGLAS  = el clima, cambia cada hora.
+//   - CARTAS  = tu build, se acumulan.
+//   - REGLAS  = el clima, cambia cada hora.
 let hourRule = null;                                  // la regla vigente
 let ruleLog = [];                                     // historial, sólo para el resumen final
 // RACHA DE CORAJE: cada hora seguida en que elegís una regla picante sube un multiplicador
@@ -3678,7 +3933,7 @@ const HAND_MAX = 5;
 //
 // CALIBRACIÓN (medida, no a ojo). Un bot INMORTAL jugando las 12 horas junta ~2.070.000, con
 // este acumulado al cierre de cada hora:
-//     h1 6.5k · h2 28k · h3 69k · h4 126k · h5 225k · h6 317k · h8 493k · h10 735k · h12 975k
+//     h1 6.5k - h2 28k - h3 69k - h4 126k - h5 225k - h6 317k - h8 493k - h10 735k - h12 975k
 //     (+ el jefe, que solo casi duplica el total)
 // Ese es el TECHO: nadie real sostiene el combo sin comer daño, porque recibir golpes lo corta.
 // Los umbrales apuntan a ~40% de esa curva, así que un buen jugador completa la mano cerca de
@@ -3711,12 +3966,12 @@ function drawCardChoices(n) {
 const HAND_BONUS = [
   { name: '—',               desc: '' },
   { name: 'PAIR',            desc: 'Score +12%' },
-  { name: 'TWO PAIR',        desc: 'Score +20% · Damage +10%' },
+  { name: 'TWO PAIR',        desc: 'Score +20%, Damage +10%' },
   { name: 'THREE OF A KIND', desc: 'Damage +25%' },
-  { name: 'STRAIGHT',        desc: 'Speed +18% · Thread +25%' },
+  { name: 'STRAIGHT',        desc: 'Speed +18%, Thread +25%' },
   { name: 'FLUSH',           desc: 'The whole suit overflows' },
-  { name: 'FULL HOUSE',      desc: 'Damage +35% · Score +35%' },
-  { name: 'FOUR OF A KIND',  desc: 'Damage +70% · +60 health' },
+  { name: 'FULL HOUSE',      desc: 'Damage +35%, Score +35%' },
+  { name: 'FOUR OF A KIND',  desc: 'Damage +70%, +60 health' },
   { name: 'STRAIGHT FLUSH',  desc: 'Everything doubled' },
 ];
 function evalHand(cards) {
@@ -3744,8 +3999,8 @@ function evalHand(cards) {
 }
 // Qué te da la mano actual, en números. `HAND_BONUS[i].desc` alcanza para todas menos el
 // COLOR, cuyo efecto depende del palo — y "The whole suit overflows" no le dice nada a nadie.
-const FLUSH_DESC = ['Thread +55% · Bounces +40%', '+70 health · +40 shield',
-                    'Score +80%', 'Magnet +0.3 · Orbs +120% · Charge x2'];
+const FLUSH_DESC = ['Thread +55%, Bounces +40%', '+70 health, +40 shield',
+                    'Score +80%', 'Magnet +0.3, Orbs +120%, Charge x2'];
 function handDesc() {
   const i = run.handIdx;
   if (i === 5) { const s = flushSuit(); return s >= 0 ? FLUSH_DESC[s] : HAND_BONUS[5].desc; }
@@ -3905,7 +4160,7 @@ function frenzyBurst() {
 // La estela vive en el enemigo (`e.trail`) y expira sola: el plato nunca se llena. Matar la
 // moto apaga su rastro rápido — ese es el premio de resolverla en vez de esquivarla.
 function updateCycle(e, dt) {
-  // `dir` = rumbo OBJETIVO (siempre múltiplo recto del anterior) · `ang` = rumbo REAL, que lo
+  // `dir` = rumbo OBJETIVO (siempre múltiplo recto del anterior) - `ang` = rumbo REAL, que lo
   // alcanza girando. Separarlos es todo el cambio: el circuito se sigue leyendo — los tramos
   // rectos siguen rectos y los giros siguen siendo de 90° — pero ahora tienen radio, así que la
   // moto CURVA como el fantasma en vez de teletransportar su rumbo entre dos frames.
@@ -4007,7 +4262,12 @@ function spawnBarrel() {
   barrels.push({
     x: Math.cos(a) * 1.18, y: Math.sin(a) * 1.18,
     vx: Math.cos(ta) * sp, vy: Math.sin(ta) * sp,
-    r: CFG.barrel.r, ang: rnd(0, TAU), hitCd: 0, spin: sp / CFG.barrel.r * 0.55,
+    r: CFG.barrel.r, hitCd: 0,
+    // `roll` es la fase de la SUPERFICIE, no un angulo en pantalla: cuanto giro el cilindro
+    // sobre su propio eje. De ahi salen las duelas que barren. Sale de la velocidad dividida por
+    // el radio, que es la relacion real entre avanzar y rodar; el 0.55 es licencia para que a
+    // ojo se lea como rodar y no como una licuadora.
+    roll: rnd(0, TAU), rollV: sp / CFG.barrel.r * 0.55,
   });
   sfx.wall(0.5);
 }
@@ -4015,7 +4275,7 @@ function updateBarrels(dt) {
   for (let i = barrels.length - 1; i >= 0; i--) {
     const b = barrels[i];
     b.x += b.vx * dt; b.y += b.vy * dt;
-    b.ang += b.spin * dt;                              // rueda: el giro sale de su propia velocidad
+    b.roll += b.rollV * dt;                            // rueda: la superficie avanza, la silueta no
     if (hyp(b.x, b.y) > 1.34) { barrels.splice(i, 1); continue; }   // salió del plato
     b.hitCd = Math.max(0, b.hitCd - dt);
     if (b.hitCd > 0) continue;
@@ -4043,38 +4303,92 @@ function updateBarrels(dt) {
     }
   }
 }
-// Un barril que rueda SÍ tiene que girar su propio brillo — a diferencia de la moto o la aguja,
-// acá el objeto está girando de verdad, así que el sprite horneado se dibuja rotado y listo.
-function barrelSprite(r) {
-  return bakeSprite('b|' + Math.round(r), Math.ceil(r * 1.2), (cx, cy) => {
-    const g = ctx.createRadialGradient(cx + LIGHT.x * r * 0.8, cy + LIGHT.y * r * 0.8, r * 0.1, cx, cy, r);
-    g.addColorStop(0, '#d7a469'); g.addColorStop(0.55, '#a66f3c'); g.addColorStop(1, '#4e2f18');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
-    // duelas y aros: es lo que lo hace leer como BARRIL y no como una piedra
-    ctx.strokeStyle = 'rgba(52,30,14,0.85)'; ctx.lineWidth = Math.max(1, r * 0.13);
-    for (const f of [-0.42, 0.42]) {
-      ctx.beginPath();
-      ctx.moveTo(cx - r * 0.93, cy + r * f); ctx.lineTo(cx + r * 0.93, cy + r * f);
-      ctx.stroke();
-    }
-    ctx.strokeStyle = 'rgba(255,214,150,0.30)'; ctx.lineWidth = Math.max(1, r * 0.07);
-    ctx.beginPath(); ctx.moveTo(cx - r * 0.93, cy - r * 0.50); ctx.lineTo(cx + r * 0.93, cy - r * 0.50); ctx.stroke();
-    ctx.strokeStyle = 'rgba(30,18,8,0.9)'; ctx.lineWidth = Math.max(1, r * 0.11);
-    ctx.beginPath(); ctx.arc(cx, cy, r * 0.94, 0, TAU); ctx.stroke();
-  });
+// ── DIBUJO DEL BARRIL ──
+// Visto desde arriba, un barril que rueda tiene el EJE cruzado al viaje: es mas largo a lo ancho
+// que a lo largo del movimiento, y esa proporcion sola ya dice hacia donde va. No rota en el
+// plano de la pantalla (rotar en el plano es una moneda bailando, no un barril rodando): lo que
+// se mueve son las DUELAS, que barren de un borde al otro mientras los aros de metal se quedan
+// quietos. Duelas que barren + aros quietos = rueda.
+// Se dibuja directo, sin hornear: la silueta es fija pero las duelas cambian en cada frame, asi
+// que un bake se regeneraria entero cada vez. Son tres barriles como mucho y solo con la regla
+// puesta.
+function drawBarrel(b) {
+  const x = sx(b.x), y = sy(b.y), r = sr(b.r);
+  const a = Math.atan2(b.vy, b.vx);                  // +X local = hacia donde va
+  const L = r * 1.30;                                // medio LARGO, sobre el eje (local Y)
+  const R = r * 0.82;                                // medio ANCHO, en el sentido del viaje
+  const pan = R * 0.30;                              // la panza del medio
+
+  groundShadow(x, y, r * 1.15, 0.95);
+  bloomPx(x, y, r * 2.0, [205, 150, 90], 0.18);
+
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(a);
+
+  // LUZ CONTRA-ROTADA. El barril no gira en el plano, asi que su brillo tiene que quedarse donde
+  // esta la luz de la escena en vez de viajar con el. Misma correccion que la moto, la aguja y la
+  // torreta del tanque.
+  const cs = Math.cos(-a), sn = Math.sin(-a);
+  const lx = LIGHT.x * cs - LIGHT.y * sn;
+  // Un cilindro se sombrea A LO ANCHO y es parejo a lo largo del eje, asi que el gradiente corre
+  // sobre X y la componente Y de la luz no entra: no habria donde ponerla.
+  const u = clamp((lx + 1) / 2, 0.12, 0.88);
+  const g = ctx.createLinearGradient(-R - pan, 0, R + pan, 0);
+  g.addColorStop(0, '#472a13');
+  g.addColorStop(Math.max(0.02, u - 0.30), '#94612f');
+  g.addColorStop(u, '#dcab6c');
+  g.addColorStop(Math.min(0.98, u + 0.32), '#8a5a2c');
+  g.addColorStop(1, '#40250f');
+
+  // SILUETA: lados que bombean hacia afuera (la panza va en el medio del LARGO) y tapas planas.
+  const cuerpo = () => {
+    ctx.beginPath();
+    ctx.moveTo(-R, -L);
+    ctx.quadraticCurveTo(-R - pan * 2, 0, -R, L);
+    ctx.lineTo(R, L);
+    ctx.quadraticCurveTo(R + pan * 2, 0, R, -L);
+    ctx.closePath();
+  };
+  ctx.fillStyle = g; cuerpo(); ctx.fill();
+
+  ctx.save();
+  cuerpo(); ctx.clip();
+  // DUELAS: tablas paralelas al eje, pegadas a la superficie. Barren de borde a borde mientras el
+  // barril rueda, y se apagan cerca del filo porque ahi la tabla se ve de canto.
+  ctx.lineWidth = Math.max(1, r * 0.055);
+  for (let k = 0; k < 6; k++) {
+    const th = b.roll + k * TAU / 6;
+    const cth = Math.cos(th);
+    if (cth <= 0.02) continue;                       // del otro lado del cilindro
+    const dx = Math.sin(th) * (R + pan * 0.55);
+    ctx.strokeStyle = 'rgba(58,33,14,' + (0.30 * cth).toFixed(3) + ')';
+    ctx.beginPath(); ctx.moveTo(dx, -L); ctx.lineTo(dx, L); ctx.stroke();
+  }
+  // AROS de metal: van en planos perpendiculares al eje, asi que NO se mueven al rodar. Son la
+  // referencia quieta contra la que se lee el barrido de las duelas.
+  for (const f of [-0.56, 0.56]) {
+    const wAqui = R + pan * 2 * (1 - f * f);
+    ctx.strokeStyle = 'rgba(38,22,9,0.80)'; ctx.lineWidth = Math.max(1.4, r * 0.13);
+    ctx.beginPath(); ctx.moveTo(-wAqui, L * f); ctx.lineTo(wAqui, L * f); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,214,150,0.22)'; ctx.lineWidth = Math.max(1, r * 0.05);
+    ctx.beginPath(); ctx.moveTo(-wAqui, L * f - r * 0.07); ctx.lineTo(wAqui, L * f - r * 0.07); ctx.stroke();
+  }
+  ctx.restore();
+
+  // TAPAS: los dos extremos del eje, apenas mas claros. Sin esto la silueta se lee como una
+  // pastilla y no como un cilindro con dos puntas.
+  ctx.strokeStyle = 'rgba(255,220,165,0.30)'; ctx.lineWidth = Math.max(1.2, r * 0.09);
+  for (const f of [-1, 1]) {
+    ctx.beginPath(); ctx.moveTo(-R, L * f); ctx.lineTo(R, L * f); ctx.stroke();
+  }
+  // contorno
+  ctx.strokeStyle = 'rgba(26,15,6,0.85)'; ctx.lineWidth = Math.max(1.2, r * 0.10);
+  cuerpo(); ctx.stroke();
+
+  ctx.restore();
 }
 function drawBarrels() {
-  if (!barrels.length) return;
-  for (const b of barrels) {
-    const x = sx(b.x), y = sy(b.y), r = sr(b.r);
-    groundShadow(x, y, r, 0.9);
-    bloomPx(x, y, r * 2.2, [210, 150, 90], 0.22);
-    ctx.save();
-    ctx.translate(x, y); ctx.rotate(b.ang);
-    blit(barrelSprite(r), 0, 0);
-    ctx.restore();
-  }
+  for (const b of barrels) drawBarrel(b);
 }
 
 // ════════════════ PÉNDULOS (regla) ════════════════
@@ -4365,7 +4679,7 @@ function drawFlares() {
 // ════════════════ ESPEJO (regla): reflejo con hilo propio ════════════════
 // Truco: el reflejo es la NEGACIÓN de tu posición. En vez de mantener un segundo hilo,
 // se testea el orbe con las coordenadas negadas contra el hilo real. Como la negación es
-// una isometría y la reflexión v−2(v·n)n es invariante a n→−n, el resultado es exacto.
+// una isometría y la reflexión v−2(v-n)n es invariante a n→−n, el resultado es exacto.
 function mirrorDeflect(o, px, py, dt) {
   if (!RULE.mirror) return;
   // OJO con `chargeCd`: si no viaja al fantasma, adentro `undefined <= 0` da false y el
@@ -4401,7 +4715,7 @@ function drawMirror() {
 const ACH = {
   primera: 'First loop closed', ceñido: 'Tight loop x3', multi: 'Three caught in one loop',
   doble: 'Double kill in one loop', gigante: 'Enormous loop', tateti: 'Tic-tac-toe',
-  simon: 'Resonance solved', paleta: '25 deflections', devolver: '10 shells returned',
+  simon: 'Resonance solved', paleta: '25 deflections',
   mina: 'Mine popped from afar', dama: 'Queen taken down', combo10: 'Combo x10',
   cincuenta: '50 pieces felled', sesenta: '60,000 points', color: 'A FLUSH',
   relojero: 'The Watchmaker fell', invicto: 'A full hour untouched',
@@ -4411,7 +4725,7 @@ function unlockAch(id) {
   if (achUnlocked.has(id)) return;                    // idempotente: llamalo desde donde sea
   achUnlocked.add(id);
   LS.set('ach', [...achUnlocked]);
-  toast('ACHIEVEMENT · ' + (ACH[id] || id), '#8ee36b');
+  toast('ACHIEVEMENT \u2014 ' + (ACH[id] || id), '#8ee36b');
 }
 
 // ════════════════ EL RELOJ: la aguja marca la oleada ════════════════
@@ -4608,6 +4922,7 @@ const UNLOCK = [
   { h: 3,  k: 'alfil',    w: 6 },
   { h: 4,  k: 'fantasma', w: 5 },
   { h: 5,  k: 'caballo',  w: 5 },
+  { h: 5,  k: 'luchador', w: 5 },
   { h: 6,  k: 'tanque',   w: 4 },
   { h: 8,  k: 'dama',     w: 2 },
 ];
@@ -4634,7 +4949,15 @@ function pickEnemyKind() {
 // ════════════════ EL RELOJERO (jefe de la hora 12) ════════════════
 // Armadura: los orbes y los obuses le hacen poco. La ÚNICA forma eficiente de bajarlo es
 // cerrarle un bucle encima — el clímax obliga a usar el verbo central del juego.
-ETYPES.relojero = { fam: 'b', hp: 2600, r: 0.15, dmg: 26, wait: [0, 0], aim: 0, spd: 0, steps: 0, score: 12000, col: [255, 190, 110] };
+// VIDA DEL JEFE. Medida, no estimada: el escenario `bossdps` de qa2.py barre orbitas y dice
+// cuanto dano por segundo se le puede meter de verdad. A la hora 12, con mano armada y acertando
+// la ventana del nucleo abierto, el techo es ~273/s. Con 4400 eso era una pelea de 16 segundos —
+// no es que fuera facil, es que no llegaba a pasar. Con 12000 son 44s al techo y ~60s a un
+// jugador bueno pero no perfecto.
+// La ventana del nucleo abierto (x3) y que las agujas ya no bateen las orbes se QUEDAN: son lo
+// que hizo que la pelea se sintiera una pelea. Un jefe que se defiende menos tiene que aguantar
+// mas, y eso no es un parche sino la consecuencia.
+ETYPES.relojero = { fam: 'b', hp: 12000, r: 0.15, dmg: 26, wait: [0, 0], aim: 0, spd: 0, steps: 0, score: 12000, col: [255, 190, 110] };
 
 function spawnBoss() {
   const b = spawnEnemy('relojero', 0, 0);
@@ -4818,14 +5141,14 @@ function drawBoss(e) {
 // overlay aparte. Todas las transiciones son umbrales sobre `game.t`.
 let perfT = 0;
 const game = {
-  state: 'menu',            // menu · play · rule · card · slot · over · win
+  state: 'menu',            // menu - play - rule - card - slot - over - win
   // `banner` es el cartel de inicio de hora. ANTES era un estado ('intro') que congelaba la
   // simulación 2.1 s después de cada draft: elegías una carta y te quedabas mirando. Ahora es
   // sólo un overlay con su propio reloj — se juega desde el primer frame de la hora.
   t: 0, hour: 0, hourT: 0, banner: 0,
   spawnCd: 0, orbCd: 0, cycleCd: 0, barrelCd: 0,
   bossFight: false, paused: false,
-  mode: 'free',             // free · daily
+  mode: 'free',             // free - daily
   diffIdx: 1,
   ruleChoices: [], cardChoices: [], pendingCard: null, roster: [], sectorsOpen: false, sectorsShown: false,
   showHand: false,          // panel del stack abierto (congela la sim mientras dura)
@@ -4833,7 +5156,7 @@ const game = {
   menuSel: 0,
 };
 const run = {
-  score: 0, combo: 0, bestCombo: 0, kills: 0, loops: 0, deflects: 0, reflects: 0,
+  score: 0, combo: 0, bestCombo: 0, kills: 0, loops: 0, deflects: 0,
   tatetis: 0, simons: 0, promotions: 0, damage: 0, hourDamage: 0, handIdx: 0, brave: 0, bestBrave: 0, sectors: 0, frenzyHour: 0,
   cardsWon: 0, cardsUsed: 0,   // umbrales de puntaje cruzados / cartas ya cobradas
   resonance: 0,                // secuencias de RESONANCE resueltas (marca permanente en el hilo)
@@ -5016,7 +5339,7 @@ function chooseSlot(i) {
 }
 function announceHand() {
   if (run.handIdx > 0) {
-    toast('HAND · ' + HAND_BONUS[run.handIdx].name, '#ffd23f');
+    toast('HAND \u2014 ' + HAND_BONUS[run.handIdx].name, '#ffd23f');
     sfx.hand(run.handIdx);
     if (run.handIdx === 5) unlockAch('color');
   }
@@ -5124,7 +5447,7 @@ function drawHUD() {
     ry += S * 0.022;
     // Qué hace, en chiquito y debajo. El número solo no dice nada: "x3" no es información
     // hasta que sabés de qué.
-    txt('thread +' + Math.round(run.resonance * 6) + '%  ·  loop +' + Math.round(run.resonance * 8) + '%',
+    txt('thread +' + Math.round(run.resonance * 6) + '%, loop +' + Math.round(run.resonance * 8) + '%',
         W - pad, ry, S * 0.0145, C.inkFaint, 'right', 500);
   }
 
@@ -5162,7 +5485,7 @@ function drawCdPip(x, y, r, f, col, label) {
 
 // ════════════════ CARTAS: se dibujan como CARTAS DE VERDAD ════════════════
 // Cara de papel crema sobre la arena oscura: se leen como naipes al instante.
-// opts: mini (sólo esquinas) · flat (sin sombra proyectada) · dim (apagada) · mark (en la mano)
+// opts: mini (sólo esquinas) - flat (sin sombra proyectada) - dim (apagada) - mark (en la mano)
 function drawCard(bx, by, bw, bh, c, opts) {
   opts = opts || {};
   const su = SUITS[c.su], rad = bw * 0.075;
@@ -5204,7 +5527,7 @@ function drawCard(bx, by, bw, bh, c, opts) {
   // verdad, y las dos de la misma familia de color que el borde. Así se lee IMPRESA sobre el
   // papel, que es lo que hace un naipe real, en vez de grabada en relieve.
   // El marco sale un poco hacia AFUERA y el contenido entra un poco hacia adentro: el número de
-  // esquina arrancaba a 0.022·bw del borde y la regla interior estaba a 0.058, así que la
+  // esquina arrancaba a 0.022-bw del borde y la regla interior estaba a 0.058, así que la
   // atravesaba. Se resuelve por layout, sin agrandar el naipe.
   const m1 = bw * 0.046, m2 = bw * 0.074;
   ctx.strokeStyle = su.ink;
@@ -5215,9 +5538,9 @@ function drawCard(bx, by, bw, bh, c, opts) {
   ctx.globalAlpha = 1;
 
   // ESQUINAS con jerarquía: el rango manda, el palo lo acompaña más chico.
-  // El rango tiene que quedar DENTRO del marco. Con `cs = 0.185·bw` su mitad mide 0.0925·bw, así
-  // que su borde de arriba está en `bh*yFrac - 0.0925·bw`; para que despegue de la regla interior
-  // (0.046·bw) el centro tiene que bajar a bh*0.125. La tapa de abajo es el espejo exacto.
+  // El rango tiene que quedar DENTRO del marco. Con `cs = 0.185-bw` su mitad mide 0.0925-bw, así
+  // que su borde de arriba está en `bh*yFrac - 0.0925-bw`; para que despegue de la regla interior
+  // (0.046-bw) el centro tiene que bajar a bh*0.125. La tapa de abajo es el espejo exacto.
   const cs = bw * 0.175;
   txt(rankStr(c.rank), bx + bw * 0.180, by + bh * 0.125, cs, su.col, 'center', 700);
   txt(su.s, bx + bw * 0.180, by + bh * 0.222, cs * 0.58, su.col);
@@ -5250,19 +5573,27 @@ function drawCard(bx, by, bw, bh, c, opts) {
   }
   if (opts.mini) return;
 
-  txtFit(c.up.name, bx + bw * 0.5, by + bh * 0.44, bw * 0.185, bw * 0.74, '#241f18', 700);
+  // El bloque entero sube 0.085-bh respecto de lo que era (0.44 / 0.515 / 0.585 / 0.700). La
+  // franja útil va de 0.257 (pie de la esquina de arriba) a 0.743 (techo de la de abajo, que es
+  // su PALO y no su rango, porque está rotada); el bloque ocupa 0.292-0.707 y queda centrado en
+  // 0.4995 con el mismo aire arriba que abajo. Los espacios internos no se tocan: lo que estaba
+  // bien adentro del bloque sigue exactamente igual.
+  txtFit(c.up.name, bx + bw * 0.5, by + bh * 0.355, bw * 0.185, bw * 0.74, '#241f18', 700);
   ctx.strokeStyle = 'rgba(90,76,52,0.28)'; ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(bx + bw * 0.24, by + bh * 0.515); ctx.lineTo(bx + bw * 0.76, by + bh * 0.515); ctx.stroke();
-  txtFit(cardEff(c), bx + bw * 0.5, by + bh * 0.585, bw * 0.100, bw * 0.76, 'rgba(46,40,32,0.80)', 500);
+  ctx.moveTo(bx + bw * 0.24, by + bh * 0.430); ctx.lineTo(bx + bw * 0.76, by + bh * 0.430); ctx.stroke();
+  txtFit(cardEff(c), bx + bw * 0.5, by + bh * 0.500, bw * 0.100, bw * 0.76, 'rgba(46,40,32,0.80)', 500);
 
   // Cinta del palo: gradiente en vez de plano, para que se lea como una etiqueta impresa.
-  const rh = bh * 0.092, ry = by + bh * 0.700;
+  // Además se angosta de 0.66 a 0.58 de ancho: aunque ahora despeja en ALTURA a los palos de las
+  // esquinas, sus tapas redondas llegaban hasta 0.83-bw y el palo de la esquina vive en 0.820.
+  // Que dos cosas no se toquen por 3 píxeles no es que no se toquen.
+  const rh = bh * 0.092, ry = by + bh * 0.615;
   const gr = ctx.createLinearGradient(0, ry, 0, ry + rh);
   gr.addColorStop(0, su.col); gr.addColorStop(1, su.ink);
   ctx.fillStyle = gr;
-  roundRectPath(bx + bw * 0.17, ry, bw * 0.66, rh, rh / 2); ctx.fill();
-  txtFit(su.theme, bx + bw * 0.5, ry + rh / 2, rh * 0.58, bw * 0.56, '#fdfaf1', 700);
+  roundRectPath(bx + bw * 0.21, ry, bw * 0.58, rh, rh / 2); ctx.fill();
+  txtFit(su.theme, bx + bw * 0.5, ry + rh / 2, rh * 0.58, bw * 0.50, '#fdfaf1', 700);
 }
 
 // ¿La carta i forma parte de la jugada actual? (mismo rango repetido, o el palo del color).
@@ -5593,7 +5924,7 @@ function drawSlotPick() {
   dimArena(0.87);
   const c = game.pendingCard, su = SUITS[c.su];
   txtG('WHICH ONE GOES?', W / 2, H * 0.14, S * TS.title, C.goldHi);
-  txtG(su.s + ' ' + rankStr(c.rank) + ' · ' + c.up.name + ' · ' + cardEff(c),
+  txtG(su.s + ' ' + rankStr(c.rank) + '   ' + c.up.name + ' \u2014 ' + cardEff(c),
     W / 2, H * 0.202, S * 0.022, '#e8dcc0', 'center', 500);
   const rs = slotRects();
   for (let i = 0; i < HAND_MAX; i++) {
@@ -5670,7 +6001,7 @@ function drawMenu() {
   ctx.stroke();
   ctx.restore();
   txtG('LOOP', W / 2, ty, S * 0.155, '#7df9ff', 'center', 900);
-  txt('DRAW  ·  CROSS  ·  COLLECT', W / 2, ty + S * 0.105, S * TS.sub, C.inkDim, 'center', 500);
+  txt('DRAW    CROSS    COLLECT', W / 2, ty + S * 0.105, S * TS.sub, C.inkDim, 'center', 500);
 
   const R = menuRects();
   // ── Modos: tarjetas con explicación. "LIBRE / DIARIO" sueltos no decían nada. ──
@@ -5703,8 +6034,8 @@ function drawMenu() {
   const b = bestScore();
   const foot = H * 0.885;
   if (b > 0) txtG('BEST  ' + fmt(b), W / 2, foot, S * 0.024, '#ffd23f');
-  txtG(IS_TOUCH ? 'stick to move  ·  DASH to close a loop'
-                : 'WASD move  ·  SPACE dash  ·  E pulse', W / 2, foot + S * 0.040, S * 0.019, 'rgba(150,180,215,0.42)', 'center', 300);
+  txtG(IS_TOUCH ? 'stick to move, DASH to close a loop'
+                : 'WASD move, SPACE dash, E pulse', W / 2, foot + S * 0.040, S * 0.019, 'rgba(150,180,215,0.42)', 'center', 300);
 }
 function pill(b, label, on, col, S) {
   panel(b.x, b.y, b.w, b.h, b.h / 2, on ? col : C.line, on ? 0.10 : 0);
@@ -6016,7 +6347,7 @@ function loop(now) {
   if (game.state === 'play') drawSectorTargets();
   if (pendulums.length) drawPendulums();
   drawCycleTrails();            // bajo el hilo y las piezas: es piso, no objeto
-  drawBarrels();                // ruedan POR el plato: van bajo el hilo y bajo las piezas
+  if (barrels.length) drawBarrels();   // ruedan POR el plato: van bajo el hilo y bajo las piezas
   drawLoopGhost();
   drawThread();
   drawMirror();
