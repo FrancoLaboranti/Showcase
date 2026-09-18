@@ -1294,13 +1294,29 @@ sobraba era DURACION, no dificultad - el compas leer/esquivar/castigar esta dond
 solo que se acababa antes de que llegaras a jugarlo dos veces. Por eso se movio la vida y NADA
 MAS: tocar `armor` o `openDmg` volveria a mover el sentimiento de la pelea.
 
-### El caracter `.` del medio
+### Nada de tipografia decorativa en texto que se dibuja
 
-Franco: "eliminalos de todo el juego, no los quiero ver". Se fue de los textos que se dibujan y
-tambien de los comentarios, para que no vuelva a colarse copiando una linea vieja. El reemplazo se
-eligio por caso, no uno solo para todos: coma donde separa dos estadisticas (`'Score +20%, Damage
-+10%'`), raya donde encabeza (`'ACHIEVEMENT - X'`), y nada en el eslogan del menu, donde el aire
-alcanza.
+Paso dos veces seguidas. Primero el punto del medio (`·`): "eliminalos de todo el juego, no los
+quiero ver". Se reemplazo por comas y por RAYA LARGA donde encabezaba... y a la vuelta siguiente
+Franco pidio sacar tambien la raya larga: "no quiero que diga 'Promoted - Queen', ese caracter no
+lo uses en nada".
+
+**La leccion no es cambiar 129 caracteres, es la regla:** un separador que no es ni una palabra ni
+un signo comun obliga al lector a interpretarlo, y a este tamano sobre fieltro oscuro se lee como
+un guion roto. Cambiar un signo raro por otro signo raro no arregla nada — por eso fallo la
+primera vez.
+
+Los textos que se DIBUJAN se reescriben como FRASES, no se les cambia el separador:
+`'PROMOTED TO QUEEN'` no necesita ninguno, y en el panel de info cada raya paso a ser un punto y
+una oracion nueva. Donde de verdad hacia falta separar dos cosas va coma o dos puntos. El nombre
+de "sin jugada" en `HAND_BONUS[0]` era `—` y ahora es `'NONE'`: una palabra dice lo mismo y
+ademas se lee.
+
+En los COMENTARIOS, guion simple. Ojo con uno: `0.74·r` era una MULTIPLICACION, no un separador, y
+un reemplazo a ciegas lo habria convertido en `0.74-r`. Va asterisco.
+
+**Chequeo, no memoria:** despues de tocar esto hay que contar los caracteres en el `index.html`
+construido (`—`, `–`, `·`, el escape `—` y `&mdash;`). Todos en cero.
 
 ### El boton de INFO se escribe contra el CODIGO, no contra la memoria
 
@@ -1425,6 +1441,245 @@ segunda. **Paso de verdad** — en un informe aparecio `### ruleclean` con las n
 
 Lo grave no es la colision sino que es INVISIBLE: no falla, MIENTE. Un escenario reporta BAD(0)
 sobre codigo que nunca ejecuto. Ahora `QA_HTML` incluye `os.getpid()`.
+
+## Dos bugs de playtest, y los dos tests que casi mienten
+
+### El fantasma orbitaba en vez de pegar
+
+Franco: "los fantasmas se quedan dando vueltas alrededor mio en vez de ir a pegarme". Medido ANTES
+de tocar nada, y la forma del resultado es el diagnostico entero:
+
+    jugador QUIETO              distancia minima 0.000   8 toques    ok
+    gira a 0.30 (mas LENTO)     distancia minima 0.120   0 toques    <-- el bug
+    gira a 0.44 (a la par)      distancia minima 0.009   4 toques    ok
+    huye a 0.86 (mas rapido)    distancia minima 0.139   0 toques    correcto
+
+**Fallaba solo contra un jugador mas lento que el.** Eso descarta la velocidad - le sobra - y
+senala la punteria. Eran dos cosas multiplicandose:
+
+1. **El adelanto era una DISTANCIA FIJA (0.34), no un tiempo.** Apuntaba siempre a 0.34 por
+   delante del jugador, incluso teniendolo a 0.05. A esa distancia un punto 0.34 adelante queda
+   casi PERPENDICULAR a su avance: pasaba de largo, volvia, pasaba de largo otra vez. **La orbita
+   no era un error de calculo: era la solucion correcta al problema equivocado.** Ahora el
+   adelanto es `t = distancia / velocidad propia` — "donde vas a estar cuando yo llegue" — y de
+   cerca tiende a cero, o sea que termina apuntando AL jugador, que es lo unico que cierra una
+   persecucion.
+   Y explica por que el caso facil de probar a mano andaba: el error angular depende de cuanto
+   avanza el jugador en el tiempo de vuelo, y contra uno que va a la par del fantasma el 0.34 fijo
+   resultaba ser casi el valor correcto de casualidad.
+2. **El radio de giro era mas grande que el contacto.** A 0.44 u/s con 2.6 rad/s el radio minimo
+   es 0.169 y el contacto ocurre a 0.069: **mas del doble**. Aun apuntando bien, cualquier error
+   cerca se volvia una orbita estable sin salida geometrica. Ahora gira mas rapido cuanto mas
+   cerca esta, que ademas es lo que se espera de un fantasma: flota, no tiene inercia.
+
+Se conserva que un jugador a fondo pueda escaparse, y el escenario lo vigila.
+
+### La pieza telegrafiada volvia de un salto a su posicion vieja
+
+`pickLane` guarda `sxp/syp` (el origen de la embestida) cuando la pieza DECIDE, o sea antes del
+medio segundo de telegrafia. Si durante ese rato la empujas - un bucle, el pulso, una embestida,
+un barril - la pieza se mueve, pero al arrancar el embate el carril interpola desde `sxp/syp` y la
+TELETRANSPORTA de vuelta.
+
+Se re-ancla el origen al arrancar: sale de donde realmente esta. **El destino no se toca, y es a
+proposito:** `drawTelegraphs` dibuja el carril desde la posicion ACTUAL hasta el destino fijo, asi
+que lo que el jugador vio prometido fue "voy a terminar ahi". Mover el destino romperia esa
+promesa; mover el origen la cumple. `dur` se recalcula despues de re-anclar, o una pieza empujada
+hacia su destino llegaria antes y se quedaria esperando.
+
+### Los dos tests casi mienten, por motivos distintos
+
+**El de la pieza dio verde contra el codigo con el bug puesto.** Media "el primer frame con
+`st === 'move'`", pero el cambio de estado y el primer paso del carril NO pasan en la misma
+llamada: son ramas de un `else if`, asi que el frame en que `st` pasa a `'move'` es justo el que
+todavia no movio nada. Se mide el MAXIMO salto de un frame durante toda la embestida.
+
+**Y despues dio un falso positivo con el caballo.** La cota salia de `T.spd`, pero el caballo
+salta con duracion FIJA (0.34s) sin importar cuan largo sea el salto, asi que se mueve mas rapido
+que su velocidad nominal y no es una teletransportacion. La cota se saca ahora del CARRIL REAL
+(`largo / dur`), con 3.4 de margen porque las curvas de suavizado tienen pendiente maxima 3.
+
+**El del fantasma medía la huida girando en circulo**, y girando el jugador VUELVE a cruzarse con
+el fantasma: eso no prueba que se pueda escapar, prueba que se puede chocar. Ahora huye en linea
+recta y se verifica que la distancia CREZCA.
+
+**Metodo que hay que repetir:** cuando un test nuevo da verde, correrlo contra una copia del
+codigo con el bug puesto a mano. Si no falla ahi, no prueba nada. Se hizo asi con `empuje` y por
+eso se encontro que la primera version no servia.
+
+## DIRECCION ARTISTICA (2026-09-18)
+
+> **LOOP deberia sentirse como un reloj de bolsillo abierto que alguien uso como mesa de juego
+> durante cien anos.**
+
+Esa frase resuelve sola casi todas las preguntas de diseno visual: explica por que hay naipes y
+piezas de ajedrez sobre la misma superficie (alguien jugo ahi), por que el laton tiene patina (es
+viejo), por que hay UNA sola luz (hay una lampara sobre la mesa) y por que el tiempo importa (el
+objeto es un reloj). **Cada cosa nueva se evalua preguntando si pertenece a eso.**
+
+**Materiales - cinco, y cada cosa pertenece a uno solo.** Fieltro (la arena) - Laton (bisel, aguja,
+marcos, el casquillo de la canica) - Hueso/marfil (naipes) - Cristal y luz (orbes, escudo, frenesi)
+- **Joya (la canica, y SOLO la canica)**. Si algo nuevo no cae en uno de los cinco, no pertenece.
+
+**Iluminacion:** una lampara, arriba a la izquierda, fija (`LIGHT`, no se toca). Emiten luz solo
+tres cosas: la canica, el hilo y lo cargado. Todo lo demas la refleja.
+
+**Color:** el sistema semantico manda sobre la decoracion. Oro = valor. Hielo = vos. Carmesi = te
+lastima. Violeta = reglas. Verde = te cura. **Cualquier elemento que use uno de esos cinco esta
+haciendo esa afirmacion, le guste o no.** Dos colisiones encontradas, una corregida: la cola del
+hilo usaba el violeta de las REGLAS (corregido en el Grupo 2); los enemigos usan oro para la dama,
+violeta para el alfil, carmesi para la torre y celeste para el caballo (**sin corregir**: pasarlos
+a hueso es la propuesta N2 y necesita decision, porque arriesga la legibilidad por color a
+distancia, que es una decision documentada).
+
+**Movimiento:** pesado, inercia corta, nada aparece de golpe. Lo unico que se mueve linealmente es
+la aguja, porque es un mecanismo.
+
+**Sonido:** Do mayor pentatonica (`PENTA` siempre lo fue) con el silencio como instrumento.
+
+**Jerarquia de feedback - cuatro niveles y el presupuesto se respeta.** Rutinario: sonido y chispa.
+Bueno: + anillo. Excelente: + hitstop y sacudon. Excepcional: + cambio de iluminacion de toda la
+arena. **Cerrar un bucle cenido con tres piezas adentro deberia ser el unico evento habitual que
+llegue al nivel cuatro.**
+
+**UI:** informacion convertida en objeto, o nada. La hora vive en el anillo de capitulo.
+
+**No es:** neon, sci-fi, arcade generico, Las Vegas, glow excesivo. **Es:** viejo, fino, tactil,
+mecanico, misterioso, premium, ligeramente gastado, contenido.
+
+## GRUPO 1 - el reloj suena, barre y cuenta
+
+### El tictac no es un metronomo: es la aguja cruzando las marcas
+
+El plato tiene 60 marcas horneadas y la hora dura 38 s, asi que el tictac sale cada 0.63 s **solo**.
+No hay tempo que elegir: **el tempo ya estaba dibujado en el plato**. Esa es la diferencia entre
+poner musica encima del juego y hacer sonar el objeto.
+
+Dos tonos alternados como un escape real (La2 y Mi3, tonica y quinta) mas un chasquido de ruido muy
+corto, que es lo que de verdad se oye de un escape; el tono solo lo ubica en la tonalidad.
+
+**En el ultimo quinto se SUBDIVIDE a 120**, o sea la misma aguja marcando medias marcas. Un reloj
+que cambia de velocidad deja de ser un reloj; uno que marca mas fino sigue siendolo, y avisa que se
+acaba la hora sin un solo elemento de UI.
+
+El colchon (`droneSet`) es La1 fijo con su quinta y **no cambia de altura nunca** - cambiar de
+altura seria cambiar de tonalidad, y ahi ya es musica. Lo que cambia es cuanto se oye: aparece en la
+hora 4 y sube hasta la 12. Las tres primeras horas el juego suena como siempre.
+
+`audioHush(dur, piso)` agacha TODO. Se usa dos veces por partida: 0.75 s antes de que despierte el
+Relojero (su rugido esta REPROGRAMADO para entrar cuando el volumen vuelve - un golpe grande
+necesita vacio delante o no se oye grande) y un chupon de 0.2 s al entrar en frenesi.
+
+**Bug que esto destapo:** `audioHush` programa rampas sobre `masterGain`, que es el mismo nodo del
+boton de mute. **Poner `.value` mientras hay rampas programadas no hace nada.** Sin cancelar las
+rampas primero, el mute habria dejado de funcionar despues del primer silencio - o sea, despues de
+pelear con el jefe por primera vez. Intermitente y dificilisimo de atar a su causa.
+
+### La aguja hace las transiciones, y NO es un estado
+
+Lo nuevo ya esta dibujado abajo; encima queda una cuna oscura cubriendo el angulo que la aguja no
+barrio todavia, con una linea de laton en el filo. Seis transiciones, entre 0.26 s y 0.52 s.
+
+**`sweep` es un contador de render, no un `game.state`.** Esta documentado por que (el cartel de
+hora fue un estado, congelo la simulacion y hubo que sacarlo): no bloquea input ni frena la
+simulacion. Medido: el jugador se movio 0.244 unidades DURANTE la transicion, y `startRun` la
+dispara con el juego ya en `play`. Por eso volver a jugar puede sentirse inmediato.
+
+Avanza con el dt REAL, no con `simDt`: durante un draft la simulacion esta congelada y un barrido
+atado a `simDt` se quedaria trabado a la mitad para siempre.
+
+### El anillo de capitulo es la aguja de HORA
+
+Doce numerales, doce horas. La varilla que ya existe da una vuelta por hora (es el minutero) y las
+horas vividas se **encienden** en el anillo. No es un indicador nuevo: es la aguja que faltaba.
+
+**Se tiraron dos versiones antes de esta, y el motivo vale mas que el resultado.** La primera era
+una banda fina de laton entre las marcas y el bisel: en escritorio apenas se adivinaba y en telefono
+apaisado **no existia**. El problema no era el color ni el alfa: a 335 px de alto el radio del plato
+son ~150 px, asi que una banda de 0.014 del radio mide **DOS PIXELES**. Ninguna cantidad de brillo
+arregla dos pixeles.
+
+**LO QUE SOBREVIVE AL TAMANO ES LA SILUETA Y LO QUE YA ESTA DIMENSIONADO PARA LEERSE.** Los
+numerales ya lo estaban. Se hornea un SEGUNDO lienzo (`dialLitCv`) con los mismos numerales en laton
+vivo y se pega recortado contra una cuna: un clip y un drawImage.
+
+La segunda version tenia numerales Y banda, y la banda sobraba por dos razones: era un segundo aro
+de laton adentro del bisel, y sobre todo **era redundante con la aguja**, que ya marca el avance
+dentro de la hora. Quedaron dos indicadores sin superposicion: los numerales cuentan (discreto), la
+aguja marca la posicion (continuo).
+
+El contraste se arregla **bajando el apagado, no subiendo el encendido**: las horas que todavia no
+viviste estan dormidas, y la esfera se llena de luz durante la run.
+
+## GRUPO 2 - el hilo es un cordon, la canica es la joya
+
+### El hilo
+
+- **La cola usaba el violeta de las REGLAS.** Ahora va de acero frio a hielo. Un color del sistema
+  semantico es una afirmacion.
+- **No se apoyaba en nada.** Una sola pasada oscura corrida en el eje de la luz da la sombra Y el
+  borde de contacto: dos cosas con un stroke.
+- **El ultimo tercio lleva un NUCLEO caliente**, asi el cordon se lee redondo donde lo estas usando
+  y plano donde quedo apoyado.
+- **Tension:** `thread[i].w` guarda la velocidad de la mano al APOYAR cada punto (el pasado). La
+  tension es el presente y sale gratis de la velocidad del jugador.
+- **Anticipacion de cierre, gratis.** `findSelfCross` YA calculaba la distancia de la cabeza a cada
+  segmento viejo para decidir el roce. Se le pide de arrastre el minimo y su indice: cero
+  iteraciones nuevas, cero cambios de decision. Con eso, el tramo que vas a encerrar se enciende.
+
+**La cabeza se estaba yendo a BLANCO** y hubo que templarla: el nucleo aditivo se sumaba sobre un
+cuerpo que ya estaba en (196,247,255). Dos brillos sumados dan blanco, y **blanco es el material que
+convierte un cordon en un laser**. Brillante no es blanco.
+
+### La canica es la joya del mecanismo
+
+El codigo decia con todas las letras "mismo material, misma luz" que las orbes. La intencion era
+coherencia; la consecuencia era que el protagonista fuera una orbe un poco mas grande - en la
+captura de juego habia que BUSCARLO.
+
+Ahora es un **zafiro octogonal montado en un casquillo de laton**: el unico objeto movil del plato
+que lleva el material del reloj, lo que dice solo que el jugador es parte de la maquina. Y resuelve
+el anclaje del hilo, porque de un casquillo sale algo.
+
+**Es un OCTAGONO y no un circulo con facetas pintadas**, por la misma razon que la banda de
+progreso: en apaisado mide ~4.5 px de radio y a ese tamano las facetas no existen. Contra orbes que
+son circulos, un octagono se lee aunque mida cinco pixeles.
+
+El halo bajo de 3.4 radios al 55% a 2.15 al 30%: **una joya no irradia**, un zafiro real es oscuro y
+lo que tiene son destellos duros.
+
+### El coste: pagar la materia con resolucion que no se usaba
+
+`drawThread` salto de 214 a **308** comandos de path (+44%) contra un techo autoimpuesto de 15%. Dos
+correcciones:
+
+1. Las pasadas nuevas van DECIMADAS (sombra en paso 3, nucleo en paso 2). **Una sombra no necesita
+   la resolucion del objeto que la proyecta.** 308 -> 255.
+2. Seguia afuera, asi que se pago con algo que sobraba: **el resplandor son cuatro trazos anchos
+   aditivos al 2-9% de alfa y se estaba trazando vertice por vertice.** Un halo difuso a esa
+   opacidad no puede mostrar facetado. Paso 2. 255 -> **224, +4.7%**.
+
+**La resolucion se gasta en la SILUETA, que es lo unico donde se nota.**
+
+OJO al medir: el peso total del escenario de `s_prof.py` varia entre 271 y 344 segun cuantas piezas
+salgan sorteadas. El numero comparable es `drawThread` con largo de hilo fijo, no el total.
+
+### Dos bugs del grupo
+
+- **`gw` ya existia en `bakeDial`.** Colision de nombre con el gradiente de desgaste: `SyntaxError`
+  y pantalla negra. Lo cazo la QA en el primer intento.
+- **El resaltado de cierre quedaba pegado.** `findSelfCross` solo corre si el jugador se movio; con
+  el jugador perfectamente quieto, `nearIdx` conservaba el valor del ultimo frame en que si se movio
+  y el tramo dorado quedaba encendido para siempre. **Tercera vez que aparece la misma familia en
+  este proyecto** (el `hitstop` que sobrevivia entre partidas, el frenesi colgado al salir al menu):
+  un valor de arrastre que solo se ESCRIBE cuando pasa algo y nunca se BORRA cuando deja de pasar.
+
+### Patina, contenida
+
+Todo dentro de `bakeDial`, coste cero por frame: bandas angulares irregulares sobre el bisel (un aro
+de metal viejo tiene el brillo manchado), cuatro rayas finas de contacto, y **el fieltro gastado por
+donde barre la aguja** - lo unico que pasa siempre por el mismo lugar, hora tras hora. Semilla FIJA
+propia, nunca `rnd`: lo decorativo no toca la semilla del juego (ya rompio el modo diario una vez).
 
 ## Lo que sigue en hold (2026-09-18)
 
