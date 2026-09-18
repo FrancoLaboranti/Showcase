@@ -366,6 +366,13 @@ const CFG = {
   boss:   { idle: 2.6, wind: 1.0, open: 2.6, openDmg: 3.0, armor: 0.55, armRetract: 0.32,
             maxAdds: 7, addsPer: 2 },
 
+  // BARRILES (regla de Donkey Kong). `dmg` es el de la dama: es el golpe más duro que se come
+  // el jugador, y un barril tiene que doler como la peor pieza del tablero.
+  // `spd0/spd1` es el rango de velocidad — variables pero parecidas, para que se lean como una
+  // tanda y no como cinco proyectiles distintos. A 0.7 u/s cruzar el plato lleva ~2.9 s: da
+  // tiempo a leerlo y salir del camino.
+  barrel: { n: 3, cd: 2.2, spd0: 0.58, spd1: 0.86, r: 0.048, dmg: 21, hitCd: 0.22, dmgE: 26 },
+
   cycle:  { n: 2, spd: 0.60, life: 1.5, step: 0.045, turn: 1.5, turnRate: 4.2, dmg: 14, hitCd: 0.7, w: 0.011 },
 
   // FRENESÍ: no huyen, los ATRAÉS. `pull` es a propósito más lento que la velocidad propia
@@ -3559,7 +3566,7 @@ function resetRule() {
   RULE.orbSpdMul = 1; RULE.chargeMul = 1; RULE.enemySpd = 1; RULE.orbDrop = 0;
   RULE.gravity = false; RULE.mirror = false; RULE.rain = 0;
   RULE.simon = false; RULE.dead = false; RULE.swarm = 1; RULE.orbRate = 1;
-  RULE.cycles = 0;
+  RULE.cycles = 0; RULE.barrels = 0;
 }
 resetRule();
 
@@ -3583,6 +3590,8 @@ const RULES = [
   // TRON. La regla ESTELAS vieja ponía cola a TODOS los enemigos y era un desastre ilegible.
   // Acá la estela es la identidad de UN enemigo: lo ves venir, leés por dónde cortó, y matarlo
   // apaga su rastro. Eso la vuelve una amenaza que se puede resolver, no un impuesto.
+  { id: 'barrels', name: 'BARRELS',           desc: 'They roll in from outside. They hit everything.', mult: 1.55,
+    apply() { RULE.barrels = CFG.barrel.n; }, onStart() { barrels.length = 0; } },
   { id: 'cycles',  name: 'LIGHT CYCLES',      desc: 'Riders carve the dial. Their wake burns.',        mult: 1.65,
     apply() { RULE.cycles = CFG.cycle.n; } },
 ];
@@ -3985,6 +3994,89 @@ function drawCycleTrails() {
   }
 }
 
+// ════════════════ BARRILES (regla de DONKEY KONG) ════════════════
+// Llegan de afuera del reloj, cruzan derecho y le pegan A TODO: a vos y a las piezas. Un barril
+// no es del enemigo ni tuyo — es del escenario, y esa es justamente la idea que DK aporta.
+const barrels = [];
+function spawnBarrel() {
+  const a = rnd(0, TAU);
+  // Apunta a un punto CUALQUIERA del plato, no al centro: si todos pasaran por el eje, el patrón
+  // sería siempre el mismo y se esquivarían de memoria en dos horas.
+  const ta = a + PI + rnd(-0.55, 0.55);
+  const sp = rnd(CFG.barrel.spd0, CFG.barrel.spd1);
+  barrels.push({
+    x: Math.cos(a) * 1.18, y: Math.sin(a) * 1.18,
+    vx: Math.cos(ta) * sp, vy: Math.sin(ta) * sp,
+    r: CFG.barrel.r, ang: rnd(0, TAU), hitCd: 0, spin: sp / CFG.barrel.r * 0.55,
+  });
+  sfx.wall(0.5);
+}
+function updateBarrels(dt) {
+  for (let i = barrels.length - 1; i >= 0; i--) {
+    const b = barrels[i];
+    b.x += b.vx * dt; b.y += b.vy * dt;
+    b.ang += b.spin * dt;                              // rueda: el giro sale de su propia velocidad
+    if (hyp(b.x, b.y) > 1.34) { barrels.splice(i, 1); continue; }   // salió del plato
+    b.hitCd = Math.max(0, b.hitCd - dt);
+    if (b.hitCd > 0) continue;
+    // ── al jugador ──
+    if (P.alive && hyp(P.x - b.x, P.y - b.y) < P.r + b.r) {
+      hurtPlayer(CFG.barrel.dmg * scaleDmg(), b.x, b.y);
+      P.vx += b.vx * 0.9; P.vy += b.vy * 0.9;          // te arrolla: te lleva puesto un poco
+      b.hitCd = CFG.barrel.hitCd;
+      spawnSparks(b.x, b.y, 7, [205, 150, 90], 0.8);
+      addTrauma(0.25);
+      continue;
+    }
+    // ── a las piezas ──
+    // El daño escala con `scaleHp()`: fijo, pasada la hora 8 el barril dejaría de matar nada y
+    // media regla se apagaría sola. El enfriamiento hace que ARE la fila en vez de barrerla
+    // entera en un frame.
+    for (const e of enemies) {
+      if (e.dead || e.T.fam === 'b') continue;
+      if (hyp(e.x - b.x, e.y - b.y) > e.r + b.r) continue;
+      hurtEnemy(e, CFG.barrel.dmgE * scaleHp() * P.dmgMul, b.x, b.y, 1);
+      e.knock(b.vx * 0.35, b.vy * 0.35);
+      b.hitCd = CFG.barrel.hitCd;
+      spawnSparks(b.x, b.y, 6, [205, 150, 90], 0.7);
+      break;
+    }
+  }
+}
+// Un barril que rueda SÍ tiene que girar su propio brillo — a diferencia de la moto o la aguja,
+// acá el objeto está girando de verdad, así que el sprite horneado se dibuja rotado y listo.
+function barrelSprite(r) {
+  return bakeSprite('b|' + Math.round(r), Math.ceil(r * 1.2), (cx, cy) => {
+    const g = ctx.createRadialGradient(cx + LIGHT.x * r * 0.8, cy + LIGHT.y * r * 0.8, r * 0.1, cx, cy, r);
+    g.addColorStop(0, '#d7a469'); g.addColorStop(0.55, '#a66f3c'); g.addColorStop(1, '#4e2f18');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU); ctx.fill();
+    // duelas y aros: es lo que lo hace leer como BARRIL y no como una piedra
+    ctx.strokeStyle = 'rgba(52,30,14,0.85)'; ctx.lineWidth = Math.max(1, r * 0.13);
+    for (const f of [-0.42, 0.42]) {
+      ctx.beginPath();
+      ctx.moveTo(cx - r * 0.93, cy + r * f); ctx.lineTo(cx + r * 0.93, cy + r * f);
+      ctx.stroke();
+    }
+    ctx.strokeStyle = 'rgba(255,214,150,0.30)'; ctx.lineWidth = Math.max(1, r * 0.07);
+    ctx.beginPath(); ctx.moveTo(cx - r * 0.93, cy - r * 0.50); ctx.lineTo(cx + r * 0.93, cy - r * 0.50); ctx.stroke();
+    ctx.strokeStyle = 'rgba(30,18,8,0.9)'; ctx.lineWidth = Math.max(1, r * 0.11);
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.94, 0, TAU); ctx.stroke();
+  });
+}
+function drawBarrels() {
+  if (!barrels.length) return;
+  for (const b of barrels) {
+    const x = sx(b.x), y = sy(b.y), r = sr(b.r);
+    groundShadow(x, y, r, 0.9);
+    bloomPx(x, y, r * 2.2, [210, 150, 90], 0.22);
+    ctx.save();
+    ctx.translate(x, y); ctx.rotate(b.ang);
+    blit(barrelSprite(r), 0, 0);
+    ctx.restore();
+  }
+}
+
 // ════════════════ PÉNDULOS (regla) ════════════════
 // Integración velocity-Verlet como en NewtonsCradleWeb: con Euler semi-implícito el
 // amortiguamiento numérico apaga el swing en pocos segundos y quedan colgando muertos.
@@ -4381,6 +4473,14 @@ function updateClock(dt) {
       if (countKind('moto') < RULE.cycles) spawnEnemy('moto');
     }
   }
+  // BARRILES: una tanda cada `cd`, con un techo de cuántos pueden estar cruzando a la vez.
+  if (RULE.barrels && game.state === 'play' && !game.bossFight) {
+    game.barrelCd -= dt;
+    if (game.barrelCd <= 0) {
+      game.barrelCd = CFG.barrel.cd * DIFF.cdK;
+      if (barrels.length < RULE.barrels) spawnBarrel();
+    }
+  }
   // Orbes de reposición
   game.orbCd -= dt;
   if (game.orbCd <= 0) {
@@ -4723,7 +4823,7 @@ const game = {
   // simulación 2.1 s después de cada draft: elegías una carta y te quedabas mirando. Ahora es
   // sólo un overlay con su propio reloj — se juega desde el primer frame de la hora.
   t: 0, hour: 0, hourT: 0, banner: 0,
-  spawnCd: 0, orbCd: 0, cycleCd: 0,
+  spawnCd: 0, orbCd: 0, cycleCd: 0, barrelCd: 0,
   bossFight: false, paused: false,
   mode: 'free',             // free · daily
   diffIdx: 1,
@@ -4758,7 +4858,7 @@ function startRun() {
   // El modo DIARIO siembra TODO el azar: misma arena, mismas cartas, mismas reglas para todos.
   rng = game.mode === 'daily' ? mulberry32(todaySeed() ^ 0x9e3779b1) : Math.random;
 
-  enemies.length = 0; orbs.length = 0; shells.length = 0; mines.length = 0;
+  enemies.length = 0; orbs.length = 0; shells.length = 0; mines.length = 0; barrels.length = 0;
   flares.length = 0; pendulums.length = 0; hand.length = 0; ruleLog.length = 0;
   sparks.length = 0; motes.length = 0; rings.length = 0; dmgNums.length = 0; pops.length = 0;
   resetSectors(); resetRule(); revealed.fill(0); hourRule = null;
@@ -4804,6 +4904,7 @@ function nextHour() {
   shells.length = 0; flares.length = 0;
   // Mundo de cero cada hora: la regla vieja NO deja restos (péndulos, minas, secuencia).
   pendulums.length = 0; mines.length = 0; revealed.fill(0); simon.phase = 'off'; simon.cool = 0;
+  barrels.length = 0; game.barrelCd = 0;              // la regla vieja NO deja restos
   game.roster = pickRoster();
   applyRules();
   recomputeStats();
@@ -4961,7 +5062,7 @@ function trimOrbs() {
 function backToMenu() {
   game.state = 'menu'; game.t = 0; game.paused = false; game.banner = 0;
   // Limpiar la arena: si no, el menú queda con enemigos y proyectiles congelados de fondo.
-  enemies.length = 0; shells.length = 0; mines.length = 0; pendulums.length = 0; flares.length = 0;
+  enemies.length = 0; shells.length = 0; mines.length = 0; pendulums.length = 0; flares.length = 0; barrels.length = 0;
   resetSectors(); resetRule(); hourRule = null; ruleLog.length = 0; game.sectorsOpen = false; game.sectorsShown = false; simon.phase = 'off';
   frenzy = 0; comboT = 0; loopGhost = null;
   P.x = 0; P.y = 0.55; resetThread();
@@ -5754,6 +5855,7 @@ function stepSim(dt) {
   updateShells(dt);
   updateEnemies(dt);
   if (pendulums.length) updatePendulums(dt);
+  if (barrels.length) updateBarrels(dt);
   if (mines.length) updateMines(dt);
   updateFlares(dt);
   updateSimon(dt);
@@ -5914,6 +6016,7 @@ function loop(now) {
   if (game.state === 'play') drawSectorTargets();
   if (pendulums.length) drawPendulums();
   drawCycleTrails();            // bajo el hilo y las piezas: es piso, no objeto
+  drawBarrels();                // ruedan POR el plato: van bajo el hilo y bajo las piezas
   drawLoopGhost();
   drawThread();
   drawMirror();

@@ -12,6 +12,36 @@ todo lo que quedó encerrado. Los enemigos son piezas de ajedrez que telegrafía
 la aguja del reloj marca las oleadas, y cada hora elegís **una sola cosa, alternando**:
 una **regla** para la arena o una **carta** (las 5 equipadas forman una mano de póker).
 
+## BARRILES: lo que DonkeyKong aportaba de mecánica (2026-09-18)
+
+DonkeyKong venía dando sólo estructura — el draft, las semillas, la ventana de combo — y ni una
+mecánica. La regla `barrels` (×1.55) es la primera que entra de verdad: barriles que llegan desde
+afuera del reloj, cruzan en línea recta y **le pegan a todo**, al jugador y a las piezas.
+
+Eso último es lo que los hace de Donkey Kong y no un proyectil más: **un barril no es del enemigo
+ni tuyo, es del escenario.** Pararte del lado correcto de uno que viene convierte un peligro en
+una herramienta, que es exactamente el juego que propone DK.
+
+- **No apuntan al centro** (`a + PI + rnd(-0.55, 0.55)`). Si todos pasaran por el eje el patrón
+  sería siempre el mismo y se esquivarían de memoria en dos horas.
+- El daño AL JUGADOR es fijo (21, el de la dama, por `scaleDmg` como cualquier pieza). El daño A
+  LAS PIEZAS va por **`scaleHp()`**: fijo, pasada la hora 8 el barril dejaría de matar nada y
+  media regla se apagaría sola. Quinta vez que aparece el mismo error en este proyecto (bucle,
+  pulso, orbe, curación del frenesí, barril), así que queda como regla de la casa: **lo que tiene
+  que seguir importando cuando la vida enemiga crece, escala con ella.**
+- Enfriamiento corto al golpear: sin él un barril arrasa una fila en un frame; con él la ARA.
+- **El jefe, excluido.**
+- Rotar el sprite horneado acá es lo CORRECTO, al revés que en la moto o la aguja: un barril que
+  rueda tiene que girar su propio brillo, porque está girando de verdad.
+
+### Un test que midió un mundo congelado
+
+La primera versión del escenario puso la prueba que MATA al jugador en segundo lugar. El jugador
+murió, `stepSim` dejó de correr con el estado en `'over'`, y las dos pruebas siguientes midieron
+una simulación detenida — reportando "el barril no le pega a las piezas" cuando en realidad no
+pasaba nada en absoluto. **En un escenario con varias pruebas, la que puede terminar la partida va
+última**; si no, todo lo que venga después mide un mundo que ya no simula.
+
 ## UI 2026-09-18 — ranuras fijas, reserva de espacio y feedback asimétrico
 
 ### El HUD no puede recolocarse solo
@@ -461,7 +491,7 @@ Dos cosas que ese flujo enseñó y conviene repetir:
 | Crazy Tanks | `createJoystick` hand-rolled; reglas como objeto de multiplicadores | `createJoystick`, `RULE` |
 | Fuegos Artificiales | Muertes que estallan; la regla PIROTECNIA | `killEnemy`, `updateFlares` |
 | Reloj | **La aguja ES el temporizador de oleada** y una paleta física | `updateClock` |
-| DonkeyKong | Draft de modificadores; seeds derivadas; combos con ventana | `openRuleDraft`, `mulberry32` |
+| DonkeyKong | Draft de modificadores; seeds derivadas; combos con ventana; **BARRILES** | `openRuleDraft`, `mulberry32`, `updateBarrels` |
 | StickFight | Estructura del archivo, audio con `voice()`, shell del Arcade | todo el esqueleto |
 
 ## Arquitectura (lo no-obvio)
