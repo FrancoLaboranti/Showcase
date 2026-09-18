@@ -494,6 +494,32 @@ Dos cosas que ese flujo enseñó y conviene repetir:
 | DonkeyKong | Draft de modificadores; seeds derivadas; combos con ventana; **BARRILES** | `openRuleDraft`, `mulberry32`, `updateBarrels` |
 | StickFight | Estructura del archivo, audio con `voice()`, shell del Arcade | todo el esqueleto |
 
+## Qué del repo entró de verdad, y qué quedó afuera
+
+La tabla de arriba dice de dónde salió cada cosa, pero varias entradas están **de nombre más que
+de sustancia**. Esto es el mapa honesto, para no volver a creer que algo está cubierto:
+
+| Origen | Estado real |
+|---|---|
+| **Ahorcado** | **Afuera del todo.** THE GALLOWS fue un intento y se eliminó (ver su sección). El pool quedó sin nada de Hangman. |
+| **Snake** | Aportó la FORMA del rastro, no su REGLA. En Snake cruzarte **te mata** y comer **te agranda**; acá cruzarte es la RECOMPENSA y el largo es un presupuesto que se compra con cartas. Las dos ideas que definen a Snake están invertidas o ausentes. |
+| **Tron** | Medio adentro. LIGHT CYCLES dio el lado enemigo (una moto cuya estela quema), pero **tu propio hilo no es una pared**: roza por 3.5 con enfriamiento, no mata. En Tron el punto es que TU línea es letal. |
+| **Fireworks** | Sólo estallido al morir y la regla PIROTECNIA. El ciclo que lo define — lanzar, arco, reventar en patrón — no está. |
+| **Ajedrez** | La coronación sí; la decisión de tablero no. Las piezas son amenazas telegrafiadas, no un rival moviendo. |
+| **DonkeyKong** | Era sólo estructura hasta que entró BARRILES (2026-09-18). |
+| **StickFight** | Esqueleto del archivo, `voice()`, shell del Arcade. **Cero mecánica.** |
+
+### Tres mecánicas cableadas que NADIE puede obtener
+
+`P.thorns` (devolver daño al recibirlo), `P.loopHeal` (curarte al cerrar un bucle) y `P.lifesteal`
+existen, se resetean en `recomputeStats` y **se chequean en el juego** — pero ninguna carta ni
+regla las sube nunca de 0. Son código que corre para algo que no puede pasar.
+
+No es urgente arreglarlo, pero conviene saberlo por dos motivos: son ranuras listas si hace falta
+tapar alguna de las ausencias de arriba, y son exactamente el tipo de cosa que un lector futuro
+va a suponer que funciona. (Misma familia que el `thread[j].w || 1` que hacía del pincel código
+muerto, o que `chargeCd` faltando en el espejo.)
+
 ## Arquitectura (lo no-obvio)
 
 - **Espacio mundo, no píxeles.** La arena es un círculo de **radio 1** centrado en (0,0);
