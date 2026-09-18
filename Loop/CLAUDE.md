@@ -12,6 +12,77 @@ todo lo que quedó encerrado. Los enemigos son piezas de ajedrez que telegrafía
 la aguja del reloj marca las oleadas, y cada hora elegís **una sola cosa, alternando**:
 una **regla** para la arena o una **carta** (las 5 equipadas forman una mano de póker).
 
+## UI 2026-09-18 — ranuras fijas, reserva de espacio y feedback asimétrico
+
+### El HUD no puede recolocarse solo
+
+La tira de la mano vivía en `pad + S * (run.combo >= 2 ? 0.178 : 0.118)`: cada vez que se cortaba
+el combo, **saltaba hacia arriba**. Ahora hay tres ranuras con Y fijo (`Y_SCORE`, `Y_MULT`,
+`Y_HAND`) y el hueco del multiplicador existe esté visible o no. Medido: 112.3 px en los dos
+estados, y vuelve exacto.
+
+Regla: **si un elemento del HUD aparece y desaparece, lo de abajo no puede depender de él.** Un
+ternario en la coordenada Y es la forma más fácil de escribir un reflow sin darse cuenta.
+
+### El espacio se reserva de AFUERA hacia adentro
+
+La lista de jugadas al costado de la mano quedó pegada al margen dos veces seguidas, porque la
+calculaba al revés: las cartas tomaban su tamaño y la lista se acomodaba con lo que sobrara. Con
+la mano centrada, el hueco de la izquierda mide `(W - total) / 2` — o sea que lo fija el tamaño de
+las cartas, y la lista no tiene voz.
+
+La cuenta correcta va de afuera hacia adentro: `margen + lista + separación` es lo que la mano NO
+puede ocupar **de cada lado** (de cada lado, porque va centrada), y el ancho de carta sale de lo
+que queda. Así la lista siempre tiene su aire y la mano nunca se mueve.
+
+### El marco del naipe cruzaba los números
+
+El rango de esquina estaba en `bh*0.078` con cuerpo `0.185·bw`: su borde superior caía a
+`0.022·bw` del borde del naipe, y la regla interior estaba a `0.058·bw`. Se cruzaban por
+construcción. Resuelto por layout y sin agrandar el naipe: el marco salió a `0.046` y el contenido
+entró a `bh*0.125` (que es exactamente `(0.046 + holgura + 0.5·cs) / bh`), más los anchos máximos
+del nombre y del efecto, que llegaban a tocar la segunda regla.
+
+### En frenesí, TODO lo tuyo se los come
+
+El contacto directo hacía `hurtEnemy(e, 999)` pero el orbe y el pulso seguían con su daño normal:
+dos reglas distintas para el mismo estado. Ahora los tres matan de un toque durante el frenesí —
+**el jefe explícitamente afuera**, porque el frenesí no puede saltearse la pelea. Medido: orbe
+120/141 → muerto, pulso 138/141 → muerto, jefe 2600 → 1776.
+
+### El número del TIGHT se va; el multiplicador se queda
+
+Antes de sacarlo había que mirar qué hacía: `tight` **multiplica el daño del bucle** hasta ×3.3,
+no es decorativo. Lo que no aportaba era el NÚMERO — un "x2.4" al lado de un "148" agrega una
+incógnita en vez de información, y el daño ya está a la vista. Que el bucle fue ceñido lo dicen el
+fantasma dorado y el sonido. El test lo verifica inspeccionando la fuente de `closeLoop`: el
+multiplicador tiene que estar, el cartel no.
+
+(Primer intento del test: cerrar bucles con el bot y mirar los carteles. Dio verde con **cero
+bucles cerrados** — un test que casi nunca dispara la rama que dice cuidar no prueba nada.)
+
+### Feedback asimétrico a propósito
+
+`healPlayer(n, callado)`. El goteo del frenesí son treinta y pico de ticks de 1 HP, y treinta y
+pico de "+1" verdes saltando encima de la canica tapan justo lo que hay que mirar. El daño
+RECIBIDO sigue sacando su número: **el golpe hay que registrarlo, la curación se lee sola en la
+barra.**
+
+### El joystick es el plato en miniatura
+
+Más chico (0.155 → 0.125 del lado corto) con la zona muerta bajada de 0.10 a 0.075 para no perder
+control fino — el radio ES la resolución de la palanca, así que achicarla se paga y hay que
+compensarlo. Visualmente: fieltro oscuro, aro de latón, filo de luz arriba, y el pomo es **la
+canica** con el mismo degradado y el mismo brillo especular. Lo que arrastrás se parece a lo que
+estás arrastrando.
+
+Dos detalles que importan:
+- Se mueve con **`transform`**, no con `left`/`top`: left/top fuerza recálculo de layout en cada
+  movimiento del dedo.
+- El pomo viaja hasta `BASE_R - KNOB_R`, o sea que queda **siempre dentro del aro**, mientras el
+  input sigue midiéndose sobre `BASE_R` completo. Es un remapeo lineal de lo que se ve: no se
+  pierde ni un paso de precisión y deja de parecer que el pomo se escapa.
+
 ## Pasada de ASIGNACIONES (2026-09-17, noche)
 
 Hasta acá siempre había medido operaciones de canvas. Nunca **asignaciones** — y en un móvil el

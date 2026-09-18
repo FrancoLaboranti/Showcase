@@ -1055,21 +1055,39 @@ function createJoystick(zoneEl, opts) {
   // en una tablet, y el radio es literalmente la resolución de la palanca — cuanto más chico,
   // menos pasos distinguibles entre quieto y a fondo.
   const S0 = Math.min(window.innerWidth, window.innerHeight);
-  const BASE_R = opts.baseR || clamp(Math.round(S0 * 0.155), 46, 88);
-  const KNOB_R = opts.knobR || Math.round(BASE_R * 0.54), DEAD = opts.dead || Math.max(4, BASE_R * 0.10);
+  // Más chica que antes (0.155 -> 0.125 del lado corto). El radio es la RESOLUCIÓN de la palanca,
+  // así que achicarla cuesta precisión: se compensa con una zona muerta más chica (0.10 -> 0.075),
+  // que es donde de verdad se siente el control fino. A 0.125 de un teléfono normal quedan ~50 px
+  // de recorrido, o sea un centenar de posiciones distinguibles — de sobra para un stick.
+  const BASE_R = opts.baseR || clamp(Math.round(S0 * 0.125), 42, 74);
+  const KNOB_R = opts.knobR || Math.round(BASE_R * 0.46), DEAD = opts.dead || Math.max(3, BASE_R * 0.075);
   const aDead = opts.activeDead || 0, REST = opts.restMargin || 122;
   const out = opts.target || { active: false, x: 0, y: 0, mag: 0 };
   const base = document.createElement('div'), knob = document.createElement('div');
-  base.style.cssText = 'position:fixed;border-radius:50%;pointer-events:none;z-index:6;display:none;width:' + (BASE_R * 2) + 'px;height:' + (BASE_R * 2) + 'px;margin:' + (-BASE_R) + 'px 0 0 ' + (-BASE_R) + 'px;' +
-    'background:radial-gradient(circle,rgba(125,249,255,0.05),rgba(125,249,255,0.01) 70%);border:1.5px solid rgba(125,249,255,0.34);box-shadow:inset 0 0 22px rgba(125,249,255,0.10);';
-  knob.style.cssText = 'position:fixed;border-radius:50%;pointer-events:none;z-index:7;display:none;width:' + (KNOB_R * 2) + 'px;height:' + (KNOB_R * 2) + 'px;margin:' + (-KNOB_R) + 'px 0 0 ' + (-KNOB_R) + 'px;' +
-    'background:radial-gradient(circle at 50% 35%,rgba(190,255,255,0.92),rgba(90,200,225,0.5) 72%);border:1.5px solid rgba(200,255,255,0.75);box-shadow:0 0 16px rgba(125,249,255,0.5);';
+  // ── EL PLATO EN CHIQUITO ──
+  // La palanca es lo único de la pantalla que no seguía la dirección de arte. Ahora la base es un
+  // plato en miniatura — fieltro oscuro, aro de latón, filo de luz arriba — y el pomo es LA
+  // CANICA: mismo degradado, mismo brillo especular arriba a la izquierda, misma luz de rebote en
+  // el borde opuesto. Lo que arrastrás se parece a lo que estás arrastrando.
+  // Nada de esto cuesta por frame: son estilos que el compositor resuelve una vez.
+  const pos = 'position:fixed;left:0;top:0;border-radius:50%;pointer-events:none;display:none;';
+  base.style.cssText = pos + 'z-index:6;width:' + (BASE_R * 2) + 'px;height:' + (BASE_R * 2) + 'px;' +
+    'background:radial-gradient(circle at 50% 50%,rgba(22,32,58,0.52),rgba(7,12,23,0.62) 72%,rgba(7,12,23,0.30));' +
+    'border:1.5px solid rgba(167,141,92,0.58);' +
+    'box-shadow:inset 0 1px 0 rgba(255,235,190,0.20),inset 0 0 18px rgba(0,0,0,0.45),0 2px 10px rgba(0,0,0,0.40);';
+  knob.style.cssText = pos + 'z-index:7;width:' + (KNOB_R * 2) + 'px;height:' + (KNOB_R * 2) + 'px;' +
+    'background:radial-gradient(circle at 34% 30%,#ffffff 4%,#9ff4ff 40%,#1d6f9c 100%);' +
+    'border:1px solid rgba(190,244,255,0.75);' +
+    'box-shadow:0 0 12px rgba(125,249,255,0.45),inset -2px -3px 6px rgba(190,244,255,0.55);';
   document.body.appendChild(base); document.body.appendChild(knob);
   let id = null, ox = 0, oy = 0, idleWanted = false, idleShown = null;
+  // Se mueve con `transform`, no con `left`/`top`: cambiar left/top obliga al navegador a
+  // recalcular layout en CADA movimiento del dedo, y transform lo resuelve el compositor.
+  const poner = (el, R, x, y) => { el.style.transform = 'translate(' + (x - R) + 'px,' + (y - R) + 'px)'; };
+  const KD = (BASE_R - KNOB_R) / BASE_R;               // recorrido visual del pomo
   const showRest = () => {
     const x0 = REST, y0 = window.innerHeight - REST;
-    base.style.left = x0 + 'px'; base.style.top = y0 + 'px';
-    knob.style.left = x0 + 'px'; knob.style.top = y0 + 'px';
+    poner(base, BASE_R, x0, y0); poner(knob, KNOB_R, x0, y0);
     base.style.display = 'block'; knob.style.display = 'block';
   };
   const hideAll = () => { base.style.display = 'none'; knob.style.display = 'none'; };
@@ -1090,8 +1108,8 @@ function createJoystick(zoneEl, opts) {
     if (hudTap(e.clientX, e.clientY)) return;
     id = e.pointerId; ox = e.clientX; oy = e.clientY;
     try { zoneEl.setPointerCapture(id); } catch (err) {}
-    base.style.left = ox + 'px'; base.style.top = oy + 'px'; base.style.display = 'block';
-    knob.style.left = ox + 'px'; knob.style.top = oy + 'px'; knob.style.display = 'block';
+    poner(base, BASE_R, ox, oy); base.style.display = 'block';
+    poner(knob, KNOB_R, ox, oy); knob.style.display = 'block';
     out.active = aDead <= 0; out.x = 0; out.y = 0; out.mag = 0;
   });
   zoneEl.addEventListener('pointermove', e => {
@@ -1099,7 +1117,11 @@ function createJoystick(zoneEl, opts) {
     let dx = e.clientX - ox, dy = e.clientY - oy;
     const d = hyp(dx, dy);
     if (d > BASE_R) { dx = dx / d * BASE_R; dy = dy / d * BASE_R; }
-    knob.style.left = (ox + dx) + 'px'; knob.style.top = (oy + dy) + 'px';
+    // El pomo viaja hasta `BASE_R - KNOB_R`, o sea que queda SIEMPRE dentro del aro. El input
+    // sigue midiéndose sobre `BASE_R` completo: es sólo un remapeo lineal de lo que se ve, así
+    // que la deflexión se lee igual de proporcional y no se pierde ni un paso de precisión.
+    // Antes el pomo se salía casi medio cuerpo en deflexión máxima y parecía un error.
+    poner(knob, KNOB_R, ox + dx * KD, oy + dy * KD);
     out.mag = Math.min(1, d / BASE_R);
     out.x = dx / BASE_R; out.y = dy / BASE_R;
     if (d <= DEAD) { out.x = 0; out.y = 0; out.mag = 0; }
@@ -1833,7 +1855,11 @@ function closeLoop(cross, bx, by) {
   addRing(mx, my, Math.sqrt(area) * 0.5, Math.sqrt(area) * 1.5, 0.5, isTight ? [255, 210, 63] : [125, 249, 255], 0.008);
   spawnSparks(mx, my, isTight ? 22 : 14, isTight ? [255, 210, 63] : [125, 249, 255], 1.1);
   addTrauma(isTight ? 0.34 : 0.20); addPunch(isTight ? 0.035 : 0.02);
-  if (isTight) { sfx.tight(); addPop(mx, my - 0.06, 'TIGHT x' + tight.toFixed(1), '#ffd23f'); }
+  // El multiplicador SIGUE ahí: `tight` multiplica el daño del bucle hasta ×3.3. Lo que se va es
+  // el NÚMERO en pantalla — no le decía nada al jugador que el número de daño sobre la pieza no
+  // le dijera mejor, y un "x2.4" suelto al lado de un "148" sólo agrega una incógnita. Que el
+  // bucle fue ceñido ya lo dicen el fantasma dorado y el sonido.
+  if (isTight) sfx.tight();
   else sfx.loop(run.combo);
   if (hits >= 3) { toast('MULTI LOOP x' + hits, '#ffd23f'); unlockAch('multi'); }
   if (killed >= 2) unlockAch('doble');
@@ -2047,16 +2073,23 @@ function firePulse() {
     e.knock(dx / d * k * 0.55, dy / d * k * 0.55);
     // `* scaleHp()`: misma razón que en closeLoop — si la vida enemiga crece y esto no, la
     // herramienta se apaga sola pasada la hora 8.
-    hurtEnemy(e, CFG.pulse.dmg * scaleHp() * P.dmgMul * k, P.x, P.y, 0);
+    // Mismo criterio que el orbe: en frenesí el pulso también mata de un toque, y por la misma
+    // razón — durante el frenesí todo lo tuyo se los come, no sólo tu cuerpo. El jefe, afuera.
+    const dPul = (frenzy > 0 && e.T.fam !== 'b') ? 999 : CFG.pulse.dmg * scaleHp() * P.dmgMul * k;
+    hurtEnemy(e, dPul, P.x, P.y, 0);
   }
   for (const m of mines) if (!m.gone && hyp(m.x - P.x, m.y - P.y) < R) detonateMine(m, 'player');
 }
 
-function healPlayer(n) {
+// `callado`: cura sin sacar el número flotante. Lo usa el goteo del frenesí — son treinta y pico
+// de ticks de 1 HP, y treinta y pico de "+1" verdes saltando encima de la canica tapan justo lo
+// que hay que estar mirando. El daño RECIBIDO sigue mostrando su número: la asimetría es a
+// propósito, porque el golpe hay que registrarlo y la curación se lee sola en la barra.
+function healPlayer(n, callado) {
   if (n <= 0 || !P.alive) return;
   const before = P.hp;
   P.hp = Math.min(P.hpMax, P.hp + n);
-  if (P.hp - before >= 1) addDmg(P.x, P.y - P.r * 2, P.hp - before, 2);
+  if (!callado && P.hp - before >= 1) addDmg(P.x, P.y - P.r * 2, P.hp - before, 2);
 }
 
 function hurtPlayer(n, fx, fy) {
@@ -2494,7 +2527,12 @@ function updateOrbs(dt) {
         const spd = hyp(o.vx, o.vy);
         // El grueso del daño lo pone la VELOCIDAD, no el hecho de estar cargado.
         const u = clamp(spd / CFG.orb.maxSpd, 0, 1);
-        hurtEnemy(e, (CFG.orb.dmg + CFG.orb.dmgSpd * u) * P.dmgMul, o.x, o.y, 1);
+        // En FRENESÍ el orbe también se los come de un toque. Antes sólo mataba de una el
+        // contacto directo del jugador, así que durante el frenesí una orbe a toda velocidad
+        // hacía menos que rozar a la pieza — dos reglas distintas para el mismo estado.
+        // El jefe queda afuera: el frenesí no puede saltearse la pelea.
+        const dOrb = (frenzy > 0 && e.T.fam !== 'b') ? 999 : (CFG.orb.dmg + CFG.orb.dmgSpd * u) * P.dmgMul;
+        hurtEnemy(e, dOrb, o.x, o.y, 1);
         // rebote + pérdida de carga: un orbe no puede segar una fila entera gratis
         const m = hyp(dx, dy) || 1;
         o.vx = -dx / m * spd * 0.7; o.vy = -dy / m * spd * 0.7;
@@ -3818,9 +3856,9 @@ function updateFrenzy(dt) {
     // El `while` tiene tope porque con mucha vida máxima un frame largo puede acumular varios
     // puntos de una, y no queremos que un tirón dispare una ráfaga de números.
     let ticks = 0;
-    while (frenzyHealAcc >= 1 && ticks++ < 4) { healPlayer(1); frenzyHealAcc -= 1; }
+    while (frenzyHealAcc >= 1 && ticks++ < 4) { healPlayer(1, true); frenzyHealAcc -= 1; }
     // Al terminar el frenesí se entrega lo que quedó suelto, para que el total sea exacto.
-    if (frenzy === 0 && frenzyHealAcc > 0) { healPlayer(frenzyHealAcc); frenzyHealAcc = 0; }
+    if (frenzy === 0 && frenzyHealAcc > 0) { healPlayer(frenzyHealAcc, true); frenzyHealAcc = 0; }
   }
   if (frenzy === 0) { frenzyHealAcc = 0; frenzyBurst(); }   // el cierre siempre paga
 }
@@ -4936,17 +4974,25 @@ function backToMenu() {
 // ════════════════ HUD ════════════════
 function drawHUD() {
   const S = Math.min(W, H), pad = S * 0.028;
-  // ── Score + combo ──
-  txtG(fmt(run.score), pad, pad + S * 0.030, S * 0.050, C.ink, 'left', 700);
+  // ── RANURAS FIJAS ──
+  // El multiplicador aparece y desaparece solo, y antes la tira de la mano se recolocaba con él:
+  // `pad + S * (run.combo >= 2 ? 0.178 : 0.118)`. O sea que cada vez que se cortaba el combo, la
+  // mano SALTABA hacia arriba. El hueco del multiplicador existe siempre, esté visible o no —
+  // así nada de lo de abajo se entera de si lo de arriba se está mostrando.
+  const Y_SCORE = pad + S * 0.030;
+  const Y_MULT = pad + S * 0.084;
+  const Y_HAND = pad + S * 0.178;
+  txtG(fmt(run.score), pad, Y_SCORE, S * 0.050, C.ink, 'left', 700);
   if (run.combo >= 2) {
     const k = clamp(run.combo / CFG.combo.max, 0, 1);
     const col = k > 0.7 ? '#ffd23f' : k > 0.35 ? '#ff9f43' : '#7df9ff';
     const bump = comboT > CFG.combo.decay + comboHold - 0.15 ? 1.22 : 1;
-    txtG('x' + comboMul().toFixed(2), pad, pad + S * 0.084, S * 0.031 * bump, col, 'left', 900);
+    txtG('x' + comboMul().toFixed(2), pad, Y_MULT, S * 0.031 * bump, col, 'left', 900);
     const bw2 = S * 0.13, bh2 = Math.max(2, S * 0.006);
-    ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(pad, pad + S * 0.104, bw2, bh2);
+    const yBar = Y_MULT + S * 0.020;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(pad, yBar, bw2, bh2);
     ctx.fillStyle = col;
-    ctx.fillRect(pad, pad + S * 0.104, bw2 * clamp(comboT / (CFG.combo.decay + comboHold), 0, 1), bh2);
+    ctx.fillRect(pad, yBar, bw2 * clamp(comboT / (CFG.combo.decay + comboHold), 0, 1), bh2);
   }
   // (Acá vivía una barra de "cuánto falta para la próxima carta". Se fue: desde que la carta se
   // entrega EN EL MOMENTO de ganarla, anunciarla de antemano sólo agregaba ruido al HUD.)
@@ -4982,7 +5028,7 @@ function drawHUD() {
   }
 
   // ── Mano de póker ──
-  if (hand.length) drawHandStrip(pad + S * 0.100, pad + S * (run.combo >= 2 ? 0.178 : 0.118), S * 0.037, false);
+  if (hand.length) drawHandStrip(pad + S * 0.100, Y_HAND, S * 0.037, false);
 
   // ── Cooldowns en desktop (en táctil viven en los botones) ──
   if (!IS_TOUCH) {
@@ -5056,7 +5102,10 @@ function drawCard(bx, by, bw, bh, c, opts) {
   // Ahora es una DOBLE REGLA en la tinta del palo: dos líneas de distinto peso, separadas de
   // verdad, y las dos de la misma familia de color que el borde. Así se lee IMPRESA sobre el
   // papel, que es lo que hace un naipe real, en vez de grabada en relieve.
-  const m1 = bw * 0.058, m2 = bw * 0.092;
+  // El marco sale un poco hacia AFUERA y el contenido entra un poco hacia adentro: el número de
+  // esquina arrancaba a 0.022·bw del borde y la regla interior estaba a 0.058, así que la
+  // atravesaba. Se resuelve por layout, sin agrandar el naipe.
+  const m1 = bw * 0.046, m2 = bw * 0.074;
   ctx.strokeStyle = su.ink;
   ctx.globalAlpha = 0.38; ctx.lineWidth = Math.max(1, bw * 0.013);
   roundRectPath(bx + m1, by + m1, bw - m1 * 2, bh - m1 * 2, rad * 0.62); ctx.stroke();
@@ -5065,13 +5114,16 @@ function drawCard(bx, by, bw, bh, c, opts) {
   ctx.globalAlpha = 1;
 
   // ESQUINAS con jerarquía: el rango manda, el palo lo acompaña más chico.
-  const cs = bw * 0.185;
-  txt(rankStr(c.rank), bx + bw * 0.165, by + bh * 0.078, cs, su.col, 'center', 700);
-  txt(su.s, bx + bw * 0.165, by + bh * 0.178, cs * 0.58, su.col);
+  // El rango tiene que quedar DENTRO del marco. Con `cs = 0.185·bw` su mitad mide 0.0925·bw, así
+  // que su borde de arriba está en `bh*yFrac - 0.0925·bw`; para que despegue de la regla interior
+  // (0.046·bw) el centro tiene que bajar a bh*0.125. La tapa de abajo es el espejo exacto.
+  const cs = bw * 0.175;
+  txt(rankStr(c.rank), bx + bw * 0.180, by + bh * 0.125, cs, su.col, 'center', 700);
+  txt(su.s, bx + bw * 0.180, by + bh * 0.222, cs * 0.58, su.col);
   ctx.save();
-  ctx.translate(bx + bw * 0.835, by + bh * 0.922); ctx.rotate(PI);
+  ctx.translate(bx + bw * 0.820, by + bh * 0.875); ctx.rotate(PI);
   txt(rankStr(c.rank), 0, 0, cs, su.col, 'center', 700);
-  txt(su.s, 0, bh * 0.100, cs * 0.58, su.col);
+  txt(su.s, 0, bh * 0.097, cs * 0.58, su.col);
   ctx.restore();
 
   // HOVER: el naipe se aclara y le aparece un filo dorado. No hay animación ni estado que
@@ -5097,11 +5149,11 @@ function drawCard(bx, by, bw, bh, c, opts) {
   }
   if (opts.mini) return;
 
-  txtFit(c.up.name, bx + bw * 0.5, by + bh * 0.44, bw * 0.185, bw * 0.82, '#241f18', 700);
+  txtFit(c.up.name, bx + bw * 0.5, by + bh * 0.44, bw * 0.185, bw * 0.74, '#241f18', 700);
   ctx.strokeStyle = 'rgba(90,76,52,0.28)'; ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(bx + bw * 0.24, by + bh * 0.515); ctx.lineTo(bx + bw * 0.76, by + bh * 0.515); ctx.stroke();
-  txtFit(cardEff(c), bx + bw * 0.5, by + bh * 0.585, bw * 0.100, bw * 0.84, 'rgba(46,40,32,0.80)', 500);
+  txtFit(cardEff(c), bx + bw * 0.5, by + bh * 0.585, bw * 0.100, bw * 0.76, 'rgba(46,40,32,0.80)', 500);
 
   // Cinta del palo: gradiente en vez de plano, para que se lea como una etiqueta impresa.
   const rh = bh * 0.092, ry = by + bh * 0.700;
@@ -5201,34 +5253,50 @@ function drawHandStrip(cx, cy, cw, big) {
 function drawHandPanel() {
   const S = Math.min(W, H);
   dimArena(0.88);
-  // ── Dónde va la tabla de jugadas ──
-  // A la IZQUIERDA cuando hay ancho de sobra (apaisado, que es como está registrado Loop en el
-  // Arcade): así no se come alto y los naipes crecen, que era el objetivo.
-  // ABAJO en vertical, porque ahí lo escaso es el ANCHO: una columna lateral le roba a las
-  // cartas más de lo que les libera, y medido las dejaba 19% más chicas que antes. El mismo
-  // layout no puede ser el correcto para las dos orientaciones.
+  // ── La MANO manda: va centrada en la pantalla, siempre ──
+  // La lista de jugadas se cuelga a su IZQUIERDA en vez de estar clavada al margen: acompaña a
+  // la mano en vez de competirle. Y como la mano se centra sin mirar la lista, su posición no
+  // cambia nunca — aparezca, desaparezca o cambie de ancho lo que tenga al costado.
+  // En VERTICAL la lista va abajo: ahí lo escaso es el ancho y una columna lateral le roba a las
+  // cartas más de lo que les libera (medido: las dejaba 19% más chicas).
   const land = W > H * 1.15;
-  const listW = land ? Math.min(W * 0.30, S * 0.42) : 0;
-  const cardsX = listW + (W - listW) / 2;
+  const cardsX = W / 2;
+  const n = Math.max(1, hand.length);
+  // La lista reclama SU lugar antes de que las cartas se repartan el resto. Al revés — cartas
+  // primero y lista con lo que sobre — la lista terminaba aplastada contra el margen, que es
+  // justo lo que no se quería. Como la mano va centrada, el hueco de la izquierda mide
+  // `(W - total) / 2`, así que el ancho de carta se acota para que ese hueco alcance para la
+  // lista MÁS su separación.
+  const anchoLista = land ? Math.min(S * 0.30, W * 0.23) : S * 0.60;
+  const sep = S * 0.05;                                // aire entre la lista y la mano
+  const margen = S * 0.055;                            // aire entre la lista y el borde
+  // La cuenta va de afuera hacia adentro: margen + lista + separación es lo que la mano NO puede
+  // ocupar de cada lado (de cada lado, porque va centrada). Lo que sobra es para las cartas.
+  const cwTope = land ? (W - 2 * (margen + anchoLista + sep)) / (n + (n - 1) * 0.14) : Infinity;
+  const cw = land ? Math.min(W * 0.125, S * 0.255, cwTope) : Math.min(W * 0.155, S * 0.21);
+  const chh = cw / 0.68, gap = cw * 0.14;
+  const total = n * cw + (n - 1) * gap;
+  const cy = H * (land ? 0.52 : 0.44);
 
-  txtG('YOUR HAND', cardsX, H * (land ? 0.115 : 0.13), S * TS.title, C.goldHi);
-  if (hand.length) {
-    const cw = land ? Math.min((W - listW) * 0.165, S * 0.255) : Math.min(W * 0.155, S * 0.21);
-    const chh = cw / 0.68, gap = cw * 0.14;
-    const total = hand.length * cw + (hand.length - 1) * gap;
-    const cy = H * (land ? 0.52 : 0.44);
-    for (let i = 0; i < hand.length; i++)
-      drawCard(cardsX - total / 2 + i * (cw + gap), cy - chh / 2, cw, chh, hand[i], { mark: inHand(i) });
-  }
+  txtG('YOUR HAND', cardsX, H * (land ? 0.135 : 0.13), S * TS.title, C.goldHi);
+  for (let i = 0; i < hand.length; i++)
+    drawCard(cardsX - total / 2 + i * (cw + gap), cy - chh / 2, cw, chh, hand[i], { mark: inHand(i) });
 
-  // Cada jugada en DOS líneas (nombre arriba, efecto abajo). En la columna angosta una sola
-  // línea obligaría a achicar la letra hasta lo ilegible, que es justo lo que había que arreglar.
-  const x0 = land ? S * 0.026 : W * 0.5 - S * 0.30;
-  const ancho = land ? listW - S * 0.046 : S * 0.60;
+  // Cada jugada en DOS líneas (nombre arriba, efecto abajo): en una columna angosta una sola
+  // línea obligaría a achicar la letra hasta lo ilegible, que es lo que había que arreglar.
   const fsN = Math.max(S * 0.0155, Math.min(S * 0.019, H * 0.021));
   const fsD = fsN * 0.82;
   const paso = (fsN + fsD) * 1.30;
-  const y0 = land ? H * 0.5 - (HAND_BONUS.length - 1) * paso / 2 + paso * 0.5 : H * 0.70;
+  const altoLista = (HAND_BONUS.length - 1) * paso;
+  const ancho = anchoLista;
+  let x0, y0;
+  if (land) {
+    x0 = Math.max(S * 0.026, cardsX - total / 2 - sep - ancho);
+    y0 = cy - altoLista / 2;
+  } else {
+    x0 = W / 2 - ancho / 2;
+    y0 = H * 0.70;
+  }
   for (let i = 1; i < HAND_BONUS.length; i++) {
     const y = y0 + (i - 1) * paso;
     const act = i === run.handIdx;
