@@ -1886,6 +1886,37 @@ Dos detalles que solo aparecieron mirando la captura al tamano real:
 - La etiqueta de DASH quedaba CORTADA en apaisado: caia a 332 px de un lienzo de 335. Regla que
   no necesita saber la plataforma: si abajo no entra, va arriba.
 
+### El cache de los botones se armaba cuando los botones estaban OCULTOS
+
+Franco, probando el build subido: "estan uno al lado del otro. no estan apilados".
+
+`cacheBtnRects()` se llamaba UNICAMENTE desde `resize()`, y `resize()` corre al cargar la
+pagina... **cuando el juego esta en el MENU**, donde `#actBtns` tiene `display: none`. El rect de
+un elemento oculto viene en ceros, la guarda de tamano cero deja `btnRects = null`, y el dibujo
+cae al plan B: las posiciones de escritorio, que son **lado a lado**. Y no se recalculaba nunca
+mas, porque `resize()` solo corre si cambia el tamano de la ventana.
+
+O sea que entrar a jugar desde el menu sin girar el telefono - lo que hace todo el mundo - era
+exactamente el unico camino que NO pasaba por el bueno.
+
+**Y la verificacion lo tapo.** La captura y el escenario sacaban `noTouch` y llamaban `resize()`
+a mano, o sea que median justo el caso que en el juego real no ocurre. **Un test que prepara el
+terreno para que el codigo funcione no prueba el codigo: prueba la preparacion.** Ahora el
+escenario entra desde el menu y no toca `resize()`, y verificado al reves: contra un build con el
+arreglo revertido, falla ("rects cacheados=NO").
+
+El arreglo: `ensureBtnRects()` rearma el cache cuando cambia la VISIBILIDAD, leida de las clases
+del `body` - que es lo que el CSS usa para ocultarlos, o sea la fuente de verdad. Leer clases no
+fuerza layout; el `getBoundingClientRect` de adentro si, pero corre unas pocas veces por partida.
+
+Ademas, de la misma tanda: los anillos quedaron **chicos** porque se dibujaban al 84% del boton y
+**un contorno se lee mas chico que un relleno del mismo diametro**; el boton venia dimensionado de
+cuando era un circuito relleno con el texto adentro, y ahora el texto vive afuera. Dash 84 -> 100,
+pulso 60 -> 76, anillo a 0.46 del ancho.
+Y la regla "si la etiqueta no entra abajo, va arriba" estaba pensada para un boton solo: en una
+COLUMNA, arriba de un boton hay otro boton, y la de DASH caia sobre el anillo de PULSE. Se le hace
+lugar abajo (38 px) en vez de voltearla, y el margen es ahora una asercion del escenario.
+
 ### El caballo, con silueta de caballo
 
 Era un poligono de ocho puntos rectos y se leia como una esquirla. Ahora es una cabeza de perfil

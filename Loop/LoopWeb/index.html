@@ -48,8 +48,12 @@
 
   /* ── Botones de acción (abajo a la derecha) ── */
   #actBtns {
-    position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(18px + env(safe-area-inset-bottom));
-    z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 14px;
+    /* `bottom` y `gap` dejan lugar a las ETIQUETAS, que el canvas dibuja debajo de cada anillo:
+       38 px abajo para la de DASH y 22 de hueco para la de PULSE. Con 30 quedaban CUATRO
+       pixeles de margen, que es menos que lo que varia entre dispositivos y safe-areas. Sin ese lugar la de DASH se
+       volteaba arriba y caia encima del anillo de PULSE - arriba de un boton hay otro boton. */
+    position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(38px + env(safe-area-inset-bottom));
+    z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 22px;
   }
   /* Un solo cuerpo para todo botón: superficie de panel + filo de luz arriba (inset claro) +
      base oscura. El "glow" es UNA sombra corta, no un blur grande: barato y se lee igual. */
@@ -65,8 +69,11 @@
     -webkit-tap-highlight-color: transparent;
     display: flex; align-items: center; justify-content: center;
   }
-  #btnDash { width: 84px; height: 84px; }
-  #btnPulse { width: 60px; height: 60px; }
+  /* Mas grandes que cuando eran circulos RELLENOS con el texto adentro: ahora el texto vive
+     afuera, asi que el circulo puede usar todo el lugar. Y el boton DOM es la zona tactil, o sea
+     que el objetivo de toque crece con el. */
+  #btnDash { width: 100px; height: 100px; }
+  #btnPulse { width: 76px; height: 76px; }
 
   /* ── Cluster superior derecho ── */
   #padMenu {
@@ -709,6 +716,22 @@ let cvLeft = 0, cvTop = 0;
 // `null` significa "no se pudo leer": el dibujo cae entonces a las posiciones de escritorio,
 // porque el control tiene que verse SIEMPRE, aunque sea en el lugar equivocado.
 let btnRects = null;
+// El cache se rearma cuando cambia la VISIBILIDAD de los botones, no cuando cambia el tamano de
+// la ventana. `resize()` corre al cargar, con el juego en el MENU, donde `#actBtns` esta oculto:
+// el rect venia en cero, `btnRects` quedaba nulo y el dibujo caia para siempre al plan B de
+// escritorio (lado a lado). Entrar a jugar desde el menu - o sea lo que hace todo el mundo - era
+// el unico camino que no pasaba por el bueno.
+// Las clases del `body` son lo que el CSS usa para ocultarlos, asi que son la fuente de verdad.
+// Leer clases no fuerza layout; el `getBoundingClientRect` de adentro si, pero corre unas pocas
+// veces por partida y no por frame.
+let btnVis = null;
+function ensureBtnRects() {
+  const cl = document.body.classList;
+  const vis = !cl.contains('noTouch') && !cl.contains('inMenu') && !cl.contains('picking');
+  if (vis === btnVis) return;
+  btnVis = vis;
+  if (vis) cacheBtnRects(); else btnRects = null;
+}
 function cacheBtnRects() {
   btnRects = null;
   // La pregunta correcta es si los botones OCUPAN LUGAR, no que dispositivo creemos que es. Si
@@ -721,8 +744,10 @@ function cacheBtnRects() {
   const rd2 = d.getBoundingClientRect(), rp = p.getBoundingClientRect();
   if (!rd2.width || !rp.width) return;
   btnRects = {
-    dash:  { x: rd2.left - cvLeft + rd2.width / 2, y: rd2.top - cvTop + rd2.height / 2, r: rd2.width * 0.42 },
-    pulse: { x: rp.left - cvLeft + rp.width / 2,  y: rp.top - cvTop + rp.height / 2,  r: rp.width * 0.42 },
+    // 0.46 y no 0.42: un CONTORNO se lee mas chico que un relleno del mismo diametro, asi que
+    // dejar un 16% de aire lo hacia parecer bastante menor de lo que el numero decia.
+    dash:  { x: rd2.left - cvLeft + rd2.width / 2, y: rd2.top - cvTop + rd2.height / 2, r: rd2.width * 0.46 },
+    pulse: { x: rp.left - cvLeft + rp.width / 2,  y: rp.top - cvTop + rp.height / 2,  r: rp.width * 0.46 },
   };
 }
 // Escala de resolución que aplica el afinador automático (1 = nitidez plena).
@@ -747,7 +772,9 @@ function resize() {
   clearBakes();                                       // los sprites dependen de PXR
   const cr = canvas.getBoundingClientRect();
   cvLeft = cr.left; cvTop = cr.top;
-  cacheBtnRects();                                    // depende de cvLeft/cvTop: va despues
+  // Un resize invalida lo cacheado; `ensureBtnRects` lo rearma en cuanto los botones esten
+  // visibles. Llamar a `cacheBtnRects()` directo aca era el bug: en el menu estan ocultos.
+  btnVis = null; btnRects = null;
   if (typeof invalidateStrip === 'function') invalidateStrip();
   bakeDial();
 }
@@ -6049,8 +6076,10 @@ function drawCdPip(x, y, r, f, col, label) {
   // Si abajo no entra, va arriba. En apaisado de telefono el boton de DASH queda a tres pixeles
   // del borde inferior del lienzo y la etiqueta se cortaba. No hace falta saber en que
   // plataforma estamos: alcanza con preguntar si hay lugar.
-  const fs = r * 0.46;
-  const ly = (y + r * 1.62 + fs * 0.6 > H) ? y - r * 1.62 : y + r * 1.62;
+  // Una sola posicion para la etiqueta - siempre abajo - porque una que a veces salta se lee
+  // peor. El volteo queda solo como red por si alguna pantalla no da.
+  const fs = r * 0.40;
+  const ly = (y + r * 1.45 + fs * 0.6 > H) ? y - r * 1.45 : y + r * 1.45;
   txtG(label, x, ly, fs, listo ? col : 'rgba(160,190,225,0.5)');
 }
 
@@ -6859,6 +6888,7 @@ function loop(now) {
   sndThisFrame = 0;
 
   syncTouchUI();
+  ensureBtnRects();                                   // rearma el cache al aparecer los botones
   pollInputs(dt);
   game.t += dt;
 
