@@ -1681,6 +1681,242 @@ de metal viejo tiene el brillo manchado), cuatro rayas finas de contacto, y **el
 donde barre la aguja** - lo unico que pasa siempre por el mismo lugar, hora tras hora. Semilla FIJA
 propia, nunca `rnd`: lo decorativo no toca la semilla del juego (ya rompio el modo diario una vez).
 
+## PANTALLA NEGRA (2026-09-19) - dos causas mias, una confirmada y una descartada
+
+Franco: "se me trabo jugando en un momento, quedo la pantalla negra".
+
+**Congelado Y negro tiene DOS firmas posibles en este juego y conviene distinguirlas:**
+
+1. `ctxLost`. El bucle hace `if (ctxLost) { lastT = now; return; }` y deja de dibujar. Si el
+   navegador tira el contexto por memoria y no lo restaura, queda negro para siempre.
+2. **Una excepcion ANTES del render.** `loop()` llama a `scheduleRaf()` en su PRIMERA linea, asi
+   que el proximo frame ya esta pedido cuando algo tira. El juego sigue "vivo" tirando la misma
+   excepcion en cada frame, y el lienzo se queda congelado en lo ultimo que alcanzo a dibujar.
+   **Esta es la mas enganosa**, porque el juego no esta muerto: esta corriendo y fallando.
+
+### Causa descartada: el bake del tamano equivocado
+
+`dialLitCv` (los numerales encendidos del Grupo 1) era **un lienzo del tamano completo del plato**,
+igual que `dialCv`, para dibujar DOCE NUMEROS. En escritorio ~1600x1600x4 = 10 MB: se duplico la
+asignacion mas grande del juego para usar el 1% de sus pixeles.
+
+**La leccion vale aunque no fuera la causa: un bake tiene que ser del tamano de lo que DIBUJA, no
+del sistema de coordenadas en el que vive.** Copiar la geometria del bake de al lado es lo comodo
+(misma escala, mismas coordenadas, se pega con los mismos numeros) y por eso cuesta verlo.
+
+Ahora son doce sprites chicos via `bakeSprite`: ~130 KB contra 10 MB, viven en `_bakes` (asi que
+`clearBakes()` los invalida solo, un bake menos que acordarse de poner en el handler de
+context-restored), se dibujan SOLO los encendidos, y se fue el `clip`.
+
+**Se descarto como causa del reporte** porque en el telefono de Franco ese lienzo mide menos de
+1 MB: duplicarlo no alcanza para tirar un contexto.
+
+### Causa probable: guardas de estado del audio que faltaban
+
+`droneSet` chequea `AC.state !== 'running'` antes de tocar el grafo. **Sus dos hermanos no.**
+Escribir cualquier parametro de un nodo de un AudioContext CERRADO tira `InvalidStateError`, y en
+movil el contexto se suspende o se interrumpe **solo**: una llamada, cambiar de app, la pagina al
+fondo. No es un estado hipotetico.
+
+Y encaja con el sintoma exacto: `updateAmbience` llama a `droneOff()` **cada medio segundo**
+mientras no estas jugando, y corre en `loop()` ANTES del render. Firma numero 2 de arriba.
+
+`acOk()` es ahora el UNICO lugar donde se decide si se puede tocar el grafo de audio.
+
+**Regla general que sale de esto: si una funcion toca el grafo de audio, la pregunta no es "hay
+contexto" sino "el contexto esta CORRIENDO".** Y todo lo que corra antes del render puede llevarse
+puesto el frame entero.
+
+### El invariante que faltaba: `memoria`
+
+La suite tenia 53 escenarios y **ninguno podia cazar esto**, porque todos miden COMPORTAMIENTO y
+el problema era de RECURSOS: nada se rompia, se acababa la memoria de lienzos.
+
+`SCENARIOS['memoria']` envuelve `document.createElement`, cuenta cada lienzo que el juego crea y
+suma su area despues de forzar un rehorneado y jugar un rato. Falla si el total pasa de 64 MB o si
+aparecen mas de dos lienzos de mas de 1 megapixel (**uno grande es el plato y esta bien; dos
+significa que alguien volvio a copiar su geometria para dibujar cuatro cosas**).
+
+Medido hoy: **47 lienzos, 3.5 MB en total, el mas grande 1.5 MB, cero de mas de 1 MP.**
+
+Importa especialmente porque todos los juegos del Arcade viven en iframes del mismo renderer y
+comparten el techo de lienzos - ya paso una vez y esta en la memoria del proyecto.
+
+## GRUPO 3 - dos gramaticas para el cierre, dos materiales para las grillas
+
+### El bucle chico y el grande eran la misma animacion pintada de otro color
+
+(Correccion de una nota del Grupo 2: el fantasma de los bucles no cenidos NO usaba el violeta de
+las reglas, usaba (125,249,255), que es el hielo. El color ya estaba bien.)
+
+**CENIDO = COMPRESION.** El poligono se CONTRAE hacia su centro en 0.22 s con filo duro. El
+anillo tambien se contrae (a `addRing` se le pasan los radios al reves). Las chispas nacen EN EL
+PERIMETRO y van HACIA ADENTRO: **el sentido de las particulas es la mitad de la lectura** - es lo
+que convierte "exploto algo" en "algo se cerro sobre algo". No deja marca: un golpe no deja
+huella.
+
+**GRANDE = BARRIDO.** El poligono no se mueve; lo que pasa es que su CONTORNO SE DIBUJA punto por
+punto, **en el mismo orden en que lo dibujo el jugador**. El poligono empieza en el cruce y sigue
+el hilo hasta la cabeza, asi que recorrerlo en orden ES recorrer lo que acaba de pasar: el dato ya
+venia ordenado, no hay que calcular nada. Dura 0.55 s, el anillo se expande, y deja una **huella
+sobre el fieltro** que se va en 2.6 s.
+
+Las marcas van DECIMADAS (`markPts`, con `ceil` y no `floor` - con floor el tope no se respeta) y
+con tope de 2: sin eso, cada marca es un poligono de cientos de puntos pagandose en cada frame y
+el plato se llena de graffiti.
+
+### Hitstop: la jerarquia estaba al reves
+
+Cerrar un bucle - el verbo central del juego - no tenia ninguno, mientras que recibir un golpe,
+embestir y el envion del luchador si. Ahora: bucle vacio = nada; con algo adentro = un toque;
+cenido = claro; cenido con dos o mas muertes = el techo (medido: 0.069 s, exactamente
+`CFG.juice.hitstop * 1.25`). **Un bucle vacio no congela nada: si todo congela, nada pesa.**
+
+### Dos grillas, dos materiales
+
+La 9x9 tenia la linea clara AZULADA, lo que la emparentaba con el hielo - el color del jugador - y
+la hacia competir. Gris neutro y mas tenue: es estructura de fondo, no informacion.
+
+El "#" del ta-te-ti estaba en cian, o sea en la familia de la LUZ. **El "#" no es luz: es una
+pieza del mecanismo.** Pasa a laton, se hornea DORMIDO, y lo enciende una capa que solo se dibuja
+mientras `game.sectorsOpen` - cero coste el resto de la hora, y comparte el clip de `drawSectors`
+para no agregar un segundo recorte contra el mismo circulo.
+
+El relleno de un sector RECLAMADO se queda en hielo a proposito: **el laton es la estructura del
+mecanismo, el hielo sos vos.** Las lineas son de la maquina; las marcas que dejas encima son
+tuyas.
+
+### El bug: el temporizador estaba en el lugar equivocado
+
+Al morir, el fantasma y las marcas se CONGELABAN en pantalla, porque sus temporizadores vivian
+adentro de `updatePlayer`, que arranca con `if (!P.alive) return;`.
+
+Quinta aparicion de la familia "estado que se queda pegado" en este proyecto, pero el diagnostico
+es distinto de las otras cuatro: **el bug no fue olvidarse de limpiar, fue poner el temporizador
+en el lugar equivocado.** Un fantasma de bucle y una marca son EFECTOS: viven y mueren como las
+chispas y los anillos, y tienen que avanzar donde avanzan ellos. Se mudaron a `updateEffects`.
+
+### Coste: el mismo error que ya se habia corregido una vez
+
+`drawChapterRing` habia quedado en **21.6 de peso, el SEGUNDO dibujo mas caro del juego**, para un
+contador de horas: nueve strokes (marcas de hora encendidas) mas nueve blits (numerales)... en el
+mismo angulo, diciendo lo mismo. Es identico al error que se corrigio en el Grupo 1 al sacar la
+banda de progreso. Se fueron las marcas: **21.6 -> 4.5**, y el anillo se lee igual.
+
+## `bossdps` era un instrumento RUIDOSO presentado como preciso
+
+**Correccion importante sobre lo que se reporto el 2026-09-18.** Cuando se eligio la vida del jefe
+(12000), este escenario midio 163/s con mano armada y de ahi salio el "44 s al techo". Medido
+despues, sobre builds distintos y sobre el mismo: 130, 163, 200, 200, 226, 229. **El instrumento
+oscila casi al doble.**
+
+La causa es estructural: la medicion cuenta el dano hecho en una ventana de 9 segundos en la que
+se cierran CUATRO O CINCO bucles. Un bucle mas o menos mueve el resultado un 20-25%. **Medir algo
+que ocurre cinco veces adentro de la ventana de medicion no puede dar un numero estable.**
+
+Y el error de metodo es peor que el numero: se saco una conclusion de UNA sola corrida, que es
+exactamente lo que el escenario decia estar corrigiendo cuando reemplazo "elegir la vida a ojo"
+por "medirla". Medir mal con confianza es peor que estimar sabiendo que se estima.
+
+Lo que el escenario **si** mide bien, porque fue consistente en todas las corridas (74, 79, 82,
+84, 92 /s):
+  - que la mejor orbita es la de radio ~0.20, apenas por afuera del jefe;
+  - que girar PEGADO cierra bucles que no lo contienen (el hallazgo geometrico original);
+  - y sirve como ALARMA: si el jefe se cae en menos de 22 s, algo se rompio.
+
+Lo que **no** puede resolver es el numero absoluto de segundos de pelea. La vida del jefe quedo en
+12000 y la pelea dura, para un jugador fuerte, **entre ~30 y ~55 s segun la corrida**. Afinar eso
+mejor pide jugarlo, no medirlo con esta herramienta.
+
+Ahora reporta la MEDIANA de tres muestras con su dispersion, y el umbral de la asercion paso de
+35 s a 22 s: dejo de pretender ser un termometro y es lo que puede ser, una alarma.
+
+## CORRECCIONES 2026-09-19 (lote aparte del Grupo 4)
+
+### El carril viaja con la pieza
+
+Franco: "si una onda de choque desplaza una pieza y despues se ejecuta su movimiento previsto, la
+pieza termina recorriendo tambien la distancia adicional desde su nueva posicion hasta el destino
+original".
+
+**El arreglo anterior era medio arreglo.** Se habia re-anclado el ORIGEN al arrancar la embestida
+(`sxp = e.x`) dejando el destino fijo, con el argumento de que el carril dibujado promete un
+destino. Eso quita la teletransportacion pero deja lo otro: el carril se ESTIRA y la pieza recorre
+de mas.
+
+Lo correcto es que **el movimiento entero se traslade**: misma direccion, MISMA DISTANCIA, otro
+punto de partida. Un empujon te corre a vos y a tu intencion con vos.
+
+Y hay UN SOLO lugar donde hacerlo. Las seis fuentes de desplazamiento - pulso del jugador,
+campanada del reloj, rafaga del frenesi, embestida del dash, orbe cargada y barril - pasan todas
+por `e.knock()`, que acumula en `kx/ky`, y eso se convierte en posicion en un unico bloque de
+`updateEnemies`. Trasladando `sxp/syp/tx/ty` ahi quedan cubiertas todas, **incluidas las que se
+agreguen despues**. Se saco el re-anclaje: con el carril viajando seria un segundo mecanismo
+haciendo el mismo trabajo, que es como nacen los bugs que nadie entiende.
+
+Efecto lateral que no se habia mirado: durante `move` el lerp del carril PISA la posicion en cada
+frame, asi que un empujon en plena embestida se tiraba a la basura y pegarle a algo que embiste no
+hacia nada. Medido: el destino se corre 0.217 en vez de 0.
+
+El destino trasladado se acota a radio 0.93. Por eso las distancias medidas dan levemente NEGATIVAS
+(-0.016 a -0.044): una pieza empujada contra el borde no puede lanzar su embestida fuera de la
+arena. **La asercion del test es asimetrica a proposito**: recorrer de mas es el bug; recorrer de
+menos solo puede venir del recorte.
+
+### Un solo control de dash y pulso
+
+Habia dos implementaciones para lo mismo: anillo dibujado en canvas (escritorio) y boton DOM
+relleno (tactil), que ademas decian el enfriamiento de forma distinta - arco que se llena contra
+opacidad. **La unica forma de que no vuelvan a divergir es que haya una sola implementacion, no
+dos que se parezcan.** El anillo se dibuja siempre; el boton DOM queda como zona tactil
+invisible (`color: transparent`, no `visibility: hidden`, porque tiene que seguir recibiendo
+toques).
+
+`btnRects` se cachea en `resize()`: `getBoundingClientRect` fuerza recalculo de layout y pedirlo
+por frame es el error que este proyecto ya cometio con el hover (de ahi `cvLeft/cvTop`). Si no se
+pudo leer, el dibujo cae a las posiciones de escritorio - **el control tiene que verse SIEMPRE,
+aunque sea en el lugar equivocado.**
+
+Dos detalles que solo aparecieron mirando la captura al tamano real:
+
+- `cacheBtnRects` preguntaba `IS_TOUCH`, y **la pregunta correcta es si los botones estan
+  MAQUETADOS**, no que dispositivo creemos que es. Ademas en headless `IS_TOUCH` es falso y no se
+  puede forzar: con la condicion vieja era imposible fotografiar lo que ve un telefono, y **un
+  cambio visual que no se puede mirar no se puede verificar**.
+- La etiqueta de DASH quedaba CORTADA en apaisado: caia a 332 px de un lienzo de 335. Regla que
+  no necesita saber la plataforma: si abajo no entra, va arriba.
+
+### El caballo, con silueta de caballo
+
+Era un poligono de ocho puntos rectos y se leia como una esquirla. Ahora es una cabeza de perfil
+mirando a la derecha con el lenguaje de las piezas de ajedrez web: hocico largo, dos orejas con su
+valle, nuca curva, quijada, base ancha. Manda la SILUETA porque a 20 px es lo unico que sobrevive
+- la misma leccion que la banda del anillo y la canica. Como la pieza **se hornea**, las curvas son
+gratis.
+
+### El aviso de cierre, revertido
+
+Se fueron el resaltado ambar, el registro de `nearD2`/`nearIdx` dentro de `findSelfCross` y las dos
+limpiezas que existian unicamente para el. `findSelfCross` volvio exactamente a lo que era: ni una
+asignacion de mas en un bucle que recorre cientos de segmentos por frame. **El resto del hilo del
+Grupo 2 se queda**: materialidad, sombra de apoyo, nucleo de la cabeza, tension, paleta.
+
+### El test midio mal TRES veces en este lote
+
+Vale anotarlo junto porque las tres tienen la misma forma - **el instrumento mide una ruta que el
+juego ya no usa, o una magnitud que no es la que dice medir** - y las tres reportaron bugs del
+juego que no existian:
+
+1. Empujaba con `e.x += dx` a mano. Eso no es el camino real (el juego empuja via `e.knock`) y,
+   con el carril viajando, es justo lo UNICO que no lo mueve.
+2. Contaba **el empujon mismo** como si fuera un salto del carril. La cota legitima de un frame
+   es el paso del carril MAS el empujon vigente, no solo el primero.
+3. Usaba el largo de carril capturado al principio, pero en dos segundos una pieza rapida termina
+   su embestida y **elige un carril nuevo**: el valor quedaba obsoleto.
+
+**Regla: cuando un test empieza a fallar despues de un arreglo, la primera pregunta es si el test
+sigue midiendo lo que el juego hace ahora.**
+
 ## Lo que sigue en hold (2026-09-18)
 
 Franco descarto las propuestas para **CrazyTanks** (la aguja como rival en una carrera; los

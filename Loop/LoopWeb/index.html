@@ -53,28 +53,20 @@
   }
   /* Un solo cuerpo para todo botón: superficie de panel + filo de luz arriba (inset claro) +
      base oscura. El "glow" es UNA sombra corta, no un blur grande: barato y se lee igual. */
+  /* DASH y PULSO se DIBUJAN EN EL CANVAS, igual que en escritorio: una sola implementacion en
+     vez de dos que se parecen. El boton DOM se queda solo como zona tactil - misma posicion,
+     mismo tamano, invisible -, que es lo que de verdad aporta: un objetivo de toque con su
+     propio manejo de eventos. El texto tambien se va: lo escribe el canvas.
+     `color: transparent` y no `visibility: hidden` porque el elemento tiene que seguir
+     recibiendo toques. */
   .abtn {
-    border-radius: 50%; border: 1.5px solid rgba(111,227,242,0.5);
-    background: var(--panel); color: var(--ice);
-    font-weight: 700; letter-spacing: 1.4px; font-size: 11px;
+    border-radius: 50%; border: 0; background: transparent; color: transparent;
     cursor: pointer; touch-action: none; padding: 0; font-family: inherit;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.45), 0 0 10px rgba(111,227,242,0.13),
-                inset 0 1px 0 rgba(255,255,255,0.12);
-    transition: transform 0.07s ease-out, box-shadow 0.12s, border-color 0.12s;
+    -webkit-tap-highlight-color: transparent;
     display: flex; align-items: center; justify-content: center;
   }
-  .abtn:active, .abtn.on {
-    transform: scale(0.91) translateY(1px); border-color: var(--ice);
-    box-shadow: 0 0 18px rgba(111,227,242,0.42), inset 0 2px 6px rgba(0,0,0,0.5);
-  }
-  /* .cool = en cooldown: se apaga. El JS lo togglea leyendo el cd real del dash. */
-  .abtn.cool { opacity: 0.35; box-shadow: none; }
-  #btnDash { width: 84px; height: 84px; font-size: 13px; }
-  #btnPulse { width: 60px; height: 60px; border-color: rgba(232,180,74,0.5); color: var(--goldHi);
-              box-shadow: 0 2px 10px rgba(0,0,0,0.45), 0 0 10px rgba(232,180,74,0.13),
-                          inset 0 1px 0 rgba(255,255,255,0.12); }
-  #btnPulse:active, #btnPulse.on { border-color: var(--gold);
-              box-shadow: 0 0 18px rgba(232,180,74,0.42), inset 0 2px 6px rgba(0,0,0,0.5); }
+  #btnDash { width: 84px; height: 84px; }
+  #btnPulse { width: 60px; height: 60px; }
 
   /* ── Cluster superior derecho ── */
   #padMenu {
@@ -431,6 +423,12 @@ const CFG = {
   // 2.0 s (corto) a 2.8 s (largo): pesado y legible.
   pend:   { g: 3.2, damp: 0.035, amp: 0.8, vel: 0.7 },
 
+  // LAS DOS GRAMATICAS DEL CIERRE. `ghostTight` es corto a proposito: una compresion que dura
+  // se deja de leer como golpe. `ghostBig` es el tiempo que tarda el contorno en re-trazarse.
+  // `markMax` 2 y `markPts` 28: sin tope, el plato se llena de graffiti y ademas cada marca es
+  // un poligono de cientos de puntos pagandose en cada frame.
+  loop:   { ghostTight: 0.22, ghostBig: 0.55, markT: 2.6, markMax: 2, markPts: 28 },
+
   juice:  { trDecay: 2.4, shakeOff: 0.017, shakeRot: 0.014, shakeHz: 22, hitstop: 0.055 },
 };
 
@@ -575,8 +573,14 @@ function noiseHit(dur, vol, freq, q) {
 // La altura NO cambia con la hora. Cambiar de altura seria cambiar de tonalidad, y ahi deja de
 // ser una habitacion y pasa a ser musica. Lo que cambia es cuanto se oye.
 let droneOsc = null, droneFifth = null, droneGain = null;
+// El UNICO lugar donde se decide si se puede tocar el grafo de audio. Un AudioContext cerrado
+// tira `InvalidStateError` al escribir cualquier parametro, y en movil el contexto se suspende o
+// se interrumpe solo (una llamada, cambiar de app, la pagina al fondo): este estado no es
+// hipotetico.
+function acOk() { return !!(AC && masterGain && AC.state === 'running'); }
+
 function droneSet(vol) {
-  if (!AC || AC.state !== 'running') return;
+  if (!acOk()) return;
   if (!droneOsc) {
     droneGain = AC.createGain(); droneGain.gain.value = 0; droneGain.connect(masterGain);
     droneOsc = AC.createOscillator(); droneOsc.type = 'sine'; droneOsc.frequency.value = 55;
@@ -587,7 +591,11 @@ function droneSet(vol) {
   // `setTargetAtTime` con constante larga: el colchon nunca entra ni sale de golpe, se filtra.
   droneGain.gain.setTargetAtTime(Math.max(0, vol), AC.currentTime, 0.5);
 }
-function droneOff() { if (droneGain && AC) droneGain.gain.setTargetAtTime(0, AC.currentTime, 0.3); }
+// OJO: `updateAmbience` llama a esto CADA MEDIO SEGUNDO mientras no estas jugando, y corre antes
+// del render. Sin la guarda de estado, un contexto cerrado tiraba aca y se llevaba puesto el
+// dibujo de todo el frame - con `scheduleRaf()` ya disparado, el juego seguia vivo tirando la
+// misma excepcion siempre y el lienzo congelado en lo ultimo que alcanzo a dibujar.
+function droneOff() { if (droneGain && acOk()) droneGain.gain.setTargetAtTime(0, AC.currentTime, 0.3); }
 
 // ── EL SILENCIO COMO INSTRUMENTO ──
 // Agacha TODO por un rato y vuelve. Se usa dos veces en toda la partida: cuando despierta el
@@ -597,7 +605,7 @@ function droneOff() { if (droneGain && AC) droneGain.gain.setTargetAtTime(0, AC.
 // `.value` mientras hay rampas programadas NO hace nada, asi que el boton tiene que cancelarlas
 // antes (ver p13_tail).
 function audioHush(dur, piso) {
-  if (!AC || !masterGain || muted) return;
+  if (!acOk() || muted) return;
   const t = AC.currentTime, f = piso === undefined ? 0.05 : piso;
   masterGain.gain.cancelScheduledValues(t);
   masterGain.gain.setValueAtTime(masterGain.gain.value, t);
@@ -686,13 +694,37 @@ let shakeX = 0, shakeY = 0, shakeR = 0, trauma = 0, zoomPunch = 0;
 canvas.addEventListener('contextlost', e => { e.preventDefault(); ctxLost = true; });
 canvas.addEventListener('contextrestored', () => {
   ctxLost = false;
-  _glowCache.clear(); dialCv = null; dialLitCv = null; vigGrad = null; bgGrad = null;
+  // Los numerales encendidos NO aparecen aca a proposito: viven en `_bakes` y los limpia
+  // `clearBakes()` desde `resize()`. Un bake menos que haya que acordarse de invalidar a mano.
+  _glowCache.clear(); dialCv = null; vigGrad = null; bgGrad = null;
   resize(); bakeDial();
 });
 
 // Origen del canvas en la página. Se refresca en `resize()` y NO en cada movimiento del mouse:
 // getBoundingClientRect fuerza recálculo de layout, y el hover lo pediría ~60 veces por segundo.
 let cvLeft = 0, cvTop = 0;
+// Centro y radio de los botones tactiles, EN COORDENADAS DE CANVAS. Se leen una vez por resize:
+// `getBoundingClientRect` fuerza recalculo de layout y pedirlo por frame es el error que este
+// proyecto ya cometio una vez con el hover (de ahi `cvLeft/cvTop`).
+// `null` significa "no se pudo leer": el dibujo cae entonces a las posiciones de escritorio,
+// porque el control tiene que verse SIEMPRE, aunque sea en el lugar equivocado.
+let btnRects = null;
+function cacheBtnRects() {
+  btnRects = null;
+  // La pregunta correcta es si los botones OCUPAN LUGAR, no que dispositivo creemos que es. Si
+  // `#actBtns` esta oculto (escritorio, menu, pantallas de eleccion) el rect viene en cero y se
+  // cae a las posiciones de escritorio. Ademas asi se puede fotografiar en headless, donde
+  // `IS_TOUCH` es falso y no se puede forzar: un cambio visual que no se puede mirar no se puede
+  // verificar.
+  const d = document.getElementById('btnDash'), p = document.getElementById('btnPulse');
+  if (!d || !p) return;
+  const rd2 = d.getBoundingClientRect(), rp = p.getBoundingClientRect();
+  if (!rd2.width || !rp.width) return;
+  btnRects = {
+    dash:  { x: rd2.left - cvLeft + rd2.width / 2, y: rd2.top - cvTop + rd2.height / 2, r: rd2.width * 0.42 },
+    pulse: { x: rp.left - cvLeft + rp.width / 2,  y: rp.top - cvTop + rp.height / 2,  r: rp.width * 0.42 },
+  };
+}
 // Escala de resolución que aplica el afinador automático (1 = nitidez plena).
 // Vive afuera de `resize()` porque `resize()` corre también por cambios de tamaño de ventana y no
 // tiene que pisar lo que el afinador ya decidió.
@@ -715,6 +747,7 @@ function resize() {
   clearBakes();                                       // los sprites dependen de PXR
   const cr = canvas.getBoundingClientRect();
   cvLeft = cr.left; cvTop = cr.top;
+  cacheBtnRects();                                    // depende de cvLeft/cvTop: va despues
   if (typeof invalidateStrip === 'function') invalidateStrip();
   bakeDial();
 }
@@ -1040,6 +1073,7 @@ function toast(text, col) {
 }
 
 function updateEffects(dt) {
+  updateLoopFx(dt);                                   // el fantasma del bucle y las marcas
   // drag exponencial: la única forma correcta de amortiguar con dt variable
   const drag = Math.pow(0.06, dt);
   for (let k = sparks.length - 1; k >= 0; k--) {
@@ -1484,10 +1518,6 @@ function sectorBoost() { return P.alive && sectors[sectorAt(P.x, P.y)] === 1; }
 // es un solo drawImage por frame. Dibujar 60 marcas + 81 celdas + números en cada frame
 // costaba ~300 llamadas de path; esto cuesta 1.
 let dialCv = null, dialX = 0, dialY = 0, dialS = 0;
-// Segundo horneado, misma geometria que el plato: SOLO los numerales y las marcas de hora, en
-// laton vivo, todo lo demas transparente. Pegarlo recortado contra una cuna es como se enciende
-// el progreso de la run sin redibujar doce textos por frame.
-let dialLitCv = null;
 let bgGrad = null, vigGrad = null, lowGrad = null;   // lowGrad: aviso de vida baja
 
 // Grano de fieltro. Un mosaico chico de ruido que se repite: cuesta un fill en vez de miles
@@ -1577,7 +1607,9 @@ function bakeDial() {
   g.lineWidth = gw;
   g.strokeStyle = 'rgba(0,0,0,0.30)'; gridPath(); g.stroke();
   g.save(); g.translate(LIGHT.x * off * 2, LIGHT.y * off * 2);
-  g.strokeStyle = 'rgba(160,200,250,0.075)'; gridPath(); g.stroke();
+  // Gris NEUTRO, no azulado. El azul la emparentaba con el hielo - que es el color del jugador -
+  // y la hacia competir. Esto es estructura de fondo, no informacion.
+  g.strokeStyle = 'rgba(214,224,238,0.055)'; gridPath(); g.stroke();
   g.restore();
 
   // Ta-te-ti: el "#" grande, también tallado - es la lectura estratégica del plato y tiene
@@ -1593,10 +1625,12 @@ function bakeDial() {
   g.lineWidth = Math.max(2, R * 0.0105);
   g.strokeStyle = 'rgba(0,0,0,0.34)'; hashPath(); g.stroke();       // surco
   g.lineWidth = Math.max(1.4, R * 0.0072);
-  g.strokeStyle = 'rgba(110,225,242,0.17)'; hashPath(); g.stroke();  // fondo del surco
+  // LATON, no cian. El "#" no es luz: es una pieza del mecanismo. Y va DORMIDO - lo enciende
+  // `drawSectorHash` solo mientras la ventana de rombos esta abierta.
+  g.strokeStyle = 'rgba(150,118,62,0.17)'; hashPath(); g.stroke();   // fondo del surco
   g.lineWidth = Math.max(0.7, R * 0.0022);
   g.save(); g.translate(LIGHT.x * off * 2.4, LIGHT.y * off * 2.4);
-  g.strokeStyle = 'rgba(185,244,251,0.20)'; hashPath(); g.stroke();  // filo iluminado
+  g.strokeStyle = 'rgba(232,198,138,0.17)'; hashPath(); g.stroke();  // filo iluminado
   g.restore();
   g.restore();
 
@@ -1721,33 +1755,6 @@ function bakeDial() {
   g.fillStyle = gDesg;
   g.beginPath(); g.arc(O, O, R * 0.86, 0, TAU); g.fill();
 
-  // ── HORNEADO 2: LAS HORAS VIVIDAS ──
-  // Mismo tamano y mismo centro que el plato, asi se pega con las mismas coordenadas. Solo las
-  // marcas de hora y los numerales, en laton vivo. El resto queda transparente.
-  const cv2 = document.createElement('canvas');
-  cv2.width = cv.width; cv2.height = cv.height;
-  const g2 = cv2.getContext('2d');
-  g2.setTransform(dpr, 0, 0, dpr, 0, 0);
-  for (let i = 0; i < 12; i++) {
-    const a = -PI / 2 + i * TAU / 12;
-    g2.strokeStyle = 'rgba(255,226,158,0.95)';
-    g2.lineWidth = Math.max(1.4, R * 0.0072);
-    g2.beginPath();
-    g2.moveTo(O + Math.cos(a) * R * 0.905, O + Math.sin(a) * R * 0.905);
-    g2.lineTo(O + Math.cos(a) * R * 0.958, O + Math.sin(a) * R * 0.958);
-    g2.stroke();
-  }
-  g2.textAlign = 'center'; g2.textBaseline = 'middle';
-  g2.font = '800 ' + Math.round(R * 0.055) + 'px ' + FONT;
-  for (let i = 1; i <= 12; i++) {
-    const a = -PI / 2 + i * TAU / 12, rr = R * 0.868;
-    const nx = O + Math.cos(a) * rr, ny = O + Math.sin(a) * rr;
-    g2.fillStyle = 'rgba(0,0,0,0.5)';                 // el grabado tambien, o flota
-    g2.fillText(String(i), nx - LIGHT.x * R * 0.0022, ny - LIGHT.y * R * 0.0022);
-    g2.fillStyle = 'rgba(255,233,175,0.98)';
-    g2.fillText(String(i), nx, ny);
-  }
-  dialLitCv = cv2;
 }
 
 // ── EL ANILLO DE CAPITULO ES EL PROGRESO DE LA RUN ──
@@ -1757,45 +1764,58 @@ function bakeDial() {
 // Va como capa y no dentro de `bakeDial` por dos razones: meterlo en el horneado obligaria a
 // re-hornear el plato entero cada hora y romperia que el bake sea funcion pura del tamano, y
 // ademas asi avanza continuo dentro de la hora en vez de saltar de a doceavos.
+// Un numeral encendido, horneado APARTE y chiquito. La primera version horneaba un lienzo del
+// TAMANO COMPLETO DEL PLATO para dibujar doce numeros - 10 MB en escritorio, duplicando la
+// asignacion mas grande del juego para usar el 1% de sus pixeles - y eso es lo que terminaba
+// tirando el contexto del canvas: pantalla negra congelada.
+// **Un bake tiene que ser del tamano de lo que DIBUJA, no del sistema de coordenadas en el que
+// vive.** Copiar la geometria del bake de al lado era lo comodo y por eso costo verlo.
+// Viven en `_bakes`, asi que `clearBakes()` los invalida solo.
+function hourPip(i, R) {
+  return bakeSprite('hn' + i + '|' + Math.round(R), Math.ceil(R * 0.052), (cx, cy) => {
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = '800 ' + Math.round(R * 0.055) + 'px ' + FONT;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';                // el grabado tambien, o flota
+    ctx.fillText(String(i), cx - LIGHT.x * R * 0.0022, cy - LIGHT.y * R * 0.0022);
+    ctx.fillStyle = 'rgba(255,233,175,0.98)';
+    ctx.fillText(String(i), cx, cy);
+  });
+}
+
+// ── EL ANILLO DE CAPITULO ES EL PROGRESO DE LA RUN ──
+// Doce numerales, doce horas. Esto es la AGUJA DE HORA: la varilla que ya existe da una vuelta
+// por hora (es el minutero) y esto avanza un doceavo por hora. No es un indicador nuevo, es la
+// aguja que faltaba, dibujada como horas encendidas en vez de como segunda varilla.
 function drawChapterRing() {
   if (game.state === 'menu') return;
-  const hs = CFG.clock.hours;
+  const hs = CFG.clock.hours, R = PXR;
   // Durante la pelea del jefe el reloj esta detenido (la hora 12 no vence por reloj), asi que la
   // cuenta se queda llena: es verdad, ya sobreviviste las doce.
   const dentro = game.bossFight ? 1 : clamp(game.hourT / hourDur(), 0, 1);
   const p = clamp((Math.min(game.hour, hs) - 1 + dentro) / hs, 0, 1);
-  const a0 = -PI / 2, a1 = a0 + TAU * p;
+  const vivas = Math.min(hs, Math.floor(p * hs + 1e-9));
+  // El numeral de la hora EN CURSO se enciende de a poco en el ultimo cuarto: el mismo aviso que
+  // da el tictac al subdividirse, dicho por el otro sentido.
+  const asomando = clamp((p * hs - vivas - 0.75) * 4, 0, 1);
+  // Latido al cambiar de hora: `game.t` se reinicia ahi, asi que sale gratis y marca el unico
+  // momento en que la cuenta da un paso.
+  const fresco = game.state === 'play' ? clamp(1 - game.t / 0.8, 0, 1) : 0;
 
-  // ── LAS HORAS VIVIDAS SE ENCIENDEN ──
-  // Un clip y un drawImage. Se probo primero con una banda fina y no se leia: en apaisado de
-  // telefono el radio del plato son ~150 px y una banda de 0.014 del radio mide DOS PIXELES.
-  // Los numerales, en cambio, ya estan dimensionados para leerse a cualquier tamano.
-  if (dialLitCv && p > 0.0008) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(CX, CY);
-    ctx.arc(CX, CY, sr(1.05), a0, a1);
-    ctx.closePath();
-    ctx.clip();
-    ctx.drawImage(dialLitCv, dialX, dialY, dialS, dialS);
-    // Latido al cambiar de hora: `game.t` se reinicia ahi, asi que el pulso sale gratis y marca
-    // el unico momento en que la cuenta da un paso. Lo que late es el numeral nuevo.
-    const fresco = game.state === 'play' ? clamp(1 - game.t / 0.8, 0, 1) : 0;
-    if (fresco > 0.01) {
-      ctx.globalAlpha = fresco * 0.55;
-      ctx.drawImage(dialLitCv, dialX, dialY, dialS, dialS);
-      ctx.globalAlpha = 1;
-    }
-    ctx.restore();
-  }
-
-  // NO hay banda de progreso. Se probo y se saco por dos razones: era un segundo aro de laton
-  // adentro del bisel (achicaba el plato y competia con el), y sobre todo era REDUNDANTE - lo
-  // que marcaba era el avance dentro de la hora en curso, que es literalmente lo que hace la
-  // aguja, que da una vuelta por hora.
-  // Quedan dos indicadores y ninguno pisa al otro: los numerales cuentan las horas vividas (lo
-  // discreto) y la aguja marca donde estas adentro de la hora (lo continuo).
-  ctx.lineWidth = 1;
+  const dibujar = (i, a) => {
+    if (a <= 0.01) return;
+    const ang = -PI / 2 + i * TAU / 12;
+    const co = Math.cos(ang), si = Math.sin(ang);
+    // SOLO el numeral. Habia tambien una marca de hora encendida, en el MISMO angulo, diciendo
+    // lo mismo: 21.6 de peso por frame - el segundo dibujo mas caro del juego - para un contador
+    // de horas. Es el mismo error que ya se corrigio al sacar la banda de progreso, dos
+    // indicadores para un solo dato. El numeral es el que carga la informacion.
+    ctx.globalAlpha = a;
+    blit(hourPip(i, R), CX + co * R * 0.868, CY + si * R * 0.868);
+    ctx.globalAlpha = 1;
+  };
+  for (let i = 1; i <= vivas; i++) dibujar(i, 1);
+  if (vivas < hs) dibujar(vivas + 1, asomando * 0.75);
+  if (fresco > 0.01 && vivas >= 1) dibujar(vivas, fresco * 0.6);   // el latido del paso nuevo
 }
 
 function drawBackdrop() {
@@ -1855,6 +1875,23 @@ function drawSectorTargets() {
 }
 
 // Sectores reclamados: relleno translúcido + marco. Se dibujan DEBAJO de todo lo vivo.
+// El "#" ENCENDIDO. Va como capa y no dentro del horneado porque tiene que poder aparecer y
+// desaparecer: el bake es funcion pura del tamano. Se dibuja unicamente mientras la ventana de
+// rombos esta abierta, asi que la mayor parte de la hora cuesta cero.
+// Late muy lento: es laton bajo una lampara, no un indicador parpadeando.
+function drawSectorHash() {
+  const q = SECT_Q / 2, lat = 0.62 + 0.38 * Math.sin(perfT * 1.7);
+  ctx.beginPath();
+  for (const t of [-q, q]) {
+    ctx.moveTo(sx(t), sy(-0.97)); ctx.lineTo(sx(t), sy(0.97));
+    ctx.moveTo(sx(-0.97), sy(t)); ctx.lineTo(sx(0.97), sy(t));
+  }
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = 'rgba(255,214,150,' + (0.10 + 0.13 * lat).toFixed(3) + ')';
+  ctx.lineWidth = Math.max(1.4, sr(0.0072));
+  ctx.stroke();
+}
+
 function drawSectors(dt) {
   // El recorte contra el plato se hace UNA vez para los nueve. Estaba dentro del bucle: con el
   // tablero lleno eran nueve `clip` por frame para recortar siempre contra el mismo círculo, y
@@ -1865,9 +1902,13 @@ function drawSectors(dt) {
     else sectorT[i] = Math.max(0, sectorT[i] - dt * 4.5);
     if (sectorT[i] > 0.001) algo = true;
   }
-  if (!algo) return;
+  // El realce del "#" comparte el MISMO clip que los sectores: dos recortes contra el mismo
+  // circulo serian dos clips por frame, y clip es de lo mas caro que hay en GPU movil.
+  const abierto = game.sectorsOpen && game.state === 'play';
+  if (!algo && !abierto) return;
   ctx.save();
   ctx.beginPath(); ctx.arc(CX, CY, sr(0.995), 0, TAU); ctx.clip();
+  if (abierto) drawSectorHash();
   for (let i = 0; i < 9; i++) {
     if (sectorT[i] <= 0.001) continue;
     const k = easeOutCubic(sectorT[i]);
@@ -1909,7 +1950,12 @@ const P = {
 // los puntos quedaban exactamente donde pasaste y no se movían nunca. Un hilo de verdad se
 // arrastra: la parte cerca de la mano hace látigo, la parte lejana queda apoyada en la mesa.
 const thread = [];
-let loopGhost = null;                       // último bucle cerrado, para el flash
+let loopGhost = null;
+// MARCAS SOBRE EL FIELTRO: la huella que deja un bucle GRANDE, como tiza sobre el pano. Es lo
+// unico persistente que agrega el grupo, asi que se limpia en los mismos dos lugares que
+// `loopGhost` - cuarta vez que aparece en este proyecto la familia "valor que persiste y nadie
+// borra", y la forma de no repetirla es que viva al lado de su hermano.
+const feltMarks = [];                       // último bucle cerrado, para el flash
 // Reloj propio de la soga. NO usar `perfT` acá: perfT es tiempo de pared desde que cargó la
 // página, así que la fase de la onda dependía de CUÁNDO empezaste a jugar y dos partidas con
 // la misma semilla divergían. Este acumula dt de simulación y lo reinicia startRun().
@@ -1924,7 +1970,7 @@ function newPt(x, y) {
   return { x, y, px: x, py: y, ax: x, ay: y, age: 0, hitT: 0, d: CFG.thread.spacing,
            w: clamp(1.30 - clamp(sp, 0, 1.4) * CFG.thread.speedW, 0.30, 1.35) };
 }
-function resetThread() { nearIdx = -1; nearD2 = 1e9; thread.length = 0; thread.push(newPt(P.x, P.y)); thread.push(newPt(P.x, P.y)); }
+function resetThread() { thread.length = 0; thread.push(newPt(P.x, P.y)); thread.push(newPt(P.x, P.y)); }
 
 // Siembra: clava la cabeza a la canica y va dejando puntos a PASO FIJO entre el último punto
 // apoyado y la cabeza. Paso uniforme siempre (antes un tirón dejaba puntos 10× más separados
@@ -2043,27 +2089,19 @@ function kickThread(i, nx, ny, k) {
 // píxeles). El salteo se mide en DISTANCIA, no en cantidad de puntos: durante un tirón los
 // puntos quedan 10× más separados, y contarlos dejaba ciega media pantalla justo cuando el
 // tirón es la herramienta con la que querés cerrar.
-// Que tan cerca estuvo la cabeza de cruzarse consigo misma en el ultimo frame, y en que segmento.
-// Lo usa SOLO el dibujo, para encender el tramo que estas por encerrar. Se llena de arrastre
-// dentro de `findSelfCross`, que ya recorre todos los segmentos midiendo esa misma distancia: no
-// agrega ni una iteracion ni cambia una sola decision.
-let nearD2 = 1e9, nearIdx = -1;
 function findSelfCross(ax, ay, bx, by) {
   const n = thread.length;
   let top = n - 1, acc = 0;
   while (top > 1 && acc < CFG.thread.skipDist) { acc += thread[top].d; top--; }
   const tol2 = CFG.thread.closeTol * CFG.thread.closeTol;
-  nearD2 = 1e9; nearIdx = -1;
   for (let i = 0; i < top; i++) {
     const p1 = thread[i], p2 = thread[i + 1];
     const t = segSegT(ax, ay, bx, by, p1.x, p1.y, p2.x, p2.y);
-    if (t >= 0) { nearD2 = 0; nearIdx = i; return { idx: i, t, hx: ax + (bx - ax) * t, hy: ay + (by - ay) * t }; }
+    if (t >= 0) return { idx: i, t, hx: ax + (bx - ax) * t, hy: ay + (by - ay) * t };
     // ROCE: pasar lo bastante cerca YA cuenta. Exigir la intersección exacta de la línea de
     // centro fallaba cierres que en pantalla se ven perfectamente hechos - el hilo se dibuja
     // con grosor, y desde que ondula la hebra vieja se corre unos píxeles de su camino.
-    const d2 = segDist2(bx, by, p1.x, p1.y, p2.x, p2.y);
-    if (d2 < nearD2) { nearD2 = d2; nearIdx = i; }    // de arrastre: el dibujo lo usa, nadie mas
-    if (d2 < tol2) return { idx: i, t: 1, hx: bx, hy: by };
+    if (segDist2(bx, by, p1.x, p1.y, p2.x, p2.y) < tol2) return { idx: i, t: 1, hx: bx, hy: by };
   }
   return null;
 }
@@ -2122,11 +2160,48 @@ function closeLoop(cross, bx, by) {
   run.lastArea = area; run.maxArea = Math.max(run.maxArea || 0, area);
   if (P.loopHeal > 0 && hits > 0) healPlayer(P.loopHeal);
 
-  // ── Feedback ──
-  loopGhost = { poly, t: 0, tight: isTight, area };
-  addRing(mx, my, Math.sqrt(area) * 0.5, Math.sqrt(area) * 1.5, 0.5, isTight ? [255, 210, 63] : [125, 249, 255], 0.008);
-  spawnSparks(mx, my, isTight ? 22 : 14, isTight ? [255, 210, 63] : [125, 249, 255], 1.1);
-  addTrauma(isTight ? 0.34 : 0.20); addPunch(isTight ? 0.035 : 0.02);
+  // ── Feedback: DOS GRAMATICAS OPUESTAS ──
+  // La diferencia entre un bucle cenido y uno grande tiene que entenderse en una captura sin
+  // HUD. Antes eran la misma animacion pintada de otro color.
+  const rad = Math.sqrt(area);
+  loopGhost = { poly, t: 0, tight: isTight, area, mx, my, dur: isTight ? CFG.loop.ghostTight : CFG.loop.ghostBig };
+  if (isTight) {
+    // COMPRESION. El anillo se CONTRAE: a `addRing` se le pasan los radios al reves.
+    addRing(mx, my, rad * 1.7, rad * 0.15, 0.30, [255, 210, 63], 0.016);
+    // Chispas que nacen en el PERIMETRO y van HACIA ADENTRO. Es lo que convierte "exploto algo"
+    // en "algo se cerro sobre algo": el sentido de las particulas es la mitad de la lectura.
+    const np = poly.length / 2;
+    for (let k = 0; k < 7; k++) {
+      const i = (Math.floor(k * np / 7) % np) * 2;
+      const px = poly[i], py = poly[i + 1];
+      spawnSparks(px, py, 3, [255, 214, 90], 0.85, Math.atan2(my - py, mx - px), 0.45);
+    }
+    addTrauma(0.34); addPunch(0.038);
+  } else {
+    // BARRIDO. El anillo se expande y la respuesta es mas elegante que agresiva.
+    addRing(mx, my, rad * 0.35, rad * 1.8, 0.62, [125, 249, 255], 0.010);
+    spawnSparks(mx, my, 10, [150, 226, 255], 0.8);
+    addTrauma(0.16); addPunch(0.016);
+    // Y la mesa se acuerda: una marca tenue sobre el fieltro. DECIMADA, o cada marca seria un
+    // poligono de cientos de puntos pagandose en cada frame.
+    if (area > 0.06) {
+      // `ceil` y no `floor`: con floor el tope no se respeta (100 puntos y tope 28 dan 34).
+      const paso = Math.max(1, Math.ceil((poly.length / 2) / CFG.loop.markPts));
+      const po = [];
+      for (let i = 0; i < poly.length; i += paso * 2) po.push(poly[i], poly[i + 1]);
+      if (po.length >= 6) {
+        feltMarks.push({ po, t: 0, dur: CFG.loop.markT });
+        while (feltMarks.length > CFG.loop.markMax) feltMarks.shift();
+      }
+    }
+  }
+  // HITSTOP CON JERARQUIA. Hasta ahora el verbo CENTRAL del juego no tenia ninguno, mientras que
+  // recibir un golpe, embestir y el envion del luchador si: la jerarquia estaba al reves.
+  // Un bucle vacio no congela nada - si todo congela, nada pesa.
+  if (hits > 0) {
+    const h = CFG.juice.hitstop;
+    addHitstop(isTight ? (killed >= 2 ? h * 1.25 : h * 0.8) : h * 0.32);
+  }
   // El multiplicador SIGUE ahí: `tight` multiplica el daño del bucle hasta ×3.3. Lo que se va es
   // el NÚMERO en pantalla - no le decía nada al jugador que el número de daño sobre la pieza no
   // le dijera mejor, y un "x2.4" suelto al lado de un "148" sólo agrega una incógnita. Que el
@@ -2280,12 +2355,6 @@ function updatePlayer(dt) {
   if (hyp(P.x - prevX, P.y - prevY) > 1e-5) {
     const cross = findSelfCross(prevX, prevY, P.x, P.y);
     if (cross) closeLoop(cross, P.x, P.y);
-  } else {
-    // Quieto, `findSelfCross` no corre y `nearIdx` se quedaria con el valor del ultimo frame en
-    // que si se movio: un tramo dorado encendido para siempre. Misma familia de bug que el
-    // `hitstop` que sobrevivia entre partidas: un valor que solo se escribe cuando pasa algo y
-    // nunca se borra cuando deja de pasar.
-    nearIdx = -1; nearD2 = 1e9;
   }
   layThread();
   simThread(dt);
@@ -2297,7 +2366,6 @@ function updatePlayer(dt) {
       if (dd > 0.02 && dd < P.magnet) { const k = (1 - dd / P.magnet) * 1.6 * dt; o.vx += dx / dd * k; o.vy += dy / dd * k; }
     }
   }
-  if (loopGhost) { loopGhost.t += dt; if (loopGhost.t > 0.45) loopGhost = null; }
 }
 
 // Velocidad instantánea del tirón (se SUMA a la integración; nunca `vx +=`, que acumularía).
@@ -2570,27 +2638,6 @@ function drawThread() {
     ctx.globalCompositeOperation = 'source-over';
   }
 
-  // ── ESTAS POR CERRAR ──
-  // `findSelfCross` ya midio la distancia de la cabeza a cada segmento viejo para decidir el
-  // roce; de ahi sale gratis cual es el mas cercano. Cuando estas cerca, ese tramo se enciende:
-  // la mecanica central del juego avisandose sola, sin un solo elemento de UI.
-  if (nearIdx >= 0) {
-    const d = Math.sqrt(nearD2), tol = CFG.thread.closeTol;
-    const prox = clamp(1 - (d - tol) / (tol * 3.2), 0, 1);
-    if (prox > 0.02) {
-      // Se pinta un tramo corto alrededor del segmento candidato, no el hilo entero: lo que hay
-      // que mirar es DONDE vas a cerrar.
-      const span = Math.max(2, Math.round(m * 0.05));
-      const ja = clamp(Math.round(nearIdx / step) - span, 0, m - 2);
-      const jb = clamp(Math.round(nearIdx / step) + span, ja + 1, m - 1);
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.strokeStyle = 'rgba(255,208,110,' + (0.55 * prox).toFixed(3) + ')';
-      ctx.lineWidth = Math.max(2, _tHw[ja] * 2.6);
-      trace(ja, jb); ctx.stroke();
-      ctx.globalCompositeOperation = 'source-over';
-    }
-  }
-
   // Donde le pegaron, brilla un instante (la vibración ya la hace la física). Un golpe enciende
   // varios puntos vecinos y cada uno pedía su blit: se sube el umbral y se topea.
   let destellos = 0;
@@ -2602,20 +2649,90 @@ function drawThread() {
   }
 }
 
+// El fantasma y las marcas son EFECTOS, no estado del jugador: los llama `updateEffects`, que
+// corre SIEMPRE. Vivian adentro de `updatePlayer`, que arranca con `if (!P.alive) return;`, asi
+// que al morir se quedaban congelados en pantalla. El bug no fue olvidarse de limpiarlos: fue
+// poner el temporizador en el lugar equivocado.
+function updateLoopFx(dt) {
+  if (loopGhost) { loopGhost.t += dt; if (loopGhost.t > loopGhost.dur) loopGhost = null; }
+  for (let i = feltMarks.length - 1; i >= 0; i--) {
+    feltMarks[i].t += dt;
+    if (feltMarks[i].t >= feltMarks[i].dur) feltMarks.splice(i, 1);
+  }
+}
+
+// ── LA HUELLA SOBRE EL FIELTRO ──
+// Solo la dejan los bucles GRANDES. Es tiza sobre el pano: clara, muy tenue, y se va sola. Va
+// dibujada temprano, bajo todo, porque es una marca EN la mesa y no un objeto sobre ella.
+function drawFeltMarks() {
+  if (!feltMarks.length) return;
+  for (const m of feltMarks) {
+    const u = clamp(m.t / m.dur, 0, 1);
+    // Exponente bajo a proposito: con 1.6 la marca pasaba la mitad de su vida ya invisible. Una
+    // huella de tiza sobre el pano se SOSTIENE y se va al final, no al reves.
+    const a = Math.pow(1 - u, 1.1);
+    const po = m.po;
+    ctx.beginPath();
+    ctx.moveTo(sx(po[0]), sy(po[1]));
+    for (let i = 2; i < po.length; i += 2) ctx.lineTo(sx(po[i]), sy(po[i + 1]));
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(150,196,228,' + (0.055 * a).toFixed(4) + ')';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(178,216,242,' + (0.150 * a).toFixed(4) + ')';
+    ctx.lineWidth = Math.max(1, sr(0.004));
+    ctx.stroke();
+  }
+}
+
+// ── EL FANTASMA DEL BUCLE: dos gramaticas opuestas ──
+// CENIDO se CONTRAE hacia su centro: compresion, filo duro, salida rapida.
+// GRANDE no se mueve; lo que pasa es que su CONTORNO SE DIBUJA en el mismo orden en que lo
+// dibujaste vos. El poligono empieza en el cruce y sigue el hilo hasta la cabeza, asi que
+// recorrerlo en orden ES recorrer lo que acabas de hacer - el dato ya venia ordenado.
 function drawLoopGhost() {
   if (!loopGhost) return;
-  const u = loopGhost.t / 0.45, po = loopGhost.poly;
-  ctx.globalAlpha = (1 - u) * 0.55;
+  const g = loopGhost, po = g.poly, n = po.length / 2;
+  const u = clamp(g.t / g.dur, 0, 1);
+
+  if (g.tight) {
+    // COMPRESION: se encoge hacia el centro con salida cubica, o sea rapido al principio.
+    const k = 1 - 0.58 * easeOutCubic(u);
+    const cx = sx(g.mx), cy = sy(g.my);
+    const a = Math.pow(1 - u, 0.7);
+    ctx.beginPath();
+    ctx.moveTo(cx + (sx(po[0]) - cx) * k, cy + (sy(po[1]) - cy) * k);
+    for (let i = 2; i < po.length; i += 2)
+      ctx.lineTo(cx + (sx(po[i]) - cx) * k, cy + (sy(po[i + 1]) - cy) * k);
+    ctx.closePath();
+    ctx.fillStyle = 'rgba(255,206,86,' + (0.30 * a).toFixed(3) + ')';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,236,170,' + (0.95 * a).toFixed(3) + ')';
+    ctx.lineWidth = Math.max(1.5, sr(0.011) * (0.4 + 0.6 * a));
+    ctx.stroke();
+    return;
+  }
+
+  // BARRIDO: el relleno se desvanece lento y el CONTORNO se traza punto por punto.
+  const a = Math.pow(1 - u, 1.4);
   ctx.beginPath();
   ctx.moveTo(sx(po[0]), sy(po[1]));
   for (let i = 2; i < po.length; i += 2) ctx.lineTo(sx(po[i]), sy(po[i + 1]));
   ctx.closePath();
-  ctx.fillStyle = loopGhost.tight ? 'rgba(255,210,63,0.35)' : 'rgba(125,249,255,0.28)';
+  ctx.fillStyle = 'rgba(125,249,255,' + (0.20 * a).toFixed(3) + ')';
   ctx.fill();
-  ctx.strokeStyle = loopGhost.tight ? '#ffd23f' : '#7df9ff';
-  ctx.lineWidth = Math.max(1.5, sr(0.008) * (1 - u));
+
+  // El trazo que avanza. `easeOutCubic` para que salga disparado y llegue frenando: es el gesto
+  // de un trazo hecho de una pasada, no el de una barra de progreso.
+  const hasta = Math.max(1, Math.floor(easeOutCubic(u) * (n - 1)));
+  ctx.beginPath();
+  ctx.moveTo(sx(po[0]), sy(po[1]));
+  for (let i = 1; i <= hasta; i++) ctx.lineTo(sx(po[i * 2]), sy(po[i * 2 + 1]));
+  ctx.strokeStyle = 'rgba(180,244,255,' + (0.55 + 0.35 * a).toFixed(3) + ')';
+  ctx.lineWidth = Math.max(1.5, sr(0.007));
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.stroke();
-  ctx.globalAlpha = 1;
+  // La punta del trazo, encendida: dice DONDE va el barrido sin seguirlo con la vista.
+  if (u < 0.97) bloomPx(sx(po[hasta * 2]), sy(po[hasta * 2 + 1]), sr(0.030), [190, 246, 255], 0.55 * a);
 }
 
 function drawPlayer() {
@@ -3468,7 +3585,26 @@ function updateEnemies(dt) {
     // knockback con decaimiento exponencial (el jefe está clavado al eje del reloj)
     if (e.T.fam !== 'b') {
       const kd = Math.pow(0.02, dt);
-      e.x += e.kx * dt * 6; e.y += e.ky * dt * 6;
+      const ddx = e.kx * dt * 6, ddy = e.ky * dt * 6;
+      e.x += ddx; e.y += ddy;
+      // ── EL CARRIL VIAJA CON LA PIEZA ──
+      // Si te empujan mientras telegrafias, tu movimiento no se estira: se traslada. Misma
+      // direccion, MISMA DISTANCIA, otro punto de partida. Antes el destino quedaba clavado y la
+      // pieza recorria de mas; y durante la embestida el lerp del carril pisaba la posicion en
+      // cada frame, asi que el empujon se tiraba a la basura y pegarle a algo que embiste no
+      // hacia nada.
+      // Este es el UNICO lugar donde el empuje se vuelve posicion, asi que alcanza para las seis
+      // fuentes (pulso, campanada, rafaga del frenesi, dash, orbe cargada, barril) y para las que
+      // vengan.
+      if (e.T.fam === 's' && (e.st === 'aim' || e.st === 'move') && (ddx || ddy)) {
+        e.sxp += ddx; e.syp += ddy;
+        let nx = e.tx + ddx, ny = e.ty + ddy;
+        // El destino se acota al plato: una pieza empujada contra el borde no puede lanzar su
+        // embestida hacia afuera de la arena (hay un invariante de QA que vigila justo eso).
+        const dr = hyp(nx, ny);
+        if (dr > 0.93) { nx = nx / dr * 0.93; ny = ny / dr * 0.93; }
+        e.tx = nx; e.ty = ny;
+      }
       e.kx *= kd; e.ky *= kd;
     } else { e.kx = e.ky = 0; e.x = 0; e.y = 0; }
 
@@ -3558,17 +3694,10 @@ function updateSlider(e, dt) {
   } else if (e.st === 'aim') {
     if (e.t >= e.dur) {
       e.st = 'move'; e.t = 0;
-      // RE-ANCLAR EL ORIGEN. `pickLane` guardó `sxp/syp` cuando la pieza DECIDIÓ, o sea antes del
-      // medio segundo de telegrafía. Si durante ese rato la empujaste - un bucle, el pulso, una
-      // embestida, un barril - el primer frame del embate la TELETRANSPORTABA de vuelta al punto
-      // viejo, porque el carril interpola desde ahí.
-      // El destino NO se toca, y es a propósito: el carril dibujado va de la posición actual al
-      // destino fijo, así que lo que el jugador vio prometido fue "voy a terminar ahí". Mover el
-      // destino rompería esa promesa; mover el origen la cumple.
-      e.sxp = e.x; e.syp = e.y;
-      // Y la duración se calcula DESPUÉS de re-anclar: si no, una pieza empujada hacia su destino
-      // llegaría antes de tiempo y se quedaría esperando, y una empujada hacia atrás correría más
-      // rápido que su propia velocidad.
+      // El carril YA viaja con la pieza (ver el bloque de empuje en `updateEnemies`), asi que
+      // `sxp/syp` es su posicion actual y la distancia es la que telegrafio. No hay nada que
+      // re-anclar: hubo una version que lo hacia y era un segundo mecanismo haciendo el mismo
+      // trabajo, que es como nacen los bugs que despues nadie entiende.
       e.dur = hyp(e.tx - e.sxp, e.ty - e.syp) / (e.T.spd * (RULE.enemySpd || 1)) + 0.02;
       if (e.kind === 'caballo') { e.dur = 0.34; sfx.shot(); }
     }
@@ -3776,10 +3905,24 @@ function piecePath(kind, x, y, r) {
     ctx.quadraticCurveTo(x - r * 0.70, y - r * 0.15, x, y - r * 0.95);
     ctx.closePath();
   } else if (kind === 'caballo') {
-    ctx.moveTo(x - r * 0.62, y + r * 0.80); ctx.lineTo(x - r * 0.40, y - r * 0.10);
-    ctx.lineTo(x - r * 0.72, y - r * 0.34); ctx.lineTo(x - r * 0.30, y - r * 0.92);
-    ctx.lineTo(x + r * 0.32, y - r * 0.72); ctx.lineTo(x + r * 0.74, y - r * 0.02);
-    ctx.lineTo(x + r * 0.46, y + r * 0.24); ctx.lineTo(x + r * 0.64, y + r * 0.80);
+    // CABEZA DE CABALLO DE PERFIL, mirando a la derecha, con el lenguaje de las piezas de ajedrez
+    // web. Lo anterior era un poligono de ocho puntos rectos y se leia como una esquirla.
+    // Manda la SILUETA - hocico largo, dos orejas con su valle, nuca curva, quijada, base ancha -
+    // porque a 20 px es lo unico que sobrevive. Y como la pieza se HORNEA, las curvas son gratis:
+    // se dibuja una vez por tamano y despues es un drawImage.
+    ctx.moveTo(x - r * 0.74, y + r * 0.86);
+    ctx.lineTo(x - r * 0.50, y + r * 0.50);
+    ctx.quadraticCurveTo(x - r * 0.64, y + r * 0.02, x - r * 0.40, y - r * 0.34);   // nuca
+    ctx.quadraticCurveTo(x - r * 0.34, y - r * 0.52, x - r * 0.31, y - r * 0.64);   // crin
+    ctx.lineTo(x - r * 0.19, y - r * 0.97);                                          // oreja trasera
+    ctx.lineTo(x - r * 0.05, y - r * 0.60);                                          // valle
+    ctx.lineTo(x + r * 0.09, y - r * 0.91);                                          // oreja delantera
+    ctx.lineTo(x + r * 0.23, y - r * 0.55);                                          // frente
+    ctx.quadraticCurveTo(x + r * 0.58, y - r * 0.52, x + r * 0.87, y - r * 0.17);    // testuz
+    ctx.quadraticCurveTo(x + r * 0.94, y + r * 0.00, x + r * 0.77, y + r * 0.08);    // hocico
+    ctx.lineTo(x + r * 0.45, y + r * 0.12);                                          // boca
+    ctx.quadraticCurveTo(x + r * 0.62, y + r * 0.28, x + r * 0.53, y + r * 0.52);    // quijada
+    ctx.lineTo(x + r * 0.74, y + r * 0.86);
     ctx.closePath();
   } else if (kind === 'dama') {
     ctx.moveTo(x - r * 0.92, y - r * 0.72); ctx.lineTo(x - r * 0.56, y - r * 0.22);
@@ -5585,7 +5728,7 @@ function startRun() {
   P.dashT = 0; P.dashCd = 0; P.pulseCd = 0; P.pulseCh = CFG.pulse.charges; P.ifr = 1.2;
   recomputeStats();
   resetThread();
-  frenzy = 0; comboT = 0; loopGhost = null; ropeT = 0;
+  frenzy = 0; comboT = 0; loopGhost = null; feltMarks.length = 0; ropeT = 0;
   // El hitstop es global y dura un frame, pero si la partida anterior termino con un golpe
   // sin consumir, el PRIMER frame de la nueva quedaba sin simular (lo cazo el test de timers).
   hitstop = 0; trauma = 0; flashA = 0; zoomPunch = 0;
@@ -5788,7 +5931,10 @@ function backToMenu() {
   // Limpiar la arena: si no, el menú queda con enemigos y proyectiles congelados de fondo.
   enemies.length = 0; shells.length = 0; mines.length = 0; pendulums.length = 0; flares.length = 0; barrels.length = 0;
   resetSectors(); resetRule(); hourRule = null; ruleLog.length = 0; game.sectorsOpen = false; game.sectorsShown = false; simon.phase = 'off';
-  frenzy = 0; comboT = 0; loopGhost = null;
+  // `hitstop` tambien: solo se limpiaba en `startRun`, asi que morir con un hitstop pendiente
+  // dejaba la simulacion congelada un instante ya en el menu. No se veia, pero es la misma
+  // familia de bug que ya aparecio tres veces.
+  frenzy = 0; comboT = 0; loopGhost = null; feltMarks.length = 0; hitstop = 0;
   P.x = 0; P.y = 0.55; resetThread();
   trimOrbs();
   if (orbs.length < 6) for (let i = orbs.length; i < 7; i++) spawnOrbRim();
@@ -5855,14 +6001,19 @@ function drawHUD() {
   // ── Mano de póker ──
   if (hand.length) drawHandStrip(pad + S * 0.100, Y_HAND, S * 0.037, false);
 
-  // ── Cooldowns en desktop (en táctil viven en los botones) ──
-  if (!IS_TOUCH) {
-    const cx0 = W - pad - S * 0.05;
-    drawCdPip(cx0, H - pad - S * 0.035, S * 0.028, 1 - P.dashCd / CFG.dash.cd, '#7df9ff', 'DASH');
-    drawCdPip(cx0 - S * 0.085, H - pad - S * 0.035, S * 0.028, P.pulseCh > 0 ? 1 : 1 - P.pulseCd / CFG.pulse.cd, '#ffd23f', 'PULSE');
+  // ── DASH y PULSO: un solo control para las dos plataformas ──
+  // En tactil se dibujan sobre el boton DOM (que es zona de toque invisible) usando el rectangulo
+  // cacheado en el resize; si no se pudo leer, caen a las posiciones de escritorio, porque el
+  // control tiene que verse siempre aunque sea en el lugar equivocado.
+  const fD = 1 - P.dashCd / CFG.dash.cd;
+  const fP = P.pulseCh > 0 ? 1 : 1 - P.pulseCd / CFG.pulse.cd;
+  if (btnRects) {
+    drawCdPip(btnRects.dash.x,  btnRects.dash.y,  btnRects.dash.r,  fD, '#7df9ff', 'DASH');
+    drawCdPip(btnRects.pulse.x, btnRects.pulse.y, btnRects.pulse.r, fP, '#ffd23f', 'PULSE');
   } else {
-    if (elDash) elDash.classList.toggle('cool', P.dashCd > 0);
-    if (elPulse) elPulse.classList.toggle('cool', P.pulseCh <= 0);
+    const cx0 = W - pad - S * 0.05;
+    drawCdPip(cx0, H - pad - S * 0.035, S * 0.028, fD, '#7df9ff', 'DASH');
+    drawCdPip(cx0 - S * 0.085, H - pad - S * 0.035, S * 0.028, fP, '#ffd23f', 'PULSE');
   }
 
   // ── FRENESÍ: sólo el borde. El tiempo restante vive en el GROSOR y el brillo del marco,
@@ -5876,12 +6027,31 @@ function drawHUD() {
     ctx.strokeRect(lw / 2, lw / 2, W - lw, H - lw);
   }
 }
+// EL control de dash/pulso, uno solo para las dos plataformas. En escritorio vive donde siempre;
+// en tactil se dibuja ENCIMA del boton DOM, que quedo como zona de toque invisible.
+// El enfriamiento es un ARCO QUE SE LLENA y no una opacidad: dice cuanto falta, no solo que
+// todavia no.
 function drawCdPip(x, y, r, f, col, label) {
+  const listo = f >= 1;
+  ctx.lineCap = 'butt';
   ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.lineWidth = Math.max(2, r * 0.28);
   ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
   ctx.strokeStyle = col;
   ctx.beginPath(); ctx.arc(x, y, r, -PI / 2, -PI / 2 + TAU * clamp(f, 0, 1)); ctx.stroke();
-  txtG(label, x, y + r * 1.75, r * 0.5, f >= 1 ? col : 'rgba(160,190,225,0.5)');
+  // Listo = el aro respira apenas. Es la unica diferencia entre "puedo" y "todavia no" que no
+  // pide leer nada.
+  if (listo) {
+    ctx.globalAlpha = 0.20 + 0.12 * Math.sin(perfT * 3.1);
+    ctx.lineWidth = Math.max(1.5, r * 0.10);
+    ctx.beginPath(); ctx.arc(x, y, r * 1.20, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+  // Si abajo no entra, va arriba. En apaisado de telefono el boton de DASH queda a tres pixeles
+  // del borde inferior del lienzo y la etiqueta se cortaba. No hace falta saber en que
+  // plataforma estamos: alcanza con preguntar si hay lugar.
+  const fs = r * 0.46;
+  const ly = (y + r * 1.62 + fs * 0.6 > H) ? y - r * 1.62 : y + r * 1.62;
+  txtG(label, x, ly, fs, listo ? col : 'rgba(160,190,225,0.5)');
 }
 
 // ════════════════ CARTAS: se dibujan como CARTAS DE VERDAD ════════════════
@@ -6759,6 +6929,7 @@ function loop(now) {
 
   if (dialCv) ctx.drawImage(dialCv, dialX, dialY, dialS, dialS);
   drawChapterRing();            // la aguja de hora, sobre el plato horneado
+  drawFeltMarks();              // tiza sobre el pano: va BAJO todo, es la mesa y no un objeto
   drawSectors(dt);
   if (mines.length) drawMineCells();
   if (game.state === 'play') drawSimon();
