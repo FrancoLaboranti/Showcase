@@ -53,7 +53,7 @@
        pixeles de margen, que es menos que lo que varia entre dispositivos y safe-areas. Sin ese lugar la de DASH se
        volteaba arriba y caia encima del anillo de PULSE - arriba de un boton hay otro boton. */
     position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(38px + env(safe-area-inset-bottom));
-    z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 22px;
+    z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 34px;
   }
   /* Un solo cuerpo para todo botón: superficie de panel + filo de luz arriba (inset claro) +
      base oscura. El "glow" es UNA sombra corta, no un blur grande: barato y se lee igual. */
@@ -69,10 +69,11 @@
     -webkit-tap-highlight-color: transparent;
     display: flex; align-items: center; justify-content: center;
   }
-  /* Mas grandes que cuando eran circulos RELLENOS con el texto adentro: ahora el texto vive
-     afuera, asi que el circulo puede usar todo el lugar. Y el boton DOM es la zona tactil, o sea
-     que el objetivo de toque crece con el. */
-  #btnDash { width: 100px; height: 100px; }
+  /* LOS DOS IGUALES. El dash era mas grande por herencia de cuando eran circulos rellenos y el
+     dash era la accion principal; con los dos anillos del mismo tamano la columna se lee como un
+     par. Y el hueco es grande a proposito: separa los dos objetivos de toque, que es lo que pide
+     un pulgar. */
+  #btnDash { width: 76px; height: 76px; }
   #btnPulse { width: 76px; height: 76px; }
 
   /* ── Cluster superior derecho ── */
@@ -2718,7 +2719,7 @@ function drawFeltMarks() {
 // recorrerlo en orden ES recorrer lo que acabas de hacer - el dato ya venia ordenado.
 function drawLoopGhost() {
   if (!loopGhost) return;
-  const g = loopGhost, po = g.poly, n = po.length / 2;
+  const g = loopGhost, po = g.poly;
   const u = clamp(g.t / g.dur, 0, 1);
 
   if (g.tight) {
@@ -2748,18 +2749,17 @@ function drawLoopGhost() {
   ctx.fillStyle = 'rgba(125,249,255,' + (0.20 * a).toFixed(3) + ')';
   ctx.fill();
 
-  // El trazo que avanza. `easeOutCubic` para que salga disparado y llegue frenando: es el gesto
-  // de un trazo hecho de una pasada, no el de una barra de progreso.
-  const hasta = Math.max(1, Math.floor(easeOutCubic(u) * (n - 1)));
-  ctx.beginPath();
-  ctx.moveTo(sx(po[0]), sy(po[1]));
-  for (let i = 1; i <= hasta; i++) ctx.lineTo(sx(po[i * 2]), sy(po[i * 2 + 1]));
-  ctx.strokeStyle = 'rgba(180,244,255,' + (0.55 + 0.35 * a).toFixed(3) + ')';
+  // EL CONTORNO ENTERO, DE UNA, Y SE APAGA.
+  // Antes se trazaba punto por punto en el orden en que el jugador lo dibujo. La idea era linda
+  // - la mesa re-trazando el recorrido - pero pone el acento en el PROCESO, y lo que el jugador
+  // acaba de hacer ya termino. Encender todo de golpe pone el acento en el RESULTADO, que es lo
+  // que corresponde a un premio. El nivel de luz y la curva de apagado no se tocan.
+  // El path del contorno ya esta construido arriba (el del relleno), asi que esto no agrega ni
+  // un comando: se vuelve a trazar el mismo.
+  ctx.strokeStyle = 'rgba(180,244,255,' + (0.90 * a).toFixed(3) + ')';
   ctx.lineWidth = Math.max(1.5, sr(0.007));
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.stroke();
-  // La punta del trazo, encendida: dice DONDE va el barrido sin seguirlo con la vista.
-  if (u < 0.97) bloomPx(sx(po[hasta * 2]), sy(po[hasta * 2 + 1]), sr(0.030), [190, 246, 255], 0.55 * a);
 }
 
 function drawPlayer() {
@@ -4634,11 +4634,15 @@ function addScore(n, wx, wy, col) {
 let frenzy = 0;
 let frenzyHealAcc = 0;
 function startFrenzy(t) {
-  // El frenesi SACA AL RELOJ DE LA HABITACION. El tictac se corta (lo hace `updateClock` mirando
-  // `frenzy`), el colchon se agacha (lo hace `updateAmbience`) y ademas hay un chupon de medio
-  // segundo al entrar: el silencio es lo que convierte un cambio de estado en un cambio de
-  // MUNDO. Sin el, el frenesi era una capa mas encima de lo mismo.
-  if (frenzy <= 0) audioHush(0.20, 0.10);
+  // El frenesi SACA AL RELOJ DE LA HABITACION: el tictac se corta (lo hace `updateClock` mirando
+  // `frenzy`) y el colchon se agacha (lo hace `updateAmbience`). Eso se queda: no es un bajon de
+  // volumen, es que el reloj se fue, y dura todo el frenesi.
+  // Lo que se SACO es el `audioHush` de la entrada. Franco lo describio como "baja el volumen un
+  // par de segundos", y tenia razon en la lectura: **un silencio sin nada del otro lado es solo
+  // un bajon de volumen.** Antes del jefe funciona porque despues entra el rugido - el vacio
+  // existe para que el golpe suene grande -, pero en el frenesi el silencio no precedia a nada.
+  // Vuelve a evaluarse en el Grupo 4, cuando el frenesi tenga sonido propio contra el cual
+  // contrastar.
   frenzy = Math.max(frenzy, t);
   frenzyHealAcc = 0;
   screenFlash(0.25, [125, 249, 255]);

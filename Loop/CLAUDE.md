@@ -1755,11 +1755,16 @@ PERIMETRO y van HACIA ADENTRO: **el sentido de las particulas es la mitad de la 
 que convierte "exploto algo" en "algo se cerro sobre algo". No deja marca: un golpe no deja
 huella.
 
-**GRANDE = BARRIDO.** El poligono no se mueve; lo que pasa es que su CONTORNO SE DIBUJA punto por
-punto, **en el mismo orden en que lo dibujo el jugador**. El poligono empieza en el cruce y sigue
-el hilo hasta la cabeza, asi que recorrerlo en orden ES recorrer lo que acaba de pasar: el dato ya
-venia ordenado, no hay que calcular nada. Dura 0.55 s, el anillo se expande, y deja una **huella
-sobre el fieltro** que se va en 2.6 s.
+**GRANDE = EXPANSION.** El poligono no se mueve: se enciende ENTERO de una y se apaga en
+desvanecido, con el anillo expandiendose, y deja una **huella sobre el fieltro** que se va en
+2.6 s. Dura 0.55 s.
+
+(Hubo una version en que el contorno se trazaba punto por punto, en el mismo orden en que lo
+dibujo el jugador. La idea era linda - la mesa re-trazando el recorrido - pero Franco pidio
+cambiarla y tenia razon en algo de fondo: **el trazado progresivo pone el acento en el PROCESO, y
+lo que el jugador acaba de hacer ya termino.** Encender todo de golpe pone el acento en el
+RESULTADO, que es lo que corresponde a un premio. Ademas salio mas barato: reusa el mismo path del
+relleno en vez de construir un segundo recorrido.)
 
 Las marcas van DECIMADAS (`markPts`, con `ceil` y no `floor` - con floor el tope no se respeta) y
 con tope de 2: sin eso, cada marca es un poligono de cientos de puntos pagandose en cada frame y
@@ -1947,6 +1952,24 @@ juego que no existian:
 
 **Regla: cuando un test empieza a fallar despues de un arreglo, la primera pregunta es si el test
 sigue midiendo lo que el juego hace ahora.**
+
+## Un silencio sin nada del otro lado es solo un bajon de volumen
+
+Franco, probando: "cuando activo el frenesi es como que baja el volumen un par de segundos".
+
+Era el `audioHush(0.20, 0.10)` de `startFrenzy`, y lo que oyo es exactamente lo que pasaba. **Pero
+el problema no era la duracion: era que del otro lado no habia nada.**
+
+Antes del jefe el silencio funciona porque despues entra el rugido - el vacio existe PARA que el
+golpe suene grande, y por eso la voz del jefe esta reprogramada para entrar cuando el volumen
+vuelve. En el frenesi el silencio no precedia a nada, asi que no se lee como "paso algo" sino como
+"bajo el volumen".
+
+**Regla: el silencio es un instrumento de CONTRASTE. Sin algo del otro lado no dice nada.**
+
+Se saco el del frenesi. Lo que se queda es que el tictac se corta durante todo el frenesi: eso no
+es un bajon de volumen, es que el reloj se fue de la habitacion, y dura los 6.5 s enteros en vez
+de un instante. Se vuelve a evaluar en el Grupo 4, cuando el frenesi tenga sonido propio.
 
 ## Lo que sigue en hold (2026-09-18)
 
