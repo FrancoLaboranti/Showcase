@@ -1971,6 +1971,86 @@ Se saco el del frenesi. Lo que se queda es que el tictac se corta durante todo e
 es un bajon de volumen, es que el reloj se fue de la habitacion, y dura los 6.5 s enteros en vez
 de un instante. Se vuelve a evaluar en el Grupo 4, cuando el frenesi tenga sonido propio.
 
+## GRUPO 4 - el frenesi deja de ser un buff y pasa a ser un EVENTO DE ARENA
+
+El frenesi ya duraba 6.5 s, ya paraba a las piezas, ya te daba puntos - pero todo eso pasaba
+adentro de las reglas. La arena no se enteraba. Era un buff con temporizador, no un momento.
+
+### Lo que cambio de estado, y lo que NO
+
+Nada de lo que DECIDE algo se toco: ni la frecuencia, ni la duracion, ni el iman, ni el puntaje,
+ni el dano. Lo que cambio es que ahora **se nota desde afuera del personaje**:
+
+- **el pano se tine** y el bisel se enciende, o sea que el frenesi le pasa al RELOJ, no a vos;
+- **el bisel ES el temporizador**: la luz recorre el aro y cuando se termina, se termino. No hay
+  barra nueva - la barra es el objeto que ya estaba;
+- **el hilo se vuelve oro**, que es el color del valor, porque en frenesi cada bucle vale mas;
+- **el drone sube una octava** en vez de agacharse. Una octava es la MISMA nota: el sonido se
+  pone urgente sin que el juego cambie de tonalidad, que es lo que hubiera pasado con otra nota.
+
+`frenzyT` entra en 0.22 s y sale en 0.55 s: entra de golpe porque es un susto, sale despacio
+porque es un bajon. Se limpia en `startRun` y en `backToMenu` - un estado visual que sobrevive a
+una partida es un bug esperando.
+
+### Los que no son piezas tambien viven en la arena
+
+Franco: "los tanques y las flechas tipo TRON no cambian de color como parte del Frenzy".
+
+`drawEnemy` **ya calculaba** el color asustado y se lo pasaba a las piezas horneadas, pero a
+`drawCycle` y `drawTank` los llamaba sin el, y cada uno leia `e.T.col` por su cuenta. Todo el
+plato se volvia azul menos esos dos. No hizo falta un color nuevo: hubo que **hacerles llegar el
+que el juego ya tenia**.
+
+Y despues faltaba la mitad: `drawCycleTrails` tenia su propio `[255,150,60]` hardcodeado, asi que
+la moto se ponia azul y dejaba una estela naranja atras. **En TRON la estela ES el enemigo** - es
+mas superficie que el cuerpo. Un rastro caliente cruzando un plato que se enfrio se leia como que
+ese enemigo no se habia enterado del frenesi.
+
+**Leccion: cuando un objeto se dibuja en mas de un lugar, tintarlo en uno solo lo deja partido a
+la mitad.** Buscar TODOS los sitios que eligen su color antes de dar el cambio por hecho.
+
+### El fantasma y el luchador no iban mas rapido: iban DOS VECES
+
+Franco: "se mueven directamente hacia el jugador y mueren al alcanzarlo, se siente demasiado
+brusco".
+
+Esta escrito que en frenesi las piezas dejan de amenazar y lo unico que las mueve es el iman, que
+a proposito es mas lento que su andar - "no los mueve por su cuenta, los escora hacia vos". Pero
+el fantasma y el luchador **seguian persiguiendo por las suyas Y ademas recibian el iman**: dos
+fuerzas sumadas hacia el mismo punto. Por eso llegaban encima de golpe.
+
+Se les bajo la persecucion propia de x0.8 a x0.22 dentro del frenesi. El iman pasa a mandar,
+igual que con las piezas: siguen acercandose, pero **escorados**, que es la palabra que el diseno
+del iman ya usaba. Fuera del frenesi no cambia nada.
+
+**Leccion: antes de bajarle la velocidad a algo que se siente brusco, fijarse cuantas cosas lo
+estan empujando.** El sintoma "va muy rapido" y el sintoma "recibe dos empujes" se sienten igual y
+se arreglan distinto.
+
+### La jerarquia: matar un peon no puede verse como matar una dama
+
+Cualquier muerte disparaba 38 chispas, un anillo de cinco radios y sacudon de pantalla: el nivel
+"excelente" para el evento mas rutinario del juego. Y durante el frenesi, donde caen cinco o seis
+por segundo, la pantalla se volvia ilegible justo en el momento que deberia ser el mas claro.
+
+El escalon no se invento: **`e.T.score` ya codifica cuanto vale cada pieza.** Tres niveles, con el
+dato que el juego ya tenia:
+
+| | | |
+|---|---|---|
+| rutina (< 200) | peon | sonido + 9 chispas. Sin anillo, sin sacudon |
+| buena (< 800) | torre, alfil, caballo, fantasma, tanque, moto, luchador | + anillo chico + sacudon minimo |
+| grande (>= 800) | dama, jefe | + anillo grande + sacudon + punch |
+
+### Ganar no puede ser la pantalla de perder en verde
+
+Es el climax de doce horas y un jefe de 12000 de vida, y era el mismo layout con otro titulo.
+Ahora la victoria **cuenta el puntaje hacia arriba** (el numero se gana, no se informa),
+**despliega la mano en naipes de verdad** (te ganaste ese build: se muestra, no se nombra en una
+fila de tabla) y **apaga menos la arena**, porque el plato quedo con las doce horas encendidas y
+eso es parte del premio. La derrota se queda sobria, que esta bien: no todo final merece la misma
+celebracion.
+
 ## Lo que sigue en hold (2026-09-18)
 
 Franco descarto las propuestas para **CrazyTanks** (la aguja como rival en una carrera; los

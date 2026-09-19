@@ -422,7 +422,12 @@ const CFG = {
   // como HP/s para que valga lo mismo con cartas de VIGOR encima - si fuera fijo, a más vida
   // máxima la curación se volvería insignificante (el mismo error que ya tuvieron el bucle,
   // el pulso y la orbe: daño fijo contra vida que escala).
-  frenzy: { time: 6.5, pull: 0.19, burstR: 0.70, burstDmg: 40, healFrac: 1 / 3 },
+  frenzy: { time: 6.5, pull: 0.19, burstR: 0.70, burstDmg: 40, healFrac: 1 / 3,
+            // Entrada rapida y salida mas larga: entrar en frenesi es un golpe, salir es que el
+            // mundo se acomoda. `drone` no depende de la hora - el frenesi es el mismo evento
+            // siempre - y sube UNA OCTAVA, que es la misma nota y por lo tanto no toca la
+            // tonalidad.
+            inT: 0.22, outT: 0.55, drone: 0.030 },
 
   // PÉNDULOS. `g` es la gravedad del péndulo: ω = sqrt(g/largo), o sea que el período sale de
   // acá y del LARGO de cada uno. Antes había un ω fijo de 5.4 rad/s para todos: período 1.16 s,
@@ -587,7 +592,7 @@ let droneOsc = null, droneFifth = null, droneGain = null;
 // hipotetico.
 function acOk() { return !!(AC && masterGain && AC.state === 'running'); }
 
-function droneSet(vol) {
+function droneSet(vol, oct) {
   if (!acOk()) return;
   if (!droneOsc) {
     droneGain = AC.createGain(); droneGain.gain.value = 0; droneGain.connect(masterGain);
@@ -597,7 +602,12 @@ function droneSet(vol) {
     droneOsc.start(); droneFifth.start();
   }
   // `setTargetAtTime` con constante larga: el colchon nunca entra ni sale de golpe, se filtra.
-  droneGain.gain.setTargetAtTime(Math.max(0, vol), AC.currentTime, 0.5);
+  // `oct` sube el colchon en octavas. Una octava es LA MISMA NOTA, asi que se puede mover sin
+  // cambiar de tonalidad - que es justamente lo que no se podia hacer con la altura.
+  const k = Math.pow(2, oct || 0), t = AC.currentTime;
+  droneOsc.frequency.setTargetAtTime(55 * k, t, 0.25);
+  droneFifth.frequency.setTargetAtTime(82.41 * k, t, 0.25);
+  droneGain.gain.setTargetAtTime(Math.max(0, vol), t, 0.5);
 }
 // OJO: `updateAmbience` llama a esto CADA MEDIO SEGUNDO mientras no estas jugando, y corre antes
 // del render. Sin la guarda de estado, un contexto cerrado tiraba aca y se llevaba puesto el
@@ -1102,6 +1112,7 @@ function toast(text, col) {
 
 function updateEffects(dt) {
   updateLoopFx(dt);                                   // el fantasma del bucle y las marcas
+  updateFrenzyFx(dt);                                 // la entrada y salida del frenesi
   // drag exponencial: la única forma correcta de amortiguar con dt variable
   const drag = Math.pow(0.06, dt);
   for (let k = sparks.length - 1; k >= 0; k--) {
@@ -1844,6 +1855,47 @@ function drawChapterRing() {
   for (let i = 1; i <= vivas; i++) dibujar(i, 1);
   if (vivas < hs) dibujar(vivas + 1, asomando * 0.75);
   if (fresco > 0.01 && vivas >= 1) dibujar(vivas, fresco * 0.6);   // el latido del paso nuevo
+}
+
+// ── EL FRENESI ES UN ESTADO DEL PLATO ──
+// El reloj entero entra en otro estado; no aparece un marco. Dos fills y dos arcos, y solo
+// mientras pasa: el resto de la hora cuesta cero.
+// EL BISEL ES EL RELOJ DEL FRENESI: un arco que se vacia dice cuanto queda. Misma idea que el
+// anillo de capitulo - informacion convertida en objeto, cero elementos de HUD nuevos.
+// ── ANTES DEL JEFE ──
+// En el ultimo cuarto de la hora 11 el fieltro se va oscureciendo. Sin un solo cartel: el mundo
+// avisa, no la UI. Mismo criterio que el tictac subdividiendose en el ultimo quinto de cada hora.
+function drawBossOmen() {
+  if (game.state !== 'play' || game.bossFight) return;
+  if (game.hour !== CFG.clock.hours - 1) return;
+  const u = clamp((game.hourT / hourDur() - 0.75) / 0.25, 0, 1);
+  if (u <= 0.002) return;
+  ctx.fillStyle = 'rgba(6,4,10,' + (0.34 * u * u).toFixed(3) + ')';
+  ctx.beginPath(); ctx.arc(CX, CY, sr(0.995), 0, TAU); ctx.fill();
+}
+
+function drawFrenzyState() {
+  if (frenzyT <= 0.002) return;
+  const k = frenzyT;
+  // El fieltro se aclara y se enfria. Aditivo y muy bajo: tiene que cambiar el AIRE del plato,
+  // no pintarlo de azul.
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  ctx.fillStyle = 'rgba(40,120,170,' + (0.10 * k).toFixed(3) + ')';
+  ctx.beginPath(); ctx.arc(CX, CY, sr(0.995), 0, TAU); ctx.fill();
+  // El bisel se enciende: es el laton reaccionando, que es lo que lo ata al objeto.
+  ctx.strokeStyle = 'rgba(150,235,255,' + (0.22 * k).toFixed(3) + ')';
+  ctx.lineWidth = Math.max(2, sr(0.030));
+  ctx.beginPath(); ctx.arc(CX, CY, sr(0.990), 0, TAU); ctx.stroke();
+  ctx.restore();
+  // Y el temporizador, sobre el bisel. Se vacia en sentido horario desde las 12.
+  const q = clamp(frenzy / CFG.frenzy.time, 0, 1);
+  if (q > 0.001) {
+    const a0 = -PI / 2;
+    ctx.strokeStyle = 'rgba(190,247,255,' + (0.75 * k).toFixed(3) + ')';
+    ctx.lineWidth = Math.max(2, sr(0.022));
+    ctx.beginPath(); ctx.arc(CX, CY, sr(0.990), a0, a0 + TAU * q); ctx.stroke();
+  }
 }
 
 function drawBackdrop() {
@@ -2644,7 +2696,14 @@ function drawThread() {
     const uu = clamp(u * hot + (1 - hot) * u * u, 0, 1);
     // El extremo caliente NO llega a blanco: se queda en hielo. Sumado al nucleo aditivo, un
     // (196,247,255) se saturaba y el hilo se leia como un laser. Brillante no es blanco.
-    const r = Math.round(lerp(92, 158, uu)), g = Math.round(lerp(118, 224, uu)), bb = Math.round(lerp(150, 247, uu));
+    let r = Math.round(lerp(92, 158, uu)), g = Math.round(lerp(118, 224, uu)), bb = Math.round(lerp(150, 247, uu));
+    // EN FRENESI el hilo se vuelve DORADO. Es tu herramienta y este es tu momento, y el oro es el
+    // color del valor en el sistema. Vuelve solo cuando `frenzyT` baja.
+    if (frenzyT > 0.002) {
+      r = Math.round(lerp(r, lerp(150, 255, uu), frenzyT));
+      g = Math.round(lerp(g, lerp(112, 216, uu), frenzyT));
+      bb = Math.round(lerp(bb, lerp(52, 120, uu), frenzyT));
+    }
     ctx.fillStyle = 'rgb(' + r + ',' + g + ',' + bb + ')';
     slice(a, b); ctx.fill();
   }
@@ -3526,11 +3585,28 @@ function killEnemy(e) {
   addScore(e.T.score * comboMul() * P.greedMul * mult * RULE.scoreMul, e.x, e.y, frenzy > 0 ? '#ffd23f' : '#ff9f43');
   addCombo(CFG.combo.perKill);
   run.kills++;
-  // Muerte estilo Fuegos Artificiales: estallido + anillo + chispas que caen.
-  spawnSparks(e.x, e.y, 26, e.T.col, 1.3);
-  spawnSparks(e.x, e.y, 12, [255, 240, 200], 1.8);
-  addRing(e.x, e.y, e.r, e.r * 5, 0.42, e.T.col, 0.008);
-  addTrauma(0.16); sfx.kill();
+  // ── JERARQUIA ──
+  // Matar un peon no puede verse como matar una dama. Antes CUALQUIER muerte disparaba 38
+  // chispas, un anillo de cinco radios y sacudon: el nivel "excelente" para el evento mas
+  // rutinario del juego. Y durante el frenesi, donde caen cinco o seis por segundo, la pantalla
+  // se volvia ilegible justo en el momento que deberia ser el mas claro.
+  // El escalon no se inventa: `e.T.score` YA dice cuanto vale cada pieza (peon 90, torre 260,
+  // dama 900). Es el dato que el juego ya tiene para decir "esto valio la pena".
+  const val = e.T.score;
+  sfx.kill();
+  if (val < 200) {                                    // RUTINA: se oye y se ve, nada mas
+    spawnSparks(e.x, e.y, 9, e.T.col, 1.0);
+  } else if (val < 800) {                             // BUENA: + anillo chico
+    spawnSparks(e.x, e.y, 18, e.T.col, 1.2);
+    spawnSparks(e.x, e.y, 5, [255, 240, 200], 1.6);
+    addRing(e.x, e.y, e.r, e.r * 3.2, 0.36, e.T.col, 0.007);
+    addTrauma(0.07);
+  } else {                                            // GRANDE: se gana el escandalo
+    spawnSparks(e.x, e.y, 26, e.T.col, 1.3);
+    spawnSparks(e.x, e.y, 12, [255, 240, 200], 1.8);
+    addRing(e.x, e.y, e.r, e.r * 5, 0.42, e.T.col, 0.008);
+    addTrauma(0.18); addPunch(0.018);
+  }
   if (rng() < 0.34 + (RULE.orbDrop || 0)) spawnOrb(e.x, e.y, rnd(-0.4, 0.4), rnd(-0.4, 0.4));
   if (e.kind === 'dama') { toast('QUEEN DOWN', '#ffd23f'); unlockAch('dama'); }
   if (run.kills === 50) unlockAch('cincuenta');
@@ -3823,7 +3899,10 @@ function updateFighter(e, dt) {
 
   if (e.fs === 'walk') {
     e.ang = arcLerp(e.ang, Math.atan2(dy, dx), Math.min(1, dt * 3.4));
-    const sp = e.T.spd * (RULE.enemySpd || 1) * slowK * (frenzy > 0 ? 0.8 : 1);
+    // En frenesi casi no camina por las suyas: el IMAN es lo que lo mueve, igual que a las
+    // piezas. Antes recibia las DOS fuerzas hacia el mismo punto y por eso llegaba encima de
+    // golpe - no iba mas rapido, iba dos veces.
+    const sp = e.T.spd * (RULE.enemySpd || 1) * slowK * (frenzy > 0 ? 0.22 : 1);
     e.x += Math.cos(e.ang) * sp * dt; e.y += Math.sin(e.ang) * sp * dt;
     // El ciclo de marcha avanza con lo que AVANZA, no con el reloj: si lo frenan, cojea más
     // lento en vez de patinar en el lugar.
@@ -3875,7 +3954,10 @@ function updateFighter(e, dt) {
 }
 
 function updateGhost(e, dt) {
-  const sp = e.T.spd * (RULE.enemySpd || 1) * (frenzy > 0 ? 0.8 : 1) * (e.slow ? 0.6 : 1);
+  // Misma razon que el luchador: en frenesi el iman manda y la persecucion propia se hace a un
+  // lado. El fantasma sigue viniendo, pero ESCORADO - que es la palabra que el diseno del iman ya
+  // usaba - en vez de cargando.
+  const sp = e.T.spd * (RULE.enemySpd || 1) * (frenzy > 0 ? 0.22 : 1) * (e.slow ? 0.6 : 1);
   e.slow = 0;
   const d = hyp(P.x - e.x, P.y - e.y);
   let tx, ty;
@@ -4114,8 +4196,11 @@ function drawEnemy(e) {
   if (e.kind === 'caballo') groundShadow(x, y, r, 1 - hop * 0.55);
   else if (e.kind === 'moto' || e.kind === 'tanque' || e.kind === 'luchador') groundShadow(x, y, r, 1);
 
-  if (e.kind === 'moto') { drawCycle(e, x, y, r, flash); }
-  else if (e.kind === 'tanque') { drawTank(e, x, y, r, flash); }
+  // `col` SI se les pasa. Antes no, y cada uno leia `e.T.col` por su cuenta: todo el plato se
+  // volvia azul en el frenesi menos estos dos. No es un color nuevo - es hacerles llegar el que
+  // `drawEnemy` ya venia calculando para todos.
+  if (e.kind === 'moto') { drawCycle(e, x, y, r, flash, col); }
+  else if (e.kind === 'tanque') { drawTank(e, x, y, r, flash, col); }
   else if (e.kind === 'luchador') { drawFighter(e, x, y, r, flash, col); }
   else {
     const wob = e.kind === 'fantasma' ? Math.sin(e.bob) * r * 0.07 : 0;
@@ -4273,8 +4358,8 @@ function drawFighter(e, x, y, r0, flash, col) {
 
 // Cuña apuntando a donde va. Se lee la DIRECCIÓN de un vistazo, que es lo único que importa
 // para adivinar por dónde va a cortar el plato.
-function drawCycle(e, x, y, r, flash) {
-  const c0 = flash ? [255, 255, 255] : e.T.col;
+function drawCycle(e, x, y, r, flash, col) {
+  const c0 = flash ? BLANCO : (col || e.T.col);
   const a = e.ang || 0;
   ctx.save();
   ctx.translate(x, y); ctx.rotate(a);
@@ -4315,10 +4400,10 @@ function tankHull(c0, r) {
     ctx.fillRect(cx - r * 0.98, cy + r * 0.60, r * 1.96, r * 0.22);
   });
 }
-function drawTank(e, x, y, r, flash) {
+function drawTank(e, x, y, r, flash, col) {
   ctx.save();
   ctx.translate(x, y);
-  const c0 = flash ? [255, 255, 255] : e.T.col;
+  const c0 = flash ? BLANCO : (col || e.T.col);
   // El CASCO no rota - sólo la torreta - así que se hornea entero (con orugas y bisel). Con él
   // se van los últimos `clip` que quedaban en el render: eran 4 por frame, y clip es lo que peor
   // le cae a una GPU móvil.
@@ -4632,6 +4717,16 @@ function addScore(n, wx, wy, col) {
 
 // ════════════════ FRENESÍ (energizante de Pac-Man, ganado con el ta-te-ti) ════════════════
 let frenzy = 0;
+// Cuanto frenesi se VE, de 0 a 1. Separado de `frenzy` (que es tiempo restante) porque entrar y
+// salir tienen que ser transiciones y no saltos: medio segundo es la diferencia entre "cambio un
+// flag" y "paso algo". Lo hace avanzar `updateEffects`, no `updatePlayer`, por la misma razon que
+// el fantasma del bucle: es un efecto y tiene que seguir venciendo aunque el jugador muera.
+let frenzyT = 0;
+function updateFrenzyFx(dt) {
+  const quiere = frenzy > 0 ? 1 : 0;
+  const vel = quiere ? dt / CFG.frenzy.inT : dt / CFG.frenzy.outT;
+  frenzyT = quiere ? Math.min(1, frenzyT + vel) : Math.max(0, frenzyT - vel);
+}
 let frenzyHealAcc = 0;
 function startFrenzy(t) {
   // El frenesi SACA AL RELOJ DE LA HABITACION: el tictac se corta (lo hace `updateClock` mirando
@@ -4767,7 +4862,13 @@ function updateCycle(e, dt) {
 function drawCycleTrails() {
   for (const e of enemies) {
     if (!e.trail || e.trail.length < 2) continue;
-    const col = e.dead ? [150, 160, 180] : [255, 150, 60];
+    // En frenesi la estela tambien se enfria: es la mitad de lo que se ve de una moto, y un
+    // rastro caliente cruzando un plato que se volvio frio se leia como que ese enemigo no se
+    // entero. Se mezcla con `frenzyT` para que entre y salga con la transicion.
+    let col = e.dead ? [150, 160, 180] : [255, 150, 60];
+    if (!e.dead && frenzyT > 0.002) {
+      col = [Math.round(lerp(255, 70, frenzyT)), Math.round(lerp(150, 120, frenzyT)), Math.round(lerp(60, 235, frenzyT))];
+    }
     ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     // Un stroke POR SEGMENTO eran ~28 por frame. La estela vive 1.5 s, así que cuantizar el
     // desvanecido en seis pasos no se distingue - y seis polilíneas son seis strokes.
@@ -5759,7 +5860,7 @@ function startRun() {
   P.dashT = 0; P.dashCd = 0; P.pulseCd = 0; P.pulseCh = CFG.pulse.charges; P.ifr = 1.2;
   recomputeStats();
   resetThread();
-  frenzy = 0; comboT = 0; loopGhost = null; feltMarks.length = 0; ropeT = 0;
+  frenzy = 0; frenzyT = 0; comboT = 0; loopGhost = null; feltMarks.length = 0; ropeT = 0;
   // El hitstop es global y dura un frame, pero si la partida anterior termino con un golpe
   // sin consumir, el PRIMER frame de la nueva quedaba sin simular (lo cazo el test de timers).
   hitstop = 0; trauma = 0; flashA = 0; zoomPunch = 0;
@@ -5965,7 +6066,7 @@ function backToMenu() {
   // `hitstop` tambien: solo se limpiaba en `startRun`, asi que morir con un hitstop pendiente
   // dejaba la simulacion congelada un instante ya en el menu. No se veia, pero es la misma
   // familia de bug que ya aparecio tres veces.
-  frenzy = 0; comboT = 0; loopGhost = null; feltMarks.length = 0; hitstop = 0;
+  frenzy = 0; frenzyT = 0; comboT = 0; loopGhost = null; feltMarks.length = 0; hitstop = 0;
   P.x = 0; P.y = 0.55; resetThread();
   trimOrbs();
   if (orbs.length < 6) for (let i = orbs.length; i < 7; i++) spawnOrbRim();
@@ -6655,12 +6756,16 @@ function pill(b, label, on, col, S) {
 
 function drawEndScreen(won) {
   const S = Math.min(W, H);
-  dimArena(Math.min(0.87, game.t * 0.9));
+  // GANAR deja ver el plato: quedo con las doce horas encendidas y eso es parte del premio.
+  // PERDER lo apaga, que es lo correcto - no todo final merece la misma celebracion.
+  dimArena(Math.min(won ? 0.70 : 0.87, game.t * 0.9));
   const a = clamp(game.t * 1.4, 0, 1);
   ctx.globalAlpha = a;
   txtG(won ? 'THE WATCHMAKER FELL' : 'YOUR SPRING RAN OUT', W / 2, H * 0.19, S * 0.046, won ? C.green : C.crimHi);
-  // el número final es ORO: es el resultado, y el oro es la moneda del juego
-  txtG(fmt(run.score), W / 2, H * 0.315, S * TS.display, C.goldHi);
+  // el número final es ORO: es el resultado, y el oro es la moneda del juego.
+  // Y al GANAR se CUENTA hacia arriba en vez de aparecer: el numero se gana, no se informa.
+  const cuenta = won ? Math.round(run.score * easeOutCubic(clamp((game.t - 0.35) / 1.5, 0, 1))) : run.score;
+  txtG(fmt(cuenta), W / 2, H * 0.315, S * TS.display, C.goldHi);
   if (run.newBest) txtG('NEW BEST', W / 2, H * 0.395, S * TS.sub, C.gold);
   else txt('best  ' + fmt(bestScore()), W / 2, H * 0.395, S * TS.body, C.inkFaint, 'center', 500);
 
@@ -6681,6 +6786,23 @@ function drawEndScreen(won) {
     txt(r[0], x0 - S * 0.015, y0, fs * 0.82, C.inkFaint, 'right', 500);
     txtG(String(r[1]), x0 + S * 0.015, y0, fs, C.ink, 'left', 700);
   });
+  // LA MANO, en naipes de verdad. Te ganaste ese build: se muestra, no se nombra en una fila de
+  // tabla. Entra escalonada y solo al ganar.
+  if (won && hand.length && game.t > 1.4) {
+    const cw = Math.min(S * 0.115, W * 0.15), chh = cw / 0.68, gap = cw * 0.16;
+    const total = hand.length * cw + (hand.length - 1) * gap;
+    const y0 = H * 0.70;
+    for (let i = 0; i < hand.length; i++) {
+      const ent = clamp((game.t - 1.4 - i * 0.09) / 0.32, 0, 1);
+      if (ent <= 0) continue;
+      const k = easeOutCubic(ent);
+      ctx.globalAlpha = a * k;
+      drawCard(W / 2 - total / 2 + i * (cw + gap), y0 + (1 - k) * S * 0.05, cw, chh, hand[i], { mark: inHand(i) });
+    }
+    ctx.globalAlpha = a;
+    if (run.handIdx) txtG(HAND_BONUS[run.handIdx].name, W / 2, y0 - S * 0.032, S * TS.sub, C.goldHi);
+  }
+
   if (game.t > 0.9) {
     const p = 0.5 + 0.5 * Math.sin(perfT * 3.4);
     txt(IS_TOUCH ? 'tap to return' : 'ENTER to return', W / 2, H * 0.94, S * TS.body, 'rgba(190,215,245,' + (0.35 + 0.35 * p).toFixed(2) + ')', 'center', 500);
@@ -6868,10 +6990,18 @@ function updateAmbience(dt) {
   const A = CFG.audio;
   // Recien asoma en la hora `droneFrom`: las tres primeras horas el juego suena como siempre.
   const h = clamp((game.hour - A.droneFrom) / Math.max(1, CFG.clock.hours - A.droneFrom), 0, 1);
-  let v = A.drone * h;
-  if (frenzy > 0) v *= 0.25;                          // el frenesi tambien lo agacha
-  if (game.bossFight) v *= 1.5;                       // el jefe lo unico que deja es esto
-  droneSet(v);
+  let v = A.drone * h, oct = 0;
+  // ANTES DEL JEFE el colchon sube junto con el fieltro que se oscurece: la habitacion se pone
+  // pesada antes de que pase nada.
+  if (game.hour === CFG.clock.hours - 1 && !game.bossFight) {
+    v += A.drone * 0.8 * clamp((game.hourT / hourDur() - 0.75) / 0.25, 0, 1);
+  }
+  if (game.bossFight) v *= 1.5;
+  // EL FRENESI SUBE UNA OCTAVA y no depende de la hora: es el mismo evento siempre. Antes lo
+  // agachaba, y una habitacion que se calla sin nada del otro lado se lee como que bajo el
+  // volumen - fue exactamente lo que Franco escucho. Ahora la habitacion CAMBIA.
+  if (frenzy > 0) { v = Math.max(v, CFG.frenzy.drone); oct = 1; }
+  droneSet(v, oct);
 }
 
 function loop(now) {
@@ -6963,6 +7093,8 @@ function loop(now) {
 
   if (dialCv) ctx.drawImage(dialCv, dialX, dialY, dialS, dialS);
   drawChapterRing();            // la aguja de hora, sobre el plato horneado
+  drawBossOmen();               // el fieltro se oscurece antes del jefe
+  drawFrenzyState();            // el plato entero entra en otro estado
   drawFeltMarks();              // tiza sobre el pano: va BAJO todo, es la mesa y no un objeto
   drawSectors(dt);
   if (mines.length) drawMineCells();
