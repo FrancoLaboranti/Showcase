@@ -2051,6 +2051,123 @@ fila de tabla) y **apaga menos la arena**, porque el plato quedo con las doce ho
 eso es parte del premio. La derrota se queda sobria, que esta bien: no todo final merece la misma
 celebracion.
 
+## El indicador de "preparate" del Simon tenia la FORMA equivocada (2026-09-19)
+
+Franco: *"el aro cuando se esta por arrancar la secuencia no se dibuja por encima completamente
+del sector, una parte esta debajo"*.
+
+Tenia razon y pasaba en las tres clases de celda:
+
+| celda | que se veia |
+|---|---|
+| centro | el aro nacia con radio 0.35 contra un medio-lado de 0.333: se salia del cuadrado por los cuatro lados desde el primer frame |
+| borde | ademas se pasaba del plato y lo cortaba el recorte |
+| esquina | se centraba en el centro GEOMETRICO del cuadrado, que esta a 0.943 del eje - practicamente sobre el canto -, asi que casi todo el aro caia fuera y quedaba un pedazo de arco suelto |
+
+**Ese ultimo es un error que este proyecto ya habia cometido y corregido una vez**: los rombos de
+sector no van en el centro geometrico de la celda por exactamente esta razon, y para eso existen
+`SECT_DX`/`SECT_DY`. El aro del Simon nunca recibio ese arreglo. Cuando una constante de
+geometria se arregla en un lugar, hay que buscar quien mas la calcula por su cuenta.
+
+Pero mover el centro no alcanzaba, porque el problema de fondo era otro: **un circulo no entra en
+un cuadrado que ademas esta mordido por un circulo mas grande.** Cualquier radio que se vea bien
+en el centro se sale en las esquinas, y cualquiera que entre en las esquinas es invisible en el
+centro. No habia numero que arreglara esto.
+
+Asi que el indicador dejo de ser un aro y paso a ser **un marco cuadrado que se cierra sobre la
+celda**: la misma silueta que la cosa que senala. Nace 1.42x y aterriza EXACTO sobre el
+rectangulo que `paint` ya dibuja, asi que el final del gesto es el indicador fundiendose con su
+blanco. Y como va bajo el mismo recorte del plato, en las celdas de borde queda cortado EN EL
+MISMO LUGAR que la celda: coinciden en vez de contradecirse.
+
+El arco que ademas barria el tiempo se fue: el encogimiento YA es la cuenta regresiva. Eran dos
+codificaciones de `u3` en el mismo objeto - la misma redundancia que ya se saco dos veces (la
+banda de progreso, el tick de hora encendido).
+
+**Regla: un indicador que senala una cosa deberia tener la forma de esa cosa.** Mientras el
+indicador y su blanco tengan geometrias distintas, cualquier recorte, cualquier borde y cualquier
+cambio de tamano los va a separar.
+
+Escenario nuevo `aro`: envuelve `strokeRect` del prototipo del contexto y comprueba, en las nueve
+celdas, que el indicador sea concentrico con su celda al empezar y aterrice exacto al terminar.
+**Contra el codigo viejo falla 9 de 9** - no habia un solo rectangulo concentrico, porque dibujaba
+un `arc`.
+
+## El luchador aprende una segunda tanda: PATADAS (2026-09-19)
+
+Franco: *"esta bueno el stickman pero podria tener un combo mas, por ejemplo que haga con
+patadas"*.
+
+Tiraba siempre lo mismo - jab, jab, envion - y una tanda sola te la aprendes en dos encuentros.
+Ahora hay dos y elige cual antes de plantarse:
+
+| tanda | golpes | alcance | dano total | duracion |
+|---|---|---|---|---|
+| PUNOS | jab, jab, envion | 0.115 / 0.115 / 0.200 | 2.30 | 1.26 s |
+| PATADAS | baja, giro | 0.165 / 0.235 | 2.30 | 1.24 s |
+
+**No es una tanda mas fuerte: es la MISMA amenaza repartida distinto.** Los totales son iguales a
+proposito. Lo que cambia es la forma: menos golpes, mas lentos, que llegan mucho mas lejos. Cada
+patada sola es mas facil de esquivar - tarda mas en salir y el arco de aviso nace mas grande -
+pero retroceder ya no alcanza, que era justo el hueco que dejaban los punos.
+
+**Como elige, y por que se puede leer.** Decide al plantarse, mirando la distancia: fuera del
+alcance del jab patea, y encima patea igual una de cada tres. Alejarte no te saca del problema,
+te cambia el problema. Y se lee sin memorizar nada porque **el arco de aviso que ya existia se
+dibuja con el alcance del golpe que viene**: cuando va a patear, nace mas grande. La informacion
+ya estaba en pantalla; ahora dice dos cosas en vez de una. Por eso la tanda se elige al
+PLANTARSE y no al pegar: si se eligiera al pegar, el aviso estaria mintiendo durante toda la
+preparacion.
+
+En el dibujo la patada sale de la PIERNA, con la misma cuenta con la que se dibujaba el puno
+(posicion de mundo, no del muneco, asi que lo que ves es lo que golpea), y la rodilla sale sola
+de la formula que ya estaba - con la pierna recogida dobla mucho, estirada queda recta. El torso
+se inclina hacia atras mientras la pierna sale: **ese contrapeso es lo que hace que una patada
+pese en vez de parecer una pierna que se estira.** La baja va al ras y la de giro va alta.
+
+El escenario `luchador` paso de 5 puntos a 7. El nuevo punto 7 es **el invariante del diseno
+escrito como test**: si el dano total o la duracion de las dos tandas se separan mas de un 15%,
+o si la patada deja de llegar mas lejos que el puno, salta. El punto 3 (el del envion) ahora
+FUERZA la tanda de punos: desde que hay dos, dejarlo elegir haria que ese punto midiera a veces
+otra cosa sin avisar.
+
+## "No se hereda" no quiere decir "no afecta" (2026-09-19)
+
+Franco: *"la barra de informacion en el celu no se desplaza"*.
+
+El panel ya tenia `overflow-y: auto`, `touch-action: pan-y` y `overscroll-behavior: contain`, y
+al lado un comentario mio que decia: *"`html, body` llevan `touch-action: none`... la propiedad no
+se hereda, asi que esto ya deberia poder desplazarse"*.
+
+**La frase es cierta y la conclusion es falsa.** `touch-action` no se HEREDA, pero el navegador no
+la resuelve por herencia: cuando el dedo baja, calcula el gesto permitido como la INTERSECCION del
+`touch-action` del elemento tocado con el de TODOS sus ancestros. Con `none` en el `body`, la
+interseccion es vacia para cualquier descendiente, diga lo que diga.
+
+Y era peor que un panel que no andaba: **el `none` del `body` era lo unico que protegia al
+lienzo.** Como `touch-action` no se hereda, el `<canvas>` nunca tuvo el suyo - estaba viviendo de
+la prohibicion global. Sacar el `none` del `body` a secas habria arreglado el panel y roto el
+juego: arrastrar el dedo sobre el plato habria empezado a mover la pagina. (El escenario nuevo lo
+muestra: contra el CSS viejo, el lienzo reporta `touch-action: auto`.)
+
+El arreglo pone cada prohibicion donde corresponde: `html, body` pasan a `manipulation` (mata el
+zoom por doble toque, deja pasar el desplazamiento), el `<canvas>` recibe su propio `none`, y
+`overscroll-behavior: none` evita que llegar al final de algo arrastre la pagina de atras - que
+importa el doble aca, porque el juego vive en un iframe del Arcade.
+
+**Reglas:**
+1. `touch-action`, `pointer-events` y `overflow` los resuelve el navegador mirando la CADENA de
+   ancestros, no el elemento solo. "No se hereda" y "no afecta" son cosas distintas.
+2. **Un comentario que explica por que algo deberia andar, al lado de algo que no anda, es una
+   hipotesis escrita como si fuera un hecho.** Si hay que justificar que algo funciona, hay que
+   probarlo, no comentarlo.
+
+Escenario nuevo `scroll`, que corre en 800x380 - telefono acostado, que es como juega Franco -:
+comprueba que el panel DESBORDE (si no, no habria nada que probar), que ningun ancestro declare
+`touch-action: none`, que el lienzo SI lo declare, y que el panel sea un contenedor desplazable de
+verdad. Contra el CSS viejo falla los dos primeros. `qa2.py` gano un mapa `SIZES` para que un
+escenario pueda pedir su propia ventana.
+
 ## Lo que sigue en hold (2026-09-18)
 
 Franco descarto las propuestas para **CrazyTanks** (la aguja como rival en una carrera; los

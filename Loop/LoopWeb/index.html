@@ -25,13 +25,25 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     width: 100%; height: 100%; overflow: hidden; background: var(--void);
-    touch-action: none;
+    /* `manipulation`, NO `none`. El navegador resuelve el gesto permitido como la INTERSECCION
+       del `touch-action` del elemento tocado con el de todos sus ancestros: con `none` aca, nada
+       de adentro podia desplazarse - el panel de info declaraba `pan-y` y no servia de nada.
+       `manipulation` mata el zoom por doble toque, que es lo que de verdad molestaba, y deja
+       pasar el desplazamiento. Lo que no se puede tocar con el dedo lo declara cada uno: el
+       lienzo, las zonas del joystick, el colchon y los botones. */
+    touch-action: manipulation;
+    /* Llegar al final de algo no arrastra la pagina de atras ni dispara "tirar para recargar".
+       Importa el doble aca, porque el juego vive en un iframe del Arcade. */
+    overscroll-behavior: none;
     user-select: none; -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
     font-family: 'Space Grotesk', 'Segoe UI', system-ui, -apple-system, sans-serif;
     color: var(--ink);
   }
-  canvas { position: fixed; inset: 0; display: block; }
+  /* El lienzo NUNCA tuvo su propio `touch-action`: vivia de la prohibicion global del `body`.
+     Ahora que el `body` deja pasar gestos, el que no los deja pasar es el. Arrastrar el dedo
+     sobre el plato mueve al jugador, no a la pagina. */
+  canvas { position: fixed; inset: 0; display: block; touch-action: none; }
 
   #hint {
     position: fixed; top: calc(8px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%);
@@ -126,10 +138,12 @@
   #infoPanel {
     position: fixed; top: calc(50px + env(safe-area-inset-top)); right: calc(10px + env(safe-area-inset-right));
     z-index: 11; width: min(380px, 88vw); max-height: 76vh; overflow-y: auto;
-    /* `html, body` llevan `touch-action: none` para que el dedo sobre el lienzo no arrastre la
-       pagina. La propiedad no se hereda, asi que esto ya deberia poder desplazarse - pero es
-       gratis declararlo y no depender de como cada navegador arma la cadena del gesto. */
+    /* Esto SI alcanza ahora. Antes no: el `body` declaraba `touch-action: none` y el navegador
+       resuelve el gesto permitido como la interseccion con TODOS los ancestros, asi que el panel
+       podia pedir `pan-y` todo lo que quisiera - la interseccion daba vacio y no se desplazaba.
+       "No se hereda" no quiere decir "no afecta". */
     touch-action: pan-y; overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
     padding: 15px 17px; border-radius: 14px;
     background: rgba(10,16,28,0.97); border: 1px solid rgba(125,249,255,0.3);
     font-size: 12.5px; line-height: 1.62; color: #c6d6ec; font-weight: 300;
@@ -679,7 +693,9 @@ const sfx = {
   kill()      { voice('kill', 55, () => { note(420, 90, 0, 0.16, 'square', 0.06); noiseHit(0.12, 0.05, 700, 0.9); }); },
   // Silbido del golpe: ruido corto y grave para el envion, agudo y seco para el jab. Que suenen
   // distinto es parte de la lectura - se escucha cual de los tres viene.
-  swing(big)  { voice('swing', 55, () => noiseHit(big ? 0.13 : 0.06, big ? 0.075 : 0.035, big ? 240 : 620, big ? 1.7 : 0.9)); },
+  // `pie` baja el centro del ruido: una patada es el mismo golpe de aire con mas cuerpo. Mismo
+  // instrumento, no uno nuevo - lo que cambia es de donde sale.
+  swing(big, pie) { voice('swing', 55, () => noiseHit(big ? 0.13 : 0.06, big ? 0.075 : 0.035, (big ? 240 : 620) * (pie ? 0.55 : 1), big ? 1.7 : 0.9)); },
   shot()      { voice('shot', 55, () => note(520, 200, 0, 0.06, 'square', 0.033)); },
   chime(q)    { voice('chime', 150, () => { const f = [523.25, 392, 329.63, 261.63][q & 3]; note(f, 0, 0, 0.85, 'sine', 0.10, 0); note(f * 2, 0, 0, 0.42, 'sine', 0.045, 0); note(f * 0.5, 0, 0, 1.1, 'sine', 0.05, 0); }); },
   hour()      { voice('hour', 400, () => [392, 523, 659].forEach((f, i) => note(f, 0, i * 0.1, 0.3, 'triangle', 0.07, 0))); },
@@ -3547,7 +3563,7 @@ function spawnEnemy(kind, x, y) {
     // Estado del LUCHADOR. Va en el literal compartido y no agregado despues sólo para los
     // luchadores: si la mitad de las piezas tuviera una forma de objeto distinta, el motor
     // dejaría de poder tratarlas todas igual y cada acceso pasaría a ser una búsqueda.
-    fs: 'walk', ft: 0, combo: 0, hitDone: false, gait: 0, ang: 0, bob: rnd(0, TAU), fireCd: rnd(0.5, 1.5),
+    fs: 'walk', ft: 0, combo: 0, cmb: 0, hitDone: false, gait: 0, ang: 0, bob: rnd(0, TAU), fireCd: rnd(0.5, 1.5),
     knock(ax, ay) { this.kx += ax; this.ky += ay; },
   };
   enemies.push(e);
@@ -3879,17 +3895,33 @@ function updateTank(e, dt) {
 // el paso en vez de seguirte la cola. Atraviesa el hilo: no lo podés frenar, lo tenés que
 // encerrar. Durante el frenesí huye y se come.
 // ════════════════ EL LUCHADOR (StickFight) ════════════════
-// Camina, planta los pies y tira TRES: jab, jab, envion. Mientras pega no se mueve.
-// `d` es la duracion del golpe; `a0`/`a1` la fraccion de esa duracion en que el puno esta AFUERA
-// (antes de `a0` se esta recogiendo, y eso es el telegrafo); `reach` el alcance en unidades de
-// mundo, `dmg` el multiplicador sobre el dano base y `kn` cuanto te lleva puesto.
-// El envion llega casi al doble que un jab: retroceder un poquito no te salva, y eso es lo que
-// obliga a salir de verdad en vez de bailar en el lugar.
-const GOLPES = [
-  { d: 0.30, a0: 0.55, a1: 0.76, reach: 0.115, dmg: 0.50, kn: 0.30, big: 0 },
-  { d: 0.30, a0: 0.50, a1: 0.72, reach: 0.115, dmg: 0.50, kn: 0.30, big: 0 },
-  { d: 0.66, a0: 0.60, a1: 0.82, reach: 0.200, dmg: 1.30, kn: 1.70, big: 1 },
+// Camina, planta los pies y tira una TANDA. Mientras pega no se mueve.
+// `d` es la duracion del golpe; `a0`/`a1` la fraccion de esa duracion en que el puno (o el pie)
+// esta AFUERA - antes de `a0` se esta recogiendo, y eso es el telegrafo -; `reach` el alcance en
+// unidades de mundo, `dmg` el multiplicador sobre el dano base, `kn` cuanto te lleva puesto y
+// `pie` si el golpe sale de la pierna.
+//
+// Hay DOS tandas y no una, porque una sola te la aprendes en dos encuentros y despues ya no dice
+// nada. **No es que una pegue mas: es la MISMA amenaza repartida distinto.** Las dos suman 2.30
+// de multiplicador en ~1.25 s. Lo que cambia es la forma.
+//
+// PUNOS: tres tiempos, cortos y rapidos. El envion final llega casi al doble que un jab, asi que
+// retroceder un poquito no salva - hay que salir de verdad en vez de bailar en el lugar.
+const PUNOS = [
+  { d: 0.30, a0: 0.55, a1: 0.76, reach: 0.115, dmg: 0.50, kn: 0.30, big: 0, pie: 0 },
+  { d: 0.30, a0: 0.50, a1: 0.72, reach: 0.115, dmg: 0.50, kn: 0.30, big: 0, pie: 0 },
+  { d: 0.66, a0: 0.60, a1: 0.82, reach: 0.200, dmg: 1.30, kn: 1.70, big: 1, pie: 0 },
 ];
+// PATADAS: dos tiempos, lentos y LARGOS. Cada una es mas facil de esquivar sola - tarda mas en
+// salir y el arco de aviso nace mas grande -, pero alejarse ya no alcanza, que era justo el
+// hueco que dejaban los punos. La baja va al ras y la de giro va alta: tampoco se confunden
+// entre si.
+const PATADAS = [
+  { d: 0.46, a0: 0.58, a1: 0.80, reach: 0.165, dmg: 0.85, kn: 0.80, big: 0, pie: 1 },
+  { d: 0.78, a0: 0.62, a1: 0.84, reach: 0.235, dmg: 1.45, kn: 2.00, big: 1, pie: 1 },
+];
+const TANDAS = [PUNOS, PATADAS];
+const tandaDe = e => TANDAS[e.cmb] || PUNOS;
 function updateFighter(e, dt) {
   const slowK = e.slow ? 0.6 : 1; e.slow = 0;
   const dx = P.x - e.x, dy = P.y - e.y, d = hyp(dx, dy);
@@ -3912,6 +3944,13 @@ function updateFighter(e, dt) {
     // juquear, así que plantarse de espaldas era tirar la tanda entera al aire. Pasa de verdad:
     // un bucle o un pulso lo empujan y queda mirando al vacío.
     if (frenzy <= 0 && d < CFG.fighter.enter && Math.abs(wrapPi(Math.atan2(dy, dx) - e.ang)) < 0.75) {
+      // ELIGE LA TANDA ACA, una sola vez, y despues la cumple entera. Mira la distancia: si
+      // estas fuera del alcance del jab patea, y si estas encima patea igual una de cada tres.
+      // O sea que alejarte no te saca del problema, te cambia el problema.
+      // Se decide en este instante y no mas tarde porque el arco de aviso se dibuja con el
+      // alcance del golpe que viene: si la tanda se eligiera al pegar, el aviso estaria mintiendo
+      // durante toda la preparacion.
+      e.cmb = (d > PUNOS[0].reach || rnd(0, 1) < 0.32) ? 1 : 0;
       e.fs = 'wind'; e.ft = 0; e.combo = 0; e.hitDone = false;
     }
   } else if (e.fs === 'wind') {
@@ -3921,10 +3960,11 @@ function updateFighter(e, dt) {
     e.ft += dt;
     if (e.ft >= CFG.fighter.wind) { e.fs = 'hit'; e.ft = 0; }
   } else if (e.fs === 'hit') {
-    const g = GOLPES[e.combo] || GOLPES[0];
+    const T = tandaDe(e);
+    const g = T[e.combo] || T[0];
     const antes = e.ft; e.ft += dt;
     const u = e.ft / g.d;
-    if (!e.hitDone && antes / g.d < g.a0 && u >= g.a0) sfx.swing(g.big);
+    if (!e.hitDone && antes / g.d < g.a0 && u >= g.a0) sfx.swing(g.big, g.pie);
     if (!e.hitDone && u >= g.a0 && u <= g.a1) {
       const fx2 = e.x + Math.cos(e.ang) * g.reach, fy2 = e.y + Math.sin(e.ang) * g.reach;
       // EL BRAZO ES UN SEGMENTO, no un puño flotante: barre desde el cuerpo hasta la punta y se
@@ -3936,14 +3976,14 @@ function updateFighter(e, dt) {
         e.hitDone = true;
         hurtPlayer(e.T.dmg * scaleDmg() * g.dmg, fx2, fy2);
         P.vx += Math.cos(e.ang) * g.kn; P.vy += Math.sin(e.ang) * g.kn;
-        spawnSparks(fx2, fy2, g.big ? 12 : 7, [255, 225, 195], g.big ? 1.1 : 0.7);
-        addTrauma(g.big ? 0.30 : 0.12);
+        spawnSparks(fx2, fy2, g.big ? 12 : (g.pie ? 9 : 7), [255, 225, 195], g.big ? 1.1 : 0.7);
+        addTrauma(g.big ? 0.30 : (g.pie ? 0.19 : 0.12));
         if (g.big) { addPunch(0.022); addHitstop(CFG.juice.hitstop * 0.5); }
       }
     }
     if (u >= 1) {
       e.ft = 0; e.hitDone = false; e.combo++;
-      if (e.combo >= GOLPES.length) { e.fs = 'rest'; e.combo = 0; }
+      if (e.combo >= T.length) { e.fs = 'rest'; e.combo = 0; }
     }
   } else {
     // El descanso escala con la cadencia de la hora, como el de las piezas: a la hora 11 se
@@ -4237,12 +4277,16 @@ function drawEnemy(e) {
 // decidir.
 function drawFighterTell(e) {
   if (e.fs !== 'wind' && e.fs !== 'hit') return;
-  const g = e.fs === 'wind' ? GOLPES[0] : (GOLPES[e.combo] || GOLPES[0]);
+  // Con dos tandas este arco pasa a decir DOS cosas: cuanto falta, y cual de las dos viene. El
+  // alcance del primer golpe ya las distingue sin agregar nada nuevo a la pantalla - cuando va a
+  // patear, el arco nace mas grande.
+  const T = tandaDe(e);
+  const g = e.fs === 'wind' ? T[0] : (T[e.combo] || T[0]);
   const u = e.fs === 'wind' ? clamp(e.ft / CFG.fighter.wind, 0, 1)
                             : clamp(e.ft / (g.d * g.a0), 0, 1);
   if (u >= 1) return;
   const x = sx(e.x), y = sy(e.y), rr = sr(g.reach + CFG.fighter.fistR);
-  const w = 0.44 + 0.22 * g.big;
+  const w = (0.44 + 0.22 * g.big) * (g.pie ? 1.22 : 1);   // una patada barre mas ancho
   ctx.strokeStyle = 'rgba(255,107,129,' + (0.10 + 0.34 * u).toFixed(3) + ')';
   ctx.lineWidth = Math.max(1.2, sr(0.006 + 0.008 * g.big));
   ctx.beginPath(); ctx.arc(x, y, rr, e.ang - w, e.ang + w); ctx.stroke();
@@ -4267,7 +4311,9 @@ function drawFighter(e, x, y, r0, flash, col) {
   const ph = e.gait;
   const face = Math.cos(e.ang) >= 0 ? 1 : -1;
   const pega = e.fs === 'hit';
-  const g = pega ? (GOLPES[e.combo] || GOLPES[0]) : null;
+  const T = tandaDe(e);
+  const g = pega ? (T[e.combo] || T[0]) : null;
+  const patea = pega && g.pie;
   const u = g ? clamp(e.ft / g.d, 0, 1) : 0;
   // Extensión del brazo que pega: negativa mientras se recoge, 1 cuando el puño está afuera, y
   // de vuelta a 0 al recuperarse. Un solo número describe todo el golpe.
@@ -4285,6 +4331,9 @@ function drawFighter(e, x, y, r0, flash, col) {
   // queda hecho un nudo y sólo se entiende la pose que estira el brazo.
   const hipY = y + r * (0.12 + bob), shoY = y - r * (0.62 - bob), pie = y + r * 0.86;
   const hx = x + face * r * 0.06 * (pega ? 1 - ext * 0.5 : 1);
+  // CONTRAPESO. Mientras la pierna sale, el torso se va para atras. Es lo que hace que una
+  // patada pese: sin esto es una pierna que se estira y el muneco queda flotando sobre ella.
+  const shx = x - (patea ? face * r * 0.30 * Math.max(0, ext) : 0);
 
   ctx.save();
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -4294,15 +4343,21 @@ function drawFighter(e, x, y, r0, flash, col) {
   const esqueleto = () => {
     ctx.beginPath();
     // torso
-    ctx.moveTo(hx, hipY); ctx.lineTo(x, shoY);
+    ctx.moveTo(hx, hipY); ctx.lineTo(shx, shoY);
     // piernas
     for (let k = 0; k < 2; k++) {
+      const patea2 = patea && k === 0;                // la que patea apunta al MUNDO
       const p = ph + k * PI;
       const cam = e.fs === 'walk' ? 1 : 0.18;         // quieto: apenas separa los pies
       // Un ciclo de marcha se lee por la SEPARACIÓN de los pies, no por el balanceo del cuerpo:
       // con los pies juntos, camine lo que camine se ve flotando.
-      const fx2 = x + face * Math.cos(p) * r * 0.52 * cam;
-      const fy2 = pie - Math.max(0, Math.sin(p)) * r * 0.36 * cam;
+      // La pierna que patea se dibuja con la MISMA cuenta que usaba el puño: posición de mundo,
+      // no del muñeco, así que lo que ves es exactamente lo que golpea. La baja va al ras y la
+      // de giro va alta.
+      const fx2 = patea2 ? sx(e.x + Math.cos(e.ang) * g.reach * ext)
+                         : x + face * Math.cos(p) * r * 0.52 * cam;
+      const fy2 = patea2 ? sy(e.y + Math.sin(e.ang) * g.reach * ext) + r * (g.big ? -0.02 : 0.20)
+                         : pie - Math.max(0, Math.sin(p)) * r * 0.36 * cam;
       // Rodilla: punto medio empujado HACIA ADELANTE. Cuanto más corta quedó la pierna respecto
       // de su largo natural, más dobla - que es de dónde sale la sensación de peso.
       const largo = hyp(fx2 - hx, fy2 - hipY) || 1;
@@ -4313,20 +4368,21 @@ function drawFighter(e, x, y, r0, flash, col) {
     }
     // brazos
     for (let k = 0; k < 2; k++) {
-      const pega2 = pega && k === 0;
+      const pega2 = pega && !g.pie && k === 0;        // pateando, los brazos hacen equilibrio
       let px2, py2;
       if (pega2) {                                    // el que golpea apunta al mundo
         px2 = sx(e.x + Math.cos(e.ang) * g.reach * ext);
         py2 = sy(e.y + Math.sin(e.ang) * g.reach * ext) - r * 0.18;
       } else {
         const p = ph + PI * (k + 1) + (e.fs === 'walk' ? 0 : PI * 0.5);
-        const cam = e.fs === 'walk' ? 1 : 0.35;
-        px2 = x + face * Math.cos(p) * r * 0.30 * cam + face * r * 0.06;
+        // Pateando abren MÁS: son el contrapeso, y un brazo pegado al cuerpo no equilibra nada.
+        const cam = e.fs === 'walk' ? 1 : (patea ? 0.85 : 0.35);
+        px2 = shx + face * Math.cos(p) * r * 0.30 * cam + face * r * 0.06;
         py2 = shoY + r * (0.42 - carga * 0.10);
       }
-      const ex2 = (x + px2) / 2 - face * r * (pega2 ? 0.04 : 0.12);
+      const ex2 = (shx + px2) / 2 - face * r * (pega2 ? 0.04 : 0.12);
       const ey2 = (shoY + py2) / 2 + r * 0.06;
-      ctx.moveTo(x, shoY); ctx.lineTo(ex2, ey2); ctx.lineTo(px2, py2);
+      ctx.moveTo(shx, shoY); ctx.lineTo(ex2, ey2); ctx.lineTo(px2, py2);
     }
   };
 
@@ -4339,16 +4395,17 @@ function drawFighter(e, x, y, r0, flash, col) {
 
   // Cabeza: relleno oscuro con anillo claro. A este tamaño un círculo lleno se convertía en un
   // punto y el muñeco perdía la cara; el anillo lo mantiene legible.
-  const cy2 = shoY - r * 0.28;
+  const cy2 = shoY - r * 0.28, chx = shx + face * r * 0.05;
   ctx.fillStyle = 'rgba(9,14,24,0.92)';
-  ctx.beginPath(); ctx.arc(x + face * r * 0.05, cy2, r * 0.24, 0, TAU); ctx.fill();
+  ctx.beginPath(); ctx.arc(chx, cy2, r * 0.24, 0, TAU); ctx.fill();
   ctx.strokeStyle = rgba(tinta, 0.95); ctx.lineWidth = Math.max(1.2, r * 0.12);
-  ctx.beginPath(); ctx.arc(x + face * r * 0.05, cy2, r * 0.24, 0, TAU); ctx.stroke();
+  ctx.beginPath(); ctx.arc(chx, cy2, r * 0.24, 0, TAU); ctx.stroke();
 
-  // El puño, cuando está afuera: un nudo brillante. Es lo que hay que estar mirando.
+  // El puño - o el pie -, cuando está afuera: un nudo brillante. Es lo que hay que estar mirando,
+  // así que va donde de verdad está la punta del golpe, no siempre a la altura del hombro.
   if (pega && ext > 0.45) {
     const fx3 = sx(e.x + Math.cos(e.ang) * g.reach * ext);
-    const fy3 = sy(e.y + Math.sin(e.ang) * g.reach * ext) - r * 0.18;
+    const fy3 = sy(e.y + Math.sin(e.ang) * g.reach * ext) + r * (g.pie ? (g.big ? -0.02 : 0.20) : -0.18);
     bloomPx(fx3, fy3, r * (0.9 + g.big * 0.7), [255, 190, 150], 0.5 * ext);
     ctx.fillStyle = 'rgba(255,240,225,0.95)';
     ctx.beginPath(); ctx.arc(fx3, fy3, r * (0.18 + 0.08 * g.big), 0, TAU); ctx.fill();
@@ -5241,19 +5298,32 @@ function drawSimon() {
       paint(sig, 0.14 + 0.10 * pulso, true);
     }
     if (simon.lit >= 0 && simon.litT > 0) paint(simon.lit, 0.30 * (simon.litT / 0.45), true);
-    // PREPARATE: el primer sector late fuerte y un aro se cierra sobre él. Cuando termina de
+    // PREPARATE: el primer sector late fuerte y un MARCO se cierra sobre él. Cuando termina de
     // cerrarse, empieza a contar - así ves si ya estabas parado encima o si tenés que salir.
+    //
+    // Era un aro, y la forma estaba mal elegida. Un círculo no entra en un cuadrado que además
+    // está mordido por un círculo más grande: con radio inicial 0.35 contra un medio-lado de
+    // 0.333 se salía de la celda por los cuatro lados, y en las ESQUINAS - donde se centraba en
+    // el centro geométrico del cuadrado, a 0.943 del eje - casi todo el aro caía fuera del plato
+    // y quedaba un pedazo de arco suelto. (Los rombos de sector no se ponen en ese centro por
+    // exactamente esta razón: para eso existen `SECT_DX`/`SECT_DY`.)
+    //
+    // El marco tiene **la misma silueta que la cosa que señala** y aterriza EXACTO sobre el
+    // rectángulo que `paint` ya dibuja, así que el final del gesto es el indicador fundiéndose
+    // con su blanco. Y como va bajo el mismo recorte del plato, en las celdas de borde queda
+    // cortado EN EL MISMO LUGAR que la celda: coinciden en vez de contradecirse.
+    // El arco que además barría el tiempo se fue: el encogimiento YA es la cuenta regresiva.
     if (ready) {
       const u3 = clamp(simon.t / CFG.simon.readyT, 0, 1);
       const s0 = simon.seq[simon.idx];
       if (s0 !== undefined) {
         const R4 = sectRect(s0), c4 = SECT_COL[s0];
-        const cx4 = sx(R4.x + R4.w / 2), cy4 = sy(R4.y + R4.h / 2);
-        ctx.strokeStyle = rgba(c4, 0.75);
+        const k4 = 1 + 0.42 * (1 - u3);                 // 1.42x → 1.0: cae sobre la celda
+        const cx4 = R4.x + R4.w / 2, cy4 = R4.y + R4.h / 2;
+        const w4 = R4.w * k4, h4 = R4.h * k4;
+        ctx.strokeStyle = rgba(c4, 0.30 + 0.55 * u3);   // y se afirma a medida que llega
         ctx.lineWidth = Math.max(2, sr(0.008));
-        ctx.beginPath();
-        ctx.arc(cx4, cy4, sr(0.26) * (1 - u3) + sr(0.09), -PI / 2, -PI / 2 + TAU * (1 - u3));
-        ctx.stroke();
+        ctx.strokeRect(sx(cx4 - w4 / 2), sy(cy4 - h4 / 2), sr(w4), sr(h4));
       }
     }
     // El aviso ya no es una marca en el piso - señalaba el sector y con eso te orientaba. Es un
