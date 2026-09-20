@@ -234,11 +234,33 @@ const CFG = {
   dash: { wind: 0.04, time: 0.20, peak: 0.85, dist: 0.34, cancelFrom: 0.28, tapWin: 0.25, cd: 0.55 },
   anim: {
     bob: 0.02, leanGain: 0.10, leanMax: 0.35,
-    breatheHz: 0.4, breatheAmp: 0.03, flinchHl: 0.12, squashT: 0.09,
+    breatheHz: 0.4, breatheAmp: 0.03, flinchHl: 0.12,
+    // ── capa de "vida": ruido lento incommensurable para que nada quede clavado ──
+    idleAmp: 1.0,                      // multiplicador global del wobble de idle/guardia
+    bounceHz: 2.15, bounceAmp: 0.014,  // rebote de guardia (boxeador que no se queda quieto)
+    popT: 0.085, popAmt: 0.55,         // compresión post-despegue (anticipación sin retrasar física)
+    landT: 0.26,                       // duración total del ciclo de aterrizaje (squash + rebote)
   },
   // ciclo de marcha procedural (apoyo/vuelo por pierna) — EL dial de "correr como humano"
   gait: { halfBase: 0.30, halfSpd: 0.55, dutyBase: 0.64, dutySpd: 0.24, stepHBase: 0.05, stepHSpd: 0.10 },
-  spr: { hIdle: 0.15, hLoco: 0.11, hAtkStart: 0.045, hStrike: 0.02, hRecov: 0.18, lagMul: 1.4 },
+  // ciclo de BRAZOS/torso de la carrera (antes era ping-pong entre dos poses: tween de Flash)
+  run: {
+    // OJO: armC/armA están en ángulo de MUNDO (respecto de la vertical), no relativos al torso
+    // — ver runCycle. Autorarlos relativos era justo lo que daba el corredor "con una bandeja".
+    armC: -0.02, armA: 0.25, armASpd: 0.37,  // centro y amplitud del hombro en mundo
+    elbC: 1.62, elbCSpd: -0.25, elbA: 0.18, elbASpd: 0.36, elbLag: 0.55,   // codo: flexión + retraso
+    leanBase: 0.10, leanSpd: 0.30, sway: 0.035,                            // inclinación y balanceo del torso
+    headLead: 0.10, headSpd: 0.10, headCounter: 0.85, headBob: 0.035,      // la cabeza se nivela sola
+    dyCrouch: 0.018,                                                       // sprint = pelvis más baja
+  },
+  spr: {
+    hIdle: 0.15, hLoco: 0.11, hAtkStart: 0.045, hStrike: 0.02, hRecov: 0.18, lagMul: 1.4,
+    hAir: 0.13, hHang: 0.2, hRoll: 0.042,
+    // Amortiguación por canal: 1 = crítico (llega y se queda, lo de antes). < 1 = se PASA y
+    // vuelve. El sobrepaso es exp(−zπ/√(1−z²)) de la distancia recorrida: 0.62 ≈ 7 %,
+    // 0.55 ≈ 12 %. En un recovery de brazo (1.5 rad) eso es un latigazo de 0.18 rad que asienta.
+    zHead: 0.62, zFree: 0.66, zRecov: 0.55, zLoco: 0.88,
+  },
   feet: { stepT: 0.17, stepApex: 0.08, trigger: 0.85, leadT: 0.12, leadX: 0.06 },
   rag: { damp: 0.985, iters: 4, blendIn: 0.15, blendOut: 0.30, getupV: 0.05, staggerW: 0.5, staggerK: 14 },
   fight: {
@@ -272,6 +294,8 @@ const rndi = (a, b) => Math.floor(rnd(a, b + 1));
 const smoothstep = t => t * t * (3 - 2 * t);
 const easeOutCubic = t => 1 - Math.pow(1 - t, 3);
 const easeInOutCubic = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+// joroba suave 0→1→0 sobre [0,1] (anticipaciones, transferencias de peso, squash)
+const hump = t => t <= 0 || t >= 1 ? 0 : Math.sin(PI * t);
 const wrapPi = a => { while (a > PI) a -= TAU; while (a < -PI) a += TAU; return a; };
 const arcLerp = (a, b, t) => a + wrapPi(b - a) * t;
 // exp-lerp por semivida: mueve cur hacia target de forma frame-rate-independiente
@@ -282,6 +306,20 @@ function springTo(pose, vel, i, target, hl, dt) {
   const y = LN2x2 / hl, j0 = pose[i] - target, j1 = vel[i] + j0 * y, e = Math.exp(-y * dt);
   pose[i] = e * (j0 + j1 * dt) + target;
   vel[i] = e * (vel[i] - j1 * y * dt);
+}
+// Resorte SUB-amortiguado exacto (misma tasa de decaimiento que el crítico, pero con sobrepaso).
+// z = 1 → cae en el caso crítico de arriba (camino rápido, sin trigonometría).
+// z < 1 → la articulación se pasa del objetivo y vuelve: follow-through de verdad, no "llegó y
+// se quedó". Lo usamos sólo en un puñado de canales (cabeza, mano libre, limbo en recovery).
+function springToZ(pose, vel, i, target, hl, dt, z) {
+  if (z >= 0.999) { springTo(pose, vel, i, target, hl, dt); return; }
+  const y = LN2x2 / hl;                                              // tasa de decaimiento
+  const wd = y * Math.sqrt(1 - z * z) / z;                           // frecuencia amortiguada
+  const j0 = pose[i] - target, v0 = vel[i];
+  const e = Math.exp(-y * dt), c = Math.cos(wd * dt), s = Math.sin(wd * dt);
+  const bb = (v0 + y * j0) / wd;
+  pose[i] = e * (j0 * c + bb * s) + target;
+  vel[i] = e * ((bb * wd - y * j0) * c - (j0 * wd + y * bb) * s);
 }
 // Distancia² de punto a segmento (hit-test de cápsulas barridas)
 function segDist2(px, py, ax, ay, bx, by) {
@@ -559,21 +597,55 @@ function ik2(ax, ay, tx, ty, l1, l2, bendDir, pts, iMid, iEnd) {
   pts[iMid * 2 + 1] = ay + l1 * (ux * s + uy * c);
   pts[iEnd * 2] = ex2; pts[iEnd * 2 + 1] = ey2;
 }
+// ik2 con MEZCLA (w=1 → IK puro, w≈0 → queda donde estaba). Soltar un IK de golpe da un
+// latigazo de un frame; esto lo apaga como un dimmer.
+// OJO: se mezcla el OBJETIVO, nunca los puntos resueltos. El promedio de dos poses válidas NO
+// es una pose válida: interpolar codo y mano entre la solución FK y la IK estira los huesos
+// (medido: hasta 89 % de error en el brazo). Mezclando el objetivo, la cadena se resuelve una
+// sola vez y los largos quedan exactos por construcción.
+function ik2Blend(ax, ay, tx, ty, l1, l2, bendDir, pts, iMid, iEnd, w) {
+  if (w <= 0.001) return;
+  if (w >= 0.999) { ik2(ax, ay, tx, ty, l1, l2, bendDir, pts, iMid, iEnd); return; }
+  const ex = pts[iEnd * 2], ey = pts[iEnd * 2 + 1];
+  ik2(ax, ay, lerp(ex, tx, w), lerp(ey, ty, w), l1, l2, bendDir, pts, iMid, iEnd);
+}
 
 // ════════════════ POSES autoradas (pocas y marcadas > muchas y tibias) ════════════════
 const POSES = {
   idle:    P({ torso: 0.06, head: 0.04, aLu: 0.42, aLl: 1.9, aRu: 0.62, aRl: 1.75, lLu: -0.22, lLl: -0.18, lRu: 0.2, lRl: -0.28, dy: 0.025 }),
-  run1:    P({ torso: 0.2, head: -0.04, aLu: -0.5, aLl: 0.85, aRu: 0.65, aRl: 1.25, lLu: -0.42, lLl: -0.95, lRu: 0.58, lRl: -0.5, dy: 0.03 }),
-  run2:    P({ torso: 0.2, head: -0.04, aLu: 0.65, aLl: 1.25, aRu: -0.5, aRl: 0.85, lLu: 0.58, lLl: -0.5, lRu: -0.42, lRl: -0.95, dy: 0.03 }),
+  // Guardia de pelea (no es el bloqueo): más compacta que idle, rodillas cargadas, mano de
+  // adelante alta y la de atrás al mentón. Se mezcla con idle según lo cerca que esté el rival
+  // y encima le corre el rebote de CFG.anim.bounce* — por eso no parece un maniquí.
+  // OJO: la diferencia con idle está casi toda en los BRAZOS a propósito. Las hurtboxes salen
+  // de renderPts, así que bajar la cabeza o la pelvis en la guardia sería regalar (o robar)
+  // centímetros de blanco. Medido: la cabeza queda ~6 px más baja y ~4 px más adelante que en
+  // idle, sobre una hurtbox de cabeza de 29 px de radio.
+  stance:  P({ torso: 0.10, head: 0.03, aLu: 0.50, aLl: 2.25, aRu: 0.85, aRl: 1.62, lLu: -0.30, lLl: -0.32, lRu: 0.28, lRl: -0.44, dy: 0.045 }),
+  // run1/run2 quedan como BASE de piernas y para mezclas de entrada/salida. Ojo: las piernas
+  // están en fase con el IK de marcha (en gaitPhase 0 la pierna IZQUIERDA está adelante); antes
+  // estaban al revés y se notaba al saltar en plena zancada. Los brazos los calcula runCycle().
+  run1:    P({ torso: 0.2, head: -0.04, aLu: -0.5, aLl: 0.85, aRu: 0.65, aRl: 1.25, lLu: 0.58, lLl: -0.5, lRu: -0.42, lRl: -0.95, dy: 0.03 }),
+  run2:    P({ torso: 0.2, head: -0.04, aLu: 0.65, aLl: 1.25, aRu: -0.5, aRl: 0.85, lLu: -0.42, lLl: -0.95, lRu: 0.58, lRl: -0.5, dy: 0.03 }),
+  // Dash: cuerpo tirado adelante, brazo de atrás estirado hacia atrás (el clásico "zip").
+  dash:    P({ torso: 0.46, head: -0.16, aLu: -0.95, aLl: 0.50, aRu: 0.80, aRl: 1.30, lLu: -0.55, lLl: -0.72, lRu: 0.72, lRl: -0.92, dy: 0.06 }),
+  // Anticipación de aterrizaje: las piernas se estiran a buscar el piso y los brazos suben.
+  airLand: P({ torso: 0.10, head: 0.06, aLu: -0.32, aLl: 0.80, aRu: -0.50, aRl: 0.90, lLu: 0.16, lLl: -0.26, lRu: 0.30, lRl: -0.40, dy: -0.012 }),
+  // Trepada en 3 tiempos (tracción → plantar el pie → empujar y subir).
+  climbPull:  P({ torso: 0.20, head: -0.10, aLu: 2.60, aLl: 0.55, aRu: 2.80, aRl: 0.42, lLu: 0.55, lLl: -1.55, lRu: 0.88, lRl: -1.95, dy: 0.10 }),
+  climbPlant: P({ torso: 0.46, head: 0.10, aLu: 2.15, aLl: 0.95, aRu: 2.45, aRl: 0.80, lLu: 0.22, lLl: -1.10, lRu: 1.28, lRl: -1.98, dy: 0.18 }),
+  climbPush:  P({ torso: 0.40, head: 0.04, aLu: 1.05, aLl: 1.35, aRu: 0.82, aRl: 1.45, lLu: -0.30, lLl: -1.15, lRu: 0.58, lRl: -1.50, dy: 0.21 }),
+  // Rodada: entrada (se tira y encoge) → bolita → salida (se despliega en cuclillas listo a correr).
+  rollTuck: P({ torso: 0.45, head: 0.34, aLu: 1.20, aLl: 2.25, aRu: 1.25, aRl: 2.30, lLu: 0.38, lLl: -1.85, lRu: -0.28, lRl: -1.95, dy: 0.26 }),
+  rollOut:  P({ torso: 0.22, head: 0.06, aLu: 0.20, aLl: 1.55, aRu: 0.45, aRl: 1.45, lLu: -0.48, lLl: -1.25, lRu: 0.64, lRl: -1.05, dy: 0.17 }),
   // Pose de IMPULSO de salto: brazos hacia arriba/atrás (aLu/aRu bien negativos), cuerpo estirado,
   // piernas casi rectas. Se usa durante los primeros ~0.15s tras despegar → sensación de "pop".
   jumpPop: P({ torso: -0.04, head: -0.10, aLu: -1.45, aLl: 0.25, aRu: -1.55, aRl: 0.30, lLu: 0.08, lLl: -0.15, lRu: 0.12, lRl: -0.20, dy: -0.06 }),
   // Pose de ROLL: cuerpo compacto (bolita). Todo doblado a fondo — arms wrapped, knees to chest,
   // dy alto (bajo al suelo). El giro visual lo aporta `f.rot` desde el estado ROLL.
   ballRoll: P({ torso: 0.55, head: 0.50, aLu: 1.55, aLl: 2.55, aRu: 1.55, aRl: 2.55, lLu: 0.55, lLl: -2.35, lRu: -0.55, lRl: -2.35, dy: 0.34 }),
-  airRise: P({ torso: 0.14, head: -0.06, aLu: -0.75, aLl: 0.55, aRu: -0.95, aRl: 0.65, lLu: 0.32, lLl: -0.85, lRu: 0.72, lRl: -1.25, dy: 0 }),
-  airApex: P({ torso: 0.08, head: 0, aLu: -0.28, aLl: 0.45, aRu: -0.2, aRl: 0.5, lLu: 0.12, lLl: -0.5, lRu: 0.42, lRl: -0.7, dy: 0 }),
-  airFall: P({ torso: 0.04, head: 0.08, aLu: -1.0, aLl: 0.35, aRu: -1.15, aRl: 0.4, lLu: -0.1, lLl: -0.22, lRu: 0.38, lRl: -0.38, dy: 0 }),
+  airRise: P({ torso: 0.14, head: -0.06, aLu: -0.88, aLl: 0.92, aRu: -1.08, aRl: 1.02, lLu: 0.34, lLl: -0.95, lRu: 0.76, lRl: -1.35, dy: 0 }),
+  airApex: P({ torso: 0.08, head: 0, aLu: -0.42, aLl: 1.05, aRu: -0.32, aRl: 1.12, lLu: 0.10, lLl: -0.55, lRu: 0.46, lRl: -0.80, dy: 0 }),
+  airFall: P({ torso: 0.04, head: 0.08, aLu: -1.18, aLl: 0.70, aRu: -1.34, aRl: 0.78, lLu: -0.12, lLl: -0.26, lRu: 0.42, lRl: -0.44, dy: 0 }),
   skid:    P({ torso: -0.28, head: 0.1, aLu: -0.55, aLl: 0.45, aRu: 0.9, aRl: 0.35, lLu: -0.34, lLl: -0.6, lRu: 0.68, lRl: -0.35, dy: 0.06 }),
   block:   P({ torso: 0.14, head: 0.1, aLu: 0.72, aLl: 2.05, aRu: 0.95, aRl: 1.9, lLu: -0.25, lLl: -0.22, lRu: 0.22, lRl: -0.3, dy: 0.05 }),
   blockLo: P({ torso: 0.35, head: 0.12, aLu: 0.7, aLl: 2.0, aRu: 0.95, aRl: 1.85, lLu: -0.35, lLl: -1.5, lRu: 0.5, lRl: -1.7, dy: 0.2 }),
@@ -585,6 +657,24 @@ const POSES = {
 // ════════════════ MOVIMIENTOS: puro dato — poses parciales + frame data ════════════════
 // poses: [{p, at (s, absoluto), ease}] · startup/active/recovery en s · kb en S · masc. de joints
 // limb: punto que golpea (cápsula barrida limbPrev→limb) · strike: joints del limb que golpea
+//
+// ── REGLA DE ORO del rework de animación (2026-09-20) ──────────────────────────────────────
+// El alcance de un golpe lo define SÓLO la cadena que lleva al limb. Mirando `fk`:
+//   · puñetazo (limb = mano): pelvis → torso → hombro → brazo   ⇒ ata {torso, brazo que pega, dy}
+//   · patada  (limb = pie):   pelvis → pierna                   ⇒ ata {lRu, lRl, dy}
+//     (las piernas NO heredan el ángulo del torso: en una patada el tren superior es LIBRE)
+// Todo lo demás (cabeza, brazo libre, piernas en un puño, torso+brazos en una patada) se puede
+// reautorar sin mover un píxel de hitbox. Para lo atado hay dos recursos:
+//   1. claves de ANTICIPACIÓN con `at <= startup - 0.033` (2 frames de colchón a 60 Hz): quedan
+//      fuera de la ventana activa Y fuera de la cápsula barrida del primer frame activo.
+//   2. claves "PIN" en mitad y final de la activa con los valores EXACTOS de la curva vieja
+//      (medidos con el probe headless) — a partir del pin, el recovery es territorio libre.
+// Para que un combo encadenado NO vuelva a cargar desde cero, el encadenado NO toca el keytrack
+// (eso movería la cápsula barrida del primer frame activo): afloja la semivida de los resortes
+// durante el startup (`atkChained` en springs()). El cuerpo pasa de largo por el wind-up y llega
+// igual al frame-data exacto en el contacto, porque hStrike lo clava.
+// `fw` = footwork (offset de los pies durante el golpe, ver feetIK) · `drive` = envolvente de
+// peso/torso que SÓLO existe fuera de la ventana activa (ver atkDrive).
 const MASK_PUNCH = [J.torso, J.head, J.aLu, J.aLl, J.aRu, J.aRl];
 const MASK_ALL = [J.torso, J.head, J.aLu, J.aLl, J.aRu, J.aRl, J.lLu, J.lLl, J.lRu, J.lRl, J.dy];
 const MOVES = {
@@ -594,119 +684,192 @@ const MOVES = {
   //  · Bajas:        jab → sweep → roundhouse → spinkick   (4-hit patadas)
   //  · Remate:       uppercut → spinkick (patada giratoria en el aire)
   jab: {
+    // Jab: el tell tiene que ser MÍNIMO. Toda la anticipación es la mano libre subiendo al
+    // mentón y el hombro que se carga medio frame; el peso casi no viaja (fw chico).
     poses: [
-      { p: { torso: 0.1, aRu: 0.4, aRl: 1.9, aLu: 0.55, aLl: 1.95 }, at: 0.035, ease: easeOutCubic },
+      { p: { head: -0.07, aLu: 0.64, aLl: 2.16 }, at: 0.018, ease: easeOutCubic },
+      { p: { torso: 0.1, aRu: 0.4, aRl: 1.9, aLu: 0.6, aLl: 2.1 }, at: 0.035, ease: easeOutCubic },
       { p: { torso: 0.24, head: 0.05, aRu: 1.52, aRl: 0.06, aLu: 0.6, aLl: 2.05 }, at: 0.07, ease: easeOutCubic },   // contacto (autorada 8% pasada)
-      { p: { torso: 0.12, aRu: 0.7, aRl: 1.7, aLu: 0.5, aLl: 1.9 }, at: 0.26, ease: easeInOutCubic },
+      { p: { torso: 0.2389, aRu: 1.5125, aRl: 0.0749, head: 0.02, aLu: 0.58, aLl: 2.0 }, at: 0.095 },    // PIN mitad activa
+      { p: { torso: 0.2313, aRu: 1.4602, aRl: 0.1796, head: -0.01, aLu: 0.56, aLl: 1.98 }, at: 0.12 },   // PIN fin activa
+      { p: { torso: 0.17, head: 0.02, aRu: 0.92, aRl: 1.38, aLu: 0.52, aLl: 1.94 }, at: 0.175, ease: easeOutCubic },
+      { p: { torso: 0.12, head: 0.04, aRu: 0.7, aRl: 1.7, aLu: 0.5, aLl: 1.9 }, at: 0.26, ease: easeInOutCubic },
     ],
     startup: 0.07, active: 0.05, recovery: 0.14, dmg: 5, stop: 0.05, kbx: 0.10, kby: 0,
     hitstun: 0.22, mask: MASK_PUNCH, limb: P_.hanR, strike: [J.aRu, J.aRl],
     root: { at: 0, time: 0.06, dist: 0.03 }, chain: 'cross', chainAlt: 'sweep', sound: 'hit', trauma: 0.15,
+    fw: { rear: -0.018, front: 0.030, heel: 0.014 }, drive: { sink: 0.014, rise: 0.012, twB: -0.07, twF: 0.05 },
   },
   cross: {
+    // Cross: el golpe de la cadera. El talón de atrás se despega y pivotea (fw.heel grande), el
+    // torso rota de −0.05 a +0.42 y el brazo de adelante se recoge a la mejilla como contrapeso.
     poses: [
-      { p: { torso: 0.05, aLu: 0.3, aLl: 2.1, aRu: 0.7, aRl: 1.8 }, at: 0.045, ease: easeOutCubic },
+      { p: { head: -0.09, aRu: 0.7, aRl: 2.0 }, at: 0.022, ease: easeOutCubic },
+      { p: { torso: 0.05, aLu: 0.3, aLl: 2.1, aRu: 0.74, aRl: 1.96 }, at: 0.045, ease: easeOutCubic },
       { p: { torso: 0.42, head: 0.08, aLu: 1.55, aLl: 0.05, aRu: 0.65, aRl: 2.1 }, at: 0.09, ease: easeOutCubic },
-      { p: { torso: 0.15, aLu: 0.5, aLl: 1.9, aRu: 0.6, aRl: 1.8 }, at: 0.34, ease: easeInOutCubic },
+      { p: { torso: 0.4181, aLu: 1.5427, aLl: 0.0628, head: 0.05, aRu: 0.6, aRl: 2.18 }, at: 0.12 },     // PIN mitad activa
+      { p: { torso: 0.4051, aLu: 1.4919, aLl: 0.1523, head: 0.01, aRu: 0.57, aRl: 2.22 }, at: 0.15 },    // PIN fin activa
+      { p: { torso: 0.31, head: -0.02, aLu: 1.02, aLl: 1.12, aRu: 0.58, aRl: 2.1 }, at: 0.22, ease: easeOutCubic },
+      { p: { torso: 0.15, head: 0.04, aLu: 0.5, aLl: 1.9, aRu: 0.6, aRl: 1.8 }, at: 0.34, ease: easeInOutCubic },
     ],
     startup: 0.09, active: 0.06, recovery: 0.19, dmg: 8, stop: 0.075, kbx: 0.11, kby: -0.04,
     hitstun: 0.28, mask: MASK_PUNCH, limb: P_.hanL, strike: [J.aLu, J.aLl],
     root: { at: 0.02, time: 0.1, dist: 0.05 }, chain: 'hook', chainAlt: 'roundhouse', sound: 'hit', trauma: 0.2,
+    fw: { rear: -0.040, front: 0.048, heel: 0.046 }, drive: { sink: 0.030, rise: 0.024, twB: -0.16, twF: 0.13 },
   },
   hook: {
     // Gancho horizontal (mano der) — variante rápida del uppercut, kb un poco lateral.
     // Torso rota hacia atrás cargando y suelta cruzado. Encadena a uppercut (finish) o spinkick.
+    // El pie de adelante pivotea con el giro (fw.front) y el de atrás empuja: es un golpe de rotación.
     poses: [
-      { p: { torso: -0.15, head: -0.05, aRu: 2.15, aRl: 1.85, aLu: 0.55, aLl: 1.9 }, at: 0.05, ease: easeOutCubic },
+      { p: { head: -0.13, aLu: 0.68, aLl: 2.1 }, at: 0.024, ease: easeOutCubic },
+      { p: { torso: -0.15, head: -0.05, aRu: 2.15, aRl: 1.85, aLu: 0.62, aLl: 2.05 }, at: 0.05, ease: easeOutCubic },
       { p: { torso: 0.38, head: 0.08, aRu: 1.55, aRl: 0.05, aLu: 0.5, aLl: 1.95 }, at: 0.11, ease: easeOutCubic },   // contacto (giro cruzado)
-      { p: { torso: 0.14, aRu: 0.65, aRl: 1.75, aLu: 0.55, aLl: 1.9 }, at: 0.36, ease: easeInOutCubic },
+      { p: { torso: 0.3795, aRu: 1.5482, aRl: 0.0535, head: 0.06, aLu: 0.46, aLl: 2.0 }, at: 0.13 },     // PIN mitad activa
+      { p: { torso: 0.3723, aRu: 1.5212, aRl: 0.1044, head: 0.01, aLu: 0.44, aLl: 2.05 }, at: 0.16 },    // PIN fin activa
+      { p: { torso: 0.27, head: -0.05, aRu: 0.96, aRl: 1.22, aLu: 0.48, aLl: 2.0 }, at: 0.235, ease: easeOutCubic },
+      { p: { torso: 0.14, head: 0.04, aRu: 0.65, aRl: 1.75, aLu: 0.55, aLl: 1.9 }, at: 0.36, ease: easeInOutCubic },
     ],
     startup: 0.10, active: 0.06, recovery: 0.20, dmg: 10, stop: 0.09, kbx: 0.16, kby: -0.03,
     hitstun: 0.30, mask: MASK_PUNCH, limb: P_.hanR, strike: [J.aRu, J.aRl],
     root: { at: 0.02, time: 0.10, dist: 0.06 }, chain: 'uppercut', chainAlt: 'spinkick', sound: 'hit', trauma: 0.25,
+    fw: { rear: -0.048, front: 0.026, heel: 0.050 }, drive: { sink: 0.028, rise: 0.022, twB: -0.18, twF: 0.15 },
   },
   uppercut: {
+    // Uppercut: el único golpe donde la caída y el empuje de piernas YA viven en el keytrack
+    // (dy 0.14 → −0.03). El rework le suma la cabeza que se va con el arco y el rebote de recupero.
     poses: [
+      { p: { head: 0.2, aLu: 0.55, aLl: 2.2 }, at: 0.032, ease: easeInOutCubic },
       { p: { torso: 0.5, head: 0.1, aRu: -0.5, aRl: 1.3, aLu: 0.6, aLl: 1.9, dy: 0.14 }, at: 0.07, ease: easeInOutCubic },
       { p: { torso: -0.18, head: -0.12, aRu: 2.55, aRl: 0.25, aLu: 0.55, aLl: 2.0, dy: -0.03 }, at: 0.13, ease: easeOutCubic },
-      { p: { torso: 0.05, aRu: 1.2, aRl: 1.0, aLu: 0.5, aLl: 1.9, dy: 0.02 }, at: 0.52, ease: easeInOutCubic },
+      { p: { torso: -0.1799, aRu: 2.5493, aRl: 0.2504, dy: -0.03, head: -0.17, aLu: 0.5, aLl: 2.1 }, at: 0.15 },      // PIN mitad activa
+      { p: { torso: -0.1747, aRu: 2.5188, aRl: 0.2673, dy: -0.0288, head: -0.2, aLu: 0.46, aLl: 2.16 }, at: 0.20 },   // PIN fin activa
+      { p: { torso: 0.2, head: 0.12, aRu: 1.78, aRl: 0.52, aLu: 0.5, aLl: 2.02, dy: 0.09 }, at: 0.32, ease: easeOutCubic },
+      { p: { torso: 0.05, head: 0.02, aRu: 1.2, aRl: 1.0, aLu: 0.5, aLl: 1.9, dy: 0.02 }, at: 0.52, ease: easeInOutCubic },
     ],
     // activa desde ANTES del keyframe de contacto: la barrida del arco (abajo→arriba) también pega
     startup: 0.10, active: 0.10, recovery: 0.32, dmg: 12, stop: 0.115, kbx: 0.12, kby: -0.75,
     hitstun: 0.4, mask: MASK_ALL, limb: P_.hanR, strike: [J.aRu, J.aRl], launcher: true,
     root: { at: 0.02, time: 0.1, dist: 0.09 }, chainAlt: 'spinkick', sound: 'heavy', trauma: 0.5,   // finish: uppercut → spinkick aéreo
+    fw: { rear: -0.030, front: 0.042, heel: 0.056 }, drive: { sink: 0.020, rise: 0.038, twB: -0.05, twF: 0.12 },
   },
   roundhouse: {
+    // Patada circular: chamber (rodilla arriba) → apertura → recupero. El tren superior es LIBRE
+    // (las piernas no heredan el torso), así que acá está toda la compensación: el torso se tira
+    // hacia atrás contra la pierna, el brazo de adelante se abre y el de atrás cruza al pecho.
     poses: [
+      { p: { torso: 0.34, head: 0.02, aRu: 1.0, aRl: 0.9, aLu: -0.15, aLl: 1.0, lRu: 0.22, lRl: -1.15, lLu: -0.1, lLl: -0.3, dy: 0.09 }, at: 0.045, ease: easeOutCubic },
       { p: { torso: 0.28, head: 0.05, aRu: 0.85, aRl: 0.5, aLu: -0.4, aLl: 0.6, lRu: 0.5, lRl: -1.6, lLu: -0.15, lLl: -0.25, dy: 0.06 }, at: 0.08, ease: easeInOutCubic },
       { p: { torso: -0.42, head: 0.15, aRu: -0.6, aRl: 0.4, aLu: 0.9, aLl: 0.3, lRu: 1.62, lRl: -0.08, lLu: -0.2, lLl: -0.38, dy: 0.04 }, at: 0.145, ease: easeOutCubic },
-      { p: { torso: 0.08, aRu: 0.6, aRl: 1.7, aLu: 0.45, aLl: 1.85, lRu: 0.25, lRl: -0.35, lLu: -0.22, lLl: -0.2, dy: 0.04 }, at: 0.48, ease: easeInOutCubic },
+      { p: { lRu: 1.6188, lRl: -0.0802, dy: 0.04, torso: -0.46, head: 0.18, aRu: -0.78, aRl: 0.34, aLu: 1.0, aLl: 0.28 }, at: 0.165 },    // PIN mitad activa
+      { p: { lRu: 1.5957, lRl: -0.0848, dy: 0.04, torso: -0.48, head: 0.20, aRu: -0.88, aRl: 0.38, aLu: 1.08, aLl: 0.3 }, at: 0.20 },  // PIN fin activa
+      { p: { torso: -0.17, head: 0.1, aRu: 0.12, aRl: 1.12, aLu: 0.82, aLl: 0.9, lRu: 0.92, lRl: -0.78, lLu: -0.24, lLl: -0.3, dy: 0.085 }, at: 0.30, ease: easeOutCubic },
+      { p: { torso: 0.08, head: 0.0, aRu: 0.6, aRl: 1.7, aLu: 0.45, aLl: 1.85, lRu: 0.25, lRl: -0.35, lLu: -0.22, lLl: -0.2, dy: 0.04 }, at: 0.48, ease: easeInOutCubic },
     ],
     startup: 0.13, active: 0.07, recovery: 0.28, dmg: 11, stop: 0.09, kbx: 0.30, kby: -0.06,
     hitstun: 0.32, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true,
     root: { at: 0.02, time: 0.12, dist: 0.05 }, chainAlt: 'spinkick', sound: 'heavy', trauma: 0.3, reachBonus: true,
+    fw: { rear: -0.052, front: 0, heel: 0.052 }, drive: { sink: 0.034, rise: 0.028, twB: 0.10, twF: -0.12 },
   },
   sweep: {
+    // Barrida: el cuerpo se va al piso. La mano de atrás baja casi a apoyarse (aLu negativo) y
+    // la de adelante sube: contrapeso real, no un muñeco girando una pierna.
     poses: [
-      { p: { torso: 0.45, aRu: 0.5, aRl: 1.2, aLu: 0.2, aLl: 1.0, lRu: 0.3, lRl: -1.5, lLu: -0.4, lLl: -1.6, dy: 0.2 }, at: 0.06, ease: easeInOutCubic },
+      { p: { torso: 0.5, head: 0.14, aRu: 0.35, aRl: 1.5, aLu: 0.1, aLl: 1.2, lRu: 0.1, lRl: -1.2, lLu: -0.3, lLl: -1.2, dy: 0.12 }, at: 0.028, ease: easeOutCubic },
+      { p: { torso: 0.45, head: 0.12, aRu: 0.5, aRl: 1.2, aLu: 0.2, aLl: 1.0, lRu: 0.3, lRl: -1.5, lLu: -0.4, lLl: -1.6, dy: 0.2 }, at: 0.06, ease: easeInOutCubic },
       { p: { torso: 0.55, head: 0.1, aRu: 0.9, aRl: 0.4, aLu: -0.3, aLl: 0.5, lRu: 1.25, lRl: -0.06, lLu: -0.45, lLl: -1.9, dy: 0.24 }, at: 0.13, ease: easeOutCubic },
-      { p: { torso: 0.3, aRu: 0.55, aRl: 1.6, aLu: 0.4, aLl: 1.7, lRu: 0.4, lRl: -1.5, lLu: -0.4, lLl: -1.6, dy: 0.18 }, at: 0.44, ease: easeInOutCubic },
+      { p: { lRu: 1.2469, lRl: -0.0652, dy: 0.2398, torso: 0.6, head: 0.13, aRu: 1.05, aRl: 0.32, aLu: -0.44, aLl: 0.46, lLu: -0.48, lLl: -1.95 }, at: 0.16 },   // PIN fin activa
+      { p: { torso: 0.5, head: 0.05, aRu: 0.8, aRl: 0.95, aLu: 0.06, aLl: 1.15, lRu: 0.78, lRl: -0.92, lLu: -0.44, lLl: -1.8, dy: 0.24 }, at: 0.26, ease: easeOutCubic },
+      { p: { torso: 0.3, head: 0.0, aRu: 0.55, aRl: 1.6, aLu: 0.4, aLl: 1.7, lRu: 0.4, lRl: -1.5, lLu: -0.4, lLl: -1.6, dy: 0.18 }, at: 0.44, ease: easeInOutCubic },
     ],
     startup: 0.10, active: 0.06, recovery: 0.28, dmg: 7, stop: 0.07, kbx: 0.12, kby: 0,
     hitstun: 0.3, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true,
     low: true, knockdown: true, root: { at: 0.02, time: 0.1, dist: 0.04 }, chainAlt: 'roundhouse', sound: 'hit', trauma: 0.25,
+    fw: { rear: -0.030, front: 0, heel: 0.0 }, drive: { sink: 0.046, rise: 0.030, twB: 0.12, twF: -0.10 },
   },
   spinkick: {
     // Patada giratoria — remate de combo. El torso rota 180° cargando y suelta lateral.
     // Muy damage, KB horizontal grande, alcance extra. Sale como finish desde: hook (K), uppercut
     // (K), roundhouse (K), o directamente dash+kick.
+    // El enrosque es el tell: brazos cruzados al pecho y hombro adelante ANTES de abrir.
     poses: [
-      { p: { torso: 0.15, aRu: 0.5, aRl: 1.7, aLu: 0.5, aLl: 1.7, lRu: 0.35, lRl: -1.4, lLu: -0.2, lLl: -0.3, dy: 0.05 }, at: 0.06, ease: easeInOutCubic },
+      { p: { torso: 0.3, head: 0.16, aRu: 0.9, aRl: 1.9, aLu: 0.85, aLl: 1.95, lRu: 0.15, lRl: -1.0, lLu: -0.12, lLl: -0.26, dy: 0.10 }, at: 0.03, ease: easeOutCubic },
+      { p: { torso: 0.15, head: 0.1, aRu: 0.5, aRl: 1.7, aLu: 0.5, aLl: 1.7, lRu: 0.35, lRl: -1.4, lLu: -0.2, lLl: -0.3, dy: 0.05 }, at: 0.06, ease: easeInOutCubic },
       { p: { torso: -0.55, head: 0.2, aRu: -0.5, aRl: 0.3, aLu: 0.9, aLl: 0.35, lRu: 1.7, lRl: -0.03, lLu: -0.25, lLl: -0.42, dy: 0.03 }, at: 0.16, ease: easeOutCubic },
-      { p: { torso: 0.05, aRu: 0.55, aRl: 1.65, aLu: 0.5, aLl: 1.9, lRu: 0.3, lRl: -0.5, lLu: -0.25, lLl: -0.35, dy: 0.04 }, at: 0.5, ease: easeInOutCubic },
+      { p: { lRu: 1.6999, lRl: -0.03, dy: 0.03, torso: -0.63, head: 0.24, aRu: -0.7, aRl: 0.28, aLu: 1.06, aLl: 0.3 }, at: 0.17 },      // PIN mitad activa
+      { p: { lRu: 1.6822, lRl: -0.036, dy: 0.0301, torso: -0.68, head: 0.27, aRu: -0.88, aRl: 0.3, aLu: 1.16, aLl: 0.32 }, at: 0.21 }, // PIN fin activa
+      { p: { torso: -0.24, head: 0.12, aRu: 0.02, aRl: 1.02, aLu: 0.86, aLl: 0.95, lRu: 0.95, lRl: -0.9, lLu: -0.3, lLl: -0.5, dy: 0.09 }, at: 0.32, ease: easeOutCubic },
+      { p: { torso: 0.05, head: 0.0, aRu: 0.55, aRl: 1.65, aLu: 0.5, aLl: 1.9, lRu: 0.3, lRl: -0.5, lLu: -0.25, lLl: -0.35, dy: 0.04 }, at: 0.5, ease: easeInOutCubic },
     ],
     startup: 0.13, active: 0.08, recovery: 0.32, dmg: 14, stop: 0.12, kbx: 0.36, kby: -0.10,
     hitstun: 0.42, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true,
     root: { at: 0.02, time: 0.14, dist: 0.06 }, sound: 'heavy', trauma: 0.4, reachBonus: true,
+    fw: { rear: -0.062, front: 0, heel: 0.060 }, drive: { sink: 0.030, rise: 0.036, twB: 0.14, twF: -0.16 },
   },
   dropkick: {
-    // aérea con compromiso: activa hasta aterrizar (el estado la corta), recovery al caer
+    // aérea con compromiso: activa hasta aterrizar (el estado la corta), recovery al caer.
+    // El PIN de 0.59 congela la pierna estirada toda la activa; recién ahí arranca la caída y el
+    // recupero (antes se quedaba con la pierna tiesa en el piso hasta que terminaba el move).
     poses: [
+      { p: { torso: 0.1, head: 0.05, aRu: -0.3, aRl: 0.9, aLu: -0.25, aLl: 0.85, lRu: 0.3, lRl: -1.7, lLu: 0.25, lLl: -1.6, dy: 0.02 }, at: 0.024, ease: easeOutCubic },
       { p: { torso: -0.2, aRu: -0.7, aRl: 0.5, aLu: -0.6, aLl: 0.45, lRu: 0.6, lRl: -1.4, lLu: 0.5, lLl: -1.3, dy: 0 }, at: 0.05, ease: easeInOutCubic },
       { p: { torso: -0.62, head: 0.2, aRu: -0.9, aRl: 0.4, aLu: -0.8, aLl: 0.35, lRu: 1.45, lRl: -0.1, lLu: 1.3, lLl: -0.12, dy: 0 }, at: 0.11, ease: easeOutCubic },
+      { p: { lRu: 1.45, lRl: -0.1, dy: 0 }, at: 0.59 },                                              // PIN: pierna extendida TODA la activa
+      { p: { torso: 0.18, head: 0.06, aRu: 0.3, aRl: 1.3, aLu: 0.2, aLl: 1.35, lRu: 0.55, lRl: -1.15, lLu: -0.15, lLl: -0.9, dy: 0.16 }, at: 0.66, ease: easeOutCubic },
+      { p: { torso: 0.05, head: 0.0, aRu: 0.6, aRl: 1.7, aLu: 0.45, aLl: 1.85, lRu: 0.2, lRl: -0.4, lLu: -0.2, lLl: -0.28, dy: 0.05 }, at: 0.79, ease: easeInOutCubic },
     ],
     startup: 0.09, active: 0.5, recovery: 0.2, dmg: 9, stop: 0.09, kbx: 0.28, kby: -0.10,
     hitstun: 0.34, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true, aerial: true,
     sound: 'heavy', trauma: 0.3, momentumDmg: true,
+    drive: { sink: 0, rise: 0.05, twB: 0.08, twF: -0.10 },
   },
   airkick: {
+    // Patada aérea descendente: la pierna libre se recoge al pecho (lLl) como contrapeso y el
+    // torso se abre; el recupero recoge la pierna en vez de dejarla colgando.
     poses: [
+      { p: { torso: 0.05, head: -0.08, aRu: -0.2, aRl: 0.9, aLu: 0.35, aLl: 1.2, lRu: 0.1, lRl: -1.75, lLu: 0.3, lLl: -1.1 }, at: 0.02, ease: easeOutCubic },
       { p: { torso: 0.15, aRu: -0.5, aRl: 0.5, aLu: 0.6, aLl: 0.8, lRu: 0.4, lRl: -1.5, lLu: 0.45, lLl: -1.4 }, at: 0.045, ease: easeOutCubic },
       { p: { torso: 0.3, head: 0.1, aRu: -0.7, aRl: 0.4, aLu: 0.8, aLl: 0.5, lRu: 1.15, lRl: -0.12, lLu: 0.55, lLl: -1.6 }, at: 0.08, ease: easeOutCubic },
-      { p: { torso: 0.1, aRu: -0.3, aRl: 0.5, aLu: 0.4, aLl: 0.7, lRu: 0.5, lRl: -0.8, lLu: 0.3, lLl: -0.9 }, at: 0.3, ease: easeInOutCubic },
+      // La activa de la airkick dura 0.15 s: partir el arco del pie en tramos le cambiaría la
+      // forma. Con el sampler POR CANAL no hace falta — estas claves no mencionan lRu/lRl, así
+      // que la pierna que pega sigue su curva original 0.08→0.3 intacta.
+      { p: { torso: 0.34, head: 0.15, aRu: -0.86, aRl: 0.38, aLu: 0.92, aLl: 0.45, lLu: 0.6, lLl: -1.72 }, at: 0.155 },
+      { p: { torso: 0.22, head: 0.08, aRu: -0.55, aRl: 0.45, aLu: 0.7, aLl: 0.6, lLu: 0.45, lLl: -1.4 }, at: 0.23 },
+      { p: { torso: 0.1, head: 0.0, aRu: -0.3, aRl: 0.5, aLu: 0.4, aLl: 0.7, lRu: 0.5, lRl: -0.8, lLu: 0.3, lLl: -0.9 }, at: 0.3, ease: easeInOutCubic },
     ],
     startup: 0.08, active: 0.15, recovery: 0.1, dmg: 9, stop: 0.075, kbx: 0.20, kby: 0.10,
     hitstun: 0.3, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true, aerial: true,
     spike: true, sound: 'hit', trauma: 0.25,
+    drive: { sink: 0, rise: 0.02, twB: -0.06, twF: 0.06 },
   },
   airpunch: {
     poses: [
-      { p: { torso: 0.15, aRu: 0.5, aRl: 1.6, aLu: 0.3, aLl: 1.2 }, at: 0.03, ease: easeOutCubic },
-      { p: { torso: 0.28, aRu: 1.5, aRl: 0.1, aLu: 0.45, aLl: 1.6 }, at: 0.06, ease: easeOutCubic },
-      { p: { torso: 0.1, aRu: 0.6, aRl: 1.4, aLu: 0.35, aLl: 1.3 }, at: 0.2, ease: easeInOutCubic },
+      { p: { head: -0.06, aLu: 0.4, aLl: 1.5 }, at: 0.013, ease: easeOutCubic },
+      { p: { torso: 0.15, aRu: 0.5, aRl: 1.6, aLu: 0.35, aLl: 1.35 }, at: 0.03, ease: easeOutCubic },
+      { p: { torso: 0.28, head: 0.04, aRu: 1.5, aRl: 0.1, aLu: 0.45, aLl: 1.6 }, at: 0.06, ease: easeOutCubic },
+      { p: { torso: 0.2779, aRu: 1.4895, aRl: 0.1152, head: 0.02, aLu: 0.42, aLl: 1.66 }, at: 0.08 },    // PIN mitad activa
+      { p: { torso: 0.2632, aRu: 1.416, aRl: 0.2213, head: -0.01, aLu: 0.4, aLl: 1.7 }, at: 0.10 },      // PIN fin activa
+      { p: { torso: 0.17, head: 0.02, aRu: 0.86, aRl: 1.12, aLu: 0.38, aLl: 1.42 }, at: 0.145, ease: easeOutCubic },
+      { p: { torso: 0.1, head: 0.0, aRu: 0.6, aRl: 1.4, aLu: 0.35, aLl: 1.3 }, at: 0.2, ease: easeInOutCubic },
     ],
     startup: 0.06, active: 0.04, recovery: 0.1, dmg: 5, stop: 0.05, kbx: 0.08, kby: 0,
     hitstun: 0.2, mask: MASK_PUNCH, limb: P_.hanR, strike: [J.aRu, J.aRl], aerial: true, sound: 'hit', trauma: 0.15,
+    drive: { sink: 0, rise: 0, twB: -0.05, twF: 0.05 },
   },
   lunge: {
     // dash+P: hereda la velocidad del lunge como knockback/daño extra (momentum como recurso)
     poses: [
-      { p: { torso: 0.15, aLu: 0.2, aLl: 2.15, aRu: 0.7, aRl: 1.8 }, at: 0.04, ease: easeOutCubic },
+      { p: { head: -0.1, aRu: 0.75, aRl: 1.95 }, at: 0.018, ease: easeOutCubic },
+      { p: { torso: 0.15, aLu: 0.2, aLl: 2.15, aRu: 0.72, aRl: 1.9 }, at: 0.04, ease: easeOutCubic },
       { p: { torso: 0.55, head: 0.1, aLu: 1.6, aLl: 0.04, aRu: 0.6, aRl: 2.1, dy: 0.05 }, at: 0.085, ease: easeOutCubic },
-      { p: { torso: 0.2, aLu: 0.5, aLl: 1.9, aRu: 0.55, aRl: 1.85 }, at: 0.32, ease: easeInOutCubic },
+      { p: { torso: 0.5471, aLu: 1.5908, aLl: 0.0555, head: 0.06, aRu: 0.55, aRl: 2.2 }, at: 0.115 },    // PIN mitad activa
+      { p: { torso: 0.5267, aLu: 1.5268, aLl: 0.1638, head: 0.01, aRu: 0.52, aRl: 2.26 }, at: 0.145 },   // PIN fin activa
+      { p: { torso: 0.37, head: -0.03, aLu: 1.02, aLl: 1.1, aRu: 0.55, aRl: 2.1 }, at: 0.215, ease: easeOutCubic },
+      { p: { torso: 0.2, head: 0.03, aLu: 0.5, aLl: 1.9, aRu: 0.55, aRl: 1.85 }, at: 0.32, ease: easeInOutCubic },
     ],
     startup: 0.085, active: 0.06, recovery: 0.18, dmg: 8, stop: 0.075, kbx: 0.2, kby: -0.05,
     hitstun: 0.3, mask: MASK_PUNCH, limb: P_.hanL, strike: [J.aLu, J.aLl], sound: 'heavy', trauma: 0.3, momentumDmg: true,
+    fw: { rear: -0.045, front: 0.058, heel: 0.042 }, drive: { sink: 0.022, rise: 0.020, twB: -0.12, twF: 0.10 },
   },
 };
 for (const k in MOVES) { const m = MOVES[k]; m.name = k; m.total = m.startup + m.active + m.recovery; }
@@ -714,22 +877,27 @@ for (const k in MOVES) { const m = MOVES[k]; m.name = k; m.total = m.startup + m
 // Muestrea el keytrack de un move en el reloj t (s): interpola poses parciales con su ease.
 // pose0 = pose del peleador al ARRANCAR el move (keyframe implícito en t=0: el golpe nace
 // desde donde estaba el cuerpo, nunca desde cero). Escribe en _sampScratch[j] los joints de la máscara.
+//
+// Interpolación POR CANAL: para cada joint se buscan la clave anterior y la siguiente que LO
+// DEFINEN, y se interpola entre ésas. Antes el sampler elegía UNA "clave siguiente" global, así
+// que meter una clave para la cabeza le partía el segmento a la pierna (y le cambiaba la
+// trayectoria, o sea el hitbox). Con canales independientes se puede autorar el tren superior de
+// una patada sin rozar el arco del pie. Con los datos viejos da exactamente lo mismo: todas las
+// claves originales definían todos sus joints atados.
 const _sampScratch = new Float64Array(NJ);
 function sampleMove(move, t, pose0) {
-  const ps = move.poses;
-  let iNext = ps.length - 1;
-  for (let i = 0; i < ps.length; i++) if (t <= ps[i].at) { iNext = i; break; }
-  const next = ps[iNext];
-  const t0 = iNext > 0 ? ps[iNext - 1].at : 0;
-  const span = Math.max(1e-4, next.at - t0);
-  const k = t >= next.at ? 1 : (next.ease || easeInOutCubic)(clamp((t - t0) / span, 0, 1));
-  const out = _sampScratch;
+  const ps = move.poses, out = _sampScratch;
   for (const j of move.mask) {
     const name = JNAMES[j];
-    let a = pose0[j];                                                // valor al inicio del segmento
-    for (let i = iNext - 1; i >= 0; i--) if (ps[i].p[name] !== undefined) { a = ps[i].p[name]; break; }
-    const b = next.p[name] !== undefined ? next.p[name] : a;         // clave ausente = sostener
-    out[j] = arcLerp(a, b, k);
+    let a = pose0[j], ta = 0, b, tb = 0, ease = null;                // a = valor vigente; b = próximo
+    for (let i = 0; i < ps.length; i++) {
+      const v = ps[i].p[name];
+      if (v === undefined) continue;                                 // esta clave no habla de este joint
+      if (ps[i].at <= t) { a = v; ta = ps[i].at; }
+      else { b = v; tb = ps[i].at; ease = ps[i].ease; break; }
+    }
+    if (b === undefined) { out[j] = a; continue; }                   // sin clave futura = sostener
+    out[j] = arcLerp(a, b, (ease || easeInOutCubic)(clamp((t - ta) / Math.max(1e-4, tb - ta), 0, 1)));
   }
   return out;
 }
@@ -748,7 +916,10 @@ const GAIT_STATES = [ST.IDLE, ST.RUN, ST.SKID, ST.ATTACK, ST.BLOCKSTUN];
 const COYOTE_STATES = [ST.FALL, ST.RUN, ST.IDLE];
 const LOCO_H_STATES = [ST.RUN, ST.JUMP, ST.FALL, ST.DASH, ST.SKID, ST.WALLSLIDE, ST.LAUNCHED];
 const NOGUARD_STATES = [ST.ATTACK, ST.DASH, ST.HITSTUN, ST.LAUNCHED, ST.KNOCKDOWN, ST.GETUP, ST.ROLL];
-const IK_STATES = [ST.IDLE, ST.RUN, ST.SKID, ST.ATTACK, ST.BLOCKSTUN, ST.GETUP];
+const IK_STATES = [ST.IDLE, ST.RUN, ST.SKID, ST.ATTACK, ST.BLOCKSTUN, ST.GETUP, ST.DASH];
+const SLIDE_STATES = [ST.SKID, ST.DASH];     // pies que ARRASTRAN con el cuerpo (no se plantan)
+// curva de aterrizaje: compresión rápida, rebote que se pasa y cola que asienta (pico ≈ 1 en u≈0.23)
+const landCurve = u => Math.sin(u * 5.341) * Math.exp(-2 * u) * 1.681;
 // pares de constraint del ragdoll (rest length se toma de los puntos al activarlo)
 const RAG_BONES = [
   [P_.pelvis, P_.neck], [P_.neck, P_.head], [P_.neck, P_.shoL], [P_.neck, P_.shoR],
@@ -768,12 +939,13 @@ class Fighter {
     this.atk = null; this.atkClock = 0; this.atkHit = false; this.atkBlocked = false; this.atkPose0 = new Float64Array(NJ);
     this.atkHitSet = new Set();                                       // defensores golpeados en el swing actual (permite multi-hit)
     this.gaitPhase = 0; this.rot = 0; this.leanAx = 0; this.prevVx = 0;
-    this.squashT = 9; this.squashAmt = 0;
+    this.squashT = 9; this.squashAmt = 0; this.popT = 9;              // popT = anticipación de despegue
+    this.guardW = 0; this.atkChained = false;
     this.targetPose = new Float64Array(NJ); this.poseCur = new Float64Array(NJ); this.poseVel = new Float64Array(NJ);
     this.poseCur.set(POSES.idle); this.targetPose.set(POSES.idle);
     this.logicPts = new Float64Array(NP * 2); this.logicPtsPrev = new Float64Array(NP * 2);
     this.renderPts = new Float64Array(NP * 2); this.renderPtsPrev = new Float64Array(NP * 2);
-    this.hArr = new Float64Array(NJ);
+    this.hArr = new Float64Array(NJ); this.zArr = new Float64Array(NJ);
     this.feet = [
       { px: x - 0.12 * CH, py: 0, planted: true, stepT: 1, fromX: 0, fromY: 0 },
       { px: x + 0.12 * CH, py: 0, planted: true, stepT: 1, fromX: 0, fromY: 0 },
@@ -878,8 +1050,12 @@ class Fighter {
         break;
       }
       case ST.ROLL: {
-        this.rot = this.facing >= 0 ? TAU * smoothstep(clamp(this.stateT / 0.38, 0, 1)) : TAU * smoothstep(clamp(this.stateT / 0.38, 0, 1));
-        if (this.stateT >= 0.38) { this.rot = 0; this.state = ST.IDLE; }
+        // El giro ya no es un smoothstep parejo (rueda de reloj): tarda en arrancar mientras el
+        // cuerpo se encoge, gira fuerte en el medio y CIERRA antes del final — los últimos 8%
+        // quedan para desplegarse de pie (rollPose hace la parte de la pose).
+        const u = clamp(this.stateT / 0.38, 0, 1);
+        this.rot = TAU * easeInOutCubic(clamp((u - 0.10) / 0.82, 0, 1));
+        if (u >= 1) { this.rot = 0; this.state = ST.IDLE; }
         break;
       }
       case ST.ATTACK: {
@@ -892,8 +1068,9 @@ class Fighter {
         const canCancel = (this.atkHit || this.atkBlocked) &&
           this.atkClock >= m.startup && this.atkClock <= m.startup + m.active + m.recovery * CFG.fight.cancelEnd;
         if (canCancel) {
-          if (m.chain && this.consume('punch')) { this.startMove(m.chain); break; }
-          if (m.chainAlt && this.consume('kick')) { this.startMove(m.chainAlt); break; }
+          // `true` = encadenado: el golpe siguiente NACE de éste (ver startMove/springs)
+          if (m.chain && this.consume('punch')) { this.startMove(m.chain, true); break; }
+          if (m.chainAlt && this.consume('kick')) { this.startMove(m.chainAlt, true); break; }
         }
         if (this.atkClock >= m.total) { this.atk = null; this.state = this.grounded ? ST.IDLE : ST.FALL; }
         break;
@@ -1016,12 +1193,14 @@ class Fighter {
   doJump() {
     this.vy = -Math.sqrt(2 * CFG.move.gUp * S * CFG.move.jumpApex * CH);
     this.grounded = false; this.state = ST.JUMP; this.stateT = 0; this.coyoteT = 9;
+    this.popT = 0;                           // la POSE arranca comprimida y se estira (ver buildPose)
     this.unplantFeet(); sfx.jump(); spawnDust(this.x, this.y + STAND, 4);
   }
-  startMove(name) {
+  startMove(name, chained) {
     const m = MOVES[name];
     this.atkPose0.set(this.targetPose);
     this.atk = m; this.atkClock = 0; this.atkHit = false; this.atkBlocked = false;
+    this.atkChained = !!chained;             // afloja los resortes del wind-up: el combo FLUYE
     if (this.atkHitSet) this.atkHitSet.clear(); else this.atkHitSet = new Set();
     this.state = ST.ATTACK; this.stateT = 0;
     if (m.unplantR) { this.feet[1].planted = false; }
@@ -1210,6 +1389,7 @@ class Fighter {
 
     // (a) base de locomoción
     this.baseLoco(tp);
+    const safe = this.safeAddW();              // 0 dentro de la ventana activa: nada la perturba
     // (b) keytrack del ataque (overwrite enmascarado con peso)
     if (this.state === ST.ATTACK) {
       const m = this.atk, t = this.atkClock;
@@ -1219,6 +1399,7 @@ class Fighter {
       const w = Math.min(wIn, wOut);
       const smp = sampleMove(m, t, this.atkPose0);
       for (const j of m.mask) tp[j] = arcLerp(tp[j], smp[j], w);
+      this.atkDrive(tp, m, t, w);              // transferencia de peso / rotación extra de torso
     }
     // (c) aditivas
     const lean = clamp((this.leanAx / S) * CFG.anim.leanGain, -CFG.anim.leanMax, CFG.anim.leanMax) * this.facing;
@@ -1228,58 +1409,301 @@ class Fighter {
       tp[J.torso] += 0.35 * d * this.flinchW;
       tp[J.head] += 0.5 * d * this.flinchW;
       tp[J.aLu] -= 0.3 * this.flinchW; tp[J.aRu] -= 0.3 * this.flinchW;   // brazos aflojan
+      tp[J.aLl] += 0.22 * this.flinchW; tp[J.aRl] += 0.18 * this.flinchW; // y se cierran al cuerpo
+      tp[J.dy] += 0.03 * this.flinchW;                                // el cuerpo cede un poco
     }
+    // ── Anticipación de DESPEGUE ──
+    // La física del salto no se retrasa ni un frame (eso sería cambiar la jugabilidad), pero la
+    // POSE nace comprimida y se estira sola hacia jumpPop. El ojo lo lee como "se agachó y saltó".
+    this.popT += dt;
+    if (this.popT < CFG.anim.popT) {
+      const k = CFG.anim.popAmt * (1 - this.popT / CFG.anim.popT) * safe;
+      tp[J.dy] += 0.10 * k; tp[J.torso] += 0.26 * k; tp[J.head] -= 0.10 * k;
+      tp[J.lLl] -= 0.55 * k; tp[J.lRl] -= 0.62 * k;
+      tp[J.lLu] += 0.30 * k; tp[J.lRu] += 0.26 * k;
+      tp[J.aLu] += 0.55 * k; tp[J.aRu] += 0.60 * k;
+      tp[J.aLl] += 0.20 * k; tp[J.aRl] += 0.20 * k;
+    }
+    // ── ATERRIZAJE en dos tiempos ──
+    // Antes era medio seno: bajaba y subía, simétrico y muerto. Ahora comprime rápido, REBOTA
+    // pasándose un poco y asienta; los brazos suben al absorber y la cabeza llega tarde.
     this.squashT += dt;
-    if (this.squashT < CFG.anim.squashT * 2) {                        // squash de aterrizaje
-      const k = Math.sin(PI * clamp(this.squashT / (CFG.anim.squashT * 2), 0, 1));
-      tp[J.dy] += 0.16 * this.squashAmt * k;
-      tp[J.lLl] -= 0.5 * this.squashAmt * k; tp[J.lRl] -= 0.5 * this.squashAmt * k;
-      tp[J.lLu] += 0.25 * this.squashAmt * k; tp[J.lRu] += 0.25 * this.squashAmt * k;
+    if (this.squashT < CFG.anim.landT && this.squashAmt > 0.01) {
+      const k = landCurve(this.squashT / CFG.anim.landT) * this.squashAmt * safe;
+      tp[J.dy] += 0.17 * k; tp[J.torso] += 0.30 * k; tp[J.head] -= 0.24 * k;
+      tp[J.lLl] -= 0.55 * k; tp[J.lRl] -= 0.60 * k;
+      tp[J.lLu] += 0.26 * k; tp[J.lRu] += 0.22 * k;
+      tp[J.aLu] -= 0.45 * k; tp[J.aRu] -= 0.40 * k;
+      tp[J.aLl] += 0.25 * k; tp[J.aRl] += 0.22 * k;
     }
+  }
+
+  // Peso de las capas aditivas que NO tienen derecho a mover un hitbox: vale 0 dentro de la
+  // ventana activa y se apaga 2 frames ANTES (lead), así ni la cápsula barrida del primer frame
+  // activo (que mira la pose del frame anterior) las ve. Fuera del golpe vale 1.
+  safeAddW() {
+    if (this.state !== ST.ATTACK) return 1;
+    const m = this.atk, t = this.atkClock, lead = 0.033;
+    if (t > m.startup - lead && t <= m.startup + m.active) return 0;
+    if (t <= m.startup - lead) return 1 - clamp((t - (m.startup - lead - 0.05)) / 0.05, 0, 1);
+    return clamp((t - m.startup - m.active) / 0.05, 0, 1);
+  }
+
+  // ── Envolvente de PESO del golpe ──
+  // El alcance lo fija el keytrack; esto le agrega lo que el keytrack no puede tocar: la pelvis
+  // que se hunde para cargar y empuja al recuperar, y la rotación extra de torso/cabeza.
+  // Igual que safeAddW: exactamente 0 en toda la ventana activa (y 2 frames antes).
+  atkDrive(tp, m, t, w) {
+    const d = m.drive; if (!d || w <= 0) return;
+    let sink = 0, tw = 0;
+    if (t < m.startup) {
+      const k = hump(t / Math.max(0.02, m.startup - 0.033));
+      sink = d.sink * k; tw = d.twB * k;
+    } else if (t > m.startup + m.active) {
+      const k = hump(clamp((t - m.startup - m.active) / Math.max(1e-4, m.recovery), 0, 1));
+      sink = -d.rise * k; tw = d.twF * k;
+    } else return;
+    sink *= w; tw *= w;
+    tp[J.dy] += sink;
+    tp[J.torso] += tw;
+    tp[J.head] -= tw * 0.45;                                          // la cabeza se queda atrás
+    // en el aire no hay IK de piernas: las rodillas tienen que acompañar el hundido a mano
+    if (!this.grounded) { tp[J.lLl] -= sink * 2.2; tp[J.lRl] -= sink * 2.2; }
   }
   baseLoco(tp) {
     const st = this.state;
-    if (st === ST.HANG) { tp.set(POSES.hang); this.hangSway(tp); return; }
-    if (st === ST.CLIMB) { tp.set(POSES.crouch); tp[J.torso] = 0.5; return; }
-    if (st === ST.GETUP) { tp.set(POSES.getup); return; }
-    if (st === ST.SKID) { tp.set(POSES.skid); return; }
-    // ROLL usa la pose de bolita — cuerpo compacto que rueda (spin lo aporta f.rot en drawFighter).
-    if (st === ST.ROLL) { tp.set(POSES.ballRoll); return; }
-    if (st === ST.DASH) { tp.set(POSES.run1); tp[J.torso] += 0.25; return; }
-    if (st === ST.WALLSLIDE) { tp.set(POSES.airFall); tp[J.torso] = 0.3; return; }
-    if (st === ST.BLOCKSTUN) { tp.set(this.input.my > 0.5 ? POSES.blockLo : POSES.block); return; }
-    if (st === ST.LAUNCHED) { tp.set(POSES.airRise); tp[J.torso] -= 0.4; return; }
-    if (!this.grounded) {                                             // aire: pop → rise → apex → fall
-      // Al arrancar el salto (primeros ~0.15s) mostramos jumpPop — cuerpo estirado con brazos
-      // hacia arriba, para que se sienta el "impulso". Después blendea hacia airRise como antes.
-      if (st === ST.JUMP && this.stateT < 0.15) {
-        const k = smoothstep(this.stateT / 0.15);
-        blendPose(POSES.jumpPop, POSES.airRise, k, tp);
-        return;
-      }
+    if (st === ST.HANG) { this.hangPose(tp); return; }
+    if (st === ST.CLIMB) { this.climbPose(tp); return; }
+    if (st === ST.GETUP) { this.getupPose(tp); return; }
+    if (st === ST.SKID) { this.skidPose(tp); return; }
+    if (st === ST.ROLL) { this.rollPose(tp); return; }
+    if (st === ST.DASH) { this.dashPose(tp); return; }
+    if (st === ST.WALLSLIDE) {
+      tp.set(POSES.airFall); tp[J.torso] = 0.3;
+      // raspar la pared: el brazo de apoyo se estira contra ella y el cuerpo vibra un toque
+      const v = Math.sin(this.T * 26) * clamp(this.vy / (0.5 * S), 0, 1);
+      tp[J.aRu] = -1.9 + 0.08 * v; tp[J.aRl] = 0.35; tp[J.aLu] = -0.45 + 0.1 * v; tp[J.aLl] = 0.9;
+      tp[J.lRu] = 0.35; tp[J.lRl] = -0.95; tp[J.lLu] = -0.15; tp[J.lLl] = -0.35;
+      tp[J.head] = 0.1 + 0.05 * v; tp[J.dy] = 0.03;
+      return;
+    }
+    if (st === ST.BLOCKSTUN) {
+      tp.set(this.input.my > 0.5 ? POSES.blockLo : POSES.block);
+      // el bloqueo acusa el impacto: retrocede y tiembla, no se queda de piedra
+      const k = clamp(this.stun / Math.max(0.05, CFG.fight.blockstun), 0, 1);
+      const v = Math.sin(this.stateT * 34) * k;
+      tp[J.torso] += 0.10 * k + 0.05 * v; tp[J.head] += 0.12 * k;
+      tp[J.aLu] += 0.14 * k + 0.06 * v; tp[J.aRu] += 0.12 * k;
+      tp[J.dy] += 0.03 * k;
+      return;
+    }
+    if (st === ST.LAUNCHED) {
+      tp.set(POSES.airRise); tp[J.torso] -= 0.4;
+      // lanzado: el cuerpo gira flojo y los brazos van detrás (todavía no es ragdoll)
+      const s = Math.sin(this.stateT * 9), s2 = Math.sin(this.stateT * 6.3 + 1);
+      tp[J.aLu] += -0.5 + 0.25 * s; tp[J.aRu] += -0.45 + 0.22 * s2;
+      tp[J.aLl] += 0.3 * s2; tp[J.aRl] += 0.28 * s;
+      tp[J.head] += -0.2 + 0.12 * s2; tp[J.torso] += 0.1 * s;
+      tp[J.lLu] += 0.2 * s2; tp[J.lRu] += 0.18 * s;
+      return;
+    }
+    if (!this.grounded) { this.airPose(tp); return; }
+    if (this.guarding()) {
+      tp.set(this.input.my > 0.5 ? POSES.blockLo : POSES.block);
+      this.guardLife(tp, 1);
+      return;
+    }
+    if (this.input.my > 0.5 && (st === ST.IDLE || st === ST.RUN)) {
+      tp.set(POSES.crouch);
+      this.guardLife(tp, 0.6);
+      tp[J.dy] += 0.012 * Math.sin(this.T * TAU * CFG.anim.breatheHz * 1.3);
+      return;
+    }
+    const spd = Math.abs(this.vx) / (CFG.move.maxRun * S);
+    // OJO con `quiet`: la máscara de los PUÑOS no incluye dy, así que lo que la base ponga en la
+    // pelvis se filtra al golpe — y mover la pelvis mueve el hombro, o sea el ALCANCE. Durante
+    // un golpe la base va sin capa de vida (dy exactamente el de POSES.idle, como siempre fue);
+    // el rebote de guardia y el ruido vuelven apenas termina.
+    if (spd < 0.12) this.idlePose(tp, this.state === ST.ATTACK); else this.runCycle(tp, spd);
+  }
+
+  // ── PARADO: nunca quieto ──
+  // Respiración + tres senos de frecuencias incommensurables (peso que pasa de una pierna a la
+  // otra, hombros, cabeza) y, si hay alguien cerca, la postura se cierra a guardia de pelea con
+  // rebote de boxeador. La guardia queda geométricamente casi encima de idle a propósito: la
+  // hurtbox sale de renderPts y no quiero regalar (ni robar) centímetros.
+  idlePose(tp, quiet) {
+    const t = this.T, a = CFG.anim, A = a.idleAmp, foe = this.foe;
+    if (quiet) { tp.set(POSES.idle); this.guardW = 0; return; }      // ver baseLoco: no tocar dy
+    const near = foe && !foe.dead
+      ? Math.abs(foe.x - this.x) + Math.abs(foe.y - this.y) * 0.6 : 1e9;
+    const gd = smoothstep(clamp((2.9 * CH - near) / (1.8 * CH), 0, 1));
+    this.guardW = gd;
+    if (gd > 0.01) blendPose(POSES.idle, POSES.stance, gd, tp); else tp.set(POSES.idle);
+    const br = Math.sin(t * TAU * a.breatheHz);
+    tp[J.torso] += a.breatheAmp * br * A;
+    tp[J.aLu] += (0.02 * Math.sin(t * TAU * a.breatheHz - 0.7) + 0.028 * Math.sin(t * 0.83 + 1.7)) * A;
+    tp[J.aRu] += (0.02 * Math.sin(t * TAU * a.breatheHz - 0.9) + 0.026 * Math.sin(t * 0.71 + 0.4)) * A;
+    tp[J.aLl] += 0.05 * Math.sin(t * 0.59 + 2.1) * A;
+    tp[J.aRl] += 0.045 * Math.sin(t * 0.67 + 0.9) * A;
+    tp[J.head] += (0.05 * Math.sin(t * 0.47 + 1.1) - 0.3 * a.breatheAmp * br) * A;
+    tp[J.dy] += 0.008 * Math.sin(t * 1.13) * A;
+    if (gd > 0.01) {                                                  // rebote de guardia
+      const b = Math.sin(t * TAU * a.bounceHz);
+      tp[J.dy] += a.bounceAmp * gd * (0.5 - 0.5 * b);
+      tp[J.torso] += 0.022 * gd * b;
+      tp[J.aRu] += 0.05 * gd * b; tp[J.aLu] -= 0.04 * gd * b;
+      tp[J.aRl] -= 0.06 * gd * b; tp[J.aLl] += 0.05 * gd * b;
+      tp[J.head] += 0.03 * gd * Math.sin(t * TAU * a.bounceHz - 0.8);
+      // la cabeza acompaña la altura del rival: intención, no sólo ruido
+      tp[J.head] += clamp((foe.y - this.y) / (1.6 * CH), -1, 1) * 0.09 * gd;
+    }
+  }
+  // vida mínima para poses "sostenidas" (bloqueo, agachado): sin esto parecen calcomanías
+  guardLife(tp, k) {
+    const t = this.T;
+    tp[J.aLu] += 0.030 * k * Math.sin(t * 9.1);
+    tp[J.aRu] += 0.028 * k * Math.sin(t * 7.7 + 1.1);
+    tp[J.aLl] += 0.035 * k * Math.sin(t * 6.3 + 2.0);
+    tp[J.aRl] += 0.032 * k * Math.sin(t * 8.3 + 0.3);
+    tp[J.torso] += 0.018 * k * Math.sin(t * 5.3);
+    tp[J.head] += 0.030 * k * Math.sin(t * 6.1 + 0.6);
+  }
+
+  // ── CORRER: ciclo CALCULADO, no un ping-pong entre dos poses ──
+  // Los brazos salen de la fase de marcha en contrafase (brazo derecho adelante con pierna
+  // izquierda adelante), el antebrazo llega con retraso (overlapping action), el torso se
+  // inclina con la velocidad y balancea al doble de frecuencia, y la cabeza compensa ese
+  // balanceo para quedar nivelada — que es lo que hace que se lea como una persona corriendo.
+  runCycle(tp, spd) {
+    const r = CFG.run, ph = TAU * this.gaitPhase;
+    const sN = clamp((spd - 0.1) / 0.9, 0, 1);                        // 0 = caminata, 1 = sprint
+    const wRun = clamp(spd * 2.4, 0, 1);                              // mezcla con idle a baja velocidad
+    const c = Math.cos(ph), c2 = Math.cos(2 * ph), s2 = Math.sin(2 * ph);
+    const cl = Math.cos(ph - r.elbLag);
+    // piernas: base autorada en fase con el IK de marcha (el IK las pisa en el piso, pero esto
+    // sostiene las transiciones a aire/dash y evita el salto de pose al despegar)
+    blendPose(POSES.run1, POSES.run2, 0.5 - 0.5 * c, tp);
+    const dirN = (Math.sign(this.vx) * this.facing) || 1;             // ¿corre de frente o de espaldas?
+    // la aceleración mete el cuerpo más adelante y agranda el bombeo de brazos
+    const accN = clamp((this.leanAx / S) * 0.09 * this.facing, -0.5, 0.6);
+    const tor = (r.leanBase + r.leanSpd * sN) * dirN + r.sway * sN * s2;
+    tp[J.torso] = tor;
+    // Los brazos son HIJOS del torso en la FK, así que se autoran en ángulo de MUNDO y recién
+    // ahí se les descuenta la inclinación. Sin este descuento, cuanto más se inclina el cuerpo
+    // más se van los brazos hacia adelante y el tipo corre como si llevara una bandeja.
+    const swA = (r.armA + r.armASpd * sN + 0.10 * accN) * dirN;
+    tp[J.aRu] = r.armC + swA * c - tor;
+    tp[J.aLu] = r.armC - swA * c - tor;
+    // codo: bien flexionado y con retraso de fase — la mano viaja de la cadera al pecho
+    const elbC = r.elbC + r.elbCSpd * sN, elbA = r.elbA + r.elbASpd * sN;
+    tp[J.aRl] = elbC + elbA * cl;
+    tp[J.aLl] = elbC - elbA * cl;
+    tp[J.head] = r.headLead + r.headSpd * sN - r.headCounter * tor + r.headBob * c2;
+    tp[J.dy] = 0.012 + r.dyCrouch * sN + CFG.anim.bob * sN * (0.5 - 0.5 * Math.cos(2 * ph + 0.55));
+    if (wRun < 1) blendPose(POSES.idle, tp, wRun, tp);                // caminar = versión atenuada
+  }
+
+  // ── DERRAPE: el cuerpo pelea contra su propia inercia ──
+  skidPose(tp) {
+    const k = clamp(Math.abs(this.vx) / (CFG.move.maxRun * S), 0, 1);
+    const w = Math.sin(this.stateT * 26) * (1 - clamp(this.stateT / 0.22, 0, 1));   // sacudón inicial
+    tp.set(POSES.skid);
+    tp[J.torso] = -0.10 - 0.26 * k + 0.05 * w;
+    tp[J.head] = 0.08 + 0.12 * k - 0.12 * w;
+    tp[J.aRu] = 0.55 + 0.55 * k + 0.16 * w; tp[J.aRl] = 0.50 - 0.20 * k;
+    tp[J.aLu] = -0.35 - 0.45 * k - 0.20 * w; tp[J.aLl] = 0.50 + 0.30 * k;
+    tp[J.dy] = 0.03 + 0.07 * k;
+    tp[J.lRu] = 0.45 + 0.35 * k; tp[J.lRl] = -0.28 - 0.12 * k;
+    tp[J.lLu] = -0.28 - 0.18 * k; tp[J.lLl] = -0.45 - 0.35 * k;
+  }
+
+  // ── DASH: explota, se estira, y se endereza al salir (antes era run1 con el torso rotado) ──
+  dashPose(tp) {
+    const u = clamp(this.stateT / (CFG.dash.wind + CFG.dash.time), 0, 1);
+    const k = 1 - smoothstep(clamp((u - 0.5) / 0.5, 0, 1));           // 1 = pleno dash, 0 = saliendo
+    blendPose(POSES.idle, POSES.dash, k, tp);
+    tp[J.dy] += 0.03 * hump(clamp(u * 1.6, 0, 1));                    // se agacha al empujar
+    tp[J.head] += 0.05 * Math.sin(u * 15) * k;
+    tp[J.aLl] += 0.18 * k * Math.sin(u * 9);                          // el brazo de atrás flamea
+  }
+
+  // ── AIRE: pop → subida → ápice → caída, con ANTICIPACIÓN de aterrizaje ──
+  // Lo que más vendía "estatua voladora" era que la pose no sabía que el piso venía subiendo.
+  airPose(tp) {
+    if (this.state === ST.JUMP && this.stateT < 0.15) {
+      blendPose(POSES.jumpPop, POSES.airRise, smoothstep(this.stateT / 0.15), tp);
+    } else {
       const v = this.vy / (0.5 * S);
       if (v < 0) blendPose(POSES.airRise, POSES.airApex, smoothstep(clamp(v + 1, 0, 1)), tp);
       else blendPose(POSES.airApex, POSES.airFall, smoothstep(clamp(v, 0, 1)), tp);
-      return;
     }
-    const guard = this.guarding();
-    if (guard) { tp.set(this.input.my > 0.5 ? POSES.blockLo : POSES.block); return; }
-    if (this.input.my > 0.5 && [ST.IDLE, ST.RUN].includes(st)) { tp.set(POSES.crouch); return; }
-    const spd = Math.abs(this.vx) / (CFG.move.maxRun * S);
-    if (spd < 0.12) {                                                 // idle + respiración
-      tp.set(POSES.idle);
-      const b = Math.sin(this.T * TAU * CFG.anim.breatheHz);
-      tp[J.torso] += CFG.anim.breatheAmp * b;
-      tp[J.aLu] += 0.02 * Math.sin(this.T * TAU * CFG.anim.breatheHz - 0.7);
-      tp[J.aRu] += 0.02 * Math.sin(this.T * TAU * CFG.anim.breatheHz - 0.9);
-    } else {                                                          // run: ping-pong por fase de gait
-      const k = 0.5 - 0.5 * Math.cos(TAU * this.gaitPhase);
-      blendPose(POSES.run1, POSES.run2, k, tp);
-      tp[J.torso] += 0.15 * spd * (Math.sign(this.vx) * this.facing || 1);   // lean CON la velocidad (no sólo con la aceleración)
-      tp[J.dy] += CFG.anim.bob * Math.abs(Math.sin(TAU * this.gaitPhase)) * spd;
-      // caminar despacio = menos amplitud de brazos
-      if (spd < 0.5) { tp[J.aLu] = lerp(POSES.idle[J.aLu], tp[J.aLu], spd * 2); tp[J.aRu] = lerp(POSES.idle[J.aRu], tp[J.aRu], spd * 2); tp[J.aLl] = lerp(POSES.idle[J.aLl], tp[J.aLl], spd * 2); tp[J.aRl] = lerp(POSES.idle[J.aRl], tp[J.aRl], spd * 2); }
+    let wLand = 0;
+    if (this.vy > 0) {                                                // ¿cuánto falta para el piso?
+      const gy = groundAt(this.x, this.y + STAND).y;
+      wLand = smoothstep(1 - clamp((gy - (this.y + STAND)) / (0.55 * CH), 0, 1));
+      if (wLand > 0.01) blendPose(tp, POSES.airLand, wLand, tp);
     }
+    // flameo: brazos y cabeza acusan la velocidad horizontal y el tiempo en el aire; se apaga
+    // al acercarse al piso (ahí manda la pose de aterrizaje)
+    const fl = (1 - wLand) * clamp(this.stateT * 4, 0, 1);
+    if (fl > 0.01) {
+      const f1 = Math.sin(this.T * 7.3), f2 = Math.sin(this.T * 5.1 + 1.2);
+      const hv = clamp(this.vx / (CFG.move.maxRun * S), -1, 1) * this.facing;
+      tp[J.aLu] += (0.10 * f1 + 0.18 * hv) * fl;
+      tp[J.aRu] += (0.09 * f2 - 0.16 * hv) * fl;
+      tp[J.aLl] += 0.08 * f2 * fl; tp[J.aRl] += 0.07 * f1 * fl;
+      tp[J.head] += (0.05 * f2 - 0.10 * hv) * fl;
+      tp[J.torso] += 0.08 * hv * fl;
+      tp[J.lLu] += 0.06 * f2 * fl; tp[J.lRu] += 0.05 * f1 * fl;
+    }
+  }
+
+  // ── RODAR: se tira, se comprime, gira y se despliega en cuclillas listo para correr ──
+  rollPose(tp) {
+    const u = clamp(this.stateT / 0.38, 0, 1);
+    if (u < 0.16) blendPose(POSES.rollTuck, POSES.ballRoll, smoothstep(u / 0.16), tp);
+    else if (u < 0.72) tp.set(POSES.ballRoll);
+    else blendPose(POSES.ballRoll, POSES.rollOut, smoothstep((u - 0.72) / 0.28), tp);
+    const sq = hump(clamp((u - 0.08) / 0.78, 0, 1));                  // se aprieta más en el medio
+    tp[J.dy] += 0.03 * sq;
+    tp[J.lLl] -= 0.18 * sq; tp[J.lRl] -= 0.18 * sq;
+    tp[J.aLl] += 0.12 * sq; tp[J.aRl] += 0.12 * sq;
+    tp[J.head] += 0.10 * sq;
+  }
+
+  // ── TREPAR: tracción (rodillas al pecho) → plantar el pie arriba → empujar y salir ──
+  climbPose(tp) {
+    const u = clamp(this.stateT / CFG.climb.climbT, 0, 1);
+    if (u < 0.40) blendPose(POSES.climbPull, POSES.climbPlant, smoothstep(u / 0.40), tp);
+    else if (u < 0.75) blendPose(POSES.climbPlant, POSES.climbPush, smoothstep((u - 0.40) / 0.35), tp);
+    else blendPose(POSES.climbPush, POSES.idle, smoothstep((u - 0.75) / 0.25) * 0.7, tp);
+    const e = hump(clamp(u / 0.45, 0, 1));                            // el tirón de brazos
+    tp[J.torso] -= 0.10 * e; tp[J.head] -= 0.16 * e;
+    tp[J.dy] += 0.03 * Math.sin(u * 11);                              // esfuerzo entrecortado
+  }
+
+  // ── COLGADO: péndulo de dos frecuencias + el tirón del agarre ──
+  hangPose(tp) {
+    tp.set(POSES.hang);
+    const t = this.T;
+    const s = Math.sin(t * TAU * 0.62), s2 = Math.sin(t * TAU * 0.41 + 1.3);
+    tp[J.lLu] += 0.09 * s; tp[J.lLl] -= 0.05 * s;
+    tp[J.lRu] += 0.08 * Math.sin(t * TAU * 0.62 - 0.85); tp[J.lRl] -= 0.04 * s2;
+    tp[J.torso] += 0.035 * s + 0.02 * s2;
+    tp[J.head] += -0.06 + 0.05 * s2;
+    const pull = Math.exp(-this.stateT * 6) * Math.sin(this.stateT * 22);
+    tp[J.torso] += 0.10 * pull; tp[J.dy] += 0.035 * pull;
+  }
+
+  // ── LEVANTARSE: empuja con las manos y se endereza hacia idle ──
+  getupPose(tp) {
+    const u = clamp(this.stateT / 0.32, 0, 1);
+    blendPose(POSES.getup, POSES.idle, smoothstep(clamp((u - 0.25) / 0.75, 0, 1)), tp);
+    const push = hump(clamp(u / 0.55, 0, 1));
+    tp[J.aLu] += 0.50 * push; tp[J.aRu] += 0.45 * push;
+    tp[J.aLl] -= 0.35 * push; tp[J.aRl] -= 0.30 * push;
+    tp[J.torso] += 0.16 * push; tp[J.head] -= 0.12 * push;
   }
   guarding() {                                                        // bloqueo = sostener ATRÁS (sin botón)
     if (!this.foe || !this.grounded) return false;
@@ -1291,34 +1715,40 @@ class Fighter {
     const f = this.foe;
     return f && (f.state === ST.ATTACK || f.state === ST.DASH) && Math.abs(f.x - this.x) < 1.6 * CH;
   }
-  hangSway(tp) {
-    const s = Math.sin(this.T * TAU * 0.7);
-    tp[J.lLu] += 0.05 * s; tp[J.lRu] += 0.05 * Math.sin(this.T * TAU * 0.7 - 0.9);
-    tp[J.torso] += 0.02 * s;
-  }
-
   // ── resortes críticamente amortiguados por canal; la tabla de semividas ES el dial de "sueltitud" ──
   springs(dt) {
-    const h = this.hArr, sp = CFG.spr;
+    const h = this.hArr, z = this.zArr, sp = CFG.spr;
     let base = sp.hIdle;
     if (LOCO_H_STATES.includes(this.state)) base = sp.hLoco;
-    for (let j = 0; j < NJ; j++) h[j] = base;
+    if (!this.grounded) base = sp.hAir;
+    if (this.state === ST.HANG) base = sp.hHang;
+    else if (this.state === ST.ROLL) base = sp.hRoll;
+    for (let j = 0; j < NJ; j++) { h[j] = base; z[j] = sp.zLoco; }
     if (this.state === ST.ATTACK) {
       const m = this.atk, t = this.atkClock;
       const phase = t < m.startup ? 0 : t < m.startup + m.active ? 1 : 2;
-      const hAtk = phase === 0 ? sp.hAtkStart : phase === 1 ? sp.hAtkStart : sp.hRecov;
-      for (const j of m.mask) h[j] = hAtk;
-      if (phase === 1) for (const j of m.strike) h[j] = sp.hStrike;  // el limb que pega CONVERGE al frame-data
+      // ENCADENADO: en el wind-up de un golpe que sale de otro se afloja la semivida, así el
+      // cuerpo pasa de largo por la pose de carga en vez de recargar desde cero — el combo se
+      // lee como una secuencia y no como tres poses sueltas. Toca SÓLO el esqueleto de render:
+      // el frame-data sale de targetPose, y hStrike vuelve a clavar el limb en el contacto.
+      const hAtk = phase === 0 ? sp.hAtkStart * (this.atkChained ? 2.4 : 1)
+        : phase === 1 ? sp.hAtkStart : sp.hRecov;
+      for (const j of m.mask) { h[j] = hAtk; z[j] = phase === 2 ? sp.zRecov : 1; }
+      if (phase === 1) for (const j of m.strike) { h[j] = sp.hStrike; z[j] = 1; }   // el limb que pega CONVERGE al frame-data
       h[J.dy] = Math.min(h[J.dy], 0.06);
+      // la mano que NO pega se queda atrás y se pasa: follow-through gratis
+      const fj = m.strike.includes(J.aRl) ? J.aLl : J.aRl;
+      h[fj] = Math.max(h[fj], base * sp.lagMul); z[fj] = sp.zFree;
     }
     // cabeza y mano libre siempre van más atrás (overlapping action gratis)
-    h[J.head] *= sp.lagMul;
+    h[J.head] *= sp.lagMul; z[J.head] = sp.zHead;
     if (!(this.state === ST.ATTACK && this.atk.strike.includes(J.aLl))) h[J.aLl] = Math.max(h[J.aLl], base * sp.lagMul);
-    if (this.state === ST.CLIMB || this.state === ST.GETUP) for (let j = 0; j < NJ; j++) h[j] = 0.08;
+    z[J.dy] = 1;                                                       // la pelvis no rebota sola (la IK de piernas ya lo hace)
+    if (this.state === ST.CLIMB || this.state === ST.GETUP) for (let j = 0; j < NJ; j++) { h[j] = 0.08; z[j] = 1; }
     for (let j = 0; j < NJ; j++) {
       // los ángulos son continuos (arcLerp en target): resortear el delta envuelto evita vueltas de 2π
       const tgt = this.poseCur[j] + wrapPi(this.targetPose[j] - this.poseCur[j]);
-      springTo(this.poseCur, this.poseVel, j, j === J.dy ? this.targetPose[j] : tgt, h[j], dt);
+      springToZ(this.poseCur, this.poseVel, j, j === J.dy ? this.targetPose[j] : tgt, h[j], dt, z[j]);
     }
   }
 
@@ -1344,6 +1774,18 @@ class Fighter {
       stepH: CH * (g.stepHBase + g.stepHSpd * spdFrac),               // altura del arco del pie en vuelo
     };
   }
+  // Curva de transferencia de peso de un golpe: −1 = cargado atrás (anticipación), +1 = todo el
+  // peso descargado adelante (impacto), 0 = neutro. La usan los pies, que es donde de verdad se
+  // ve el peso: la pelvis no se mueve, así que el alcance del golpe no se entera.
+  atkWeight() {
+    const m = this.atk, t = this.atkClock;
+    const coil = hump(clamp(t / Math.max(0.02, m.startup), 0, 1));
+    const s0 = m.startup * 0.55, s1 = m.startup + m.active * 0.5, s2 = m.total * 0.92;
+    const drive = t < s0 ? 0
+      : t < s1 ? smoothstep((t - s0) / Math.max(1e-4, s1 - s0))
+      : 1 - smoothstep(clamp((t - s1) / Math.max(1e-4, s2 - s1), 0, 1));
+    return drive - coil * 0.8;
+  }
   feetIK(dt) {
     if (!this.grounded || !IK_STATES.includes(this.state)) return;
     if (this.state === ST.ATTACK && this.atk.aerial) return;
@@ -1351,18 +1793,44 @@ class Fighter {
     const spd = Math.abs(this.vx);
     const spdFrac = Math.min(1, spd / (CFG.move.maxRun * S));
     // ¿ciclo de marcha? (desplazándose de verdad; golpear en el lugar usa stance plantada)
-    const gait = spd > 0.12 * CFG.move.maxRun * S && (this.state === ST.RUN || this.state === ST.IDLE || this.state === ST.SKID);
+    const gait = spd > 0.12 * CFG.move.maxRun * S && (this.state === ST.RUN || this.state === ST.IDLE);
+    // Derrape y dash: los pies NO se plantan en el mundo, ARRASTRAN con el cuerpo en base ancha.
+    // (plantarlos mientras el cuerpo se va a 0.34·S es justo lo que daba el estirón de patas de
+    // araña que Franco sacó en su momento — esto es lo contrario: cero plantado, cero estirón)
+    const slide = SLIDE_STATES.includes(this.state);
     const { half, duty, stepH } = this.strideParams(spdFrac);
     const dir = Math.sign(this.vx) || this.facing;
     // objetivo de stance: lead adelante, rear atrás (del lado del facing)
     const stanceX = [this.x - this.facing * 0.13 * CH, this.x + this.facing * 0.14 * CH];
     const pelX = this.renderPts[0], pelY = this.renderPts[1];
+    const atking = this.state === ST.ATTACK;
+    const fw = atking ? this.atk.fw : null;
+    const fwW = fw ? this.atkWeight() : 0;
+    // parado/guardia: el peso pasa lento de una pierna a la otra y el rebote de guardia lo empuja
+    const still = !gait && !slide && !atking;
+    const wsh = still
+      ? Math.sin(this.T * 0.9) * 0.55 + this.guardW * 0.45 * Math.sin(this.T * TAU * CFG.anim.bounceHz)
+      : 0;
     for (let k = 0; k < 2; k++) {
       const f = this.feet[k], other = this.feet[1 - k];
       const kneeI = k === 0 ? P_.kneL : P_.kneR, footI = k === 0 ? P_.ftL : P_.ftR;
       if (this.state === ST.ATTACK && this.atk.unplantR && k === 1) continue;   // pierna que patea: manda el keytrack
       let tx, ty;
-      if (gait) {
+      if (slide) {
+        // base ancha que acompaña al cuerpo. En el derrape el pie de adelante frena y el de
+        // atrás levanta el talón; en el dash es una tijera que se cierra al salir.
+        if (this.state === ST.DASH) {
+          const u = clamp(this.stateT / (CFG.dash.wind + CFG.dash.time), 0, 1);
+          const sc = 1 - smoothstep(u);
+          tx = this.x + this.facing * (k === 1 ? (0.10 + 0.20 * sc) : -(0.08 + 0.22 * sc)) * CH;
+          ty = gy - (k === 1 ? 0.045 : 0.015) * sc * CH;
+        } else {
+          const kb = clamp(spd / (CFG.move.maxRun * S), 0, 1);
+          tx = this.x + dir * (k === 1 ? (0.10 + 0.20 * kb) : -(0.10 + 0.10 * kb)) * CH;
+          ty = gy - (k === 0 ? 0.035 * kb : 0) * CH;
+        }
+        f.px = tx; f.py = ty; f.planted = true; f.stepT = 1;
+      } else if (gait) {
         // ── CICLO PROCEDURAL DE MARCHA: apoyo (el pie queda CLAVADO en el mundo y la cadera
         //    pasa por encima) + vuelo (arco hacia adelante con rodilla). La fase avanza por
         //    DISTANCIA recorrida, así el pie en apoyo tiene derivada 0 en mundo → cero patinaje.
@@ -1387,17 +1855,47 @@ class Fighter {
           f.px = stanceX[k]; f.py = gy; f.planted = true; f.stepT = 0;
         }
         if (!f.planted) continue;
-        if (f.stepT >= 1 && other.planted && other.stepT >= 1 && Math.abs(f.px - stanceX[k]) > 0.16 * CH) {
+        // Umbral de re-paso: durante un golpe se aprieta y el pasito va más rápido. Los golpes
+        // tienen root motion (el cuerpo se va hacia adelante), y con el umbral flojo los pies se
+        // quedaban atrás combo tras combo hasta dejar al muñeco cayéndose de punta. Ahora los
+        // pies ACOMPAÑAN el golpe: eso es la transferencia de peso que faltaba.
+        // SHUFFLE de root motion: mientras el golpe EMPUJA el cuerpo hacia adelante, los pies
+        // barren con él (lo que hace un boxeador al entrar). Sin esto el torso viajaba y los pies
+        // se quedaban: combo tras combo el muñeco terminaba cayéndose de punta sobre su propia
+        // base. Dura sólo los ~0.1 s del envelope, así que no es patinaje: es el paso de entrada.
+        if (atking && this.atk.root) {
+          const rt = this.atkClock - this.atk.root.at;
+          if (rt > 0 && rt < this.atk.root.time) f.px = dampHL(f.px, stanceX[k], 0.055, dt);
+        }
+        const trig = (atking ? 0.10 : 0.16) * CH;
+        const sdur = atking ? CFG.feet.stepT * 0.6 : CFG.feet.stepT;
+        if (f.stepT >= 1 && other.planted && other.stepT >= 1 && Math.abs(f.px - stanceX[k]) > trig) {
           f.fromX = f.px; f.fromY = f.py;                             // acomodarse a la stance con un pasito
           f.px = stanceX[k]; f.py = gy; f.stepT = 0;
         }
         tx = f.px; ty = f.py;
         if (f.stepT < 1) {                                            // pasito de acomode en Bezier
-          f.stepT = Math.min(1, f.stepT + dt / CFG.feet.stepT);
+          f.stepT = Math.min(1, f.stepT + dt / sdur);
           const t = easeInOutCubic(f.stepT), u = 1 - t;
           const cx2 = (f.fromX + f.px) / 2, cy2 = Math.min(f.fromY, f.py) - CFG.feet.stepApex * CH * 0.5;
           tx = u * u * f.fromX + 2 * u * t * cx2 + t * t * f.px;
           ty = u * u * f.fromY + 2 * u * t * cy2 + t * t * f.py;
+        }
+        // ── FOOTWORK del golpe ──
+        // Offset TEMPORAL sobre el objetivo (vuelve solo a 0 al terminar el move): el pie de
+        // atrás se afirma y despega el talón al empujar, el de adelante recibe el peso. Nunca
+        // toca `f.px`, así que el plantado no se entera y no hay deriva ni repaso de pasos.
+        // Para una patada sólo existe la pierna de APOYO (la otra la manda el keytrack): ahí
+        // este offset ES la compensación de equilibrio.
+        if (fw) {
+          const rear = k === 0;
+          tx += this.facing * (rear ? fw.rear : fw.front) * CH * fwW;
+          if (rear && fw.heel) ty -= fw.heel * CH * Math.max(0, fwW);
+        } else if (still) {
+          // transferencia de peso parado: la pelvis "flota" sobre los pies y la pierna
+          // descargada despega apenas el talón
+          tx += wsh * 0.016 * CH * this.facing;
+          ty -= (k === 0 ? -wsh : wsh) * 0.009 * CH;
         }
       }
       // IK en AMBOS esqueletos (los hitboxes de piernas también son deterministas)
@@ -1406,16 +1904,31 @@ class Fighter {
       ik2(this.logicPts[0] + (k === 0 ? -1 : 1) * B.hipOff * this.facing, this.logicPts[1], tx, ty, B.thigh, B.shin, -this.facing, this.logicPts, kneeI, footI);
     }
   }
-  // manos IK: colgado (ambas al borde) y trepada (fijas hasta el 60%)
+  // manos IK: colgado (ambas al borde) y trepada (se sueltan de a poco, no de golpe)
   armIK() {
     if (this.state !== ST.HANG && this.state !== ST.CLIMB) return;
     const L = this.state === ST.HANG ? this.ledge : this.climbFrom;
     if (!L) return;
-    if (this.state === ST.CLIMB && this.stateT / CFG.climb.climbT > 0.6) return;
+    const u = this.state === ST.CLIMB ? this.stateT / CFG.climb.climbT : 0;
+    // Antes las manos se despegaban del borde de un frame al otro al 60% y daba un latigazo.
+    // Ahora el peso del IK baja del 52% al 80%: primero se suelta una, después la otra.
+    const wBase = this.state === ST.CLIMB ? 1 - clamp((u - 0.52) / 0.28, 0, 1) : 1;
     const sway = Math.sin(this.T * TAU * 0.7) * 0.015 * CH;
-    for (const [sho, elb, han, off] of [[P_.shoL, P_.elbL, P_.hanL, -0.035], [P_.shoR, P_.elbR, P_.hanR, 0.035]]) {
+    const arms = [[P_.shoL, P_.elbL, P_.hanL, -0.035, 0.85], [P_.shoR, P_.elbR, P_.hanR, 0.035, 1]];
+    for (const [sho, elb, han, off, lagW] of arms) {
+      const w = clamp(wBase * (this.state === ST.CLIMB ? lagW * 1.18 : 1), 0, 1);
+      if (w <= 0.001) continue;
       const tx = L.x + off * CH * -L.side, ty = L.y + (off < 0 ? 0.02 : -0.01) * CH + (off < 0 ? sway : -sway) * 0.4;
-      ik2(this.renderPts[sho * 2], this.renderPts[sho * 2 + 1], tx, ty, B.uArm, B.fArm, -this.facing, this.renderPts, elb, han);
+      ik2Blend(this.renderPts[sho * 2], this.renderPts[sho * 2 + 1], tx, ty, B.uArm, B.fArm, -this.facing, this.renderPts, elb, han, w);
+    }
+    // El pie de adelante busca el borde y se PLANTA arriba mientras el cuerpo sube: es lo que
+    // convierte "subir flotando" en "treparse" (esfuerzo legible, no un Bezier con una pose).
+    if (this.state === ST.CLIMB) {
+      const wf = smoothstep(clamp((u - 0.30) / 0.22, 0, 1)) * (1 - smoothstep(clamp((u - 0.86) / 0.14, 0, 1)));
+      if (wf > 0.001) {
+        const fx = L.x - L.side * (0.10 + 0.10 * u) * CH, fy = L.y - 0.015 * CH;
+        ik2Blend(this.renderPts[0], this.renderPts[1], fx, fy, B.thigh, B.shin, -this.facing, this.renderPts, P_.kneR, P_.ftR, wf);
+      }
     }
   }
 
@@ -2210,6 +2723,7 @@ function resetFighter(f, x) {
   f.state = ST.IDLE; f.stateT = 0; f.atk = null; f.rot = 0; f.juggle = 0; f.combo = 0; f.stun = 0;
   f.hitstopT = 0; f.pendKb = false; f.rag.on = false; f.rag.w = 0; f.invuln = 0; f.ledge = null;
   f.buffer.length = 0; f.dead = false; f.leanAx = 0; f.prevVx = 0;
+  f.popT = 9; f.squashT = 9; f.squashAmt = 0; f.guardW = 0; f.atkChained = false;
   f.poseCur.set(POSES.idle); f.poseVel.fill(0);
   fk(f.poseCur, f.renderPts, f.x, f.y, f.facing);
   f.replantFeet();
@@ -2466,6 +2980,12 @@ const TUNE = [
   ['move.jumpApex', 0.9, 1.6], ['move.airAccel', 0.8, 2],
   ['dash.dist', 0.15, 0.45], ['dash.time', 0.14, 0.32],
   ['anim.leanGain', 0.03, 0.25], ['anim.bob', 0.005, 0.05],
+  ['anim.bounceAmp', 0, 0.05], ['anim.bounceHz', 1, 3.5], ['anim.idleAmp', 0, 2],
+  ['anim.popAmt', 0, 1], ['anim.landT', 0.12, 0.45],
+  ['run.armA', 0.1, 0.5], ['run.armASpd', 0.1, 0.7], ['run.elbA', 0.05, 0.4],
+  ['run.elbASpd', 0.1, 0.6], ['run.elbLag', 0, 1.4], ['run.leanSpd', 0.1, 0.5],
+  ['run.sway', 0, 0.12], ['run.headCounter', 0, 1.2],
+  ['spr.zHead', 0.45, 1], ['spr.zFree', 0.45, 1], ['spr.zRecov', 0.4, 1], ['spr.zLoco', 0.6, 1],
   ['cam.frac', 0.1, 0.3], ['cam.posHl', 0.06, 0.3], ['cam.look', 0, 0.4],
   ['juice.shakeOff', 0, 0.05], ['fight.hitR', 0.03, 0.09],
 ];

@@ -22,6 +22,62 @@ Registrado en el Arcade (`landscape`).
   aceleración + lean por velocidad, poses de aire por vy — ley Fancy Pants: la animación se CALCULA,
   no se reproduce); (b) keytrack del ataque, overwrite enmascarado con peso; (c) aditivas (flinch,
   squash de aterrizaje, respiración).
+
+### REGLA DE ORO para tocar animación de golpes
+
+El alcance de un golpe lo define SÓLO la cadena de FK que llega al limb. Mirando `fk()`:
+
+| golpe | cadena | joints ATADOS | joints LIBRES |
+|---|---|---|---|
+| puño (limb = mano) | pelvis → torso → hombro → brazo | `torso`, brazo que pega, `dy` | cabeza, brazo libre, piernas |
+| patada (limb = pie) | pelvis → pierna | `lRu`, `lRl`, `dy` | cabeza, torso, **ambos brazos**, pierna de apoyo |
+
+Las piernas **no** heredan el ángulo del torso, por eso en una patada todo el tren superior es libre.
+Para lo atado hay tres recursos, todos verificados con el probe headless:
+
+1. Claves de **anticipación** con `at <= startup − 0.033` (2 frames de colchón a 60 Hz): caen fuera de
+   la ventana activa *y* fuera de la cápsula barrida del primer frame activo (que mira la pose del
+   frame ANTERIOR — por eso el colchón, si no el barrido se alarga y el golpe alcanza más lejos).
+2. Claves **PIN** en mitad y fin de la activa con los valores exactos de la curva vieja (los escupe
+   `probe_moves.js`); a partir del pin, el recovery es territorio libre.
+3. Aditivas con `safeAddW()`, que vale **exactamente 0** en toda la ventana activa (y 2 frames antes).
+   Así van el hundido/empuje de `atkDrive`, la anticipación de despegue y el ciclo de aterrizaje.
+
+Ojo con un cuarto camino silencioso: la **capa base** se filtra a los joints que la máscara no cubre.
+`MASK_PUNCH` no incluye `dy`, así que cualquier cosa que la base le ponga a la pelvis mueve el hombro
+y con él el alcance — por eso `baseLoco` usa `idlePose(tp, quiet)` durante un golpe (sin rebote de
+guardia ni ruido, `dy` exactamente el de `POSES.idle`, como fue siempre).
+
+### Peso y footwork (dónde vive la transferencia de peso)
+
+La pelvis no se puede mover durante un golpe sin mover el alcance, así que el peso se cuenta con los
+PIES, que no están en ninguna cadena de hitbox:
+
+- `atkWeight()` da la curva −1 (cargado atrás) → +1 (descargado adelante) → 0.
+- `m.fw = {rear, front, heel}` la aplica como offset TEMPORAL sobre el objetivo del pie (nunca sobre
+  `f.px`, así el plantado no se entera y no hay deriva). En una patada sólo existe la pierna de
+  apoyo: ahí ese offset *es* la compensación de equilibrio.
+- **Shuffle de root motion**: mientras el envelope del golpe empuja el cuerpo, los pies barren con él
+  (`dampHL(f.px, stanceX, 0.055, dt)`). Sin esto el torso viajaba y los pies se quedaban: combo tras
+  combo el muñeco terminaba cayéndose de punta. Medido con la métrica `desbalance` (pelvis adelante
+  del punto medio de los pies): 0.30·CH antes → 0.17·CH ahora.
+- `m.drive = {sink, rise, twB, twF}` es lo que la pelvis y el torso SÍ pueden hacer fuera de la activa.
+
+### Locomoción procedural
+
+- `runCycle()` calcula el ciclo entero de la fase de marcha: brazos contralaterales, antebrazo con
+  retraso (`elbLag` = overlapping action), balanceo de torso al doble de frecuencia, cabeza que se
+  nivela sola. **`CFG.run.armC/armA` están en ángulo de MUNDO**: los brazos son hijos del torso, así
+  que se les descuenta la inclinación (`- tor`). Autorarlos relativos era justo lo que daba el
+  corredor "llevando una bandeja" — cuanto más se inclinaba, más se le iban los brazos adelante.
+- Rama **slide** de `feetIK` (`SLIDE_STATES` = derrape y dash): los pies NO se plantan, arrastran con
+  el cuerpo en base ancha. Plantarlos mientras el cuerpo se va a 0.34·S es exactamente lo que daba el
+  estirón de patas de araña.
+- `idlePose()` mezcla idle ↔ `POSES.stance` según la cercanía del rival y le suma rebote de guardia.
+  La diferencia entre `idle` y `stance` está casi toda en los BRAZOS **a propósito**: las hurtboxes
+  salen de `renderPts`, así que bajar cabeza o pelvis en la guardia sería regalar/robar blanco.
+- `airPose()` consulta `groundAt()` cuando `vy > 0` y mezcla hacia `POSES.airLand` al acercarse el
+  piso: sin esa anticipación el salto se lee como una estatua volando.
 - **Ciclo de marcha procedural** (`strideParams` + rama `gait` de `feetIK`, tuneable en `CFG.gait`):
   cada pierna alterna APOYO (el pie queda CLAVADO en el mundo — la fase avanza por distancia con
   ciclo = `2·half/duty`, así la derivada del pie en apoyo es exactamente 0 → cero patinaje) y VUELO
@@ -31,12 +87,25 @@ Registrado en el Arcade (`landscape`).
 - **La tabla de semividas de resortes es el dial de "sueltitud"** (`CFG.spr`): el limb que golpea baja
   a `hStrike=0.02 s` durante los frames activos (converge al frame-data justo cuando pega); cabeza y
   mano libre van 1.4× más lentas (follow-through gratis).
+- **Amortiguación por canal** (`CFG.spr.z*`, `springToZ`): 1 = crítico (llega y se queda); < 1 = la
+  articulación se PASA del objetivo y vuelve. Sobrepaso = `exp(−zπ/√(1−z²))` de la distancia
+  recorrida (0.62 ≈ 7 %, 0.55 ≈ 12 %). Sólo lo usan cabeza, mano libre y el limb en recovery; con
+  z = 1 la función cae en el camino rápido de siempre (sin trigonometría).
+- **El sampler de keytracks interpola POR CANAL** (`sampleMove`): para cada joint busca la clave
+  anterior y la siguiente *que lo definen*. Antes elegía una "clave siguiente" global, así que meter
+  una clave para la cabeza le partía el segmento a la pierna — o sea le cambiaba la trayectoria, o
+  sea el hitbox. Con canales independientes se autora el tren superior de una patada sin rozar el
+  arco del pie. Con los datos viejos da idéntico (todas las claves definían todos sus joints atados).
 - **11 DOF** en `Float64Array` (orden en `J`), autorados mirando a la DERECHA; `facing` espeja en FK.
   Convención: cadenas "cuelgan" (0 = abajo, dirDown), torso apunta arriba. Rodillas: flexión = valores
   NEGATIVOS de `lLl/lRl`.
 - **Gotcha de `ik2(bendDir)`**: con el y-abajo del canvas, rotar +θ es HORARIO visual → para que la
   rodilla apunte hacia adelante hay que pasar `-facing` (las piernas de `feetIK` ya lo hacen).
   Pasar `facing` da piernas de pájaro — ya pasó y Franco lo notó al toque.
+- **`ik2Blend` mezcla el OBJETIVO, jamás los puntos resueltos.** El promedio de dos poses válidas no
+  es una pose válida: interpolar codo y mano entre la solución FK y la IK estira los huesos (medido
+  89 % de error en el brazo al soltar el borde en la trepada). Mezclando el objetivo, la cadena se
+  resuelve una sola vez y los largos quedan exactos por construcción.
 - **Root motion de golpes/dash**: `lungeVel()` devuelve VELOCIDAD instantánea — se suma en la
   integración (`x += (vx + rootVx)·dt`), **nunca** `vx +=` (acumularía y sale volando; ya pasó).
 - **Ragdoll verlet** (13 partículas, constraints con rest tomado al activar) sólo en KNOCKDOWN/KO;
@@ -65,6 +134,21 @@ aunque los timers corran**. El loop está preparado para bombearse a mano:
 - `dbgFreeze = true` congela la sim (sigue dibujando) → screenshot exacto del instante deseado.
 - Patrón completo (cazador de errores + driver por escenario + status dump): el harness `qa.py` de la
   sesión 2026-07-22/23; escenarios útiles: menu/fight/run/skid/jump/jab/combo/kick/ko/hang/boxes.
+- **`--virtual-time-budget` ni hace falta**: `loop(t)` se puede bombear SINCRÓNICAMENTE en un `for`,
+  lo que hace los escenarios deterministas y rápidos. El driver tiene que manejar `keys` (teclado),
+  **no** `inP1`: `pollInputs()` reescribe `inP1` entero en cada frame.
+- Tres harnesses de la sesión de animación (2026-09-20), en el scratchpad:
+  1. **probe de moves**: reconstruye la capa (b) de `buildPose` y muestrea la trayectoria del limb
+     cada 1 ms → compara frame-data exacto, desvío dentro de la activa y **Hausdorff unilateral de la
+     cápsula barrida** a 60 y 30 Hz. Es la prueba de que un rework visual no movió un hitbox.
+  2. **harness de simulación**: ~30 escenarios guionados con validador por frame (finitud, largos de
+     hueso, pie sobre pelvis, pie lejos del cuerpo, patinaje en apoyo, jerk, desbalance pelvis/pies,
+     alcance real punta a punta). Corre a 16.7 / 33.3 / 50 ms.
+  3. **tiras de fotogramas**: reasigna el `ctx` global y llama a `drawStick()` para pintar N poses en
+     una grilla, y saca UNA screenshot. Es la única forma práctica de *ver* una animación acá.
+- Ojo al comparar corridas: `Fighter` arranca con `this.T = rnd(0, 9)` (fase de respiración), así que
+  escenarios donde un golpe conecta justo en el límite dan ±8 px de diferencia **entre corridas del
+  mismo build**. Antes de culpar a un cambio, corré el mismo build dos veces.
 - Teclas de debug en vivo: `T` panel de tuning (sliders sobre `CFG`), `H` hit/hurtboxes, `G` cámara
   lenta, `Y` dump de pose a consola; triple-tap en la versión del menú abre el panel en mobile.
 

@@ -2604,6 +2604,111 @@ Escribi `S * 0.02` dentro de `drawHandStrip`, donde **`S` no esta en alcance** -
 `drawHUD`. Lo cazo la revision antes de construir. El margen se expresa ahora en unidades de la
 propia tira, que es lo unico que esa funcion conoce.
 
+## LAS MANOS DE POKER: una sola tabla, un color explicito y la escalera real (2026-09-20)
+
+### El problema de fondo: el efecto y su texto eran dos cosas
+
+Habia una cadena de `if` que aplicaba los premios y, aparte, una tabla de strings que los
+describia. Dos listas que tenian que decir lo mismo y **nada obligaba a que lo hicieran**. Ya
+habia cobrado dos victimas: el COLOR decia una cosa en el HUD y otra en el inventario (arreglado a
+mano el dia anterior, o sea parcheando el sintoma), y la ESCALERA DE COLOR decia *"Everything
+doubled"*, que no es lo que hace - suma cinco cosas fijas, no duplica nada.
+
+Ahora cada mano es **una entrada con su efecto en datos**:
+
+```js
+{ name: 'FULL HOUSE', eff: { dmg: 0.35, greed: 0.35 } }
+```
+
+`applyHandBonus` lo aplica y `bonusSegs` lo escribe. **El texto se genera del mismo objeto que
+produce el efecto, asi que no puede mentir.** Tocar un numero cambia sola la descripcion en el HUD
+y en el inventario a la vez.
+
+**Regla: cuando un texto describe un comportamiento, generarlo DEL comportamiento.** Mientras
+sean dos declaraciones separadas, la unica pregunta es cuando divergen, no si.
+
+### El color deja de ser un misterio
+
+El COLOR daba un efecto distinto segun el palo. Franco pregunto dos veces que hacia - la segunda
+ya con el texto arreglado -, o sea que **el problema no era la redaccion sino el diseno**: una
+mano cuyo premio hay que ir a buscar a otro lado no se puede evaluar mientras jugas.
+
+Ahora: **Damage, Score y Thread +20%.** Tres numeros, una linea, sin ir a buscar nada.
+
+Y hay una razon para que sea ANCHO y no profundo: en este juego **el palo lo decide la carta, no
+el azar** (`su: up.su`, y hay dos mejoras por palo). Un color son cinco cartas de las mismas dos
+mejoras: un build angosto por construccion. Premiarlo con mas de lo mismo lo hacia mas angosto
+todavia; darle un poco de las tres monedas principales lo ABRE.
+
+### La escalera real
+
+`evalHand` devolvia 8 para cualquier escalera de color. Ahora distingue el 10-J-Q-K-A del mismo
+palo y devuelve 9. Su premio es **exactamente el doble de la escalera de color** - una relacion
+que se entiende de una y no hay que memorizar.
+
+Cuidado con la RUEDA: A-2-3-4-5 es escalera y puede ser color, pero **no** es real. Tiene el As,
+que es justo lo que haria pasar un chequeo perezoso del tipo "termina en As"; por eso se mira el
+arranque (`rs[0] === 10 && rs[4] === 14`) y hay un caso de test para eso.
+
+**Probabilidad, dicha a Franco para que decida:** es practicamente inalcanzable. Los rangos salen
+de `rndi(2,14)` uniforme, asi que cinco rangos que formen 10-J-Q-K-A son 120 de 371293 (0.032%), y
+encima los cinco tienen que ser del mismo palo. Esta implementada y es correcta; hacerla visible
+exigiria tocar como se sortean los rangos, o sea balance.
+
+### La jerarquia
+
+Sumando los porcentajes como medida cruda de cuanto da cada mano:
+
+    PAR 0.12 - DOBLE PAR 0.30 - TRIO 0.25 - ESCALERA 0.43 - COLOR 0.60
+    FULL 0.70 - POKER 0.70+60 vida - ESCALERA DE COLOR 2.85+80 - REAL 5.70+160
+
+Monotona salvo el escalon trio/doble par, que ya estaba asi y no se toco: el doble par reparte
+entre dos monedas y el trio concentra en dano, que es lo que los distingue.
+**Solo cambiaron dos entradas de la tabla, y las dos porque Franco las pidio.**
+
+### La lista, alineada con las cartas
+
+El paso de la lista se calculaba de la TIPOGRAFIA (`(fsN + fsD) * 1.30`) y la altura salia del
+paso: la lista medía lo que medía, y que coincidiera con las cartas era casualidad. No coincidia,
+asi que las dos columnas no compartian ningun borde y la vista no las asociaba.
+
+Ahora **la lista ocupa exactamente el alto de los naipes** y la tipografia sale de ahi.
+
+Y una correccion sobre mi propia primera version: repartir el alto en **partes iguales** hacia que
+las dos jugadas largas -escalera de color y real, con cinco efectos cada una- mandaran sobre el
+tamano de letra de las nueve. Medido en 1080p: la lista caia de 20.5 px a 11.8, o sea que
+"alinearla" habia empeorado justo lo que habia que mejorar. Se reparte **a prorrata**: cada fila
+pesa lo que necesita (2.18 unidades con un renglon de efecto, 3.05 con dos) y las siete cortas
+devuelven el espacio que no usan.
+
+**Regla: alinear un bloque con otro no puede costar la legibilidad del bloque. Si la cuenta
+obliga a elegir, la cuenta esta mal planteada.**
+
+Ademas: el ancho de la columna bajo de `S*0.30` a `S*0.26` porque la columna y los naipes se
+disputan el ancho y **los naipes le devuelven ALTO a la lista** (su alto ES el de la lista).
+Medido en 1080p: con 0.30 el naipe queda en 200 px y la lista en 295 de alto; con 0.26, 216 y 317.
+El texto mas largo sigue entrando sin achicarse.
+
+Y el realce de la fila activa abraza el BLOQUE entero: con dos renglones de efecto, una barra de
+una linea dejaba media fila afuera de su propio resalte.
+
+### Los tests
+
+- `manos` recorre las NUEVE jugadas con una mano real de cada una y mide el stat **con y sin** el
+  bono para comprobar que el efecto aplicado es exactamente el de la tabla. Ese punto es el que
+  garantiza que el texto no pueda mentir.
+- `manopanel2` mide la GEOMETRIA de lo que se dibuja - envuelve `drawCard` y `txtFit` durante el
+  panel - y exige que ningun naipe se salga y que la columna no pise el primer naipe. Corrido en
+  1600x900, 900x420 y 520x900.
+- Los casos de `evalHand` se actualizaron: 10-J-Q-K-A del mismo palo ya no es 8 sino 9, y se
+  agrego la rueda de color (que tiene que seguir siendo 8).
+
+**Gotcha del harness, para no volver a perder tiempo:** `--headless=new` fuerza un ancho minimo de
+ventana de 500 px. Pedir 420 da una captura de 420 px de ancho pero la pagina se dispone para 500,
+asi que la imagen parece recortada y no lo esta. Un telefono vertical de 390 no se puede
+reproducir con este harness; el reparto en vertical es proporcional al ancho (los naipes ocupan
+siempre el 86%), asi que lo que entra a 500 entra a 390.
+
 ## Lo que sigue en hold (2026-09-18)
 
 Franco descarto las propuestas para **CrazyTanks** (la aguja como rival en una carrera; los

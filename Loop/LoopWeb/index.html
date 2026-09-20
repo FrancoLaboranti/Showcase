@@ -4850,17 +4850,63 @@ function drawCardChoices(n) {
 }
 
 // ── Evaluación de la mano (misma idea que hand_rank de Poker.py, simplificada a 5 cartas) ──
+//
+// **EL EFECTO ES LA DESCRIPCIÓN.** Antes había una cadena de `if` que aplicaba los efectos y,
+// aparte, una tabla de strings que los describía: dos listas que tenían que decir lo mismo y
+// nada obligaba a que lo hicieran. Por eso el COLOR ya había divergido una vez, y por eso la
+// ESCALERA DE COLOR decía "Everything doubled", que no es lo que hace.
+// Ahora cada mano lleva su efecto EN DATOS: `applyHandBonus` lo aplica y `bonusSegs` lo escribe.
+// El texto sale del mismo objeto que produce el efecto, así que no puede mentir.
+//
+// El orden respeta el póker de verdad y los premios crecen con él. Sumando los porcentajes como
+// medida cruda: 0.12 - 0.30 - 0.25 - 0.43 - 0.60 - 0.70 - 0.70+vida - 2.85+vida - 5.70+vida.
+// (El escalón trío/doble par ya estaba así: el doble par reparte entre dos monedas y el trío
+// concentra en daño, que es lo que los distingue.)
 const HAND_BONUS = [
-  { name: 'NONE',            desc: '' },
-  { name: 'PAIR',            desc: 'Score +12%' },
-  { name: 'TWO PAIR',        desc: 'Score +20%, Damage +10%' },
-  { name: 'THREE OF A KIND', desc: 'Damage +25%' },
-  { name: 'STRAIGHT',        desc: 'Speed +18%, Thread +25%' },
-  { name: 'FLUSH',           desc: 'Amplifies your suit' },
-  { name: 'FULL HOUSE',      desc: 'Damage +35%, Score +35%' },
-  { name: 'FOUR OF A KIND',  desc: 'Damage +70%, +60 health' },
-  { name: 'STRAIGHT FLUSH',  desc: 'Everything doubled' },
+  { name: 'NONE',            eff: {} },
+  { name: 'PAIR',            eff: { greed: 0.12 } },
+  { name: 'TWO PAIR',        eff: { greed: 0.20, dmg: 0.10 } },
+  { name: 'THREE OF A KIND', eff: { dmg: 0.25 } },
+  { name: 'STRAIGHT',        eff: { len: 0.25, spd: 0.18 } },
+  // COLOR: ANCHO, no profundo. El palo lo decide la carta (`su: up.su`, dos mejoras por palo),
+  // así que un color son cinco cartas de las mismas dos mejoras - un build angosto por
+  // construcción. Premiarlo con más de lo mismo lo hacía más angosto; un poco de las tres
+  // monedas principales lo ABRE. Y se entiende de un vistazo, que era el pedido.
+  { name: 'FLUSH',           eff: { dmg: 0.20, greed: 0.20, len: 0.20 } },
+  { name: 'FULL HOUSE',      eff: { dmg: 0.35, greed: 0.35 } },
+  { name: 'FOUR OF A KIND',  eff: { dmg: 0.70, hp: 60 } },
+  { name: 'STRAIGHT FLUSH',  eff: { dmg: 1.00, greed: 1.00, len: 0.60, spd: 0.25, hp: 80 } },
+  // ESCALERA REAL: exactamente el DOBLE de la escalera de color. Una relación que se entiende
+  // de una y no hay que memorizar.
+  { name: 'ROYAL FLUSH',     eff: { dmg: 2.00, greed: 2.00, len: 1.20, spd: 0.50, hp: 160 } },
 ];
+// Cómo se escribe cada estadística, y en qué orden. Es lo único que hay que tocar para agregar
+// una moneda nueva a los premios de mano.
+const HB_TXT = [
+  ['dmg',   v => 'Damage +' + Math.round(v * 100) + '%'],
+  ['greed', v => 'Score +' + Math.round(v * 100) + '%'],
+  ['len',   v => 'Thread +' + Math.round(v * 100) + '%'],
+  ['spd',   v => 'Speed +' + Math.round(v * 100) + '%'],
+  ['hp',    v => '+' + Math.round(v) + ' health'],
+  ['sh',    v => '+' + Math.round(v) + ' shield'],
+];
+// Los pedazos sueltos: la lista los usa para partir en dos renglones cuando son muchos.
+function bonusSegs(i) {
+  const e = HAND_BONUS[i] && HAND_BONUS[i].eff;
+  if (!e) return [];
+  const out = [];
+  for (const [k, f] of HB_TXT) if (e[k]) out.push(f(e[k]));
+  return out;
+}
+function applyHandBonus(e) {
+  if (!e) return;
+  if (e.dmg)   P.dmgMul   += e.dmg;
+  if (e.greed) P.greedMul += e.greed;
+  if (e.len)   P.lenMul   += e.len;
+  if (e.spd)   P.spdMul   += e.spd;
+  if (e.hp)    P.hpMax    += e.hp;
+  if (e.sh)    P.shMax    += e.sh;
+}
 function evalHand(cards) {
   if (cards.length < 2) return 0;
   const cnt = {}, suits = {};
@@ -4874,7 +4920,9 @@ function evalHand(cards) {
     straight = u.length === 5 && u[4] - u[0] === 4;
     if (!straight && u.length === 5 && u[4] === 14 && u[0] === 2 && u[3] === 5) straight = true;   // la rueda A-2-3-4-5
   }
-  if (straight && flush) return 8;
+  // ESCALERA REAL: 10-J-Q-K-A del mismo palo. La rueda A-2-3-4-5 tambien es escalera pero NO es
+  // real, y por eso se mira el arranque y no solo el As.
+  if (straight && flush) return (rs[0] === 10 && rs[4] === 14) ? 9 : 8;
   if (counts[0] === 4) return 7;
   if (counts[0] === 3 && counts[1] === 2) return 6;
   if (flush) return 5;
@@ -4884,22 +4932,8 @@ function evalHand(cards) {
   if (counts[0] === 2) return 1;
   return 0;
 }
-// Qué da una jugada, en números. `HAND_BONUS[i].desc` alcanza para todas menos el COLOR, cuyo
-// efecto depende del PALO.
-//
-// **UNA sola fuente para las dos pantallas.** El HUD llamaba a `handDesc()` (efecto concreto) y
-// el inventario leía `HAND_BONUS[i].desc` directo (texto genérico), así que el color decía dos
-// cosas distintas en dos lugares a la vez. No discrepaban por un error de transcripción: leían
-// fuentes distintas, y una de las dos no sabía que el color depende del palo.
-// Ahora las dos llaman acá y no pueden divergir aunque alguien toque una sola.
-const FLUSH_DESC = ['Thread +55%, Bounces +40%', '+70 health, +40 shield',
-                    'Score +80%', 'Magnet +0.3, Orbs +120%, Charge x2'];
-function bonusDesc(i) {
-  // El color sólo puede ser concreto cuando ES tu mano: sin las cinco cartas no hay palo del que
-  // hablar, y ahí el texto genérico es la respuesta honesta.
-  if (i === 5 && i === run.handIdx) { const s = flushSuit(); if (s >= 0) return FLUSH_DESC[s]; }
-  return HAND_BONUS[i] ? HAND_BONUS[i].desc : '';
-}
+// Qué da una jugada, en números. **UNA sola fuente para las dos pantallas y para el efecto.**
+function bonusDesc(i) { return bonusSegs(i).join(', '); }
 function handDesc() { return bonusDesc(run.handIdx); }
 function flushSuit() {
   const s = {};
@@ -4928,19 +4962,8 @@ function recomputeStats() {
 
   const hb = evalHand(hand);
   run.handIdx = hb;
-  if (hb === 1) P.greedMul += 0.12;
-  else if (hb === 2) { P.greedMul += 0.20; P.dmgMul += 0.10; }
-  else if (hb === 3) P.dmgMul += 0.25;
-  else if (hb === 4) { P.spdMul += 0.18; P.lenMul += 0.25; }
-  else if (hb === 5) {                                // COLOR: el palo entero se desborda
-    const s = flushSuit();
-    if (s === 0) { P.lenMul += 0.55; P.deflMul += 0.4; }
-    else if (s === 1) { P.hpMax += 70; P.shMax += 40; }
-    else if (s === 2) { P.greedMul += 0.8; }
-    else { P.magnet += 0.3; RULE_orbBonus += 1.2; chargeBonus += 1; }
-  } else if (hb === 6) { P.dmgMul += 0.35; P.greedMul += 0.35; }
-  else if (hb === 7) { P.dmgMul += 0.70; P.hpMax += 60; }
-  else if (hb === 8) { P.dmgMul += 1; P.greedMul += 1; P.lenMul += 0.6; P.spdMul += 0.25; P.hpMax += 80; }
+  // Una linea, y el premio sale de la MISMA tabla que escribe el texto.
+  applyHandBonus(HAND_BONUS[hb] && HAND_BONUS[hb].eff);
 
   P.hp = clamp(hpBefore + Math.max(0, P.hpMax - maxBefore), 1, P.hpMax);
   P.sh = Math.min(P.sh, P.shMax);
@@ -6607,7 +6630,10 @@ function drawCard(bx, by, bw, bh, c, opts) {
 function inHand(i) {
   const c = hand[i];
   if (!c || !run.handIdx) return false;
-  if (run.handIdx === 5 || run.handIdx === 8) return c.su === flushSuit() || run.handIdx === 8;
+  // Las tres manos de PALO marcan las cinco. (La escalera real se olvidaba: entro al juego
+  // despues y este `if` estaba escrito con numeros sueltos.)
+  if (run.handIdx === 8 || run.handIdx === 9) return true;
+  if (run.handIdx === 5) return c.su === flushSuit();
   if (run.handIdx === 4) return true;                       // escalera: todas
   let n = 0;
   for (const o of hand) if (o.rank === c.rank) n++;
@@ -6730,7 +6756,11 @@ function drawHandPanel() {
   // justo lo que no se quería. Como la mano va centrada, el hueco de la izquierda mide
   // `(W - total) / 2`, así que el ancho de carta se acota para que ese hueco alcance para la
   // lista MÁS su separación.
-  const anchoLista = land ? Math.min(S * 0.30, W * 0.23) : S * 0.60;
+  // 0.26 y no 0.30: la columna y los naipes se disputan el ancho, y los naipes le devuelven ALTO
+  // a la lista (su alto ES el de la lista). Medido en 1080p: con 0.30 el naipe queda en 200 px de
+  // ancho y la lista en 295 de alto; con 0.26, 216 y 317. La columna pierde 43 px de ancho y la
+  // letra gana un 7%, y el texto mas largo sigue entrando sin achicarse.
+  const anchoLista = land ? Math.min(S * 0.26, W * 0.23) : S * 0.60;
   const sep = S * 0.018;                               // aire entre la lista y la mano
   const margen = S * 0.055;                            // aire entre la lista y el borde
   // La cuenta va de afuera hacia adentro: margen + lista + separación es lo que la mano NO puede
@@ -6745,43 +6775,69 @@ function drawHandPanel() {
   for (let i = 0; i < hand.length; i++)
     drawCard(cardsX - total / 2 + i * (cw + gap), cy - chh / 2, cw, chh, hand[i], { mark: inHand(i) });
 
-  // Cada jugada en DOS líneas (nombre arriba, efecto abajo): en una columna angosta una sola
-  // línea obligaría a achicar la letra hasta lo ilegible, que es lo que había que arreglar.
-  const fsN = Math.max(S * 0.0155, Math.min(S * 0.019, H * 0.021));
-  const fsD = fsN * 0.82;
-  const paso = (fsN + fsD) * 1.30;
-  const altoLista = (HAND_BONUS.length - 1) * paso;
+  // ── LA LISTA MIDE LO QUE MIDEN LAS CARTAS ──
+  // Antes el paso salía de la TIPOGRAFÍA (`(fsN + fsD) * 1.30`) y la altura de la lista salía del
+  // paso: la lista medía lo que medía, y que coincidiera con las cartas era casualidad. No
+  // coincidía - arrancaba más arriba y terminaba más arriba que su base -, así que las dos
+  // columnas no compartían ningún borde y la vista no las asociaba.
+  // Ahora es al revés: la lista ocupa EXACTAMENTE el alto de los naipes y reparte sus filas
+  // dentro; la tipografía sale del paso. Arriba y abajo coinciden y la relación se ve sola.
+  const filas = HAND_BONUS.length - 1;
   const ancho = anchoLista;
-  let x0, y0;
+  let x0, y0, altoLista;
   if (land) {
+    altoLista = chh;                                   // el alto del naipe, exacto
     x0 = Math.max(S * 0.026, cardsX - total / 2 - sep - ancho);
     y0 = cy - altoLista / 2;
   } else {
+    // En vertical la lista va debajo y no tiene naipe con qué alinearse: usa el alto que queda
+    // hasta el borde, acotado para que no se salga nunca de la pantalla.
+    altoLista = Math.min(H * 0.30, (H - (cy + chh / 2) - S * 0.06));
     x0 = W / 2 - ancho / 2;
-    y0 = H * 0.70;
+    y0 = cy + chh / 2 + S * 0.035;
   }
+  // ── EL ALTO SE REPARTE SEGÚN LO QUE PIDE CADA FILA, no en partes iguales ──
+  // Sólo dos de las nueve jugadas necesitan dos renglones de efecto. Con el alto repartido en
+  // partes iguales, esas dos mandaban sobre el tamaño de letra de TODAS: medido en 1080p, la
+  // lista caía de 20.5 px a 11.8. Repartiendo a prorrata, las siete cortas ocupan lo que ocupan
+  // y la letra sube para todas.
+  // Los pesos son el alto real de una fila en unidades de `fsN` (ver el trazado de abajo).
+  const pesoFila = i => (bonusSegs(i).length > 3 ? 3.05 : 2.18);
+  let suma = 0;
+  for (let i = 1; i < HAND_BONUS.length; i++) suma += pesoFila(i);
+  const fsN = Math.min(altoLista / suma, S * 0.020);
+  const fsD = fsN * 0.80;
+  let yFila = y0 + (altoLista - fsN * suma) / 2;       // centrado si sobró por el tope de tamaño
   for (let i = 1; i < HAND_BONUS.length; i++) {
-    const y = y0 + (i - 1) * paso;
+    const yTop = yFila;
+    yFila += pesoFila(i) * fsN;
     const act = i === run.handIdx;
+    // Las descripciones largas (escalera de color y real, con cinco efectos) se parten en DOS
+    // renglones en vez de achicarse hasta lo ilegible.
+    const segs = bonusSegs(i);
+    const dos = segs.length > 3;
+    const lineas = dos ? [segs.slice(0, 3).join(', '), segs.slice(3).join(', ')] : [segs.join(', ')];
+    const yN = yTop + fsN * 0.70;
+    const yD = yN + fsN * 0.62 + fsD * 0.58;
     if (act) {
-      // La barra abraza SU texto. Con las filas a la derecha, una barra del ancho de la columna
-      // dejaba media barra vacia a la izquierda y parecia un error de alineacion.
-      const wN = medirFit(HAND_BONUS[i].name, fsN, ancho, 800);
-      const wD = medirFit(bonusDesc(i), fsD, ancho, 600);
-      const wMax = Math.min(ancho, Math.max(wN, wD));
-      const bx = land ? x0 + ancho - wMax : x0;
+      // El realce abraza el BLOQUE entero, no una linea: con dos renglones de efecto, una barra
+      // de una linea dejaba la mitad de la fila afuera de su propio resalte.
+      let wMax = medirFit(HAND_BONUS[i].name, fsN, ancho, 800);
+      for (const L of lineas) wMax = Math.max(wMax, medirFit(L, fsD, ancho, 600));
+      wMax = Math.min(ancho, wMax);
+      const bx = land ? x0 + ancho - wMax : x0 + (ancho - wMax) / 2;
+      const alto = (yD + fsD * (lineas.length - 1) * 1.08 + fsD * 0.7) - (yN - fsN * 0.8);
       ctx.fillStyle = 'rgba(232,180,74,0.15)';
-      roundRectPath(bx - S * 0.012, y - paso * 0.44, wMax + S * 0.024, paso * 0.88, paso * 0.22);
+      roundRectPath(bx - S * 0.010, yN - fsN * 0.8, wMax + S * 0.020, alto, fsN * 0.55);
       ctx.fill();
     }
-    // ALINEADAS A LA DERECHA en apaisado. Alineadas a la izquierda, cada fila terminaba donde
-    // se le daba la gana y el hueco hasta la primera carta lo decidía el LARGO DEL TEXTO:
-    // "PAIR" quedaba a media pantalla de la mano y "STRAIGHT FLUSH" casi tocándola. Así todas
-    // terminan a la misma distancia, que es como se lee una lista que acompaña algo que está a
-    // su derecha. En vertical la lista va debajo y centrada, así que ahí sigue a la izquierda.
-    const ax = land ? x0 + ancho : x0, al = land ? 'right' : 'left';
-    txtFit(HAND_BONUS[i].name, ax, y - fsD * 0.52, fsN, ancho, act ? C.goldHi : C.inkFaint, act ? 800 : 600, al);
-    txtFit(bonusDesc(i), ax, y + fsN * 0.52, fsD, ancho, act ? C.green : C.inkDim, act ? 600 : 400, al);
+    // ALINEADAS A LA DERECHA en apaisado: así todas terminan a la misma distancia de la primera
+    // carta, que es como se lee una lista que acompaña algo que está a su derecha. Alineadas a la
+    // izquierda, el hueco hasta la mano lo decidía el largo de cada texto.
+    const ax = land ? x0 + ancho : x0 + ancho / 2, al = land ? 'right' : 'center';
+    txtFit(HAND_BONUS[i].name, ax, yN, fsN, ancho, act ? C.goldHi : C.inkFaint, act ? 800 : 600, al);
+    for (let L = 0; L < lineas.length; L++)
+      txtFit(lineas[L], ax, yD + L * fsD * 1.08, fsD, ancho, act ? C.green : C.inkDim, act ? 600 : 400, al);
   }
 }
 
