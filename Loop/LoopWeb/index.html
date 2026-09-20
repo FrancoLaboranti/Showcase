@@ -1068,6 +1068,18 @@ function panel(x, y, w, h, r, accent, glow) {
   ctx.stroke();
 }
 // Texto que se achica hasta entrar en `maxW` (los nombres largos de carta se salían del marco)
+// Cuanto va a MEDIR un texto pasado por `txtFit`, sin dibujarlo. Corre el mismo bucle de
+// achique a proposito: si el ancho se calculara aparte, los dos numeros se separarian en cuanto
+// alguien tocara uno y el resultado seria una caja que no calza con su texto.
+function medirFit(s, px, maxW, weight) {
+  let f = px;
+  for (let i = 0; i < 8; i++) {
+    ctx.font = (weight || 700) + ' ' + Math.round(f) + 'px ' + FONT;
+    if (ctx.measureText(s).width <= maxW || f < 6) break;
+    f *= 0.9;
+  }
+  return ctx.measureText(s).width;
+}
 function txtFit(s, x, y, px, maxW, col, weight, align) {
   let f = px;
   for (let i = 0; i < 8; i++) {
@@ -2534,6 +2546,11 @@ function healPlayer(n, callado) {
   if (!callado && P.hp - before >= 1) addDmg(P.x, P.y - P.r * 2, P.hp - before, 2);
 }
 
+// MODO TEST: no baja la vida, pero todo lo demás pasa igual - el golpe se ve, se oye, te sacude
+// y te empuja, y el daño recibido se sigue contando. Un modo de prueba que ESCONDE los golpes no
+// sirve para probar nada: lo que hay que sacar es la muerte, no la información.
+const inmortal = () => game.mode === 'test';
+
 function hurtPlayer(n, fx, fy) {
   if (!P.alive || P.ifr > 0 || game.state !== 'play') return;
   if (frenzy > 0) return;                             // el frenesí te hace intocable
@@ -2546,7 +2563,7 @@ function hurtPlayer(n, fx, fy) {
   }
   P.shT = CFG.player.shDelay;
   if (n <= 0) { P.ifr = Math.max(P.ifr, 0.3); sfx.clack(1); return; }
-  P.hp -= n;
+  if (!inmortal()) P.hp -= n;
   P.ifr = CFG.player.ifr;
   resetCombo();
   addDmg(P.x, P.y - P.r * 2, n, 3);   // 3 = RECIBIDO: carmesí y pesado
@@ -2567,7 +2584,7 @@ function hurtPlayerRaw(n) {
   if (P.sh > 0) { const a = Math.min(P.sh, n); P.sh -= a; n -= a; }
   P.shT = CFG.player.shDelay;
   if (n <= 0) return;
-  P.hp -= n;
+  if (!inmortal()) P.hp -= n;
   P.ifr = CFG.player.ifr;
   addDmg(P.x, P.y - P.r * 2, n, 3);
   spawnSparks(P.x, P.y, 22, [226, 68, 92], 1.2);
@@ -2577,6 +2594,7 @@ function hurtPlayerRaw(n) {
 
 function killPlayer() {
   if (!P.alive) return;                             // idempotente: el patíbulo puede rematarte
+  if (inmortal()) { P.hp = Math.max(P.hp, 1); return; }   // la promesa del modo test es una sola
   P.alive = false;
   spawnSparks(P.x, P.y, 60, [125, 249, 255], 1.8);
   spawnSparks(P.x, P.y, 40, [255, 90, 110], 1.3);
@@ -3665,18 +3683,23 @@ function pickLane(e) {
   else if (e.T.dirs === 'all') dirs = ORTH.concat(DIAG);
   else if (e.T.dirs === 'L') dirs = LJMP;
   else dirs = [pawnLane(e, c, r, pc, pr)];           // peón: avanza derecho, come en diagonal
+  // ── SÓLO DIRECCIONES QUE CAEN EN EL TABLERO ──
+  // Esto lo hacía únicamente el caballo. Para las demás, cuando ninguna dirección servía, más
+  // abajo entraba un plan B que ponía `dx` E `dy` a la vez: una DIAGONAL, para cualquier pieza.
+  // Una torre acorralada contra el borde rebotaba en diagonal - lo vio Franco jugando.
+  // **Una pieza no puede salirse de su regla ni para escapar de una esquina.**
+  const libres = dirs.filter(d => cellOk(c + d[0], r + d[1]));
+  const usar = libres.length ? libres : dirs;
   // puntaje: alineación con el jugador + algo de ruido
   let best = null, bestS = -1e9;
-  for (const d of dirs) {
+  for (const d of usar) {
     const align = (e.T.dirs === 'L')
       ? -(Math.abs(c + d[0] - pc) + Math.abs(r + d[1] - pr))
       : ((pc - c) * d[0] + (pr - r) * d[1]) / (hyp(pc - c, pr - r) || 1);
-    const tgt = [c + d[0] * e.T.steps, r + d[1] * e.T.steps];
-    if (e.T.dirs === 'L' && !cellOk(c + d[0], r + d[1])) continue;
     const s = align * 1.6 + rnd(0, 1.3);
     if (s > bestS) { bestS = s; best = d; }
   }
-  if (!best) best = pick(ORTH);
+  if (!best) best = usar[0] || pick(ORTH);
   // recorrer hasta el borde del plato o hasta `steps`
   let n = 0;
   for (let k = 1; k <= e.T.steps; k++) {
@@ -3684,9 +3707,22 @@ function pickLane(e) {
     n = k;
   }
   if (e.T.dirs === 'L') n = 1;
-  if (n === 0) {                                     // acorralada contra el borde: rebota al centro
-    e.dx = -Math.sign(e.x) || 1; e.dy = -Math.sign(e.y) || 1; n = 1;
-    e.tx = clamp(e.x + e.dx * CELL, -0.9, 0.9); e.ty = clamp(e.y + e.dy * CELL, -0.9, 0.9);
+  if (n === 0) {
+    // Ni un paso legal cae en el tablero: la pieza quedó fuera de la grilla (empujada contra el
+    // borde, por ejemplo). Vuelve hacia el centro, pero POR UNA DIRECCIÓN SUYA - la torre en
+    // recto, el alfil en diagonal. El plan B viejo usaba (±1,±1) siempre y por eso se veían
+    // torres moviéndose como alfiles.
+    let mejor = usar[0], mejorS = -1e9;
+    for (const d of usar) {
+      const s2 = (-e.x * d[0] - e.y * d[1]) / (hyp(e.x, e.y) || 1);
+      if (s2 > mejorS) { mejorS = s2; mejor = d; }
+    }
+    e.dx = mejor[0]; e.dy = mejor[1]; n = 1;
+    // El paso se ACORTA hasta entrar en el plato, en vez de recortar x e y por separado: así la
+    // dirección sigue siendo exactamente la de la pieza (recortar los ejes la torcería).
+    let paso = CELL;
+    while (paso > 0.02 && hyp(e.x + e.dx * paso, e.y + e.dy * paso) > 0.93) paso *= 0.6;
+    e.tx = e.x + e.dx * paso; e.ty = e.y + e.dy * paso;
   } else {
     e.dx = best[0]; e.dy = best[1];
     e.tx = cellX(clamp(c + best[0] * n, 0, GN - 1));
@@ -3725,6 +3761,13 @@ function updateEnemies(dt) {
         e.tx = nx; e.ty = ny;
       }
       e.kx *= kd; e.ky *= kd;
+      // ── EL CENTRO DEL RELOJ ES UN LUGAR, NO EL PREMIO POR UN MOVIMIENTO ──
+      // Antes la coronación se miraba SÓLO al terminar la embestida del peón. Un peón empujado
+      // al centro por un pulso, una campanada o un barril se quedaba ahí sin coronar, y su
+      // siguiente movimiento lo sacaba. Ahora llegar es llegar, sea cual sea el motivo.
+      // Va acá, después de que el empuje se volvió posición, para que el frame en que lo
+      // empujaron ya cuente.
+      if (e.kind === 'peon' && !e.dead && hyp(e.x, e.y) < CELL * 1.2) { promotePawn(e); continue; }
     } else { e.kx = e.ky = 0; e.x = 0; e.y = 0; }
 
     // ── IMÁN DEL FRENESÍ ── hacia la canica, más lento que el andar propio de una pieza:
@@ -3833,7 +3876,7 @@ function updateSlider(e, dt) {
         spawnSparks(e.x, e.y, 8, e.T.col, 0.6); addTrauma(0.08);
         if (P.alive && hyp(P.x - e.x, P.y - e.y) < 0.16) hurtPlayer(e.T.dmg * scaleDmg() * 0.8, e.x, e.y);
       }
-      if (e.kind === 'peon' && hyp(e.x, e.y) < CELL * 1.2) promotePawn(e);
+      // (La coronación ya no se mira acá: se mira todos los frames, en `updateEnemies`.)
       // La dama YA NO invoca peones. Era el motor de una reacción en cadena: dama → peones,
       // peón que llega al centro → dama, y así. Con el jugador quieto la arena se llenaba de
       // damas hasta reventar (lo vio Franco: "se spawnearon 800 peones que coronaron").
@@ -4037,14 +4080,29 @@ function piecePath(kind, x, y, r) {
     ctx.lineTo(x + r * 0.62, y + r * 0.72);
     ctx.closePath();
   } else if (kind === 'torre') {
-    ctx.moveTo(x - r * 0.72, y - r * 0.72); ctx.lineTo(x - r * 0.72, y - r * 0.30);
-    ctx.lineTo(x - r * 0.34, y - r * 0.30); ctx.lineTo(x - r * 0.34, y - r * 0.72);
-    ctx.lineTo(x - r * 0.14, y - r * 0.72); ctx.lineTo(x - r * 0.14, y - r * 0.30);
-    ctx.lineTo(x + r * 0.14, y - r * 0.30); ctx.lineTo(x + r * 0.14, y - r * 0.72);
-    ctx.lineTo(x + r * 0.34, y - r * 0.72); ctx.lineTo(x + r * 0.34, y - r * 0.30);
-    ctx.lineTo(x + r * 0.72, y - r * 0.30); ctx.lineTo(x + r * 0.72, y - r * 0.72);
-    ctx.lineTo(x + r * 0.86, y - r * 0.72); ctx.lineTo(x + r * 0.60, y + r * 0.80);
-    ctx.lineTo(x - r * 0.60, y + r * 0.80); ctx.lineTo(x - r * 0.86, y - r * 0.72);
+    // TORRE DE AJEDREZ DE VERDAD. La anterior era un cono invertido - 0.86 de ancho arriba y
+    // 0.60 abajo -, o sea que se afinaba hacia el piso y quedaba parada en punta. Una torre es
+    // al revés: almenas, cuello, fuste casi recto con una cintura apenas insinuada, y una BASE
+    // ANCHA que la planta. Franco la pidió "más derechita" y ese es el perfil.
+    // Se hornea, así que las curvas no cuestan nada en tiempo de partida.
+    const M = [[-0.72, -0.50], [-0.31, -0.09], [0.10, 0.32], [0.51, 0.72]];   // las cuatro almenas
+    ctx.moveTo(x - r * 0.88, y + r * 0.88);                                    // base, abajo izq
+    ctx.lineTo(x - r * 0.88, y + r * 0.56);
+    ctx.lineTo(x - r * 0.62, y + r * 0.46);                                    // escalón al fuste
+    ctx.quadraticCurveTo(x - r * 0.40, y + r * 0.02, x - r * 0.44, y - r * 0.40);  // fuste
+    ctx.lineTo(x - r * 0.64, y - r * 0.50);                                    // cuello
+    ctx.lineTo(x - r * 0.72, y - r * 0.62);
+    for (let i = 0; i < 4; i++) {                                              // almenas, izq→der
+      ctx.lineTo(x + r * M[i][0], y - r * 0.96);
+      ctx.lineTo(x + r * M[i][1], y - r * 0.96);
+      ctx.lineTo(x + r * M[i][1], y - r * (i === 3 ? 0.62 : 0.74));
+      if (i < 3) ctx.lineTo(x + r * M[i + 1][0], y - r * 0.74);
+    }
+    ctx.lineTo(x + r * 0.64, y - r * 0.50);
+    ctx.lineTo(x + r * 0.44, y - r * 0.40);
+    ctx.quadraticCurveTo(x + r * 0.40, y + r * 0.02, x + r * 0.62, y + r * 0.46);
+    ctx.lineTo(x + r * 0.88, y + r * 0.56);
+    ctx.lineTo(x + r * 0.88, y + r * 0.88);
     ctx.closePath();
   } else if (kind === 'alfil') {
     ctx.moveTo(x, y - r * 0.95);
@@ -5885,7 +5943,7 @@ const game = {
   t: 0, hour: 0, hourT: 0, banner: 0,
   spawnCd: 0, orbCd: 0, cycleCd: 0, barrelCd: 0,
   bossFight: false, paused: false,
-  mode: 'free',             // free - daily
+  mode: 'free',             // free - daily - test
   diffIdx: 1,
   ruleChoices: [], cardChoices: [], pendingCard: null, roster: [], sectorsOpen: false, sectorsShown: false,
   showHand: false,          // panel del stack abierto (congela la sim mientras dura)
@@ -5898,6 +5956,14 @@ const run = {
   cardsWon: 0, cardsUsed: 0,   // umbrales de puntaje cruzados / cartas ya cobradas
   resonance: 0,                // secuencias de RESONANCE resueltas (marca permanente en el hilo)
 };
+// ── Modos: tarjetas con explicación. "LIBRE / DIARIO" sueltos no decían nada. ──
+// TEST es un modo y no una dificultad: no cambia números, saca la muerte. Por eso vive acá y no
+// en `DIFFS`, y por eso no guarda récord.
+const MODES = [
+  { id: 'free',  name: 'FREE RUN',  sub: 'A new dial every time',       foot: 'practice freely',    col: '#7df9ff' },
+  { id: 'daily', name: 'DAILY RUN', sub: 'Same run for everyone today', foot: 'one dial, one shot', col: '#c084fc' },
+  { id: 'test',  name: 'TEST RUN',  sub: 'You cannot die',              foot: 'no record kept',     col: '#8ee36b' },
+];
 const DIFFS = [
   { name: 'STROLL',    hpK: 0.78, cdK: 1.22, dmgK: 0.70, timeK: 1.0 },
   { name: 'NORMAL',    hpK: 1.00, cdK: 1.00, dmgK: 1.00, timeK: 1.0 },
@@ -5906,8 +5972,9 @@ const DIFFS = [
 let DIFF = DIFFS[1];
 
 const bestKey = () => game.mode === 'daily' ? 'best_' + dateKey() : 'best';
-function bestScore() { return LS.get(bestKey(), 0); }
+function bestScore() { return game.mode === 'test' ? 0 : LS.get(bestKey(), 0); }
 function saveBest() {
+  if (game.mode === 'test') return false;            // un récord sin muerte no es un récord
   if (run.score > bestScore()) { LS.set(bestKey(), run.score); return true; }
   return false;
 }
@@ -6475,7 +6542,7 @@ function drawHandPanel() {
   // `(W - total) / 2`, así que el ancho de carta se acota para que ese hueco alcance para la
   // lista MÁS su separación.
   const anchoLista = land ? Math.min(S * 0.30, W * 0.23) : S * 0.60;
-  const sep = S * 0.05;                                // aire entre la lista y la mano
+  const sep = S * 0.018;                               // aire entre la lista y la mano
   const margen = S * 0.055;                            // aire entre la lista y el borde
   // La cuenta va de afuera hacia adentro: margen + lista + separación es lo que la mano NO puede
   // ocupar de cada lado (de cada lado, porque va centrada). Lo que sobra es para las cartas.
@@ -6508,12 +6575,24 @@ function drawHandPanel() {
     const y = y0 + (i - 1) * paso;
     const act = i === run.handIdx;
     if (act) {
+      // La barra abraza SU texto. Con las filas a la derecha, una barra del ancho de la columna
+      // dejaba media barra vacia a la izquierda y parecia un error de alineacion.
+      const wN = medirFit(HAND_BONUS[i].name, fsN, ancho, 800);
+      const wD = medirFit(HAND_BONUS[i].desc, fsD, ancho, 600);
+      const wMax = Math.min(ancho, Math.max(wN, wD));
+      const bx = land ? x0 + ancho - wMax : x0;
       ctx.fillStyle = 'rgba(232,180,74,0.15)';
-      roundRectPath(x0 - S * 0.012, y - paso * 0.44, ancho + S * 0.024, paso * 0.88, paso * 0.22);
+      roundRectPath(bx - S * 0.012, y - paso * 0.44, wMax + S * 0.024, paso * 0.88, paso * 0.22);
       ctx.fill();
     }
-    txtFit(HAND_BONUS[i].name, x0, y - fsD * 0.52, fsN, ancho, act ? C.goldHi : C.inkFaint, act ? 800 : 600, 'left');
-    txtFit(HAND_BONUS[i].desc, x0, y + fsN * 0.52, fsD, ancho, act ? C.green : C.inkDim, act ? 600 : 400, 'left');
+    // ALINEADAS A LA DERECHA en apaisado. Alineadas a la izquierda, cada fila terminaba donde
+    // se le daba la gana y el hueco hasta la primera carta lo decidía el LARGO DEL TEXTO:
+    // "PAIR" quedaba a media pantalla de la mano y "STRAIGHT FLUSH" casi tocándola. Así todas
+    // terminan a la misma distancia, que es como se lee una lista que acompaña algo que está a
+    // su derecha. En vertical la lista va debajo y centrada, así que ahí sigue a la izquierda.
+    const ax = land ? x0 + ancho : x0, al = land ? 'right' : 'left';
+    txtFit(HAND_BONUS[i].name, ax, y - fsD * 0.52, fsN, ancho, act ? C.goldHi : C.inkFaint, act ? 800 : 600, al);
+    txtFit(HAND_BONUS[i].desc, ax, y + fsN * 0.52, fsD, ancho, act ? C.green : C.inkDim, act ? 600 : 400, al);
   }
 }
 
@@ -6756,10 +6835,12 @@ function wrapText(s, cx, cy, maxW, px, col) {
 // Antes el bloque se pasaba del plato por abajo.
 function menuRects() {
   const S = Math.min(W, H);
-  const mw = Math.min(W * 0.21, S * 0.30), mh = S * 0.115, mg = S * 0.030;
+  const mw = Math.min(W * 0.185, S * 0.26), mh = S * 0.115, mg = S * 0.024;
   const dw = S * 0.155, dh = S * 0.058, dg = S * 0.016;
   return {
-    mode: [0, 1].map(i => ({ x: W / 2 + (i - 0.5) * (mw + mg) - mw / 2, y: H * 0.475, w: mw, h: mh })),
+    // Tres tarjetas, centradas. La cuenta es genérica en la cantidad: con `(i - 0.5)` cableado,
+    // agregar un modo descentraba la fila entera.
+    mode: MODES.map((_, i) => ({ x: W / 2 + (i - (MODES.length - 1) / 2) * (mw + mg) - mw / 2, y: H * 0.475, w: mw, h: mh })),
     diff: DIFFS.map((_, i) => ({ x: W / 2 + (i - 1) * (dw + dg) - dw / 2, y: H * 0.645, w: dw, h: dh })),
     play: { x: W / 2 - S * 0.19, y: H * 0.745, w: S * 0.38, h: S * 0.095 },
   };
@@ -6779,24 +6860,18 @@ function drawMenu() {
   txt('DRAW    CROSS    COLLECT', W / 2, ty + S * 0.105, S * TS.sub, C.inkDim, 'center', 500);
 
   const R = menuRects();
-  // ── Modos: tarjetas con explicación. "LIBRE / DIARIO" sueltos no decían nada. ──
-  const modes = [
-    { id: 'free',  name: 'FREE RUN',  sub: 'A new dial every time',        col: '#7df9ff' },
-    { id: 'daily', name: 'DAILY RUN', sub: 'Same run for everyone today',  col: '#c084fc' },
-  ];
-  modes.forEach((m, i) => {
+  MODES.forEach((m, i) => {
     const b = R.mode[i], on = game.mode === m.id;
     const pulse = 0.5 + 0.5 * Math.sin(perfT * 2.6 + i);
     panel(b.x, b.y, b.w, b.h, S * 0.014, on ? m.col : C.line, on ? 0.07 + 0.05 * pulse : 0);
     txtFit(m.name, b.x + b.w / 2, b.y + b.h * 0.34, S * 0.028, b.w * 0.86, on ? '#ffffff' : 'rgba(180,205,235,0.7)', 900);
     txtFit(m.sub, b.x + b.w / 2, b.y + b.h * 0.63, S * 0.0175, b.w * 0.90, on ? m.col : 'rgba(150,178,212,0.5)', 300);
+    let pie = m.foot;
     if (m.id === 'daily') {
       const best = LS.get('best_' + dateKey(), 0);
-      txtFit(best > 0 ? "today's best  " + fmt(best) : 'one dial, one shot',
-        b.x + b.w / 2, b.y + b.h * 0.85, S * 0.0155, b.w * 0.90, 'rgba(150,178,212,0.42)', 300);
-    } else {
-      txtFit('practice freely', b.x + b.w / 2, b.y + b.h * 0.85, S * 0.0155, b.w * 0.90, 'rgba(150,178,212,0.42)', 300);
+      if (best > 0) pie = "today's best  " + fmt(best);
     }
+    txtFit(pie, b.x + b.w / 2, b.y + b.h * 0.85, S * 0.0155, b.w * 0.90, 'rgba(150,178,212,0.42)', 300);
   });
 
   txt('DIFFICULTY', W / 2, H * 0.612, S * TS.cap, C.inkFaint, 'center', 500);
@@ -6885,7 +6960,7 @@ function drawEndScreen(won) {
 function onCanvasTap(lx, ly) {
   if (game.state === 'menu') {
     const R = menuRects();
-    for (let i = 0; i < R.mode.length; i++) if (hitRect(R.mode[i], lx, ly)) { game.mode = i ? 'daily' : 'free'; sfx.ui(); return; }
+    for (let i = 0; i < R.mode.length; i++) if (hitRect(R.mode[i], lx, ly)) { game.mode = MODES[i].id; sfx.ui(); return; }
     for (let i = 0; i < R.diff.length; i++) if (hitRect(R.diff[i], lx, ly)) { game.diffIdx = i; sfx.ui(); return; }
     if (hitRect(R.play, lx, ly)) { sfx.hour(); startRun(); return; }
     return;
@@ -7279,6 +7354,54 @@ window.LOOP = { CFG, P, game, run, RULE, hand, enemies, orbs, thread, QA, inP, m
       btn.classList.toggle('on', on);
       if (on) startFps(); else stopFps();          // el contador vive sólo mientras se mira
     });
+    // ── DESPLAZAR EL PANEL ARRASTRANDO, A MANO ──
+    // El gesto nativo no llega: el juego vive en un iframe que el Arcade ROTA 90 grados por CSS
+    // en telefono vertical, y el desplazamiento tactil dentro de un contenedor rotado depende de
+    // como cada navegador clasifica la direccion del gesto. En vez de seguir adivinando que capa
+    // se lo come, se hace a mano: con eventos de puntero - lo que ya usa todo el juego - y con
+    // `clientY` del documento del iframe, que viene por la misma transformacion que todo lo
+    // demas, asi que el delta ya esta en el sistema de coordenadas del panel.
+    if (panel) (function () {
+      let id = null, yAnt = 0, top0 = 0, vel = 0, tAnt = 0, rafId = 0;
+      const frena = () => { if (rafId) { cancelAnimationFrame(rafId); rafId = 0; } };
+      panel.addEventListener('pointerdown', e => {
+        if (id !== null) return;
+        frena();
+        id = e.pointerId; yAnt = e.clientY; top0 = panel.scrollTop; vel = 0; tAnt = e.timeStamp;
+        try { panel.setPointerCapture(id); } catch (_) {}
+      });
+      panel.addEventListener('pointermove', e => {
+        if (e.pointerId !== id) return;
+        const dy = e.clientY - yAnt, dt = Math.max(1, e.timeStamp - tAnt);
+        panel.scrollTop -= dy;
+        // Velocidad suavizada: un solo frame puede venir con un salto raro y la inercia saldria
+        // disparada. 0.7 del historial + 0.3 de lo ultimo alcanza y no arrastra retraso visible.
+        vel = vel * 0.7 + (-dy / dt) * 0.3 * 16;
+        yAnt = e.clientY; tAnt = e.timeStamp;
+        e.preventDefault();
+      });
+      const suelta = e => {
+        if (e.pointerId !== id) return;
+        try { panel.releasePointerCapture(id); } catch (_) {}
+        id = null;
+        // INERCIA. Un panel de texto que frena en seco donde levantaste el dedo se siente roto en
+        // un telefono. Se decae hasta que no mueve ni un pixel por frame.
+        const paso = () => {
+          vel *= 0.93;
+          if (Math.abs(vel) < 0.4) { rafId = 0; return; }
+          const antes = panel.scrollTop;
+          panel.scrollTop += vel;
+          if (panel.scrollTop === antes) { rafId = 0; return; }   // toco un extremo
+          rafId = requestAnimationFrame(paso);
+        };
+        frena(); rafId = requestAnimationFrame(paso);
+      };
+      panel.addEventListener('pointerup', suelta);
+      panel.addEventListener('pointercancel', suelta);
+      // Rueda del mouse en escritorio: el navegador ya la maneja con `overflow-y: auto`. No se
+      // toca - reimplementarla seria agregar un segundo mecanismo para el mismo trabajo.
+    })();
+
     const bp = document.getElementById('btnPause');
     if (bp) bp.addEventListener('pointerdown', e => { e.preventDefault(); togglePause(); });
     const br = document.getElementById('btnReset');

@@ -2168,6 +2168,131 @@ comprueba que el panel DESBORDE (si no, no habria nada que probar), que ningun a
 verdad. Contra el CSS viejo falla los dos primeros. `qa2.py` gano un mapa `SIZES` para que un
 escenario pueda pedir su propia ventana.
 
+## Ninguna pieza se mueve fuera de su regla, ni para salir de una esquina (2026-09-19)
+
+Franco: *"vi a las torres moviendose en diagonal"*.
+
+`pickLane` elegia entre las direcciones de la familia pero **no comprobaba que el primer paso
+cayera en el tablero** - eso lo hacia unicamente el caballo. Cuando ninguna direccion servia, mas
+abajo entraba un plan B:
+
+```js
+e.dx = -Math.sign(e.x) || 1; e.dy = -Math.sign(e.y) || 1;   // ambos a la vez = DIAGONAL
+```
+
+Para cualquier pieza. Una torre acorralada contra el borde rebotaba en diagonal.
+
+Ahora se filtran las direcciones por "el primer paso cae en el tablero", y el plan B elige, entre
+**las direcciones de la pieza**, la que mas apunta al centro; el paso se ACORTA hasta entrar en el
+plato en vez de recortar x e y por separado, porque recortar los ejes tuerce la direccion.
+
+**Regla: un caso de escape no es permiso para romper la regla que define al objeto.** El plan B
+existia para sacar a una pieza de una esquina, y al hacerlo la convertia en otra pieza.
+
+Escenario nuevo `legal`: 384 elecciones en los ocho bordes y esquinas, mas 96 con la pieza
+empujada FUERA de la grilla, comprobando contra el conjunto legal de cada familia. Contra el
+codigo viejo: **48/384 ilegales, con "torre en (-0.86,-0.86) eligio (1,1)"** - el bug de Franco,
+reproducido literalmente.
+
+## La torre, con perfil de torre
+
+La silueta vieja era un cono invertido: 0.86 de ancho arriba y 0.60 abajo. Se afinaba hacia el
+piso, o sea que estaba parada en punta, que es lo contrario de lo que transmite una torre. Franco
+la pidio "mas derechita" y paso el dibujo de referencia.
+
+El perfil nuevo es el clasico: **almenas, cuello, fuste casi recto con una cintura apenas
+insinuada, y una base ancha que la planta.** Las cuatro almenas salen de una tabla `M` en vez de
+veinte `lineTo` a mano, asi que mover una no obliga a recalcular las otras. La pieza se hornea:
+las curvas no cuestan nada en tiempo de partida.
+
+## El peon corona por LLEGAR, no por terminar un movimiento
+
+Franco: *"estoy viendo peones que son desplazados al centro y no promocionan; deberian hacerlo
+siempre que lleguen al centro sea cual fuere el motivo"*.
+
+La coronacion se miraba dentro del `if (u >= 1)` de la embestida, o sea **solo al terminar su
+propio movimiento**. Un peon empujado al centro por un pulso, una campanada o un barril se
+quedaba ahi sin coronar, y su siguiente movimiento lo sacaba.
+
+Ahora se mira todos los frames, en `updateEnemies`, **justo despues de que el empuje se volvio
+posicion** - para que el frame en que lo empujaron ya cuente.
+
+**Regla: si una condicion es sobre UN LUGAR, se evalua por estar ahi, no por como se llego.**
+Atarla al final de un movimiento la convierte en "premio por moverse bien", que es otra cosa.
+
+Lo que sigue sin coronar es un peon que ATRAVIESA el centro a toda velocidad en un solo frame
+(un empujon enorme lo mueve 0.6 por frame y la ventana mide 0.27). Eso es correcto: paso por
+arriba, no llego. Si alguna vez hace falta, el arreglo es un chequeo barrido contra el segmento
+del frame, no agrandar la ventana.
+
+Escenario nuevo `corona`, con tres puntos: empujado **por el pulso de verdad** (el camino que
+reporto Franco - el jugador afuera, la onda lo manda al centro), puesto en el centro a mano, y
+uno lejos que NO debe coronar. Contra el codigo viejo el peon termina en r=0.081 - o sea, en el
+centro - y no corona.
+
+## Modo TEST
+
+Franco pidio "un modo test que tenga vida infinita". Es un MODO y no una dificultad: no cambia
+numeros, **saca la muerte**. Por eso vive en `MODES` y no en `DIFFS`, y por eso no guarda record -
+un record sin muerte no es un record.
+
+Lo importante es lo que NO hace: **no esconde los golpes.** El impacto se ve, se oye, te sacude,
+te empuja y se sigue contando en `run.damage`. Lo unico que no pasa es que baje la vida. Un modo
+de prueba que tapa los golpes no sirve para probar nada.
+
+Tres candados, porque hay tres caminos a la muerte: `hurtPlayer`, `hurtPlayerRaw` (el patibulo,
+que se saltea la invulnerabilidad) y `killPlayer` (por si aparece un cuarto).
+
+`menuRects` paso a centrar `MODES.length` tarjetas en vez de tener el `(i - 0.5)` de dos cableado:
+con la cuenta vieja, agregar un modo descentraba la fila entera.
+
+Escenario nuevo `modotest`: un golpe de 9999, un `hurtPlayerRaw(9999)`, 600 frames quieto en el
+medio de la arena a la hora 9 con ocho enemigos, y `saveBest`. Comprueba las dos mitades - que no
+muera Y que el golpe siga contandose y dejando chispas.
+
+## La lista de manos, pegada a las cartas
+
+Franco: *"que esten un poco mas pegados a la primera carta de la izquierda, al menos unos 50px"*.
+
+Las filas se dibujaban **alineadas a la izquierda** dentro de una columna de ancho fijo, asi que
+cada nombre terminaba donde se le daba la gana y **el hueco hasta la primera carta lo decidia el
+largo del texto**: "PAIR" quedaba a media pantalla de la mano y "STRAIGHT FLUSH" casi tocandola.
+No era un margen mal elegido - era que no habia margen, habia sobra de texto.
+
+Alineadas a la DERECHA, todas terminan a la misma distancia de la carta. Y la separacion baja de
+`S*0.05` a `S*0.018`. En vertical la lista va debajo y centrada, asi que ahi sigue a la izquierda.
+
+La barra de resalte de la mano activa tuvo que aprender a medir: con las filas a la derecha seguia
+midiendo la columna entera y quedaba media barra vacia a la izquierda. Se agrego `medirFit`, que
+corre **el mismo bucle de achique** que `txtFit` y devuelve el ancho. Corre el mismo bucle a
+proposito: si el ancho se calculara aparte, los dos numeros se separarian en cuanto alguien tocara
+uno, y el resultado seria una caja que no calza con su texto y nadie sabria por que.
+
+## El panel de info, segunda vuelta: se desplaza A MANO
+
+El arreglo de CSS de la vuelta anterior era correcto y necesario - el `touch-action: none` del
+`body` vaciaba la interseccion para todo lo de adentro, y el lienzo estaba viviendo de esa
+prohibicion sin tener la suya -, pero Franco probo y **seguia sin desplazarse**.
+
+El sospechoso es donde vive el juego: el Arcade lo mete en un iframe y, en telefono vertical, lo
+**rota 90 grados por CSS** para que se juegue apaisado sin girar el aparato. El desplazamiento
+tactil dentro de un contenedor rotado depende de como cada navegador clasifica la direccion del
+gesto, y `pan-y` se refiere al eje LOCAL del elemento.
+
+No valia la pena seguir adivinando cual capa se lo comia: **el desplazamiento se hace a mano**,
+con eventos de puntero - lo que ya usa todo el juego - y `clientY` del documento del iframe, que
+viene por la misma transformacion que todo lo demas. Con inercia, porque un panel de texto que
+frena en seco donde levantaste el dedo se siente roto en un telefono.
+
+El CSS se queda: es correcto, arregla el lienzo desprotegido, y si el gesto nativo llega alguna
+vez los dos caminos hacen lo mismo.
+
+**Regla: cuando un arreglo "correcto segun la especificacion" no arregla el sintoma en el aparato
+real, el siguiente paso no es una segunda teoria - es sacar la dependencia.**
+
+El escenario `scroll` gano un punto que despacha eventos de puntero de verdad y comprueba que el
+panel se haya movido, en los dos sentidos. Los puntos de CSS se quedan: cubren la otra mitad.
+
 ## Lo que sigue en hold (2026-09-18)
 
 Franco descarto las propuestas para **CrazyTanks** (la aguja como rival en una carrera; los
