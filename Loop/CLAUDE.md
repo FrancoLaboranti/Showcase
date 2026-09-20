@@ -2293,6 +2293,177 @@ real, el siguiente paso no es una segunda teoria - es sacar la dependencia.**
 El escenario `scroll` gano un punto que despacha eventos de puntero de verdad y comprueba que el
 panel se haya movido, en los dos sentidos. Los puntos de CSS se quedan: cubren la otra mitad.
 
+## El luchador solo pateaba, y por que (2026-09-19)
+
+**Medido antes de tocar nada**, con 40 encuentros en condiciones de juego: **0 tandas de punos, 40
+de patadas.** El repertorio nunca se perdio - los tres punos seguian ahi con su alcance, su dano y
+su tiempo -, lo que fallaba era ELEGIR.
+
+```js
+e.cmb = (d > PUNOS[0].reach || rnd(0, 1) < 0.32) ? 1 : 0;
+```
+
+La distancia al plantarse, medida, va de **0.1293 a 0.1369**. El alcance del jab es 0.115. O sea
+que `d > 0.115` es siempre verdadero, el `||` corta antes de llegar al azar, y sale patada
+siempre.
+
+**La causa de fondo no es el umbral: es que `d` no puede informar nada en ese punto.** El luchador
+se planta JUSTO cuando entra en `CFG.fighter.enter`, asi que la distancia en ese instante siempre
+vale casi lo mismo - la ventana mide un paso de caminata, 0.008. Yo razone "si esta fuera del
+alcance del jab, patea", describiendo una situacion que la propia regla de plantarse vuelve
+imposible.
+
+**Regla: una variable que el propio codigo acaba de fijar no sirve para ramificar.** Antes de
+poner un umbral, preguntarse si el numero puede variar en ese punto.
+
+Un matiz que aparecio en los tests y que vale registrar: en una pelea SOSTENIDA - el luchador ya
+pegado al jugador, sin volver a acercarse - `d` si podia bajar de 0.115 y entonces salian punos.
+O sea que no era "nunca punos" en abstracto: era **nunca punos en la aproximacion**, que es la
+inmensa mayoria de lo que se ve. Las dos mediciones son correctas y miden cosas distintas.
+
+**Arreglo:** ALTERNA. Despues de una tanda hay 75% de que salga la otra. A la larga da 50/50, y
+ademas se LEE: "acaba de patear" pasa a ser informacion util. Y la tanda ARRANCA sorteada en vez
+de en 0 - con `cmb: 0` fijo la primera tanda de cada luchador salia 75% patadas (medido: 30 de
+40), y como la mayoria no vive para tirar muchas, el jugador seguia viendo una mezcla torcida.
+
+## Las animaciones del luchador
+
+Franco: *"se ven toscas y poco pulidas... golpes que parecen simples desplazamientos rigidos de
+las extremidades o poses que cambian bruscamente"*. Los saltos eran reales y eran seis.
+
+1. **La maquina de estados saltaba y el cuerpo tambien.** `cam` (cuanto separa los pies) pasaba
+   de 1 a 0.18 en UN frame al plantarse, y la carga del envion se apagaba de golpe al empezar a
+   pegar. Ahora hay dos valores suavizados en el enemigo - `e.guard` (0 caminando, 1 plantado) y
+   `e.crouch` - y todo lo que antes miraba `e.fs` para decidir una pose lee esos numeros. La
+   transicion dura ~0.11 s en vez de un frame.
+2. **El golpe era una recta.** `lerp(-0.42, 1, t)` con `t` lineal: velocidad constante, que es
+   exactamente "una extremidad que se desplaza". Ahora la anticipacion se recoge rapido y SE
+   QUEDA cargada -el rato quieto arriba es lo que hace legible el golpe-, la salida va con quinta
+   potencia (la mitad del recorrido en el primer 13% del tiempo) y la recuperacion vuelve mas
+   lento de lo que fue. Que la vuelta no sea simetrica con la ida es la mitad de por que un golpe
+   parece pesar.
+3. **El muneco se espejaba en un frame al darse vuelta.** `face` se recalculaba cada frame desde
+   `cos(ang)`. Primero le puse histeresis, y el test de continuidad demostro que no alcanzaba: el
+   volteo seguia siendo instantaneo, 6.4 px de salto en un muneco de 15.7. Ahora `face` es un
+   NUMERO CONTINUO: al girar pasa por cero en ~0.07 s, la figura se angosta y sale del otro lado,
+   que es como gira un recorte de papel.
+4. **No habia cuerpo detras del golpe.** Ahora el hombro entra con el puno y sale con la patada
+   (contrapeso), la cadera empuja hacia el golpe, y el pie de apoyo se desliza adelante en los
+   grandes: plantarse y EMPUJAR.
+5. **El codo no se estiraba nunca**: tenia un desvio fijo, asi que un puno a fondo seguia doblado.
+   Ahora usa la misma cuenta que la rodilla - cuanto mas corto quedo el miembro, mas dobla -, y el
+   brazo se endereza al llegar. Es lo que mata la sensacion de palito articulado.
+6. **No habia seguimiento.** Durante la salida se traza un rastro tenue de la extremidad unos
+   cuadros atras. Son dos lineas y es la diferencia entre un golpe y una pose: sin rastro, a 60
+   fps el puno simplemente APARECE afuera.
+
+Y el nudo brillante de la punta entraba de golpe en `ext > 0.45`; ahora entra por alfa desde 0.15.
+
+**Nada de mecanica cambio**: ni dano, ni alcance, ni duracion, ni cadencia, ni cuando se planta,
+ni el descanso, ni el frenesi.
+
+### El escenario `lucha2`, y como se mide una animacion
+
+Tres partes. Las dos primeras son directas: **que salgan las dos tandas** (con chequeo de que
+ALTERNE, porque las proporciones podrian dar bien con rachas largas) y **que los cinco golpes
+ejecuten** - tres punos y dos patadas, cada indice tiene que haber hecho dano al menos una vez.
+
+La tercera es la interesante: se envuelve `drawFighter` y se capturan **los puntos que emite**,
+frame a frame. Es lo que llega al lienzo, no una formula copiada del juego.
+
+Tres cosas me obligaron a corregir el test antes de que midiera algo:
+
+- **El rastro corre los indices.** Se dibuja antes del esqueleto y solo durante la salida del
+  golpe, asi que los primeros puntos a veces son suyos. Denuncio un salto de 37 px en un muneco
+  de 15: no era el muneco, era el test comparando la punta del rastro contra una cadera. Se
+  cuenta desde el FINAL: el esqueleto emite 14 puntos fijos, o sea que los ultimos 28 numeros son
+  siempre la misma estructura.
+- **Caminar no es saltar.** El luchador andando mueve el torso ~3 px por frame. Se le DESCUENTA
+  LA TRASLACION y se mide la pose pura.
+- **El umbral hay que medirlo, no elegirlo.** El pico del build bueno es 2.6 px sobre 15.7 (0.166)
+  y ese pico es la entrada del cuerpo en el puno, o sea la animacion haciendo lo suyo. Se fijo en
+  0.22, con 33% de margen. **Contra el build anterior el mismo test da 11.44 px y falla**, que es
+  el espejado instantaneo.
+
+**Regla que ya habia aparecido y ahora tiene tercera prueba: cuando un test cambia de color, la
+primera pregunta es si el test sigue midiendo lo que el juego hace ahora.**
+
+### Un NaN que me metio el propio parche
+
+El parche inserto `guard: 0, crouch: 0, face: 1,` con un comentario `//` al final de la linea...
+y el ancla caia en MEDIO de una linea del fuente, que seguia con `gait: 0, ang: 0, bob: ...`. El
+comentario se comio el resto: `ang` quedo sin definir y la posicion del luchador se volvio NaN en
+el primer frame.
+
+**Regla: si el ancla de un reemplazo cae en medio de una linea, el reemplazo no puede terminar en
+un comentario de linea.** Va arriba, en su propia linea.
+
+## El colchon del frenesi sonaba a telefono vibrando
+
+Franco: *"el sonido en el frenzy que parece como una vibracion de un celular sacalo a la mierda"*.
+
+Mio, de la tanda anterior. El colchon son dos senos - 55 y 82.41 Hz - y en el frenesi yo los subia
+una octava: **110 y 164.8 Hz**, a volumen forzado. Un parlante de telefono no reproduce esas notas,
+las convierte en golpeteo, y ademas dos senos graves tan juntos baten entre si y producen
+modulacion de amplitud. Golpeteo mas modulacion es, literalmente, la descripcion fisica de un
+telefono vibrando.
+
+**Regla: en un parlante chico, una nota grave no se oye grave - se oye como un defecto.** Todo lo
+que este por debajo de ~200 Hz hay que darlo por perdido o por sucio.
+
+Se saco entero, junto con el parametro `oct` de `droneSet` y `CFG.frenzy.drone`, que no usaba
+nadie mas. **Probe dos cosas con el colchon del frenesi y las dos estuvieron mal**: agacharlo (se
+oyo como un bajon de volumen) y subirlo (zumbido). Lo que marca el frenesi por audio es que el
+TICTAC SE CORTA los 6.5 s enteros - el reloj se fue de la habitacion -, y eso no es un cambio de
+volumen, es una ausencia.
+
+## Las puntas de las flechas
+
+Franco: *"las puntas no terminan de verse prolijas... terminaciones toscas"*. La causa era de
+construccion, no de tamano. El carril era un cuadrilatero ahusado **con su propio contorno
+cerrado**, y la punta un TRIANGULO APARTE encima:
+
+- el carril terminaba en un corte recto contorneado - una tapa dura justo donde deberia haber una
+  punta;
+- el triangulo arrancaba en `L - 0.45·w1` con medio ancho `1.05·w1` contra un carril de ancho
+  `w1`: apenas mas ancho, asi que se leia como un bulto y no como una punta;
+- y al ser dos figuras con alfas distintas, la costura quedaba a la vista.
+
+Ahora la flecha es **UNA sola silueta cerrada** - cuerpo ahusado, hombros, vertice y vuelta -, el
+contorno la recorre entera y la cabeza mide casi el doble del ancho del cuerpo. Uniones
+redondeadas, que a este tamano se ve mas fino que un pico.
+
+Un intento intermedio que descarte: atar el encendido de la cabeza a que el relleno del cuerpo
+LLEGARA hasta ella. Sonaba mas fino y estaba mal: en un carril largo la cabeza mide un 8% del
+largo, asi que se quedaba apagada durante el 92% del aviso - justo cuando lo unico que importa es
+hacia donde. **La cabeza dice la DIRECCION: tiene que verse desde el primer frame.** Ahora se
+enciende con el progreso general.
+
+No cambia ni el ancho, ni el largo, ni el color, ni la alfa del cuerpo.
+
+## El dorado de los sectores: rompia la ley de color del juego
+
+Franco: *"las lineas que dividen los sectores se vuelven doradas y no entiendo que representa"*.
+
+**Que lo causaba.** `drawSectorHash` dibuja el "#" del ta-te-ti encendido, y corre unicamente
+mientras `game.sectorsOpen` - la VENTANA DE RECLAMO, que se abre pasado un tercio de cada hora y
+se cierra al cobrar una linea o al terminar la hora. El resto del tiempo el "#" esta horneado en
+el plato, apagado. O sea que el dorado SI significaba algo: "se puede reclamar sectores ahora".
+
+**Por que igual no se entendia.** El juego tiene una ley de color propia - **oro = valor** - y
+esto la rompia: el "#" se ponia dorado siempre que la ventana estaba abierta, valiera algo o no,
+mientras que los rombos de la MISMA mecanica la respetan (hielo si son un blanco normal, oro si
+completan una linea). Dos objetos de la misma mecanica hablando idiomas distintos.
+
+**El dorado no era ambiguo por ser tenue: era ambiguo por mentir.** Un color con significado
+asignado que se usa fuera de su significado envenena al resto - si el oro a veces no quiere decir
+valor, deja de querer decir valor nunca.
+
+**Arreglo:** el "#" habla el idioma de los rombos. HIELO mientras la ventana esta abierta, ORO
+solo cuando algun sector libre completaria una linea. La informacion no se pierde - la ventana se
+sigue anunciando, y encima con el color correcto -, y el dorado pasa a ser un aviso con contenido:
+hay una linea a un paso.
+
 ## Lo que sigue en hold (2026-09-18)
 
 Franco descarto las propuestas para **CrazyTanks** (la aguja como rival en una carrera; los

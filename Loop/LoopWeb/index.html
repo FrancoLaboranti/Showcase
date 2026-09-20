@@ -438,10 +438,12 @@ const CFG = {
   // el pulso y la orbe: daño fijo contra vida que escala).
   frenzy: { time: 6.5, pull: 0.19, burstR: 0.70, burstDmg: 40, healFrac: 1 / 3,
             // Entrada rapida y salida mas larga: entrar en frenesi es un golpe, salir es que el
-            // mundo se acomoda. `drone` no depende de la hora - el frenesi es el mismo evento
+            // mundo se acomoda. (Aca vivia `drone`, el colchon propio del frenesi: se fue con
+            // la octava, porque en un parlante chico sonaba a telefono vibrando.)
+            // El frenesi es el mismo evento
             // siempre - y sube UNA OCTAVA, que es la misma nota y por lo tanto no toca la
             // tonalidad.
-            inT: 0.22, outT: 0.55, drone: 0.030 },
+            inT: 0.22, outT: 0.55 },
 
   // PÉNDULOS. `g` es la gravedad del péndulo: ω = sqrt(g/largo), o sea que el período sale de
   // acá y del LARGO de cada uno. Antes había un ω fijo de 5.4 rad/s para todos: período 1.16 s,
@@ -606,7 +608,7 @@ let droneOsc = null, droneFifth = null, droneGain = null;
 // hipotetico.
 function acOk() { return !!(AC && masterGain && AC.state === 'running'); }
 
-function droneSet(vol, oct) {
+function droneSet(vol) {
   if (!acOk()) return;
   if (!droneOsc) {
     droneGain = AC.createGain(); droneGain.gain.value = 0; droneGain.connect(masterGain);
@@ -616,11 +618,11 @@ function droneSet(vol, oct) {
     droneOsc.start(); droneFifth.start();
   }
   // `setTargetAtTime` con constante larga: el colchon nunca entra ni sale de golpe, se filtra.
-  // `oct` sube el colchon en octavas. Una octava es LA MISMA NOTA, asi que se puede mover sin
-  // cambiar de tonalidad - que es justamente lo que no se podia hacer con la altura.
-  const k = Math.pow(2, oct || 0), t = AC.currentTime;
-  droneOsc.frequency.setTargetAtTime(55 * k, t, 0.25);
-  droneFifth.frequency.setTargetAtTime(82.41 * k, t, 0.25);
+  // Aca vivia un parametro `oct` que subia el colchon una octava durante el frenesi. Lo saque:
+  // 110 y 164.8 Hz en el parlante de un telefono no suenan graves, suenan a GOLPETEO, y dos
+  // senos tan juntos ademas baten entre si. Franco lo describio como "una vibracion de celular",
+  // que es exactamente lo que es. El colchon ya no cambia de altura nunca.
+  const t = AC.currentTime;
   droneGain.gain.setTargetAtTime(Math.max(0, vol), t, 0.5);
 }
 // OJO: `updateAmbience` llama a esto CADA MEDIO SEGUNDO mientras no estas jugando, y corre antes
@@ -1987,15 +1989,26 @@ function drawSectorTargets() {
 // desaparecer: el bake es funcion pura del tamano. Se dibuja unicamente mientras la ventana de
 // rombos esta abierta, asi que la mayor parte de la hora cuesta cero.
 // Late muy lento: es laton bajo una lampara, no un indicador parpadeando.
+//
+// EL COLOR HABLA EL IDIOMA DE LOS ROMBOS. Antes se encendia siempre en laton mientras la ventana
+// estaba abierta, valiera algo o no, y eso rompia la ley de color del juego - **oro = valor** -
+// justo cuando los rombos de la MISMA mecanica la respetan (hielo si son un blanco normal, oro si
+// completan una linea). Dos objetos de la misma mecanica hablando idiomas distintos: por eso el
+// dorado no se podia decodificar y Franco pregunto que significaba.
+// Ahora: HIELO mientras se puede reclamar, y ORO solo cuando algun sector libre completaria una
+// linea. El dorado deja de ser un estado ambiguo y pasa a ser un aviso con contenido.
 function drawSectorHash() {
   const q = SECT_Q / 2, lat = 0.62 + 0.38 * Math.sin(perfT * 1.7);
+  let vale = false;
+  for (let i = 0; i < 9; i++) if (!sectors[i] && wouldCompleteLine(i)) { vale = true; break; }
   ctx.beginPath();
   for (const t of [-q, q]) {
     ctx.moveTo(sx(t), sy(-0.97)); ctx.lineTo(sx(t), sy(0.97));
     ctx.moveTo(sx(-0.97), sy(t)); ctx.lineTo(sx(0.97), sy(t));
   }
   ctx.lineCap = 'round';
-  ctx.strokeStyle = 'rgba(255,214,150,' + (0.10 + 0.13 * lat).toFixed(3) + ')';
+  ctx.strokeStyle = vale ? 'rgba(255,214,150,' + (0.13 + 0.20 * lat).toFixed(3) + ')'
+                         : 'rgba(125,249,255,' + (0.09 + 0.11 * lat).toFixed(3) + ')';
   ctx.lineWidth = Math.max(1.4, sr(0.0072));
   ctx.stroke();
 }
@@ -3581,7 +3594,10 @@ function spawnEnemy(kind, x, y) {
     // Estado del LUCHADOR. Va en el literal compartido y no agregado despues sólo para los
     // luchadores: si la mitad de las piezas tuviera una forma de objeto distinta, el motor
     // dejaría de poder tratarlas todas igual y cada acceso pasaría a ser una búsqueda.
-    fs: 'walk', ft: 0, combo: 0, cmb: 0, hitDone: false, gait: 0, ang: 0, bob: rnd(0, TAU), fireCd: rnd(0.5, 1.5),
+    fs: 'walk', ft: 0, combo: 0, cmb: rndi(0, 1), hitDone: false,
+    // pose suavizada del luchador (ver `updateFighter`)
+    guard: 0, crouch: 0, face: 1, faceT: 1,
+    gait: 0, ang: 0, bob: rnd(0, TAU), fireCd: rnd(0.5, 1.5),
     knock(ax, ay) { this.kx += ax; this.ky += ay; },
   };
   enemies.push(e);
@@ -3968,6 +3984,25 @@ const tandaDe = e => TANDAS[e.cmb] || PUNOS;
 function updateFighter(e, dt) {
   const slowK = e.slow ? 0.6 : 1; e.slow = 0;
   const dx = P.x - e.x, dy = P.y - e.y, d = hyp(dx, dy);
+  // ── POSE SUAVIZADA ──
+  // La maquina de estados salta; el cuerpo no puede. Todo lo que antes miraba `e.fs` directo
+  // para decidir una pose ahora lee estos dos numeros, asi que pasar de caminar a plantarse -
+  // o de preparar a pegar - dura ~0.11 s en vez de un frame. Era el salto mas visible que tenia.
+  e.guard += ((e.fs === 'walk' ? 0 : 1) - e.guard) * Math.min(1, dt * 9);
+  const cargaObj = e.fs === 'wind' ? clamp(e.ft / CFG.fighter.wind, 0, 1) : 0;
+  e.crouch += (cargaObj - e.crouch) * Math.min(1, dt * (e.fs === 'wind' ? 8 : 13));
+  // Hacia que lado MIRA. Antes se recalculaba cada frame desde `cos(ang)`, asi que un giro minimo
+  // espejaba el muneco entero de un frame al otro - incluso en mitad de un golpe.
+  // Dos arreglos: HISTERESIS (hace falta pasar 0.22, y no cambia mientras pega) para que no
+  // tironee, y sobre todo que `face` sea un NUMERO CONTINUO y no un signo. Al girar pasa por
+  // cero en ~0.07 s: la figura se angosta y sale del otro lado, que es como gira un recorte de
+  // papel. Con el signo pelado el muneco se daba vuelta entero en un frame, y eso lo denuncio el
+  // test de continuidad - 6.4 px de salto en un muneco de 15.
+  if (e.fs !== 'hit') {
+    const cf = Math.cos(e.ang);
+    if (Math.abs(cf) > 0.22) e.faceT = cf >= 0 ? 1 : -1;
+  }
+  e.face += ((e.faceT === undefined ? e.face : e.faceT) - e.face) * Math.min(1, dt * 14);
   // En frenesi deja de amenazar, igual que las piezas dejan de telegrafiar: la tanda se corta y
   // solo camina. Que durante el frenesi no pase NADA amenazante es la regla de la casa.
   if (frenzy > 0 && e.fs !== 'walk') { e.fs = 'walk'; e.ft = 0; e.combo = 0; e.hitDone = false; }
@@ -3987,13 +4022,21 @@ function updateFighter(e, dt) {
     // juquear, así que plantarse de espaldas era tirar la tanda entera al aire. Pasa de verdad:
     // un bucle o un pulso lo empujan y queda mirando al vacío.
     if (frenzy <= 0 && d < CFG.fighter.enter && Math.abs(wrapPi(Math.atan2(dy, dx) - e.ang)) < 0.75) {
-      // ELIGE LA TANDA ACA, una sola vez, y despues la cumple entera. Mira la distancia: si
-      // estas fuera del alcance del jab patea, y si estas encima patea igual una de cada tres.
-      // O sea que alejarte no te saca del problema, te cambia el problema.
-      // Se decide en este instante y no mas tarde porque el arco de aviso se dibuja con el
-      // alcance del golpe que viene: si la tanda se eligiera al pegar, el aviso estaria mintiendo
-      // durante toda la preparacion.
-      e.cmb = (d > PUNOS[0].reach || rnd(0, 1) < 0.32) ? 1 : 0;
+      // ELIGE LA TANDA ACA, una sola vez, y despues la cumple entera. Se decide en este instante
+      // y no mas tarde porque el arco de aviso se dibuja con el alcance del golpe que viene: si
+      // la tanda se eligiera al pegar, el aviso estaria mintiendo durante toda la preparacion.
+      //
+      // ALTERNA, y no elige por distancia. La version anterior hacia
+      //     e.cmb = (d > PUNOS[0].reach || rnd(0,1) < 0.32) ? 1 : 0;
+      // y daba PATADAS SIEMPRE - medido: 40 de 40. La razon no es el umbral: es que **`d` no
+      // puede informar nada en este punto.** El luchador se planta justo cuando entra en
+      // `CFG.fighter.enter`, asi que la distancia en ese instante siempre vale casi lo mismo
+      // (medido: 0.129 a 0.137, una ventana de un paso de caminata) y el `||` cortaba antes de
+      // llegar al azar. Una variable que el propio codigo acaba de fijar no sirve para ramificar.
+      //
+      // Alternar ademas se LEE: despues de una tanda de patadas vienen punos tres de cada cuatro
+      // veces, asi que "acaba de patear" pasa a ser informacion util. A la larga da 50/50.
+      e.cmb = rnd(0, 1) < 0.75 ? (e.cmb ? 0 : 1) : e.cmb;
       e.fs = 'wind'; e.ft = 0; e.combo = 0; e.hitDone = false;
     }
   } else if (e.fs === 'wind') {
@@ -4199,23 +4242,51 @@ function drawTelegraphs() {
       // Carril AHUSADO hacia el destino + punta de flecha: la forma dice HACIA DÓNDE aun
       // congelando el frame. Un rectángulo gris plano no comunicaba dirección.
       const w0 = wpx, w1 = wpx * 0.44;
-      const lane = (len, wA, wB) => {
+      // ── UNA SOLA SILUETA ──
+      // Antes eran DOS figuras: un cuadrilátero ahusado con su propio contorno cerrado, y encima
+      // un triángulo suelto. El cuadrilátero terminaba en un corte recto contorneado - una tapa
+      // dura justo donde debería haber una punta -, el triángulo era apenas más ancho que el
+      // carril (1.05·w1 contra w1) así que se leía como un bulto y no como una punta, y la
+      // costura entre las dos alfas quedaba a la vista. Eso era lo tosco.
+      // Ahora el contorno recorre cuerpo y punta de corrido: no hay corte ni costura, y la
+      // cabeza mide casi el doble del ancho del cuerpo, que es lo que la hace leerse como punta.
+      const hl = Math.min(w1 * 2.0, L * 0.42);          // largo de la cabeza, sin comerse carriles cortos
+      const hw = w1 * 1.85;                             // medio ancho de la cabeza
+      const cuerpo = (len, wA, wB) => {                 // sólo el cuerpo, para el relleno de avance
         ctx.beginPath();
         ctx.moveTo(0, -wA); ctx.lineTo(len, -wB); ctx.lineTo(len, wB); ctx.lineTo(0, wA);
         ctx.closePath();
       };
+      const flecha = () => {                            // cuerpo + cabeza, cerrada
+        ctx.beginPath();
+        ctx.moveTo(0, -w0);
+        ctx.lineTo(L - hl, -w1);
+        ctx.lineTo(L - hl, -hw);
+        ctx.lineTo(L, 0);                               // el vértice cae EXACTO en el destino
+        ctx.lineTo(L - hl, hw);
+        ctx.lineTo(L - hl, w1);
+        ctx.lineTo(0, w0);
+        ctx.closePath();
+      };
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';    // a este tamaño se ve más fino que en pico
       ctx.fillStyle = rgba(col, 0.042);
-      lane(L, w0, w1); ctx.fill();
-      ctx.fillStyle = rgba(col, 0.12 + 0.12 * u);      // la barra se LLENA: cuándo, no sólo dónde
-      lane(L * u, w0, lerp(w0, w1, u)); ctx.fill();
-      ctx.fillStyle = rgba(col, 0.46 + 0.34 * u);      // filo brillante que avanza
-      ctx.fillRect(L * u - Math.max(1, r * 0.05), -lerp(w0, w1, u), Math.max(1.2, r * 0.10), lerp(w0, w1, u) * 2);
+      flecha(); ctx.fill();
+      ctx.fillStyle = rgba(col, 0.12 + 0.12 * u);       // la barra se LLENA: cuándo, no sólo dónde
+      cuerpo(Math.min(L * u, L - hl), w0, lerp(w0, w1, clamp(u, 0, 1))); ctx.fill();
+      // LA CABEZA SE ENCIENDE con el progreso. Probé atarla a que el relleno del cuerpo LLEGARA
+      // hasta ella, que sonaba más fino, y estaba mal: en un carril largo la cabeza mide un 8%
+      // del largo, así que se quedaba casi apagada durante el 92% del aviso - justo cuando lo
+      // único que importa es hacia dónde. La cabeza es la que dice la DIRECCIÓN: tiene que verse
+      // desde el primer frame y ganar peso hacia el final.
+      ctx.beginPath();
+      ctx.moveTo(L - hl, -hw); ctx.lineTo(L, 0); ctx.lineTo(L - hl, hw); ctx.closePath();
+      ctx.fillStyle = rgba(col, 0.26 + 0.46 * u);
+      ctx.fill();
+      ctx.fillStyle = rgba(col, 0.46 + 0.34 * u);       // filo brillante que avanza
+      const wFilo = lerp(w0, w1, clamp(u, 0, 1));
+      ctx.fillRect(Math.min(L * u, L - hl) - Math.max(1, r * 0.05), -wFilo, Math.max(1.2, r * 0.10), wFilo * 2);
       ctx.strokeStyle = rgba(col, 0.24 + 0.28 * u); ctx.lineWidth = Math.max(1, r * 0.05);
-      lane(L, w0, w1); ctx.stroke();
-      ctx.beginPath();                                  // punta de flecha en el destino
-      ctx.moveTo(L + w1 * 1.0, 0); ctx.lineTo(L - w1 * 0.45, -w1 * 1.05); ctx.lineTo(L - w1 * 0.45, w1 * 1.05);
-      ctx.closePath();
-      ctx.fillStyle = rgba(col, 0.30 + 0.42 * u); ctx.fill();
+      flecha(); ctx.stroke();
     }
     ctx.restore();
   }
@@ -4367,31 +4438,56 @@ function drawFighter(e, x, y, r0, flash, col) {
   // de COLISIÓN no se toca: lo que había que corregir es cuánto ocupa en pantalla.
   const r = r0 * 1.30;
   const ph = e.gait;
-  const face = Math.cos(e.ang) >= 0 ? 1 : -1;
+  // CONTINUO, no un signo: al girar pasa por cero y la figura se angosta en vez de espejarse
+  // en un frame. Ver `updateFighter`.
+  const face = e.face === undefined ? 1 : e.face;
+  const gu = e.guard;                                // 0 caminando ─ 1 plantado, sin saltos
   const pega = e.fs === 'hit';
   const T = tandaDe(e);
   const g = pega ? (T[e.combo] || T[0]) : null;
   const patea = pega && g.pie;
   const u = g ? clamp(e.ft / g.d, 0, 1) : 0;
-  // Extensión del brazo que pega: negativa mientras se recoge, 1 cuando el puño está afuera, y
-  // de vuelta a 0 al recuperarse. Un solo número describe todo el golpe.
-  let ext = 0;
+  // ── LA CURVA DEL GOLPE ──
+  // `ext` describe todo el golpe con un número: negativo mientras se recoge, 1 con la extremidad
+  // afuera, de vuelta a 0 al recuperarse. Lo que cambió es CÓMO viaja entre esos valores.
+  // Antes era `lerp(-0.42, 1, t)` con `t` lineal: velocidad constante, o sea exactamente "una
+  // extremidad que se desplaza". Un golpe no se mueve así.
+  const CH = 0.46;                                   // cuánto se recoge antes de salir
+  let ext = 0, sale = 0;                             // `sale` = 1 sólo mientras viaja hacia afuera
   if (g) {
-    if (u < g.a0) ext = -0.42 * (u / g.a0);
-    else if (u < g.a1) ext = lerp(-0.42, 1, (u - g.a0) / Math.max(0.01, g.a1 - g.a0));
-    else ext = 1 - (u - g.a1) / Math.max(0.01, 1 - g.a1);
+    if (u < g.a0) {
+      // ANTICIPACIÓN: se recoge rápido y SE QUEDA cargado. El rato quieto arriba es lo que hace
+      // que el golpe se pueda leer - una anticipación que se mueve todo el tiempo no avisa nada.
+      ext = -CH * easeOutCubic(clamp(u / g.a0 * 1.45, 0, 1));
+    } else if (u < g.a1) {
+      // EL GOLPE: quinta potencia. La mitad del recorrido en el primer 13% del tiempo.
+      const t = (u - g.a0) / Math.max(0.01, g.a1 - g.a0);
+      ext = lerp(-CH, 1, 1 - Math.pow(1 - t, 5));
+      sale = 1;
+    } else {
+      // RECUPERACIÓN: vuelve MÁS LENTO de lo que fue, con salida y entrada suaves. Que la vuelta
+      // no sea simétrica con la ida es la mitad de por qué un golpe parece pesar.
+      ext = 1 - easeInOutCubic((u - g.a1) / Math.max(0.01, 1 - g.a1));
+    }
   }
+  const extP = Math.max(0, ext);                     // sólo la parte de afuera empuja el cuerpo
   // Se agacha para el envión y se planta durante la preparación: el cuerpo también telegrafía.
-  const carga = e.fs === 'wind' ? clamp(e.ft / CFG.fighter.wind, 0, 1) : 0;
-  const bob = (e.fs === 'walk' ? -Math.abs(Math.sin(ph)) * 0.07 : 0) + carga * 0.07;
+  // `e.crouch` está suavizado: antes la carga se apagaba de un frame al otro al empezar a pegar.
+  const carga = e.crouch;
+  const bob = -Math.abs(Math.sin(ph)) * 0.07 * (1 - gu) + carga * 0.07;
   // Proporciones: tronco 0.74*r, piernas 0.74*r, cabeza 0.24*r de radio. Una figura de palo se
   // lee por sus LARGOS - con la cabeza compitiendo con el tronco (como estaba) todo el medio
   // queda hecho un nudo y sólo se entiende la pose que estira el brazo.
   const hipY = y + r * (0.12 + bob), shoY = y - r * (0.62 - bob), pie = y + r * 0.86;
-  const hx = x + face * r * 0.06 * (pega ? 1 - ext * 0.5 : 1);
-  // CONTRAPESO. Mientras la pierna sale, el torso se va para atras. Es lo que hace que una
-  // patada pese: sin esto es una pierna que se estira y el muneco queda flotando sobre ella.
-  const shx = x - (patea ? face * r * 0.30 * Math.max(0, ext) : 0);
+  // ── EL CUERPO VA DETRÁS DEL GOLPE ──
+  // Antes sólo se estiraba la extremidad y el resto del muñeco miraba. Ahora la CADERA empuja
+  // hacia el golpe y el HOMBRO entra con el puño / sale con la patada, que es el contrapeso.
+  // Son dos números, y son la diferencia entre golpear y estirar un palito.
+  const hx = x + face * r * (0.06 + extP * (patea ? -0.10 : 0.13));
+  const shx = x + face * r * (patea ? -0.32 * extP : 0.19 * extP);
+  // El pie de apoyo se desliza HACIA el golpe en los grandes (y hacia atrás en las patadas):
+  // plantarse y empujar. Sin esto, un envión es un brazo saliendo de una estatua.
+  const dPie = pega ? face * r * extP * (patea ? -0.13 : (g.big ? 0.20 : 0.08)) : 0;
 
   ctx.save();
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
@@ -4406,14 +4502,14 @@ function drawFighter(e, x, y, r0, flash, col) {
     for (let k = 0; k < 2; k++) {
       const patea2 = patea && k === 0;                // la que patea apunta al MUNDO
       const p = ph + k * PI;
-      const cam = e.fs === 'walk' ? 1 : 0.18;         // quieto: apenas separa los pies
+      const cam = lerp(1, 0.20, gu);                  // plantado: apenas separa los pies
       // Un ciclo de marcha se lee por la SEPARACIÓN de los pies, no por el balanceo del cuerpo:
       // con los pies juntos, camine lo que camine se ve flotando.
       // La pierna que patea se dibuja con la MISMA cuenta que usaba el puño: posición de mundo,
       // no del muñeco, así que lo que ves es exactamente lo que golpea. La baja va al ras y la
       // de giro va alta.
       const fx2 = patea2 ? sx(e.x + Math.cos(e.ang) * g.reach * ext)
-                         : x + face * Math.cos(p) * r * 0.52 * cam;
+                         : x + face * Math.cos(p) * r * 0.52 * cam + dPie;
       const fy2 = patea2 ? sy(e.y + Math.sin(e.ang) * g.reach * ext) + r * (g.big ? -0.02 : 0.20)
                          : pie - Math.max(0, Math.sin(p)) * r * 0.36 * cam;
       // Rodilla: punto medio empujado HACIA ADELANTE. Cuanto más corta quedó la pierna respecto
@@ -4432,17 +4528,39 @@ function drawFighter(e, x, y, r0, flash, col) {
         px2 = sx(e.x + Math.cos(e.ang) * g.reach * ext);
         py2 = sy(e.y + Math.sin(e.ang) * g.reach * ext) - r * 0.18;
       } else {
-        const p = ph + PI * (k + 1) + (e.fs === 'walk' ? 0 : PI * 0.5);
+        const p = ph + PI * (k + 1) + lerp(0, PI * 0.5, gu);
         // Pateando abren MÁS: son el contrapeso, y un brazo pegado al cuerpo no equilibra nada.
-        const cam = e.fs === 'walk' ? 1 : (patea ? 0.85 : 0.35);
-        px2 = shx + face * Math.cos(p) * r * 0.30 * cam + face * r * 0.06;
-        py2 = shoY + r * (0.42 - carga * 0.10);
+        const cam = lerp(1, patea ? 0.85 : 0.36, gu);
+        // EL BRAZO LIBRE RETROCEDE cuando el otro sale. Es el gesto que más falta hacía: sin él
+        // un puñetazo era medio cuerpo trabajando y el otro medio quieto.
+        const tira = pega && !patea ? extP * r * 0.26 : 0;
+        px2 = shx + face * Math.cos(p) * r * 0.30 * cam + face * r * 0.06 - face * tira;
+        py2 = shoY + r * (0.42 - carga * 0.10 - extP * 0.08);
       }
-      const ex2 = (shx + px2) / 2 - face * r * (pega2 ? 0.04 : 0.12);
+      // CODO, con la misma cuenta que la rodilla: cuanto más corto quedó el brazo, más dobla.
+      // Antes el desvío era fijo, así que un puño a fondo seguía doblado y el brazo se leía como
+      // un palito articulado en vez de como un brazo que se estira.
+      const largoB = hyp(px2 - shx, py2 - shoY) || 1;
+      const doblaB = clamp(1 - largoB / (r * 0.80), 0, 1);
+      const ex2 = (shx + px2) / 2 - face * r * (0.03 + doblaB * 0.24);
       const ey2 = (shoY + py2) / 2 + r * 0.06;
       ctx.moveTo(shx, shoY); ctx.lineTo(ex2, ey2); ctx.lineTo(px2, py2);
     }
   };
+
+  // ── SEGUIMIENTO ──
+  // Mientras la extremidad viaja hacia afuera se traza un rastro suyo unos cuadros atrás. Son dos
+  // líneas y es la diferencia entre un golpe y una pose: sin rastro, a 60 fps el puño simplemente
+  // APARECE afuera. Se dibuja ANTES del esqueleto para que quede debajo.
+  if (sale && ext > -0.1) {
+    const atras = lerp(ext, -CH, 0.42);
+    const ax = sx(e.x + Math.cos(e.ang) * g.reach * atras);
+    const ay = sy(e.y + Math.sin(e.ang) * g.reach * atras) + r * (g.pie ? (g.big ? -0.02 : 0.20) : -0.18);
+    const ox = patea ? hx : shx, oy = patea ? hipY : shoY;
+    ctx.strokeStyle = rgba(flash ? BLANCO : col, 0.16 + 0.12 * extP);
+    ctx.lineWidth = Math.max(1.5, r * (g.big ? 0.42 : 0.30));
+    ctx.beginPath(); ctx.moveTo(ox, oy); ctx.lineTo(ax, ay); ctx.stroke();
+  }
 
   const tinta = flash ? BLANCO : col;
   ctx.strokeStyle = 'rgba(6,10,20,0.70)'; ctx.lineWidth = Math.max(2, r * 0.30);
@@ -4453,7 +4571,8 @@ function drawFighter(e, x, y, r0, flash, col) {
 
   // Cabeza: relleno oscuro con anillo claro. A este tamaño un círculo lleno se convertía en un
   // punto y el muñeco perdía la cara; el anillo lo mantiene legible.
-  const cy2 = shoY - r * 0.28, chx = shx + face * r * 0.05;
+  // La cabeza acompaña: entra con el puño y se va con la patada, igual que el hombro.
+  const cy2 = shoY - r * 0.28, chx = shx + face * r * (0.05 + extP * (patea ? -0.05 : 0.05));
   ctx.fillStyle = 'rgba(9,14,24,0.92)';
   ctx.beginPath(); ctx.arc(chx, cy2, r * 0.24, 0, TAU); ctx.fill();
   ctx.strokeStyle = rgba(tinta, 0.95); ctx.lineWidth = Math.max(1.2, r * 0.12);
@@ -4461,12 +4580,15 @@ function drawFighter(e, x, y, r0, flash, col) {
 
   // El puño - o el pie -, cuando está afuera: un nudo brillante. Es lo que hay que estar mirando,
   // así que va donde de verdad está la punta del golpe, no siempre a la altura del hombro.
-  if (pega && ext > 0.45) {
+  // Entra por ALFA desde 0.15 en vez de aparecer de golpe en 0.45: un destello que se enciende
+  // en un frame es un pop, y era el único que quedaba en toda la secuencia.
+  if (pega && ext > 0.15) {
+    const k3 = clamp((ext - 0.15) / 0.45, 0, 1);
     const fx3 = sx(e.x + Math.cos(e.ang) * g.reach * ext);
     const fy3 = sy(e.y + Math.sin(e.ang) * g.reach * ext) + r * (g.pie ? (g.big ? -0.02 : 0.20) : -0.18);
-    bloomPx(fx3, fy3, r * (0.9 + g.big * 0.7), [255, 190, 150], 0.5 * ext);
-    ctx.fillStyle = 'rgba(255,240,225,0.95)';
-    ctx.beginPath(); ctx.arc(fx3, fy3, r * (0.18 + 0.08 * g.big), 0, TAU); ctx.fill();
+    bloomPx(fx3, fy3, r * (0.9 + g.big * 0.7), [255, 190, 150], 0.5 * ext * k3);
+    ctx.fillStyle = 'rgba(255,240,225,' + (0.95 * k3).toFixed(3) + ')';
+    ctx.beginPath(); ctx.arc(fx3, fy3, r * (0.18 + 0.08 * g.big) * (0.55 + 0.45 * k3), 0, TAU); ctx.fill();
   }
   ctx.restore();
 }
@@ -7135,18 +7257,19 @@ function updateAmbience(dt) {
   const A = CFG.audio;
   // Recien asoma en la hora `droneFrom`: las tres primeras horas el juego suena como siempre.
   const h = clamp((game.hour - A.droneFrom) / Math.max(1, CFG.clock.hours - A.droneFrom), 0, 1);
-  let v = A.drone * h, oct = 0;
+  let v = A.drone * h;
   // ANTES DEL JEFE el colchon sube junto con el fieltro que se oscurece: la habitacion se pone
   // pesada antes de que pase nada.
   if (game.hour === CFG.clock.hours - 1 && !game.bossFight) {
     v += A.drone * 0.8 * clamp((game.hourT / hourDur() - 0.75) / 0.25, 0, 1);
   }
   if (game.bossFight) v *= 1.5;
-  // EL FRENESI SUBE UNA OCTAVA y no depende de la hora: es el mismo evento siempre. Antes lo
-  // agachaba, y una habitacion que se calla sin nada del otro lado se lee como que bajo el
-  // volumen - fue exactamente lo que Franco escucho. Ahora la habitacion CAMBIA.
-  if (frenzy > 0) { v = Math.max(v, CFG.frenzy.drone); oct = 1; }
-  droneSet(v, oct);
+  // EL FRENESI NO TOCA EL COLCHON. Probe dos cosas y las dos estuvieron mal: agacharlo (se oia
+  // como un bajon de volumen) y subirlo una octava (110 y 164.8 Hz en el parlante de un telefono
+  // = golpeteo + batido entre los dos senos, o sea un telefono vibrando - lo reporto Franco).
+  // Lo que marca el frenesi por audio es que el TICTAC SE CORTA los 6.5 s enteros: el reloj se
+  // fue de la habitacion. Eso no es un cambio de volumen, es una ausencia, y no necesita ayuda.
+  droneSet(v);
 }
 
 function loop(now) {
