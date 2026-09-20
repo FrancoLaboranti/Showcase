@@ -2464,6 +2464,146 @@ solo cuando algun sector libre completaria una linea. La informacion no se pierd
 sigue anunciando, y encima con el color correcto -, y el dorado pasa a ser un aviso con contenido:
 hay una linea a un paso.
 
+## EL CRASH DE MOVIL: el juego dibujaba dentro de un sprite (2026-09-20)
+
+Franco: la palanca andaba, el menu de arriba a la derecha respondia al toque pero no hacia nada,
+y el boton de info andaba y se podia desplazar.
+
+**Los sintomas eran el diagnostico.** Todo lo que siguio funcionando es DOM puro: la palanca, el
+panel de info y su arrastre a mano. Todo lo que "respondia pero no hacia nada" es DOM que cambia
+ESTADO DEL JUEGO y necesita que alguien vuelva a dibujar: pausa cambia `game.paused` y no se ve,
+reset vuelve al menu y no se ve. O sea, el lienzo dejo de actualizarse y el resto siguio vivo.
+No era un problema de controles.
+
+### La causa
+
+Dos lugares PISABAN la variable global `ctx` para dibujar en un lienzo auxiliar y la devolvian al
+final - `bakeSprite` y `bakeHandStrip`:
+
+```js
+const prev = ctx;
+ctx = cv.getContext('2d');       // sin comprobar
+ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+dibujar(S / 2, S / 2);           // si esto tira, no hay vuelta
+ctx = prev;                      // nunca se ejecuta
+```
+
+Si algo fallaba en el medio, **`ctx` se quedaba apuntando al lienzo auxiliar - o a `null` - para
+siempre**. A partir de ese frame el juego seguia corriendo, simulando y respondiendo, y dibujaba
+todo dentro de un sprite de 40 px que nadie mira.
+
+Dos maneras concretas de fallar, las dos propias del telefono:
+
+1. **`getContext('2d')` devuelve `null`.** iOS tiene techo de memoria de lienzos POR PESTANA y en
+   el Arcade todos los juegos viven en iframes de la misma pestana - esto ya le paso a este repo
+   con Pong. Reproducido en el test: el build viejo tira
+   `Cannot read properties of null (reading 'setTransform')` en `bakeSprite`.
+2. **`dibujar()` tira.** Y como `_bakes.set(...)` pasa DESPUES, el sprite no se cachea: se
+   reintenta el frame siguiente, y el siguiente, para siempre.
+
+Estos bakes no corren solo al cargar: `bakeSprite` corre cuando aparece un tamano o tipo de pieza
+nuevo y `bakeHandStrip` cada vez que cambia la mano. O sea, en mitad de una partida.
+
+### El arreglo
+
+`try/finally` en los dos, mas comprobacion del contexto, mas `blit` tolerando un sprite nulo, mas
+las mismas guardas en los otros tres lugares que crean lienzos auxiliares (`bakeDial`, el sprite
+de resplandor, la textura de fieltro).
+
+**Regla: un intercambio de variable global sin camino de vuelta es una bomba, no importa que la
+tire.** Si una funcion pisa estado global para trabajar, la restitucion va en `finally`, siempre.
+
+### Y que la proxima deje rastro
+
+Aparte de la causa hay un problema de DISENO que es el que convirtio un error en una partida
+muerta: **cualquier excepcion dentro de `loop()` congelaba el lienzo para siempre y en silencio.**
+`scheduleRaf()` es la primera linea de `loop`, asi que el frame siguiente ya esta pedido cuando la
+excepcion sale: el bucle seguia vivo tirando el mismo error eternamente.
+
+Eso no es un sintoma: es la razon por la que Franco no pudo decirme que paso. Ahora un frame que
+tira cuesta un frame, y la primera vez aparece un cartel en el DOM - lo unico que sigue vivo
+cuando el lienzo muere - con el mensaje del error.
+
+Escenario nuevo `ctxswap`. Contra el build anterior da tres fallas, incluida
+**"el juego quedo dibujando fuera de la pantalla"**: el crash de Franco, reproducido sin telefono.
+
+## Flush decia dos cosas distintas, y una era ilegible
+
+El HUD llamaba a `handDesc()` -efecto concreto segun el palo- y el inventario leia
+`HAND_BONUS[i].desc` -texto generico-. **No discrepaban por un error de transcripcion: leian
+fuentes distintas**, y una de las dos no sabia que el color depende del palo. Se unifico en
+`bonusDesc(i)`, que llaman las dos.
+
+Y el tamano: **medido, el efecto se dibujaba a `cw * 0.25` con `cw = S * 0.037`, o sea
+`S * 0.00925`. En el telefono acostado de Franco son 3.3 pixeles.** El piso del sistema
+tipografico del propio juego es `TS.cap = S * 0.0125`. No era letra chica: estaba por debajo de lo
+que el diseno admite.
+
+El arreglo tuvo dos pasos y el primero fue insuficiente. Subir el tamano base no alcanzaba porque
+**el tope real era el ANCHO**: el texto iba centrado sobre una tira pegada al borde izquierdo, asi
+que solo podia crecer hasta chocar contra el canto de la pantalla. Alineandolo a la izquierda con
+la tira puede estirarse hacia la derecha, que es donde no hay nada, hasta el borde del plato. De
+3.3 px paso a ~9.
+**Cuando un texto no entra, preguntarse si el problema es el tamano o el lugar.**
+
+## Los peones no coronan en frenesi
+
+Efecto colateral del arreglo de ayer, y tenia que aparecer: desde que la coronacion se mira todos
+los frames, el IMAN del frenesi -que arrastra las piezas hacia el jugador- empezo a meter peones
+en el centro y cada uno que pasaba coronaba. La regla de la casa ya estaba escrita: **en frenesi
+no pasa NADA amenazante**, y coronar es la amenaza que crece sola.
+
+## Dos tests que no median lo que decian
+
+Los dos aparecieron en la suite completa y **ninguno era una regresion del juego.**
+
+### `rngdet` comparaba la corrida de CALENTAMIENTO contra una asentada
+
+Bisecado: pasa en los cuatro commits anteriores y falla en `be01d88`. Parecia una regresion
+clarisima. Se instrumento la divergencia frame a frame: las dos corridas se separan en el
+**frame 1**. La pregunta decisiva fue correr TRES veces:
+
+    1a vs 2a: primer frame distinto = 1
+    2a vs 3a: primer frame distinto = -1   (identicas en 700 frames)
+
+**La simulacion sembrada es determinista; lo raro es la PRIMERA corrida de la pagina** - arranca
+con el primer frame despues de cargar, con su dt y sus lienzos recien horneados. Y lo decisivo:
+esto pasa IGUAL en los builds de anteayer, incluidos los que el test daba por buenos. El test
+venia comparando calentamiento contra asentada y pasaba de casualidad; los cambios de ayer hicieron
+que el juego consumiera azar en un patron algo distinto por pieza y esa diferencia de un frame
+dejo de lavarse.
+
+Se arreglo el TEST: descarta la corrida de calentamiento. Y quedo escrito lo que el modo diario
+garantiza de verdad: **la misma arena, las mismas reglas y las mismas cartas** - todo lo que
+decide la semilla -, no el mismo resultado, que depende del jugador y del ritmo de frames.
+
+### `barriles` dejaba orbes sueltos en la prueba del jefe
+
+Fallo una vez en la suite y no se reprodujo en 19 corridas aisladas. El escenario corre en modo
+LIBRE y deja **siete orbes rebotando** mientras comprueba que el barril no le pegue al jefe, que
+esta clavado en el centro. Un orbe cargado le hace dano a cualquier pieza, y 4 de dano es
+exactamente lo que hace uno.
+
+El test decia "el barril no le pega al jefe" y medía "nada le pega al jefe". Se le sacan los
+orbes. **Un test que a veces falla por algo que no esta probando es peor que no tenerlo: ensena a
+ignorar el rojo.**
+
+## Detalles de la misma tanda
+
+- **El numero de vida** pasa de `txtG` (sombra en diagonal) a `txtO` (contorno negro). Sobre una
+  barra que va de verde a amarillo a rojo, una sombra desplazada no separa el texto del fondo, lo
+  emborrona. `txtO` ya existia y esta documentado como "para lo que tiene que leerse encima de
+  cualquier cosa": no hubo que inventar nada.
+- **El barrido al morir** se saco. Queda solo en la VICTORIA, donde hace de telon antes de la
+  ceremonia de puntaje. Verificado: `sweep.dur` queda en 0 al morir y en 0.52 al ganar.
+- Se unificaron los dos bucles de achique de texto (`txtFit` y `medirFit`) en `fitPx`.
+
+### Un error mio que casi entra
+
+Escribi `S * 0.02` dentro de `drawHandStrip`, donde **`S` no esta en alcance** - vive en
+`drawHUD`. Lo cazo la revision antes de construir. El margen se expresa ahora en unidades de la
+propia tira, que es lo unico que esa funcion conoce.
+
 ## Lo que sigue en hold (2026-09-18)
 
 Franco descarto las propuestas para **CrazyTanks** (la aguja como rival en una carrera; los

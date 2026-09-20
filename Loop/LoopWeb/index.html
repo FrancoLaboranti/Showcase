@@ -879,6 +879,7 @@ function glowSprite(col) {
   const S = 72;
   s = document.createElement('canvas'); s.width = S; s.height = S;
   const c2 = s.getContext('2d');
+  if (!c2) return null;                               // sin contexto: sin resplandor, no sin juego
   const grd = c2.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
   grd.addColorStop(0, 'rgba(' + key + ',0.95)');
   grd.addColorStop(0.28, 'rgba(' + key + ',0.42)');
@@ -910,23 +911,43 @@ const _bakes = new Map();
 // Gradientes cacheados (la aguja del reloj). Viven acá, al lado de su limpieza, porque un
 // gradiente guarda COORDENADAS: a otra escala dibuja cualquier cosa y hay que tirarlo.
 const _handGrads = new Map();
+// ── HORNEAR UN SPRITE ──
+// Esta función PISA LA VARIABLE GLOBAL `ctx` para que los helpers de dibujo escriban en el lienzo
+// auxiliar, y la devuelve al final. Ese "al final" era el problema: si algo fallaba en el medio,
+// `ctx` se quedaba apuntando al auxiliar -o a `null`- PARA SIEMPRE, y a partir de ahí el juego
+// seguía corriendo y dibujando todo dentro de un sprite de 40 px que nadie mira. La pantalla
+// quedaba congelada en el último frame bueno mientras el resto respondía: exactamente el crash
+// que reportó Franco en el teléfono.
+// Dos maneras concretas de fallar, las dos propias del móvil: `getContext` devuelve `null` bajo
+// presión de memoria (iOS tiene techo de lienzos POR PESTAÑA y en el Arcade todos los juegos
+// comparten pestaña - ya pasó con Pong), o `dibujar()` tira.
+// **Un intercambio de variable global sin camino de vuelta es una bomba, no importa qué la tire.**
 function bakeSprite(key, half, dibujar) {
   let sp = _bakes.get(key);
   if (sp) return sp;
   const S = Math.max(2, Math.ceil(half) * 2);
   const cv = document.createElement('canvas');
   cv.width = Math.max(1, Math.round(S * dpr)); cv.height = cv.width;
+  const c2 = cv.getContext('2d');
+  // Sin contexto no se hornea y se sigue jugando: un sprite que falta es una pieza que no se ve
+  // un rato, un `ctx` en null es la partida entera.
+  if (!c2) return null;
   const prev = ctx;
-  ctx = cv.getContext('2d');
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  dibujar(S / 2, S / 2);
-  ctx = prev;
+  try {
+    ctx = c2;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    dibujar(S / 2, S / 2);
+  } finally {
+    ctx = prev;                                       // pase lo que pase
+  }
   sp = { cv, h: S / 2, S };
   _bakes.set(key, sp);
   return sp;
 }
 function clearBakes() { _bakes.clear(); _handGrads.clear(); }
-function blit(sp, x, y) { ctx.drawImage(sp.cv, x - sp.h, y - sp.h, sp.S, sp.S); }
+// Tolera un sprite nulo: `bakeSprite` devuelve `null` si el navegador no da contexto, y el juego
+// tiene que seguir andando con una pieza menos dibujada en vez de morirse.
+function blit(sp, x, y) { if (sp) ctx.drawImage(sp.cv, x - sp.h, y - sp.h, sp.S, sp.S); }
 
 // ════════════════ BARRIDO DE AGUJA (transiciones) ════════════════
 // La aguja barre y lo que barrio ya cambio. Lo NUEVO ya esta dibujado debajo; encima queda una
@@ -1070,25 +1091,22 @@ function panel(x, y, w, h, r, accent, glow) {
   ctx.stroke();
 }
 // Texto que se achica hasta entrar en `maxW` (los nombres largos de carta se salían del marco)
-// Cuanto va a MEDIR un texto pasado por `txtFit`, sin dibujarlo. Corre el mismo bucle de
-// achique a proposito: si el ancho se calculara aparte, los dos numeros se separarian en cuanto
-// alguien tocara uno y el resultado seria una caja que no calza con su texto.
-function medirFit(s, px, maxW, weight) {
+// ── UN SOLO bucle de achique para todo el juego ──
+// `fitPx` decide el tamaño y deja la fuente puesta; `medirFit` dice cuánto midió y `txtFit`
+// dibuja. Antes el bucle estaba copiado en dos lados: dos copias del mismo cálculo se separan en
+// cuanto alguien toca una, y el síntoma sería una caja que no calza con su texto.
+function fitPx(s, px, maxW, weight) {
   let f = px;
   for (let i = 0; i < 8; i++) {
     ctx.font = (weight || 700) + ' ' + Math.round(f) + 'px ' + FONT;
     if (ctx.measureText(s).width <= maxW || f < 6) break;
     f *= 0.9;
   }
-  return ctx.measureText(s).width;
+  return f;
 }
+function medirFit(s, px, maxW, weight) { fitPx(s, px, maxW, weight); return ctx.measureText(s).width; }
 function txtFit(s, x, y, px, maxW, col, weight, align) {
-  let f = px;
-  for (let i = 0; i < 8; i++) {
-    ctx.font = (weight || 700) + ' ' + Math.round(f) + 'px ' + FONT;
-    if (ctx.measureText(s).width <= maxW || f < 6) break;
-    f *= 0.9;
-  }
+  fitPx(s, px, maxW, weight);
   ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = col; ctx.fillText(s, x, y);
 }
@@ -1604,6 +1622,7 @@ function feltPattern(g) {
   const cv = document.createElement('canvas');
   cv.width = N; cv.height = N;
   const c2 = cv.getContext('2d');
+  if (!c2) return null;                               // sin fieltro, pero con juego
   const img = c2.createImageData(N, N);
   const d = img.data;
   for (let i = 0; i < N * N; i++) {
@@ -1624,6 +1643,9 @@ function bakeDial() {
   const cv = document.createElement('canvas');
   cv.width = Math.max(1, Math.round(S * dpr)); cv.height = cv.width;
   const g = cv.getContext('2d');
+  // Sin contexto no hay plato horneado. Se abandona y se reintenta en el próximo `resize`, en vez
+  // de tirar todos los frames: el techo de lienzos de iOS es un estado real, no una hipótesis.
+  if (!g) { dialCv = null; return; }
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
   const O = S / 2, R = PXR;                          // centro y radio dentro del bake
   const X = x => O + x * R, Y = y => O + y * R;
@@ -3783,7 +3805,12 @@ function updateEnemies(dt) {
       // siguiente movimiento lo sacaba. Ahora llegar es llegar, sea cual sea el motivo.
       // Va acá, después de que el empuje se volvió posición, para que el frame en que lo
       // empujaron ya cuente.
-      if (e.kind === 'peon' && !e.dead && hyp(e.x, e.y) < CELL * 1.2) { promotePawn(e); continue; }
+      // EN FRENESI NO CORONA. Efecto colateral del arreglo de ayer, y tenia que aparecer: desde
+      // que la coronacion se mira todos los frames, el IMAN del frenesi -que arrastra las piezas
+      // hacia el jugador- empezo a meter peones en el centro, y cada uno que pasaba coronaba.
+      // La regla de la casa ya estaba escrita: en frenesi no pasa NADA amenazante, y coronar es
+      // la amenaza que crece sola.
+      if (e.kind === 'peon' && !e.dead && frenzy <= 0 && hyp(e.x, e.y) < CELL * 1.2) { promotePawn(e); continue; }
     } else { e.kx = e.ky = 0; e.x = 0; e.y = 0; }
 
     // ── IMÁN DEL FRENESÍ ── hacia la canica, más lento que el andar propio de una pieza:
@@ -4829,7 +4856,7 @@ const HAND_BONUS = [
   { name: 'TWO PAIR',        desc: 'Score +20%, Damage +10%' },
   { name: 'THREE OF A KIND', desc: 'Damage +25%' },
   { name: 'STRAIGHT',        desc: 'Speed +18%, Thread +25%' },
-  { name: 'FLUSH',           desc: 'The whole suit overflows' },
+  { name: 'FLUSH',           desc: 'Amplifies your suit' },
   { name: 'FULL HOUSE',      desc: 'Damage +35%, Score +35%' },
   { name: 'FOUR OF A KIND',  desc: 'Damage +70%, +60 health' },
   { name: 'STRAIGHT FLUSH',  desc: 'Everything doubled' },
@@ -4857,15 +4884,23 @@ function evalHand(cards) {
   if (counts[0] === 2) return 1;
   return 0;
 }
-// Qué te da la mano actual, en números. `HAND_BONUS[i].desc` alcanza para todas menos el
-// COLOR, cuyo efecto depende del palo - y "The whole suit overflows" no le dice nada a nadie.
+// Qué da una jugada, en números. `HAND_BONUS[i].desc` alcanza para todas menos el COLOR, cuyo
+// efecto depende del PALO.
+//
+// **UNA sola fuente para las dos pantallas.** El HUD llamaba a `handDesc()` (efecto concreto) y
+// el inventario leía `HAND_BONUS[i].desc` directo (texto genérico), así que el color decía dos
+// cosas distintas en dos lugares a la vez. No discrepaban por un error de transcripción: leían
+// fuentes distintas, y una de las dos no sabía que el color depende del palo.
+// Ahora las dos llaman acá y no pueden divergir aunque alguien toque una sola.
 const FLUSH_DESC = ['Thread +55%, Bounces +40%', '+70 health, +40 shield',
                     'Score +80%', 'Magnet +0.3, Orbs +120%, Charge x2'];
-function handDesc() {
-  const i = run.handIdx;
-  if (i === 5) { const s = flushSuit(); return s >= 0 ? FLUSH_DESC[s] : HAND_BONUS[5].desc; }
+function bonusDesc(i) {
+  // El color sólo puede ser concreto cuando ES tu mano: sin las cinco cartas no hay palo del que
+  // hablar, y ahí el texto genérico es la respuesta honesta.
+  if (i === 5 && i === run.handIdx) { const s = flushSuit(); if (s >= 0) return FLUSH_DESC[s]; }
   return HAND_BONUS[i] ? HAND_BONUS[i].desc : '';
 }
+function handDesc() { return bonusDesc(run.handIdx); }
 function flushSuit() {
   const s = {};
   for (const c of hand) s[c.su] = (s[c.su] || 0) + 1;
@@ -6282,7 +6317,9 @@ function endRun(won) {
   frenzy = 0;                                       // updateFrenzy sólo corre en 'play': si no, queda colgado
   toasts.length = 0;                                  // los carteles pisaban el título del resumen
   run.newBest = saveBest();
-  startSweep(0.52);                                   // la unica pausa del juego que dice algo
+  // El barrido queda SOLO en la victoria, donde hace de telon antes de la ceremonia de puntaje.
+  // En la derrota Franco lo pidio afuera: la pantalla entra sin transicion.
+  if (won) startSweep(0.52);
   droneOff();
   LS.set('total', LS.get('total', 0) + run.score);
   LS.set('bestHour', Math.max(LS.get('bestHour', 0), game.hour));
@@ -6371,7 +6408,12 @@ function drawHUD() {
     ctx.fillStyle = 'rgba(125,249,255,0.72)';
     roundRectPath(bx, by - bh * 0.62, bw * clamp(P.sh / P.shMax, 0, 1), bh * 0.45, bh * 0.22); ctx.fill();
   }
-  txtG(Math.ceil(P.hp) + ' / ' + Math.round(P.hpMax), bx + bw * 0.5, by + bh * 0.5, bh * 0.78, C.ink);
+  // CONTORNEADO y no con sombra: el fondo de este numero es la propia barra de vida, que va de
+  // verde a amarillo a rojo. Una sombra en diagonal no separa el texto de un fondo claro, lo
+  // emborrona. `txtO` ya existia justo para esto - "lo que tiene que leerse encima de cualquier
+  // cosa" - y no hubo que inventar nada.
+  txtO(Math.ceil(P.hp) + ' / ' + Math.round(P.hpMax), bx + bw * 0.5, by + bh * 0.5, bh * 0.78,
+       C.ink, 'center', 700, Math.max(2, bh * 0.22));
 
   // ── Columna derecha: hora, regla, multiplicadores ──
   const topR = pad + 34 + S * 0.022;
@@ -6589,21 +6631,28 @@ function bakeHandStrip(cw) {
   stripW = Math.ceil(total) + pad2 * 2; stripH = Math.ceil(ch) + pad2 * 2;
   const cv = document.createElement('canvas');
   cv.width = Math.max(1, Math.round(stripW * dpr)); cv.height = Math.max(1, Math.round(stripH * dpr));
+  const c2 = cv.getContext('2d');                 // los helpers de dibujo escriben en `ctx`
+  // El mismo intercambio de global que `bakeSprite`, y el mismo arreglo: sin contexto no se
+  // hornea, y el `ctx` global vuelve pase lo que pase. `drawHandStrip` ya tolera no tener bitmap.
+  if (!c2) { stripCv = null; stripKey = ''; return; }
   const prev = ctx;
-  ctx = cv.getContext('2d');                      // los helpers de dibujo escriben en `ctx`
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  let x = pad2;
-  for (let i = 0; i < HAND_MAX; i++) {
-    const c = hand[i];
-    if (c) drawCard(x, pad2, cw, ch, c, { mini: true, flat: true, mark: run.handIdx > 0 && inHand(i) });
-    else {
-      ctx.fillStyle = 'rgba(14,20,32,0.42)';
-      roundRectPath(x, pad2, cw, ch, cw * 0.075); ctx.fill();
-      ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.stroke();
+  try {
+    ctx = c2;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    let x = pad2;
+    for (let i = 0; i < HAND_MAX; i++) {
+      const c = hand[i];
+      if (c) drawCard(x, pad2, cw, ch, c, { mini: true, flat: true, mark: run.handIdx > 0 && inHand(i) });
+      else {
+        ctx.fillStyle = 'rgba(14,20,32,0.42)';
+        roundRectPath(x, pad2, cw, ch, cw * 0.075); ctx.fill();
+        ctx.strokeStyle = C.line; ctx.lineWidth = 1; ctx.stroke();
+      }
+      x += cw + gap;
     }
-    x += cw + gap;
+  } finally {
+    ctx = prev;
   }
-  ctx = prev;
   stripCv = cv;
 }
 function drawHandStrip(cx, cy, cw, big) {
@@ -6621,8 +6670,26 @@ function drawHandStrip(cx, cy, cw, big) {
       ctx.drawImage(stripCv, cx - total / 2 - pad2, cy - ch / 2 - pad2, stripW, stripH);
     }
     if (run.handIdx > 0) {
-      txtG(HAND_BONUS[run.handIdx].name, cx, cy + ch * 0.80, cw * 0.34, C.gold);
-      txt(handDesc(), cx, cy + ch * 1.14, cw * 0.25, C.inkDim, 'center', 500);
+      // MEDIDO: esto era `cw * 0.25` con `cw = S * 0.037`, o sea S * 0.00925. En un teléfono
+      // acostado (S ≈ 360) son 3.3 píxeles - por debajo de `TS.cap`, que es el piso del sistema
+      // tipográfico del propio juego. No era letra chica, era letra que no se puede leer.
+      // Ahora +68%, con achique automático para que "Magnet +0.3, Orbs +120%, Charge x2" y
+      // "STRAIGHT FLUSH" no se salgan de la tira.
+      // ALINEADO A LA IZQUIERDA, con la tira. Centrado no servia: la tira vive pegada al borde
+      // izquierdo, asi que un texto centrado en ella solo puede crecer hasta chocar con el borde
+      // - el ancho disponible era el tope real, no el tamano base que yo eligiera. Alineandolo al
+      // arranque de la tira puede estirarse hacia la derecha, que es donde no hay nada, hasta el
+      // canto del plato.
+      const xTxt = cx - total / 2;
+      // `S` NO esta en alcance aca (vive en `drawHUD`): el margen se expresa en unidades de la
+      // propia tira, que es lo unico que esta funcion conoce. Casi me lo llevo puesto.
+      const anchoTxt = Math.max(total * 1.1, CX - sr(1) - xTxt - cw * 0.6);
+      txtFit(HAND_BONUS[run.handIdx].name, xTxt, cy + ch * 0.84, cw * 0.62, anchoTxt, C.gold, 800, 'left');
+      // CONTORNEADO: es letra chica encima del plato, que cambia de color debajo. Una sombra en
+      // diagonal (`txt`/`txtG`) la emborrona; el contorno la despega.
+      const dsc = bonusDesc(run.handIdx);
+      const fD2 = fitPx(dsc, cw * 0.62, anchoTxt, 600);
+      txtO(dsc, xTxt, cy + ch * 1.28, fD2, C.ink, 'left', 600, Math.max(1.6, fD2 * 0.22));
     }
     return;
   }
@@ -6700,7 +6767,7 @@ function drawHandPanel() {
       // La barra abraza SU texto. Con las filas a la derecha, una barra del ancho de la columna
       // dejaba media barra vacia a la izquierda y parecia un error de alineacion.
       const wN = medirFit(HAND_BONUS[i].name, fsN, ancho, 800);
-      const wD = medirFit(HAND_BONUS[i].desc, fsD, ancho, 600);
+      const wD = medirFit(bonusDesc(i), fsD, ancho, 600);
       const wMax = Math.min(ancho, Math.max(wN, wD));
       const bx = land ? x0 + ancho - wMax : x0;
       ctx.fillStyle = 'rgba(232,180,74,0.15)';
@@ -6714,7 +6781,7 @@ function drawHandPanel() {
     // su derecha. En vertical la lista va debajo y centrada, así que ahí sigue a la izquierda.
     const ax = land ? x0 + ancho : x0, al = land ? 'right' : 'left';
     txtFit(HAND_BONUS[i].name, ax, y - fsD * 0.52, fsN, ancho, act ? C.goldHi : C.inkFaint, act ? 800 : 600, al);
-    txtFit(HAND_BONUS[i].desc, ax, y + fsN * 0.52, fsD, ancho, act ? C.green : C.inkDim, act ? 600 : 400, al);
+    txtFit(bonusDesc(i), ax, y + fsN * 0.52, fsD, ancho, act ? C.green : C.inkDim, act ? 600 : 400, al);
   }
 }
 
@@ -7168,7 +7235,38 @@ const QA = { simT: 0 };
 
 // rAF con dedupe: loop() también puede llamarse a mano (QA headless con Chrome, que no
 // dispara rAF de forma sostenida bajo --virtual-time-budget) sin duplicar la cadena.
-function scheduleRaf() { if (rafPend) return; rafPend = true; requestAnimationFrame(t => { rafPend = false; loop(t); }); }
+// ── UN FRAME ROTO CUESTA UN FRAME, NO LA PARTIDA ──
+// `scheduleRaf()` es la PRIMERA línea de `loop`, así que cuando una excepción sale del frame el
+// siguiente ya está pedido: el bucle seguía vivo tirando el mismo error eternamente, con el
+// lienzo congelado y el DOM respondiendo. Nada en pantalla decía que algo había pasado, y por eso
+// un error transitorio se volvía una partida muerta que nadie podía diagnosticar.
+// Esto no tapa el bug de turno: hace que el bug de turno cueste un frame y DEJE RASTRO.
+let errN = 0;
+function onFrameError(err) {
+  errN++;
+  if (errN > 1) return;                               // una sola vez: no inundar
+  try {
+    console.error('LOOP', err);
+    // El cartel va en el DOM y no en el lienzo a propósito: cuando el render muere, el DOM es lo
+    // único que queda vivo - es justo lo que Franco pudo seguir usando.
+    const d = document.createElement('div');
+    d.style.cssText = 'position:fixed;left:8px;right:8px;top:8px;z-index:99;padding:8px 10px;' +
+      'border-radius:10px;background:rgba(120,16,32,0.94);border:1px solid #ff6b81;color:#ffe;' +
+      'font:600 12px/1.4 monospace;white-space:pre-wrap;word-break:break-word';
+    d.textContent = 'render error: ' + (err && err.message ? err.message : err);
+    d.addEventListener('pointerdown', () => d.remove());
+    document.body.appendChild(d);
+  } catch (e) { /* si hasta esto falla, no hay nada que hacer */ }
+}
+function scheduleRaf() {
+  if (rafPend) return;
+  rafPend = true;
+  requestAnimationFrame(t => {
+    rafPend = false;
+    try { loop(t); }
+    catch (err) { onFrameError(err); scheduleRaf(); }  // por si tiró ANTES de pedir el siguiente
+  });
+}
 
 function stepSim(dt) {
   if (game.state !== 'play') return false;           // murió (o cambió de pantalla) en el subpaso anterior
