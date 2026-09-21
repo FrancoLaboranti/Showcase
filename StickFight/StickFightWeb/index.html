@@ -241,6 +241,7 @@ const CFG = {
     // ── capa de "vida": ruido lento incommensurable para que nada quede clavado ──
     idleAmp: 1.0,                      // multiplicador global del wobble de idle/guardia
     bounceHz: 2.15, bounceAmp: 0.014,  // rebote de guardia (boxeador que no se queda quieto)
+    blendT: 0.075,                     // empalme de targetPose entre estados (ver buildPose)
     popT: 0.085, popAmt: 0.55,         // compresión post-despegue (anticipación sin retrasar física)
     swayAmp: 0.020,                    // balanceo lateral de pelvis parado (peso de una pierna a la otra)
     landT: 0.26,                       // duración total del ciclo de aterrizaje (squash + rebote)
@@ -569,10 +570,26 @@ const J_LINEAR = [J.dy, J.dx];
 const P_ = { pelvis: 0, neck: 1, head: 2, shoL: 3, elbL: 4, hanL: 5, shoR: 6, elbR: 7, hanR: 8, kneL: 9, ftL: 10, kneR: 11, ftR: 12, chest: 13 };
 const NP = 14;
 // Largos de hueso (fracciones de CH) — sanity: piernas 0.39 + torso 0.30 + cuello 0.08 + cabeza 0.20 ≈ 0.97
+// ── PROPORCIONES (revisadas 2026-09-22) ─────────────────────────────────────────────────────
+// El cuello medía 0.08·CH y los hombros colgaban 0.07·CH por debajo del tope de la columna, así
+// que entre el hombro y la base de la cabeza quedaban 0.152·CH de aire: el 15 % de la altura del
+// personaje en cuello pelado. La cabeza parecía pegada con un palito. (Y la camisa encima se
+// cerraba en PUNTA a la altura del hombro, así que los brazos salían del cuello.)
+//
+// El arreglo mantiene la cabeza EXACTAMENTE donde estaba —torso + neck + headR sigue dando
+// 0.48·CH— y sube los hombros 0.10·CH metiéndolos bajo la cabeza:
+// El hueco se reparte en TRES movimientos chicos en vez de uno grande, porque cada uno tiene su
+// costo: subir el hombro acorta la extension del punazo (la mano esta fija), bajar la cabeza
+// mueve su hurtbox, y agrandarla cambia la silueta.
+//     antes: torso 0.30  + neck 0.08  + headR 0.10  = 0.48 · hombro = 0.30 − 0.07 = 0.23
+//     ahora: torso 0.31  + neck 0.022 + headR 0.108 = 0.44 · hombro = 0.31 − 0.04 = 0.27
+// Resultado: el cuello pelado pasa de 0.152·CH (37 px) a 0.064·CH (16 px). El hombro sube
+// 10 px (los punos se re-resolvieron por IK para que la mano caiga EXACTO donde caia), la
+// cabeza baja 10 px y crece un 8 %. El personaje queda 3 % mas bajo.
 const B = {
-  torso: 0.30 * CH, neck: 0.08 * CH, headR: 0.10 * CH,
+  torso: 0.31 * CH, neck: 0.022 * CH, headR: 0.108 * CH,
   uArm: 0.16 * CH, fArm: 0.15 * CH, thigh: 0.20 * CH, shin: 0.19 * CH,
-  shoOff: 0.025 * CH, hipOff: 0.02 * CH, shoDrop: 0.07 * CH,
+  shoOff: 0.025 * CH, hipOff: 0.02 * CH, shoDrop: 0.04 * CH,
 };
 // La columna se parte en la unión lumbar/torácica: 42 % abajo, 58 % arriba.
 B.spineLo = B.torso * 0.42; B.spineUp = B.torso - B.spineLo;   // la resta garantiza suma EXACTA
@@ -602,9 +619,16 @@ function fk(pose, pts, x, y, facing) {
   const ux = Math.sin(ua) * f, uy = -Math.cos(ua);
   const nx = cx0 + B.spineUp * ux, ny = cy0 + B.spineUp * uy;
   pts[2] = nx; pts[3] = ny;                                          // cuello (tope del torso)
-  const ha = ua + pose[J.head];                                      // la cabeza cuelga del torso ALTO
-  pts[4] = nx + (B.neck + B.headR) * Math.sin(ha) * f;               // centro de cabeza
-  pts[5] = ny - (B.neck + B.headR) * Math.cos(ha);
+  // El cuello es parte de la COLUMNA, no de la cabeza: sigue el ángulo del torso alto y el
+  // atlas (su tope) es el pivote del cráneo. Antes el DOF `head` giraba el conjunto cuello+
+  // cabeza desde la base, con un brazo de palanca de 0.13·CH: al mirar hacia abajo (agacharse,
+  // encajar un golpe) la cabeza se iba de paseo y el cuello se veía estirado en diagonal.
+  // Ahora la palanca es sólo el radio del cráneo y el cuello no cambia de largo nunca.
+  // Con head = 0 el punto es EXACTAMENTE el mismo de antes (los dos tramos son colineales).
+  const ax = nx + B.neck * ux, ay = ny + B.neck * uy;                // atlas (punto DERIVADO)
+  const ha = ua + pose[J.head];
+  pts[4] = ax + B.headR * Math.sin(ha) * f;                          // centro de cabeza
+  pts[5] = ay - B.headR * Math.cos(ha);
   // hombros: sobre el torso ALTO, apenas bajo el cuello, con offset de profundidad (L atrás, R adelante)
   const sx = nx - B.shoDrop * ux, sy = ny - B.shoDrop * uy;
   pts[P_.shoL * 2] = sx - B.shoOff * f; pts[P_.shoL * 2 + 1] = sy;
@@ -731,6 +755,10 @@ const POSES = {
 // `fw` = footwork (offset de los pies durante el golpe, ver feetIK) · `drive` = envolvente de
 // peso/torso que SÓLO existe fuera de la ventana activa (ver atkDrive).
 const MASK_PUNCH = [J.torso, J.head, J.aLu, J.aLl, J.aRu, J.aRl, J.chest, J.dx];
+// El LUNGE agrega `dy`: es el único puño que baja el centro de masa dentro de la ventana activa
+// (ver su keytrack). Con dy en la máscara el valor sale del keytrack y no de la base, así que
+// la altura del impacto sigue siendo determinista.
+const MASK_PUNCH_DY = MASK_PUNCH.concat([J.dy]);
 const MASK_ALL = [J.torso, J.head, J.aLu, J.aLl, J.aRu, J.aRl, J.lLu, J.lLl, J.lRu, J.lRl, J.dy, J.chest, J.dx];
 const MOVES = {
   // ═══ CADENAS DE COMBO (chain = próximo move si tocás PUÑO durante recovery; chainAlt = PATADA)
@@ -744,9 +772,9 @@ const MOVES = {
     poses: [
       { p: { chest: -0.08, dx: -0.025, head: -0.09, aLu: 0.34, aLl: 2.66 }, at: 0.018, ease: easeOutCubic },
       { p: { torso: 0.02, aRu: 0.16, aRl: 2.48, aLu: 0.30, aLl: 2.62, chest: -0.13, dx: 0 }, at: 0.035, ease: easeOutCubic },   // carga: puno al menton
-      { p: { torso: 0.24, head: 0.05, aRu: 1.2298, aRl: 0.4882, aLu: 0.6, aLl: 2.05, chest: 0.1, dx: 0 }, at: 0.07, ease: easeOutCubic },   // contacto (autorada 8% pasada)
-      { p: { torso: 0.2389, aRu: 1.2092, aRl: 0.5132, head: 0.02, aLu: 0.30, aLl: 2.60, chest: 0.11, dx: 0 }, at: 0.095 },    // PIN mitad activa
-      { p: { torso: 0.2313, aRu: 1.2122, aRl: 0.5194, head: -0.01, aLu: 0.28, aLl: 2.58, chest: 0.1, dx: 0 }, at: 0.12 },   // PIN fin activa
+      { p: { torso: 0.24, head: 0.05, aRu: 1.1121, aRl: 0.7540, aLu: 0.6, aLl: 2.05, chest: 0.1, dx: 0 }, at: 0.07, ease: easeOutCubic },   // contacto (autorada 8% pasada)
+      { p: { torso: 0.2389, aRu: 1.0935, aRl: 0.7755, head: 0.02, aLu: 0.30, aLl: 2.60, chest: 0.11, dx: 0 }, at: 0.095 },    // PIN mitad activa
+      { p: { torso: 0.2313, aRu: 1.1012, aRl: 0.7699, head: -0.01, aLu: 0.28, aLl: 2.58, chest: 0.1, dx: 0 }, at: 0.12 },   // PIN fin activa
       { p: { torso: 0.16, head: 0.03, aRu: 0.42, aRl: 2.46, aLu: 0.26, aLl: 2.60, chest: 0.24, dx: 0.03 }, at: 0.175, ease: easeOutCubic },   // recoge pasandose
       { p: { torso: 0.10, head: 0.04, aRu: 0.52, aRl: 2.14, aLu: 0.22, aLl: 2.54, chest: 0.03, dx: 0 }, at: 0.26, ease: easeInOutCubic },
     ],
@@ -761,9 +789,9 @@ const MOVES = {
     poses: [
       { p: { chest: -0.14, dx: -0.03, head: -0.11, aRu: 0.60, aRl: 2.34 }, at: 0.022, ease: easeOutCubic },
       { p: { torso: -0.10, aLu: 0.02, aLl: 2.62, aRu: 0.58, aRl: 2.28, chest: -0.24, dx: 0 }, at: 0.045, ease: easeOutCubic },   // carga: cadera atras, puno al menton
-      { p: { torso: 0.42, head: 0.08, aLu: 1.2141, aLl: 0.5052, aRu: 0.65, aRl: 2.1, chest: 0.16, dx: 0 }, at: 0.09, ease: easeOutCubic },
-      { p: { torso: 0.4181, aLu: 1.198, aLl: 0.5216, head: 0.05, aRu: 0.50, aRl: 2.34, chest: 0.17, dx: 0 }, at: 0.12 },     // PIN mitad activa
-      { p: { torso: 0.4051, aLu: 1.1884, aLl: 0.5383, head: 0.01, aRu: 0.47, aRl: 2.38, chest: 0.16, dx: 0 }, at: 0.15 },    // PIN fin activa
+      { p: { torso: 0.42, head: 0.08, aLu: 1.0735, aLl: 0.8679, aRu: 0.65, aRl: 2.1, chest: 0.16, dx: 0 }, at: 0.09, ease: easeOutCubic },
+      { p: { torso: 0.4181, aLu: 1.0596, aLl: 0.8809, head: 0.05, aRu: 0.50, aRl: 2.34, chest: 0.17, dx: 0 }, at: 0.12 },     // PIN mitad activa
+      { p: { torso: 0.4051, aLu: 1.0533, aLl: 0.8850, head: 0.01, aRu: 0.47, aRl: 2.38, chest: 0.16, dx: 0 }, at: 0.15 },    // PIN fin activa
       { p: { torso: 0.30, head: -0.03, aLu: 0.30, aLl: 2.54, aRu: 0.52, aRl: 2.26, chest: 0.34, dx: 0.036 }, at: 0.22, ease: easeOutCubic },
       { p: { torso: 0.13, head: 0.04, aLu: 0.22, aLl: 2.55, aRu: 0.50, aRl: 2.15, chest: 0.04, dx: 0 }, at: 0.34, ease: easeInOutCubic },
     ],
@@ -779,9 +807,9 @@ const MOVES = {
     poses: [
       { p: { chest: -0.16, dx: -0.03, head: -0.15, aLu: 0.38, aLl: 2.60 }, at: 0.024, ease: easeOutCubic },
       { p: { torso: -0.26, head: -0.10, aRu: 2.30, aRl: 2.30, aLu: 0.40, aLl: 2.58, chest: -0.28, dx: 0 }, at: 0.05, ease: easeOutCubic },   // enrosque del gancho
-      { p: { torso: 0.38, head: 0.08, aRu: 1.2276, aRl: 0.5015, aLu: 0.5, aLl: 1.95, chest: 0.14, dx: 0 }, at: 0.11, ease: easeOutCubic },   // contacto (giro cruzado)
-      { p: { torso: 0.3795, aRu: 1.2124, aRl: 0.5178, head: 0.06, aLu: 0.28, aLl: 2.56, chest: 0.15, dx: 0 }, at: 0.13 },     // PIN mitad activa
-      { p: { torso: 0.3723, aRu: 1.2332, aRl: 0.4986, head: 0.01, aLu: 0.26, aLl: 2.60, chest: 0.13, dx: 0 }, at: 0.16 },    // PIN fin activa
+      { p: { torso: 0.38, head: 0.08, aRu: 1.0898, aRl: 0.8452, aLu: 0.5, aLl: 1.95, chest: 0.14, dx: 0 }, at: 0.11, ease: easeOutCubic },   // contacto (giro cruzado)
+      { p: { torso: 0.3795, aRu: 1.0765, aRl: 0.8590, head: 0.06, aLu: 0.28, aLl: 2.56, chest: 0.15, dx: 0 }, at: 0.13 },     // PIN mitad activa
+      { p: { torso: 0.3723, aRu: 1.0963, aRl: 0.8369, head: 0.01, aLu: 0.26, aLl: 2.60, chest: 0.13, dx: 0 }, at: 0.16 },    // PIN fin activa
       { p: { torso: 0.25, head: -0.06, aRu: 0.44, aRl: 2.48, aLu: 0.28, aLl: 2.58, chest: 0.32, dx: 0.034 }, at: 0.235, ease: easeOutCubic },
       { p: { torso: 0.12, head: 0.04, aRu: 0.50, aRl: 2.15, aLu: 0.22, aLl: 2.55, chest: 0.03, dx: 0 }, at: 0.36, ease: easeInOutCubic },
     ],
@@ -796,9 +824,9 @@ const MOVES = {
     poses: [
       { p: { chest: 0.34, dx: -0.02, head: 0.22, aLu: 0.30, aLl: 2.64 }, at: 0.032, ease: easeInOutCubic },
       { p: { torso: 0.5, head: 0.1, aRu: -0.5, aRl: 1.3, aLu: 0.30, aLl: 2.62, dy: 0.14, chest: 0.06, dx: 0 }, at: 0.07, ease: easeInOutCubic },   // OJO: aRu/aRl acá gobiernan parte de la ACTIVA (0.10-0.13): intocables
-      { p: { torso: -0.18, head: -0.12, aRu: 2.4213, aRl: 0.4219, aLu: 0.55, aLl: 2.0, dy: -0.03, chest: 0.06, dx: 0 }, at: 0.13, ease: easeOutCubic },
-      { p: { torso: -0.1799, aRu: 2.4206, aRl: 0.4221, dy: -0.03, head: -0.17, aLu: 0.26, aLl: 2.62, chest: 0.06, dx: 0 }, at: 0.15 },      // PIN mitad activa
-      { p: { torso: -0.1747, aRu: 2.4108, aRl: 0.4116, dy: -0.0288, head: -0.2, aLu: 0.24, aLl: 2.66, chest: 0.05, dx: 0 }, at: 0.20 },   // PIN fin activa
+      { p: { torso: -0.18, head: -0.12, aRu: 2.4595, aRl: 0.3155, aLu: 0.55, aLl: 2.0, dy: -0.03, chest: 0.06, dx: 0 }, at: 0.13, ease: easeOutCubic },
+      { p: { torso: -0.1799, aRu: 2.4588, aRl: 0.3158, dy: -0.03, head: -0.17, aLu: 0.26, aLl: 2.62, chest: 0.06, dx: 0 }, at: 0.15 },      // PIN mitad activa
+      { p: { torso: -0.1747, aRu: 2.4542, aRl: 0.2942, dy: -0.0288, head: -0.2, aLu: 0.24, aLl: 2.66, chest: 0.05, dx: 0 }, at: 0.20 },   // PIN fin activa
       { p: { torso: 0.2, head: 0.12, aRu: 1.45, aRl: 1.55, aLu: 0.26, aLl: 2.58, dy: 0.09, chest: -0.28, dx: 0.026 }, at: 0.32, ease: easeOutCubic },
       { p: { torso: 0.05, head: 0.02, aRu: 0.56, aRl: 2.10, aLu: 0.22, aLl: 2.55, dy: 0.02, chest: 0.02, dx: 0 }, at: 0.52, ease: easeInOutCubic },
     ],
@@ -904,9 +932,9 @@ const MOVES = {
     poses: [
       { p: { chest: -0.1, dx: 0, head: -0.08, aLu: 0.26, aLl: 2.10 }, at: 0.013, ease: easeOutCubic },
       { p: { torso: 0.05, aRu: 0.22, aRl: 2.35, aLu: 0.24, aLl: 2.15, chest: -0.17 }, at: 0.03, ease: easeOutCubic },
-      { p: { torso: 0.28, head: 0.04, aRu: 1.1979, aRl: 0.5252, aLu: 0.45, aLl: 1.6, chest: 0.12 }, at: 0.06, ease: easeOutCubic },
-      { p: { torso: 0.2779, aRu: 1.1751, aRl: 0.5492, head: 0.02, aLu: 0.42, aLl: 1.66, chest: 0.13 }, at: 0.08 },    // PIN mitad activa
-      { p: { torso: 0.2632, aRu: 1.1661, aRl: 0.5511, head: -0.01, aLu: 0.4, aLl: 1.7, chest: 0.11 }, at: 0.10 },      // PIN fin activa
+      { p: { torso: 0.28, head: 0.04, aRu: 1.0750, aRl: 0.8107, aLu: 0.45, aLl: 1.6, chest: 0.12 }, at: 0.06, ease: easeOutCubic },
+      { p: { torso: 0.2779, aRu: 1.0543, aRl: 0.8308, head: 0.02, aLu: 0.42, aLl: 1.66, chest: 0.13 }, at: 0.08 },    // PIN mitad activa
+      { p: { torso: 0.2632, aRu: 1.0500, aRl: 0.8160, head: -0.01, aLu: 0.4, aLl: 1.7, chest: 0.11 }, at: 0.10 },      // PIN fin activa
       { p: { torso: 0.17, head: 0.02, aRu: 0.45, aRl: 2.30, aLu: 0.26, aLl: 2.10, chest: 0.28 }, at: 0.145, ease: easeOutCubic },
       { p: { torso: 0.1, head: 0.0, aRu: 0.52, aRl: 2.00, aLu: 0.28, aLl: 1.95, chest: 0.03 }, at: 0.2, ease: easeInOutCubic },
     ],
@@ -917,16 +945,16 @@ const MOVES = {
   lunge: {
     // dash+P: hereda la velocidad del lunge como knockback/daño extra (momentum como recurso)
     poses: [
-      { p: { chest: -0.14, dx: -0.028, head: -0.12, aRu: 0.62, aRl: 2.32 }, at: 0.018, ease: easeOutCubic },
-      { p: { torso: 0.0, aLu: -0.05, aLl: 2.65, aRu: 0.58, aRl: 2.26, chest: -0.26, dx: 0 }, at: 0.04, ease: easeOutCubic },   // carga con embalada
-      { p: { torso: 0.55, head: 0.1, aLu: 1.3125, aLl: 0.3825, aRu: 0.6, aRl: 2.1, dy: 0.05, chest: 0.18, dx: 0 }, at: 0.085, ease: easeOutCubic },
-      { p: { torso: 0.5471, aLu: 1.2978, aLl: 0.3953, head: 0.06, aRu: 0.48, aRl: 2.34, chest: 0.19, dx: 0 }, at: 0.115 },    // PIN mitad activa
-      { p: { torso: 0.5267, aLu: 1.2776, aLl: 0.439, head: 0.01, aRu: 0.45, aRl: 2.40, chest: 0.17, dx: 0 }, at: 0.145 },   // PIN fin activa
-      { p: { torso: 0.36, head: -0.04, aLu: 0.28, aLl: 2.56, aRu: 0.50, aRl: 2.24, chest: 0.36, dx: 0.038 }, at: 0.215, ease: easeOutCubic },
-      { p: { torso: 0.18, head: 0.03, aLu: 0.22, aLl: 2.55, aRu: 0.50, aRl: 2.15, chest: 0.04, dx: 0 }, at: 0.32, ease: easeInOutCubic },
+      { p: { chest: -0.14, dx: -0.028, head: -0.12, aRu: 0.62, aRl: 2.32, dy: 0.025 }, at: 0.018, ease: easeOutCubic },
+      { p: { torso: 0.0, aLu: -0.05, aLl: 2.65, aRu: 0.58, aRl: 2.26, chest: -0.26, dx: 0, dy: 0.031 }, at: 0.04, ease: easeOutCubic },   // carga con embalada
+      { p: { torso: 0.55, head: 0.1, aLu: 1.1561, aLl: 0.8230, aRu: 0.6, aRl: 2.1, dy: 0.0553, chest: 0.18, dx: 0 }, at: 0.085, ease: easeOutCubic },
+      { p: { torso: 0.5471, aLu: 1.1438, aLl: 0.8317, head: 0.06, aRu: 0.48, aRl: 2.34, chest: 0.19, dx: 0, dy: 0.0551 }, at: 0.115 },    // PIN mitad activa
+      { p: { torso: 0.5267, aLu: 1.1309, aLl: 0.8498, head: 0.01, aRu: 0.45, aRl: 2.40, chest: 0.17, dx: 0, dy: 0.0561 }, at: 0.145 },   // PIN fin activa
+      { p: { torso: 0.36, head: -0.04, aLu: 0.28, aLl: 2.56, aRu: 0.50, aRl: 2.24, chest: 0.36, dx: 0.038, dy: 0.040 }, at: 0.215, ease: easeOutCubic },
+      { p: { torso: 0.18, head: 0.03, aLu: 0.22, aLl: 2.55, aRu: 0.50, aRl: 2.15, chest: 0.04, dx: 0, dy: 0.025 }, at: 0.32, ease: easeInOutCubic },
     ],
     startup: 0.085, active: 0.06, recovery: 0.18, dmg: 8, stop: 0.075, kbx: 0.2, kby: -0.05,
-    hitstun: 0.3, mask: MASK_PUNCH, limb: P_.hanL, strike: [J.aLu, J.aLl], sound: 'heavy', trauma: 0.3, momentumDmg: true,
+    hitstun: 0.3, mask: MASK_PUNCH_DY, limb: P_.hanL, strike: [J.aLu, J.aLl], sound: 'heavy', trauma: 0.3, momentumDmg: true,
     fw: { rear: -0.045, front: 0.058, heel: 0.042 }, drive: { sink: 0.022, rise: 0.020, twB: -0.12, twF: 0.10 },
   },
 };
@@ -974,8 +1002,11 @@ const GAIT_STATES = [ST.IDLE, ST.RUN, ST.SKID, ST.ATTACK, ST.BLOCKSTUN];
 const COYOTE_STATES = [ST.FALL, ST.RUN, ST.IDLE];
 const LOCO_H_STATES = [ST.RUN, ST.JUMP, ST.FALL, ST.DASH, ST.SKID, ST.WALLSLIDE, ST.LAUNCHED];
 const NOGUARD_STATES = [ST.ATTACK, ST.DASH, ST.HITSTUN, ST.LAUNCHED, ST.KNOCKDOWN, ST.GETUP, ST.ROLL];
-const IK_STATES = [ST.IDLE, ST.RUN, ST.SKID, ST.ATTACK, ST.BLOCKSTUN, ST.GETUP, ST.DASH];
-const SLIDE_STATES = [ST.SKID, ST.DASH];     // pies que ARRASTRAN con el cuerpo (no se plantan)
+const IK_STATES = [ST.IDLE, ST.RUN, ST.SKID, ST.ATTACK, ST.BLOCKSTUN, ST.GETUP, ST.DASH, ST.HITSTUN];
+// Pies que ARRASTRAN con el cuerpo (no se plantan). HITSTUN entra acá y no en el plantado:
+// mientras te empujan hacia atrás los pies tienen que frenar el empujón en base ancha, no
+// clavarse (clavarlos con el cuerpo yéndose es exactamente el estirón de patas de araña).
+const SLIDE_STATES = [ST.SKID, ST.DASH, ST.HITSTUN];
 // curva de aterrizaje: compresión rápida, rebote que se pasa y cola que asienta (pico ≈ 1 en u≈0.23)
 const landCurve = u => Math.sin(u * 5.341) * Math.exp(-2 * u) * 1.681;
 // pares de constraint del ragdoll (rest length se toma de los puntos al activarlo)
@@ -998,6 +1029,9 @@ class Fighter {
     this.atk = null; this.atkClock = 0; this.atkHit = false; this.atkBlocked = false; this.atkPose0 = new Float64Array(NJ);
     this.atkHitSet = new Set();                                       // defensores golpeados en el swing actual (permite multi-hit)
     this.gaitPhase = 0; this.rot = 0; this.leanAx = 0; this.prevVx = 0;
+    // empalme entre estados (ver buildPose): último targetPose y desde dónde cruzar
+    this.stPrev = this.state; this.tpPrev = new Float64Array(NJ); this.blendFrom = new Float64Array(NJ);
+    this.blendT = 9;
     this.squashT = 9; this.squashAmt = 0; this.popT = 9;              // popT = anticipación de despegue
     this.guardW = 0; this.atkChained = false;
     this.targetPose = new Float64Array(NJ); this.poseCur = new Float64Array(NJ); this.poseVel = new Float64Array(NJ);
@@ -1480,6 +1514,23 @@ class Fighter {
 
     // (a) base de locomoción
     this.baseLoco(tp);
+    // ── EMPALME ENTRE ESTADOS ────────────────────────────────────────────────────────────
+    // Medido sobre 18 escenarios: al cambiar de estado `targetPose` pegaba saltos de hasta
+    // 2.37 rad EN UN SOLO FRAME (idle→jump en aRu; idle→dash 2.01; run→jump 1.98; skid→run
+    // 1.95; fall→idle 1.90). El resorte los absorbe, pero un ESCALÓN en el objetivo hace que
+    // el resorte arranque con aceleración máxima: eso es exactamente lo que se ve como
+    // "arranca de golpe". Ahora el objetivo cruza con smoothstep desde la última pose del
+    // estado anterior: llega a lo mismo, en el mismo tiempo, pero con derivada nula al empezar
+    // y al terminar (ease in/out de verdad, no sólo la cola del resorte).
+    // NUNCA durante un ataque: ahí `targetPose` ES el frame-data y no se toca.
+    if (this.state !== this.stPrev) {
+      this.blendFrom.set(this.tpPrev); this.blendT = 0; this.stPrev = this.state;
+    }
+    if (this.state !== ST.ATTACK && this.blendT < CFG.anim.blendT) {
+      this.blendT += dt;
+      const wB = smoothstep(clamp(this.blendT / CFG.anim.blendT, 0, 1));
+      for (let j = 0; j < NJ; j++) tp[j] = arcLerp(this.blendFrom[j], tp[j], wB);
+    }
     const safe = this.safeAddW();              // 0 dentro de la ventana activa: nada la perturba
     // (b) keytrack del ataque (overwrite enmascarado con peso)
     if (this.state === ST.ATTACK) {
@@ -1532,6 +1583,7 @@ class Fighter {
       tp[J.aLu] -= 0.45 * k; tp[J.aRu] -= 0.40 * k;
       tp[J.aLl] += 0.25 * k; tp[J.aRl] += 0.22 * k;
     }
+    this.tpPrev.set(tp);            // desde acá cruza el próximo cambio de estado
   }
 
   // Peso de las capas aditivas que NO tienen derecho a mover un hitbox: vale 0 dentro de la
@@ -1596,6 +1648,7 @@ class Fighter {
       tp[J.dy] += 0.03 * k;
       return;
     }
+    if (st === ST.HITSTUN) { this.hurtPose(tp); return; }
     if (st === ST.LAUNCHED) {
       tp.set(POSES.airRise); tp[J.torso] -= 0.4;
       // lanzado: el cuerpo gira flojo y los brazos van detrás (todavía no es ragdoll)
@@ -1625,6 +1678,31 @@ class Fighter {
     // un golpe la base va sin capa de vida (dy exactamente el de POSES.idle, como siempre fue);
     // el rebote de guardia y el ruido vuelven apenas termina.
     if (spd < 0.12) this.idlePose(tp, this.state === ST.ATTACK); else this.runCycle(tp, spd);
+  }
+
+  // ── RECIBIENDO ──────────────────────────────────────────────────────────────────────
+  // HITSTUN no tenía rama propia en baseLoco: caía en idlePose() y el único registro del golpe
+  // era la capa aditiva de flinch (torso/cabeza/pecho). El resultado era un tipo parado que se
+  // inclinaba. Ahora los BRAZOS acusan el impacto: se sueltan hacia el lado del golpe, se abren
+  // y vuelven a cerrarse sobre el cuerpo mientras se recupera, con una vibración corta encima.
+  // Los brazos NO son hurtbox (ver hurtboxes(): cabeza, pelvis→cuello y pelvis→pies), así que
+  // esta pose no mueve ni un píxel de caja de daño — el castigo y los combos son los mismos.
+  // El torso, la cabeza y las piernas los sigue manejando el flinch, sin cambios.
+  hurtPose(tp) {
+    tp.set(POSES.idle);
+    const d = this.flinchDir * this.facing;                  // dirección del golpe, en local
+    const k = 1 - smoothstep(clamp(this.stateT / 0.24, 0, 1));
+    const sh = Math.sin(this.stateT * 41) * k * k;           // sacudón corto del impacto
+    // el brazo de adelante se va hacia atrás con el golpe; el de atrás se abre para equilibrar
+    tp[J.aLu] += (-0.62 * d - 0.20) * k + 0.14 * sh;
+    tp[J.aRu] += (-0.70 * d - 0.14) * k + 0.17 * sh;
+    tp[J.aLl] += (0.42 + 0.26 * d) * k + 0.10 * sh;
+    tp[J.aRl] += (0.36 + 0.22 * d) * k - 0.09 * sh;
+    // …y en la cola vuelven a guardia, no a los costados
+    const g = 1 - k;
+    tp[J.aLu] += 0.10 * g; tp[J.aRu] += 0.08 * g;
+    tp[J.aLl] += 0.18 * g; tp[J.aRl] += 0.15 * g;
+    this.guardLife(tp, 0.8);
   }
 
   // ── PARADO: nunca quieto ──
@@ -1690,7 +1768,12 @@ class Fighter {
     // piernas: base autorada en fase con el IK de marcha (el IK las pisa en el piso, pero esto
     // sostiene las transiciones a aire/dash y evita el salto de pose al despegar)
     blendPose(POSES.run1, POSES.run2, 0.5 - 0.5 * c, tp);
-    const dirN = (Math.sign(this.vx) * this.facing) || 1;             // ¿corre de frente o de espaldas?
+    // ¿corre de frente o de espaldas? Esto valía ±1 y saltaba de −1 a +1 EN UN FRAME al
+    // cruzar vx = 0, así que al cambiar de sentido el torso invertía su inclinación de golpe
+    // (y con él los brazos, que se autoran en ángulo de mundo y le descuentan el lean). Ahora
+    // cruza el cero de forma continua: el cuerpo tarda en darse vuelta, que es lo que hace una
+    // persona al frenar y salir para el otro lado.
+    const dirN = clamp(this.vx / (0.22 * CFG.move.maxRun * S), -1, 1) * this.facing;
     // la aceleración mete el cuerpo más adelante y agranda el bombeo de brazos
     const accN = clamp((this.leanAx / S) * 0.09 * this.facing, -0.5, 0.6);
     const tor = (r.leanBase + r.leanSpd * sN) * dirN + r.sway * sN * s2;
@@ -2391,6 +2474,24 @@ function drawStick(f, pts, alpha) {
   ctx.beginPath();
   ctx.ellipse(pts[P_.ftL * 2] + f.facing * 0.008 * CH, pts[P_.ftL * 2 + 1], 0.052 * CH, 0.028 * CH, footRoll(P_.kneL, P_.ftL), 0, TAU);
   ctx.fill();
+  // ── cuello: va ANTES de la camisa (si no, su cap redondo muerde el escote y deja un
+  //    manchón de piel sobre el pecho) y va del hombro al ATLAS, no al centro de la cabeza.
+  {
+    const smx = (pts[P_.shoL * 2] + pts[P_.shoR * 2]) / 2;
+    const smy = (pts[P_.shoL * 2 + 1] + pts[P_.shoR * 2 + 1]) / 2;
+    // el atlas se reconstruye de la columna alta (chest → cuello): no hace falta guardarlo
+    // como punto, así que ni NP ni el ragdoll cambian.
+    const ndx = pts[P_.neck * 2] - pts[P_.chest * 2], ndy = pts[P_.neck * 2 + 1] - pts[P_.chest * 2 + 1];
+    const nl = Math.hypot(ndx, ndy) || 1;
+    const ax = pts[P_.neck * 2] + ndx / nl * B.neck, ay = pts[P_.neck * 2 + 1] + ndy / nl * B.neck;
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = ink; ctx.lineWidth = 0.070 * CH;
+    ctx.beginPath(); ctx.moveTo(smx, smy); ctx.lineTo(ax, ay); ctx.stroke();
+    ctx.strokeStyle = flash ? '#ffd9cf' : (f.skin || '#f4ebdd');
+    ctx.lineWidth = 0.070 * CH - 0.026 * CH;
+    ctx.beginPath(); ctx.moveTo(smx, smy); ctx.lineTo(ax, ay); ctx.stroke();
+    ctx.lineCap = 'round';
+  }
   // ── torso: spine + CAMISA como polígono coloreado ──
   ctx.strokeStyle = ink; ctx.fillStyle = ink;
   seg(pts, P_.pelvis, P_.chest, wT); seg(pts, P_.chest, P_.neck, wT);   // columna en dos tramos
@@ -2409,27 +2510,49 @@ function drawStick(f, pts, alpha) {
     const p1x = -d1y / l1, p1y = d1x / l1;                            // perpendicular tramo bajo
     const d2x = nx - chx, d2y = ny - chy, l2 = Math.hypot(d2x, d2y) || 1;
     const p2x = -d2y / l2, p2y = d2x / l2;                            // perpendicular tramo alto
-    const wWaist = 0.055 * CH, wChest = 0.072 * CH;
+    // Silueta en V: hombros anchos → cintura marcada. Con anchos casi iguales (0.055/0.072/
+    // 0.082) el torso se leía como un bloque; la cónica es lo que lo hace un cuerpo.
+    const wWaist = 0.046 * CH, wChest = 0.068 * CH;
+    // …y la camisa no baja hasta la pelvis: termina en la cadera y el culote la cierra.
+    const hipK = 0.055 * CH / (l1 || 1);
+    const hwx = plx + d1x * hipK, hwy = ply + d1y * hipK;
     ctx.fillStyle = shirt;
     ctx.strokeStyle = shirtDark;
     ctx.lineWidth = 0.014 * CH;
+    // La camisa termina en una LINEA DE HOMBROS ancha, no en punta. Antes las dos puntas de
+    // arriba eran los hombros, separados sólo por el offset de profundidad (±0.025·CH): el torso
+    // se cerraba en pico y los brazos parecían salir del cuello.
+    const smx = (slx + srx) / 2, smy = (sly + sry) / 2, wSho = 0.088 * CH;
+    // …y con las esquinas REDONDEADAS. Con vértices filosos el hombro de atrás salía en pico
+    // cada vez que el torso se inclinaba (el ancho es perpendicular a la columna) y la prenda
+    // se leía como cartulina recortada. Mismos vértices, radio chico en cada codo.
+    const V = [
+      [smx - p2x * wSho,   smy - p2y * wSho],                         // punta de hombro izq
+      [chx - p2x * wChest, chy - p2y * wChest],                       // pecho izq
+      [hwx - p1x * wWaist, hwy - p1y * wWaist],                       // cintura izq
+      [hwx + p1x * wWaist, hwy + p1y * wWaist],                       // cintura der
+      [chx + p2x * wChest, chy + p2y * wChest],                       // pecho der
+      [smx + p2x * wSho,   smy + p2y * wSho],                         // punta de hombro der
+    ];
+    const rCorner = 0.024 * CH;
     ctx.beginPath();
-    ctx.moveTo(slx, sly);                                             // hombro izq
-    ctx.lineTo(chx - p2x * wChest, chy - p2y * wChest);               // pecho izq
-    ctx.lineTo(plx - p1x * wWaist, ply - p1y * wWaist);               // cintura izq
-    ctx.lineTo(plx + p1x * wWaist, ply + p1y * wWaist);               // cintura der
-    ctx.lineTo(chx + p2x * wChest, chy + p2y * wChest);               // pecho der
-    ctx.lineTo(srx, sry);                                             // hombro der
+    ctx.moveTo((V[5][0] + V[0][0]) / 2, (V[5][1] + V[0][1]) / 2);     // arranca en medio del hombro
+    for (let v = 0; v < V.length; v++) {
+      const nxt = V[(v + 1) % V.length];
+      ctx.arcTo(V[v][0], V[v][1], (V[v][0] + nxt[0]) / 2, (V[v][1] + nxt[1]) / 2, rCorner);
+    }
     ctx.closePath();
     ctx.fill(); ctx.stroke();
-    // Cuello: pequeño arco oscuro entre neck y shoulders (rompe la planidad).
-    ctx.strokeStyle = shirtDark; ctx.lineWidth = 0.02 * CH;
+    // Escote: una V corta sobre la línea de hombros. (El collar viejo era un arco entre los DOS
+    // hombros, que están casi en el mismo punto: no se veía nada.)
+    ctx.strokeStyle = shirtDark; ctx.lineWidth = 0.018 * CH;
     ctx.beginPath();
-    ctx.moveTo(slx + (nx - slx) * 0.35, sly + (ny - sly) * 0.35);
-    ctx.lineTo(srx + (nx - srx) * 0.35, sry + (ny - sry) * 0.35);
+    ctx.moveTo(smx - p2x * wSho * 0.62, smy - p2y * wSho * 0.62);
+    ctx.lineTo(smx + d2x / l2 * 0.055 * CH, smy + d2y / l2 * 0.055 * CH);
+    ctx.lineTo(smx + p2x * wSho * 0.62, smy + p2y * wSho * 0.62);
     ctx.stroke();
   }
-  if (f.pants) { ctx.fillStyle = flash ? '#e74c3c' : f.pants; circle(pts[0], pts[1], 0.055 * CH); }   // culote/cinturón
+  if (f.pants) { ctx.fillStyle = flash ? '#e74c3c' : f.pants; circle(pts[0], pts[1], 0.062 * CH); }   // culote/cadera (cierra la camisa)
   // ── cabeza: papel + contorno a tinta + pelo (varios estilos) + ojo ──
   const hx = pts[P_.head * 2], hy = pts[P_.head * 2 + 1];
   ctx.fillStyle = flash ? '#ffd9cf' : (f.skin || '#f4ebdd');
@@ -2620,6 +2743,7 @@ function drawEffects() {
 const ARENA = {
   w: CFG.world.arenaW, floorY: 620, surfs: [], ledges: [],
   exit: { x: 0, y: 0 }, pad: 0.15 * CH, topY: 0, seed: 0, plan: '',
+  semilla: 0, nivel: 1, etapa: null,
 };
 // Alturas de salto reales del personaje, que son las que acotan el diseño:
 //   subida útil = jumpApex·CH ≈ 343 px. Ningún escalón autorado pasa de ~250 px.
@@ -2654,41 +2778,67 @@ function alcanceCayendo(drop) {
   return CFG.move.maxRun * S * t * (LVL.margen + 0.15) + 0.4 * CH;
 }
 
-// Cada sección devuelve plataformas [dx, altura sobre el piso, ancho] y su ancho total.
-// Las proporciones están elegidas a mano; lo que varía es el rango de cada parámetro.
+// ── ETAPAS DE DIFICULTAD ────────────────────────────────────────────────────────────────
+// La dificultad de un nivel es ESTRUCTURAL: no cambia el daño, la vida, la velocidad ni el
+// cerebro de nadie. Lo que cambia es la FORMA del terreno — qué patrones pueden salir, cuántos
+// tramos tiene el nivel, cuánto mide cada plataforma y cuánto hay que saltar entre ellas.
+//   · Inicial     rampas y puentes anchos; todo se cruza caminando o con un salto cómodo
+//   · Intermedia  aparecen rutas paralelas, plataformas solapadas y bifurcaciones
+//   · Avanzada    columnas, saltos encadenados, islotes y pozos: hay que leer el terreno
+//   · Experta     todo lo anterior, más angosto, más separado y con tramos asimétricos
+// Las palancas son TRES y las tres crecen de forma monótona:
+//   `lvl`   qué patrones se habilitan (5 → 9 → 13 → 14)
+//   `wK`    cuánta superficie tiene cada plataforma (medido: mediana 297 → 231 px de ancho)
+//   `gap`   cuánto hay que saltar de un tramo al siguiente
+//   `torre` cuántos escalones tiene la torre de salida
+// `secs` NO es una palanca: medido, el ancho de arena (8000 px) corta antes que el contador —
+// con secs = 7 el generador truncaba en silencio y EXPERTA salía MÁS corta que AVANZADA. Va
+// alto a propósito para que el nivel llene la arena siempre y el largo no dependa de la etapa.
+const ETAPAS = [
+  { n: 'INICIAL',    lvl: 1, secs: 8, gap: [296, 372], wK: 1.14, torre: 5 },
+  { n: 'INTERMEDIA', lvl: 2, secs: 8, gap: [304, 384], wK: 1.00, torre: 6 },
+  { n: 'AVANZADA',   lvl: 3, secs: 8, gap: [312, 396], wK: 0.90, torre: 7 },
+  { n: 'EXPERTA',    lvl: 4, secs: 8, gap: [322, 408], wK: 0.82, torre: 7 },
+];
+// dos niveles por etapa: 1-2 Inicial, 3-4 Intermedia, 5-6 Avanzada, 7+ Experta
+function etapaDe(nivel) { return ETAPAS[clamp((nivel - 1) >> 1, 0, ETAPAS.length - 1)]; }
+
+// Cada sección devuelve plataformas [dx, altura sobre el piso, ancho]. El ancho total se DERIVA
+// de las plataformas (ver buildLevel): autorarlo a mano era la fuente de los solapes raros.
+// `lvl` = etapa mínima en la que el patrón puede aparecer.
 const SECCIONES = [
-  { n: 'escalera', make(R) {                       // subida limpia en escalones
+  { n: 'escalera', lvl: 1, make(R) {                       // subida limpia en escalones
       const k = R() < 0.45 ? 3 : 4, rise = 178 + R() * 52, step = 372 + R() * 96, w = 232 + R() * 62;
       const p = [];
       for (let i = 0; i < k; i++) p.push([i * step, rise * (i + 1), w]);
       return { p, w: (k - 1) * step + w };
   } },
-  { n: 'puente', make(R) {                         // dos losas largas con un hueco al medio
+  { n: 'puente', lvl: 1, make(R) {                         // dos losas largas con un hueco al medio
       const up = 244 + R() * 76, w1 = 336 + R() * 88, w2 = 322 + R() * 96, hueco = 286 + R() * 78;
       return { p: [[0, up, w1], [w1 + hueco, up + (R() < 0.5 ? 0 : 88), w2]], w: w1 + hueco + w2 };
   } },
-  { n: 'arco', make(R) {                           // alto al medio + dos bajos: DOS rutas
+  { n: 'arco', lvl: 1, make(R) {                           // alto al medio + dos bajos: DOS rutas
       const bajo = 224 + R() * 44, alto = bajo + 208 + R() * 34;
       const wb = 232 + R() * 46, wa = 258 + R() * 54, sep = 286 + R() * 62;
       return { p: [[0, bajo, wb], [wb + sep, alto, wa], [wb + sep + wa + sep, bajo, wb]],
                w: wb * 2 + wa + sep * 2 };
   } },
-  { n: 'piramide', make(R) {                       // sube tres, baja dos
+  { n: 'piramide', lvl: 1, make(R) {                       // sube tres, baja dos
       const rise = 186 + R() * 44, step = 352 + R() * 72, w = 238 + R() * 52;
       const alt = [1, 2, 3, 2, 1];
       return { p: alt.map((a, i) => [i * step, rise * a, w]), w: 4 * step + w };
   } },
-  { n: 'zigzag', make(R) {                         // alterna alto/bajo: obliga a subir y bajar
+  { n: 'zigzag', lvl: 2, make(R) {                         // alterna alto/bajo: obliga a subir y bajar
       const lo = 228 + R() * 42, hi = lo + 198 + R() * 40, step = 318 + R() * 54, w = 228 + R() * 44;
       return { p: [0, 1, 2, 3].map(i => [i * step, i % 2 ? hi : lo, w]), w: 3 * step + w };
   } },
-  { n: 'balcon', make(R) {                         // losa larga arriba con acceso por LOS DOS lados
+  { n: 'balcon', lvl: 2, make(R) {                         // losa larga arriba con acceso por LOS DOS lados
       const up = 418 + R() * 58, wB = 706 + R() * 196, acc = up - (198 + R() * 38), wa = 216 + R() * 44;
       const sep = 268 + R() * 58;
       return { p: [[0, acc, wa], [wa + sep, up, wB], [wa + sep + wB + sep, acc, wa]],
                w: wa * 2 + wB + sep * 2 };
   } },
-  { n: 'columnas', make(R) {                       // cinco columnas angostas a distintas alturas
+  { n: 'columnas', lvl: 3, make(R) {                       // cinco columnas angostas a distintas alturas
       const w = 152 + R() * 42, step = 268 + R() * 58, base = 208 + R() * 42;
       const p = []; let up = base;
       for (let i = 0; i < 5; i++) {
@@ -2697,17 +2847,60 @@ const SECCIONES = [
       }
       return { p, w: 4 * step + w };
   } },
-  { n: 'dobleRuta', make(R) {                      // carril bajo y carril alto en paralelo
+  { n: 'dobleRuta', lvl: 1, make(R) {                      // carril bajo y carril alto en paralelo
       const lo = 196 + R() * 42, hi = lo + 206 + R() * 36, w = 296 + R() * 66, step = w + 242 + R() * 48;
       return { p: [[0, lo, w], [step, lo, w], [step * 0.5, hi, w * 0.86], [step * 1.5, hi, w * 0.86]],
                w: step * 1.5 + w * 0.86 };
+  } },
+  { n: 'solapadas', lvl: 2, make(R) {   // dos losas que se PISAN en x: se pasa por abajo O por arriba
+      const lo = 208 + R() * 40, hi = lo + 198 + R() * 38;
+      const wl = 430 + R() * 130, wh = 300 + R() * 90;
+      const off = wl * (0.34 + R() * 0.30);        // la de arriba arranca DENTRO de la de abajo
+      const sal = Math.max(wl, off + wh) + 258 + R() * 74;
+      return { p: [[0, lo, wl], [off, hi, wh], [sal, lo + 84 + R() * 40, 252 + R() * 62]] };
+  } },
+  { n: 'bifurcacion', lvl: 2, make(R) {  // dos ramas que salen del mismo rellano y RECONECTAN
+      const base = 202 + R() * 38, alto = base + 212 + R() * 36;
+      const w0 = 262 + R() * 54, wm = 214 + R() * 44, wf = 306 + R() * 72;
+      const step = 300 + R() * 58;
+      return { p: [[0, base, w0],
+                   [w0 + step * 0.52, alto, wm],                    // rama de arriba
+                   [w0 + step * 0.66, base, wm * 0.82],             // rama de abajo
+                   [w0 + step * 1.30, base + 96 + R() * 44, wf]] }; // reencuentro
+  } },
+  { n: 'saltitos', lvl: 3, make(R) {     // cadena de plataformas chicas: saltos encadenados
+      const k = 4 + (R() < 0.5 ? 0 : 1), w = 146 + R() * 34, step = 284 + R() * 44;
+      const base = 216 + R() * 38, amp = 62 + R() * 42, fase = R() * 0.4;
+      const p = [];
+      for (let i = 0; i < k; i++) p.push([i * step, base + amp * Math.sin(i * 1.35 + fase), w]);
+      return { p };
+  } },
+  { n: 'islote', lvl: 3, make(R) {       // plataforma alta AISLADA: se entra por un solo lado
+      const lo = 198 + R() * 34, alto = lo + 206 + R() * 32;
+      const wl = 286 + R() * 56, wi = 176 + R() * 34, wr = 300 + R() * 62;
+      const s1 = 272 + R() * 48, s2 = 288 + R() * 56;
+      return { p: [[0, lo, wl], [wl + s1, alto, wi], [wl + s1 + wi + s2, lo + 58 + R() * 46, wr]] };
+  } },
+  { n: 'pozo', lvl: 3, make(R) {         // sector COMPACTO: dos paredes de repisas y una tapa
+      const w = 190 + R() * 36, paso = 174 + R() * 28, k = 3;
+      const ancho = 560 + R() * 150;
+      const p = [];
+      for (let i = 0; i < k; i++) { p.push([0, paso * (i + 1), w]); p.push([ancho - w, paso * (i + 1), w]); }
+      p.push([ancho * 0.5 - w * 0.6, paso * (k + 1) + 44, w * 1.25]);
+      return { p };
+  } },
+  { n: 'voladizo', lvl: 4, make(R) {     // ASIMETRICA: una losa larguísima y un muñón corto arriba
+      const lo = 228 + R() * 40, hi = lo + 204 + R() * 32;
+      const wl = 740 + R() * 220, ws = 158 + R() * 38, wf = 262 + R() * 58;
+      const sep = 296 + R() * 66, sep2 = 254 + R() * 58;
+      return { p: [[0, lo, wl], [wl + sep, hi, ws], [wl + sep + ws + sep2, lo + 112 + R() * 48, wf]] };
   } },
 ];
 
 // Torre final con la SALIDA arriba. Zigzag vertical: el lado de arranque y la cantidad de
 // escalones varían, pero el paso siempre entra cómodo en un salto.
-function seccionTorre(R) {
-  let pasos = 6 + (R() < 0.5 ? 0 : 1);
+function seccionTorre(R, E) {
+  let pasos = E.torre + (R() < 0.5 ? 0 : 1);
   const paso = 216 + R() * 30;
   // el tope no puede salirse del terreno horneado (bakeTerrain arranca en floorY − 1850):
   // si la torre se pasa, se le sacan escalones en vez de achicar el paso (que la haría fea)
@@ -2796,32 +2989,39 @@ function lvlRnd(seed) {
   let s = (seed >>> 0) || 1;
   return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
 }
-function buildLevel(seed) {
+function buildLevel(seed, nivel) {
+  const E = etapaDe(nivel || 1);
   for (let intento = 0; intento < 24; intento++) {
     const R = lvlRnd(seed + intento * 7919);
     const floorY = ARENA.floorY;
     const surfs = [{ x: -200, y: floorY, w: ARENA.w + 400, oneway: false, i: 0 }];
     const plan = [];
     // barajar el pool y tomar 5-6 secciones, sin repetir dos iguales seguidas
-    const pool = SECCIONES.slice();
+    const pool = SECCIONES.filter(sc => sc.lvl <= E.lvl);
     for (let i = pool.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; const t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
-    const cuantas = 5 + (R() < 0.5 ? 0 : 1);
+    const cuantas = E.secs;
     let x = 360;
     const torreW = 900;
     for (let i = 0; i < cuantas; i++) {
       const sec = pool[i % pool.length];
       const g = sec.make(R);
-      if (x + g.w + torreW + 500 > ARENA.w) break;
+      // El ancho de cada plataforma lo escala la etapa: más avanzada = menos superficie donde
+      // caer (y por lo tanto huecos efectivos más grandes) SIN mover un solo salto de sitio.
+      // El piso es 0.62·CH: por debajo de eso no entra el muñeco y la validación lo rechaza.
+      for (const q of g.p) q[2] = Math.max(0.62 * CH, q[2] * E.wK);
+      // …y el ancho TOTAL se deriva de las plataformas en vez de autorarse a mano.
+      const gw = g.p.reduce((a, q) => Math.max(a, q[0] + q[2]), 0);
+      if (x + gw + torreW + 500 > ARENA.w) break;
       const espejar = R() < 0.4;
       for (const [dx, up, w] of g.p) {
-        const px = espejar ? x + g.w - dx - w : x + dx;
+        const px = espejar ? x + gw - dx - w : x + dx;
         surfs.push({ x: Math.round(px), y: Math.round(floorY - up), w: Math.round(w), oneway: true });
       }
       plan.push(sec.n + (espejar ? '~' : ''));
-      x += g.w + LVL.gapMin + R() * (LVL.gapMax - LVL.gapMin);
+      x += gw + E.gap[0] + R() * (E.gap[1] - E.gap[0]);
     }
     // torre final, pegada al fondo del mapa
-    const T = seccionTorre(R);
+    const T = seccionTorre(R, E);
     const tx = Math.min(x + 180, ARENA.w - T.w - 320);
     let topSurf = null;
     T.p.forEach(([dx, up, w], i) => {
@@ -2859,6 +3059,7 @@ function buildLevel(seed) {
       ARENA.ledges.push({ x: s.x + s.w, y: s.y, side: 1, surf: s });
     }
     ARENA.seed = seed + intento * 7919;
+    ARENA.semilla = seed; ARENA.nivel = nivel || 1; ARENA.etapa = E;
     ARENA.plan = plan.join(' · ');
     return true;
   }
@@ -3037,6 +3238,11 @@ function drawHUD(dt, p) {
   ctx.font = '900 ' + Math.max(13, Math.round(0.032 * H)) + 'px system-ui,sans-serif';
   ctx.fillStyle = INK;
   ctx.fillText('K.O.  ' + game.kos + '/' + enemies.length, x0, y0 + bh + 8);
+  // nivel y etapa de la corrida (la progresión tiene que verse)
+  ctx.font = '800 ' + Math.max(11, Math.round(0.024 * H)) + 'px system-ui,sans-serif';
+  ctx.fillStyle = 'rgba(34,30,27,0.62)';
+  ctx.fillText('NIVEL ' + game.nivel + ' · ' + (ARENA.etapa ? ARENA.etapa.n : ''),
+    x0, y0 + bh + 8 + Math.max(15, Math.round(0.036 * H)));
   // flecha a la salida cuando está fuera de pantalla
   const exitScreenX = (ARENA.exit.x - cam.x) * cam.z + W / 2;
   if (exitScreenX > W - 20 && game.state === 'play') {
@@ -3091,7 +3297,7 @@ function drawBanner() {
 
 // ════════════════ FLUJO sandbox: menú → nivel → (te bajan → respawn) → salida ════════════════
 const game = {
-  state: 'menu', diff: 1, t: 0, kos: 0, levelT: 0,
+  state: 'menu', diff: 1, t: 0, kos: 0, levelT: 0, nivel: 1, runT: 0,
   banner: '', bannerT: 0, bannerLife: 0, bannerCol: '', bannerSub: '',
   paused: false, mode: 'sandbox',
 };
@@ -3106,6 +3312,8 @@ function resetFighter(f, x) {
   f.buffer.length = 0; f.dead = false; f.leanAx = 0; f.prevVx = 0;
   f.popT = 9; f.squashT = 9; f.squashAmt = 0; f.guardW = 0; f.atkChained = false;
   f.poseCur.set(POSES.idle); f.poseVel.fill(0);
+  f.targetPose.set(POSES.idle);
+  f.stPrev = f.state; f.tpPrev.set(POSES.idle); f.blendT = 9;   // sin empalme tras un teleport
   fk(f.poseCur, f.renderPts, f.x, f.y, f.facing);
   f.replantFeet();
 }
@@ -3131,23 +3339,40 @@ function repartirEnemigos() {
     enemies[i].spawnX = clamp(sx, ARENA.pad + 40, ARENA.w - ARENA.pad - 40);
   }
 }
-function startMatch() {
+// Arma el nivel `game.nivel` y pone a todos en su lugar. `semilla` es opcional: pasarla hace
+// la corrida REPRODUCIBLE (la usa el QA y queda escrita en el panel de info).
+function armarNivel(semilla) {
   game.kos = 0; game.levelT = 0;
-  // NIVEL NUEVO por partida (secciones autoradas combinadas + validación de recorrido) y
-  // re-horneo de los bakes world-space, que dependen de las plataformas.
-  buildLevel((Math.random() * 1e9) | 0);
+  buildLevel(semilla === undefined ? (Math.random() * 1e9) | 0 : semilla, game.nivel);
   bakeBg(); bakeTerrain();
   repartirEnemigos();
   resetFighter(P1, 180); P1.facing = 1;
   for (const e of enemies) { resetFighter(e, e.spawnX); e.facing = -1; e.brain = newBrain(); }
-  hud.chip = hud.hpPrev = CFG.fight.hp; hud.chipT = 9;
+  hud.chipT = 9;
   sparks.length = 0; dmgNums.length = 0; smears.length = 0; ghosts.length = 0; hitArcs.length = 0;
   trauma = 0;
   cam.x = 400; cam.y = ARENA.floorY - 1.2 * CH;
   game.state = 'intro'; game.t = 0;
-  setBanner('¡DALE!', 0.9, '#e2781e');
+}
+function startMatch(semilla) {
+  game.nivel = 1; game.runT = 0;
+  armarNivel(semilla);
+  P1.hp = CFG.fight.hp; hud.chip = hud.hpPrev = CFG.fight.hp;
+  setBanner('¡DALE!', 0.9, '#e2781e', 'etapa ' + ARENA.etapa.n);
   document.getElementById('menu').classList.add('hidden');
   document.body.classList.remove('inMenu');
+}
+// Siguiente nivel de la MISMA corrida: sube el contador (y con él la etapa), cura un poco y
+// arma terreno nuevo. La vida no se rellena entera: la corrida tiene que pesar.
+function siguienteNivel() {
+  game.nivel++;
+  const antes = ARENA.etapa;
+  armarNivel();
+  P1.hp = Math.min(CFG.fight.hp, P1.hp + Math.round(CFG.fight.hp * 0.45));
+  hud.chip = hud.hpPrev = P1.hp;
+  const E = ARENA.etapa;
+  if (E !== antes) setBanner('ETAPA ' + E.n, 1.6, '#8e44ad', 'nivel ' + game.nivel);
+  else setBanner('NIVEL ' + game.nivel, 1.1, '#e2781e', 'etapa ' + E.n);
 }
 function onKO(att, def) {
   if (def === P1) {
@@ -3168,7 +3393,7 @@ function stepGameFlow(dt) {
       if (game.t > 0.9) { game.state = 'play'; game.t = 0; }
       break;
     case 'play':
-      game.levelT += dt;
+      game.levelT += dt; game.runT += dt;
       // ¿llegó a la salida? (pisando, cerca de la puerta)
       // Bug fix: la salida ahora está ARRIBA de la torre (y muy negativo). El check anterior
       // (exit.y - P1.y - STAND < 60) daba TRUE en el piso porque exit.y - anything_bigger es < 60
@@ -3176,7 +3401,8 @@ function stepGameFlow(dt) {
       if (P1.grounded && Math.abs(P1.x - ARENA.exit.x) < 70 && Math.abs(ARENA.exit.y - P1.y - STAND) < 60) {
         game.state = 'win'; game.t = 0;
         const secs = Math.round(game.levelT);
-        setBanner('¡NIVEL COMPLETADO!', 4, '#2e7d32', 'K.O. ' + game.kos + '/' + enemies.length + ' · ' + secs + ' s');
+        setBanner('¡NIVEL ' + game.nivel + ' LIMPIO!', 2.8, '#2e7d32',
+          'K.O. ' + game.kos + '/' + enemies.length + ' · ' + secs + ' s · sigue ' + etapaDe(game.nivel + 1).n);
         sfx.win();
       }
       break;
@@ -3188,7 +3414,7 @@ function stepGameFlow(dt) {
       }
       break;
     case 'win':
-      if (game.t > 4.2) showMenu();
+      if (game.t > 3.0) siguienteNivel();
       break;
   }
 }

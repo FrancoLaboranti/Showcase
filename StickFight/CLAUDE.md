@@ -136,6 +136,95 @@ PIES, que no están en ninguna cadena de hitbox:
   Convención: cadenas "cuelgan" (0 = abajo, dirDown), torso apunta arriba. Rodillas: flexión = valores
   NEGATIVOS de `lLl/lRl`.
 
+### Proporciones: hombros, cuello y cabeza (2026-09-21b)
+
+El torso se veía *por debajo* de la cabeza. Medido sobre un retrato de 16 poses: el hombro estaba a
+**0.23·CH** sobre la pelvis y la base de la cabeza a **0.382·CH** → **0.152·CH de cuello pelado, el
+15 % de la altura del personaje**. Encima la camisa se cerraba en PUNTA a la altura del hombro, así
+que los brazos parecían salir del cuello.
+
+El hueco se repartió en tres movimientos chicos, porque cada uno tiene su costo:
+
+| | antes | ahora | costo |
+|---|---|---|---|
+| `B.torso` | 0.30 | **0.31** | sube el hombro ⇒ sube el punto de impacto de los puños |
+| `B.neck` | 0.08 | **0.022** | — |
+| `B.headR` | 0.10 | **0.108** | mueve la hurtbox de la cabeza |
+| `B.shoDrop` | 0.07 | **0.04** | sube el hombro |
+| hombro sobre pelvis | 0.23 | **0.27** | |
+| cuello pelado | 37 px | **16 px** | |
+
+Tres arreglos más, todos de dibujo:
+
+1. **La camisa termina en una LÍNEA DE HOMBROS** (`wSho = 0.088·CH`), no en pico, con silueta cónica
+   (`wChest 0.068`, `wWaist 0.046`), cintura levantada a la cadera y **esquinas redondeadas con
+   `arcTo`** — con vértices filosos el hombro de atrás salía en punta cada vez que el torso se
+   inclinaba, porque el ancho es perpendicular a la columna.
+2. **El cuello se dibuja ANTES de la camisa.** Dibujado después, su cap redondo mordía el escote y
+   dejaba un manchón de piel sobre el pecho (se veía en las 16 poses).
+3. **La cabeza pivota en el ATLAS**, no en la base del cuello (`fk()`). Antes el DOF `head` giraba
+   cuello+cabeza desde abajo con una palanca de 0.13·CH: al mirar hacia abajo (agacharse, encajar un
+   golpe) el cuello se veía estirado en diagonal. Ahora el cuello sigue la columna alta y sólo el
+   cráneo rota, con palanca `B.headR`. **Con `head = 0` el punto es idéntico** (los dos tramos son
+   colineales), así que no hay migración de poses. El atlas es un punto DERIVADO en `drawStick` (no
+   se agregó a `P_`: ni `NP` ni el ragdoll cambian).
+
+**Qué le costó al combate** (medido, ver más abajo): los puños caen **8-10 px más arriba** porque el
+hombro subió; el **alcance horizontal es idéntico** (≤ 0.79 px en los 11 moves, y ése es el
+uppercut, que es vertical). El `lunge` era el único golpe plano y perdía alcance real contra
+agachados (0.66 → 0.50 CH), así que **hunde la cadera esos mismos px durante el golpe**
+(`MASK_PUNCH_DY`, `dy` autorado en sus 7 claves): puño exacto donde caía, brazo igual de estirado.
+
+#### Lo ÚNICO que el cambio de proporciones le movió al combate
+
+Matriz `probe_conecta.js`, determinista, 1430 celdas, HEAD vs ahora: **21 celdas distintas
+(8 ganadas, 13 perdidas) — el 1.5 %**. Un paso de la matriz son 0.055 CH ≈ 13.5 px.
+
+| golpe | blanco | alcance máx (CH) |
+|---|---|---|
+| jab · cross · airpunch | agachado / bloqueo bajo | −0.055 |
+| cross | de pie | **+0.110** |
+| hook | de pie | **+0.055**; bloqueo bajo −0.110 |
+| uppercut | agachado | mismo alcance, un hueco interno |
+| lunge | bloqueo alto / bajo | −0.055 |
+| sweep | bloqueo alto −0.055 · bloqueo bajo **+0.055** |
+| spinkick | bloqueo bajo | **+0.055** |
+| roundhouse · dropkick · airkick | todos | **sin cambios** |
+
+La causa no es el puño sino el **defensor**: su hurtbox de cabeza bajó ~10 px con las proporciones
+nuevas. Por eso también se mueven filas de patadas cuyo contacto es idéntico al píxel.
+Se evaluó y se DESCARTÓ compensarlo agrandando `CFG.fight.hurtHead` un 8 % (subiría el radio sólo
+2.4 px y agrandaría el blanco en todos los demás cruces).
+
+**Los combos no cambiaron** (`probe_combo.js`, 4 cadenas × 16 distancias): mismo número de golpes
+conectados y mismo daño total en todas las celdas, salvo que tres cadenas mantienen su cuenta alta
+UN paso más lejos. Nada perdido.
+
+### Empalme entre estados (2026-09-21b)
+
+`targetPose` pegaba **saltos de hasta 2.37 rad en UN frame** al cambiar de estado (medido sobre 18
+escenarios: `idle→jump` 2.37 en `aRu`, `idle→dash` 2.01, `run→jump` 1.98, `skid→run` 1.95,
+`fall→idle` 1.90). El resorte los absorbe, pero un ESCALÓN en el objetivo hace que arranque con
+aceleración máxima: eso es lo que se sentía como "empieza de golpe".
+
+`buildPose` cruza ahora el objetivo con `smoothstep` desde la última pose del estado anterior
+(`CFG.anim.blendT = 0.075 s`): llega a lo mismo, en el mismo tiempo, pero con derivada nula al
+empezar y al terminar. **Nunca durante un ataque** — ahí `targetPose` ES el frame-data, y el probe
+confirma 0.000 px de diferencia. Medido después: **máximo 0.46 rad** (−81 %).
+
+Dos cosas más de la misma tanda:
+
+- **`dirN` continuo** en `runCycle`. Valía ±1 y saltaba de −1 a +1 al cruzar `vx = 0`: al cambiar de
+  sentido el torso invertía su inclinación de golpe (y con él los brazos, que se autoran en ángulo
+  de mundo). Ahora cruza el cero de forma continua.
+- **HITSTUN tiene pose propia** (`hurtPose`). No tenía rama en `baseLoco`: caía en `idlePose()` y el
+  único registro del golpe era la capa de flinch. Los BRAZOS cuentan ahora el impacto — y los brazos
+  **no son hurtbox** (`hurtboxes()` usa cabeza, pelvis→cuello y pelvis→pies), así que no mueve ni un
+  píxel de caja de daño. Además HITSTUN entró en `IK_STATES` y en **`SLIDE_STATES`**: antes las
+  piernas salían de FK pura y los pies viajaban con el cuerpo mientras te empujaban (medido
+  4.83 px/frame, el peor de todos los estados controlables). Va en el arrastre y no en el plantado
+  a propósito: clavarlos con el cuerpo yéndose ES el estirón de patas de araña.
+
 ### Columna en dos segmentos (2026-09-21)
 
 El torso era UN hueso rígido pelvis→cuello y eso topaba con todo: el cuerpo no podía encorvarse
@@ -227,10 +316,42 @@ mide ~80 px en pantalla y una mano son 4 px — a esa escala lo único que se le
 `bakeTerrain()` porque los bakes son world-space). `ARENA` es un objeto que se **muta**, no se
 reemplaza: todo el resto del juego lo referencia por `ARENA.surfs` / `.exit` / … y no se enteró.
 
-La variedad no sale de tirar plataformas al azar: son **8 secciones autoradas a mano** (escalera,
-puente, arco de dos rutas, pirámide, zigzag, balcón, columnas, doble ruta) más la torre de salida,
-y lo que varía es cuáles salen, en qué orden, con qué parámetros y si van espejadas. Medido sobre
-300 niveles: 284 combinaciones distintas, mediana 20 plataformas.
+La variedad no sale de tirar plataformas al azar: son **14 secciones autoradas a mano** más la
+torre de salida, y lo que varía es cuáles salen, en qué orden, con qué parámetros y si van
+espejadas. Al repertorio original (escalera, puente, arco, pirámide, zigzag, balcón, columnas, doble
+ruta) se sumaron seis patrones en 2026-09-21b: **solapadas** (dos losas que se pisan en x: se pasa
+por abajo o por arriba), **bifurcacion** (dos ramas que salen del mismo rellano y reconectan),
+**saltitos** (cadena de plataformas chicas, saltos encadenados), **islote** (plataforma alta con una
+sola entrada), **pozo** (sector compacto: dos paredes de repisas y una tapa) y **voladizo**
+(asimétrica: una losa larguísima y un muñón corto arriba).
+
+#### Etapas de dificultad (2026-09-21b)
+
+`game.nivel` crece al llegar a la SALIDA (`siguienteNivel()`, cura 45 %) y la etapa sale de
+`etapaDe(nivel)` — **dos niveles por etapa**. La dificultad es ESTRUCTURAL: no toca daño, vida,
+velocidad ni el cerebro de nadie.
+
+| etapa | niveles | patrones | `wK` | `gap` | torre |
+|---|---|---|---|---|---|
+| INICIAL | 1-2 | 5 | 1.14 | 296-372 | 5 |
+| INTERMEDIA | 3-4 | 9 | 1.00 | 304-384 | 6 |
+| AVANZADA | 5-6 | 13 | 0.90 | 312-396 | 7 |
+| EXPERTA | 7+ | 14 | 0.82 | 322-408 | 7 |
+
+`wK` escala el ancho de cada plataforma (piso 0.62·CH): más avanzada = menos superficie donde caer
+y por lo tanto huecos efectivos más grandes, **sin mover un solo salto de sitio**. Medido sobre 200
+semillas por etapa: ancho mediano **297 → 275 → 252 → 231 px**.
+
+**`secs` NO es una palanca**: el ancho de arena (8000 px) corta antes que el contador. Con `secs = 7`
+el generador truncaba en silencio y EXPERTA salía MÁS corta que AVANZADA. Va alto a propósito (8)
+para que el nivel llene la arena siempre y el largo no dependa de la etapa.
+
+**El ancho total de una sección se DERIVA** de sus plataformas (`max(dx + w)`), ya no se autora a
+mano: autorarlo era la fuente de los solapes raros al espejar.
+
+`buildLevel(seed, nivel)` es reproducible: misma semilla + mismo nivel ⇒ misma geometría
+(verificado 32/32, ensuciando el estado entre las dos tiradas). `armarNivel(semilla)` y
+`startMatch(semilla)` aceptan semilla opcional — es lo que usa el QA.
 
 **`NAV` es un grafo sobre las superficies** y lo usan DOS cosas:
 1. La IA, para perseguir entre alturas.
@@ -282,6 +403,29 @@ TÉCNICO 19 puños/2 patadas, MATÓN el que más se pega a 0.32·CH).
   encima para la embalada del dash). Con drag débil el equilibrio quedaba 65% arriba del tope.
 
 ## QA headless (sin node)
+
+Sondas nuevas de 2026-09-21b (todas en el scratchpad, se inyectan antes de `</body>`):
+
+- **`probe_conecta.js`** — matriz ¿CONECTA? de 11 golpes × 5 estados del blanco (de pie, agachado,
+  bloqueo alto, bloqueo bajo, en el aire) × 26 distancias = 1430 celdas. Es la única prueba que
+  mide el ALCANCE EFECTIVO en vez de la geometría. **Ojo con dos trampas que costaron una corrida
+  entera**: (a) el blanco hay que clavarlo en x ABSOLUTO — re-anclarlo a `P1.x` lo hace perseguir
+  al atacante por el root motion y la distancia miente; (b) `this.T` (reloj de respiración) nace en
+  `rnd(0, 9)`, así que sin fijarlo la matriz no es reproducible **ni contra sí misma** (medido:
+  9 filas distintas entre dos corridas del mismo build). Con `P1.T` y `E.T` fijos: 0 filas.
+- **`probe_continuidad.js`** — mide, no asume: salto de `targetPose` en cada cambio de estado, jerk
+  por joint, patinaje de pie plantado POR ESTADO, desbalance pelvis-vs-apoyo, articulación del
+  torso. Hay que descartar una ventana de ~6 frames después de cada teleport del propio test
+  (`resetFighter` pisa `poseCur` de golpe: sin filtro el jerk y el patinaje no miden nada).
+- **`probe_niveles.js`** — reproducibilidad, barrido de 200 semillas × 4 etapas, repertorio de
+  patrones por etapa, persecución de la IA por etapa y progresión de partida (8 niveles seguidos).
+- **`probe_humo.js`** — 6 minutos de partida real con input pseudo-aleatorio reproducible: NaN,
+  estados fuera del enum, hp fuera de rango, peleadores fuera del mundo, pies sobre la pelvis.
+- **`probe_huesos.js`** / **`probe_retrato.js`** — retratos grandes con y sin las articulaciones
+  marcadas encima. Para juzgar proporciones no alcanza con los números: hay que mirar.
+- **`ejes.py`** — descompone el cambio de un golpe en EJES. `compare.py` mide `+ALCANCE` **radial**
+  desde la raíz, así que subir la mano 9 px le da +5.5 px aunque el alcance horizontal no cambie.
+
 
 Chrome headless + `--virtual-time-budget` NO dispara rAF de forma sostenida: **la sim queda congelada
 aunque los timers corran**. El loop está preparado para bombearse a mano:
