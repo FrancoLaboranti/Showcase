@@ -421,28 +421,28 @@
     // sincronizado con el shine del logo (ver @property + @keyframes accentCycle al inicio del CSS).
     // El 5° campo (hue) queda como dato histórico, lo ignora el factory.
     const GAMES = [
-      ['Loop.png',           'Loop',          'Loop/LoopWeb/',                     'landscape', '#7df9ff'],
-      ['Snake.png',          'Snake',         'Snake/SnakeWeb/',                   'portrait',  '#84cc16'],
-      ['TankWars.png',       'Tank Wars',     'TankWARS/TankWARSWeb/',             'landscape', '#f59e0b'],
-      ['CrazyTanks.png',     'Crazy Tanks',   'CrazyTanks/CrazyTanksWeb/',         'landscape', '#fb923c'],
-      ['Pong.png',           'Sleepy Pong',   'Pong/PongWeb/',                     'landscape', '#6ee7b7'],
-      ['Balls.png',          'Canicas',       'Balls/BallsWeb/',                   'portrait',  '#c084fc'],
-      ['MiniBalls.png',      'Mini Canicas',  'MiniBalls/MiniBallsWeb/',           'portrait',  '#67e8f9'],
-      ['Fireworks.png',      'Fuegos',        'Fireworks/FireworksWeb/',           'portrait',  '#f472b6'],
-      ['FireworksV2.png',    'Fuegos V2',     'FireworksV2/FireworksV2Web/',       'landscape', '#22d3ee'],
-      ['Tron.png',           'Tron',          'Tron/TronWeb/',                     'portrait',  '#38bdf8'],
-      ['TronV2.png',         'Tron V2',       'TronV2/TronV2Web/',                 'landscape', '#fb7185'],
-      ['DonkeyKong.png',     'Donkey Kong',   'DonkeyKong/DonkeyKongWeb/',         'portrait',  '#e83b2a'],
-      ['Pacman.png',         'Pac-Man',       'Pacman/PacmanWeb/',                 'portrait',  '#ffe300'],
-      ['StickFight.png',     'Stick Fight',   'StickFight/StickFightWeb/',         'landscape', '#35d6ff'],
-      ['Chess.png',          'Ajedrez',       'Chess/ChessWeb/',                   'portrait',  '#fbbf24'],
-      ['Clock.png',          'Reloj',         'Clock/ClockWeb/',                   'portrait',  '#94a3b8'],
-      ['MineSweeper.png',    'Buscaminas',    'MineSweeperGPT/MineSweeperWeb/',    'portrait',  '#ef4444'],
-      ['Hangman.png',        'Ahorcado',      'Hangman/HangmanWeb/',               'portrait',  '#a3e635'],
-      ['NewtonsCradle.png',  'Péndulo',       "Newton's Cradle/NewtonsCradleWeb/", 'landscape', '#5eead4'],
-      ['Poker.png',          'Póker',         'Poker/PokerWeb/',                   'landscape', '#dc2626'],
-      ['Simon.png',          'Simón Dice',    'SimonSays/SimonSaysWeb/',           'portrait',  '#e879f9'],
-      ['Tateti.png',         'Ta-Te-Ti',      'Tateti/TatetiWeb/',                 'portrait',  '#60a5fa'],
+      ['Loop.webp',           'Loop',          'Loop/LoopWeb/',                     'landscape', '#7df9ff'],
+      ['Snake.webp',          'Snake',         'Snake/SnakeWeb/',                   'portrait',  '#84cc16'],
+      ['TankWars.webp',       'Tank Wars',     'TankWARS/TankWARSWeb/',             'landscape', '#f59e0b'],
+      ['CrazyTanks.webp',     'Crazy Tanks',   'CrazyTanks/CrazyTanksWeb/',         'landscape', '#fb923c'],
+      ['Pong.webp',           'Sleepy Pong',   'Pong/PongWeb/',                     'landscape', '#6ee7b7'],
+      ['Balls.webp',          'Canicas',       'Balls/BallsWeb/',                   'portrait',  '#c084fc'],
+      ['MiniBalls.webp',      'Mini Canicas',  'MiniBalls/MiniBallsWeb/',           'portrait',  '#67e8f9'],
+      ['Fireworks.webp',      'Fuegos',        'Fireworks/FireworksWeb/',           'portrait',  '#f472b6'],
+      ['FireworksV2.webp',    'Fuegos V2',     'FireworksV2/FireworksV2Web/',       'landscape', '#22d3ee'],
+      ['Tron.webp',           'Tron',          'Tron/TronWeb/',                     'portrait',  '#38bdf8'],
+      ['TronV2.webp',         'Tron V2',       'TronV2/TronV2Web/',                 'landscape', '#fb7185'],
+      ['DonkeyKong.webp',     'Donkey Kong',   'DonkeyKong/DonkeyKongWeb/',         'portrait',  '#e83b2a'],
+      ['Pacman.webp',         'Pac-Man',       'Pacman/PacmanWeb/',                 'portrait',  '#ffe300'],
+      ['StickFight.webp',     'Stick Fight',   'StickFight/StickFightWeb/',         'landscape', '#35d6ff'],
+      ['Chess.webp',          'Ajedrez',       'Chess/ChessWeb/',                   'portrait',  '#fbbf24'],
+      ['Clock.webp',          'Reloj',         'Clock/ClockWeb/',                   'portrait',  '#94a3b8'],
+      ['MineSweeper.webp',    'Buscaminas',    'MineSweeperGPT/MineSweeperWeb/',    'portrait',  '#ef4444'],
+      ['Hangman.webp',        'Ahorcado',      'Hangman/HangmanWeb/',               'portrait',  '#a3e635'],
+      ['NewtonsCradle.webp',  'Péndulo',       "Newton's Cradle/NewtonsCradleWeb/", 'landscape', '#5eead4'],
+      ['Poker.webp',          'Póker',         'Poker/PokerWeb/',                   'landscape', '#dc2626'],
+      ['Simon.webp',          'Simón Dice',    'SimonSays/SimonSaysWeb/',           'portrait',  '#e879f9'],
+      ['Tateti.webp',         'Ta-Te-Ti',      'Tateti/TatetiWeb/',                 'portrait',  '#60a5fa'],
     ];
     {
       const grid = document.getElementById('grid');
@@ -459,7 +459,10 @@
         a.dataset.src = src;
         a.dataset.orient = orient;
         a.setAttribute('aria-label', name);
-        a.innerHTML = '<img src="thumbnails/' + thumb + '" alt="">';
+        // `lazy`: solo se bajan las miniaturas que se ven. Con 22 tarjetas pidiendose todas de
+        // una, en un telefono la mitad ni estan en pantalla cuando se piden.
+        // `async`: decodificar no bloquea el hilo principal mientras entran las tarjetas.
+        a.innerHTML = '<img src="thumbnails/' + thumb + '" alt="" loading="lazy" decoding="async">';
         const label = document.createElement('div');
         label.className = 'tile-name';
         label.textContent = name;

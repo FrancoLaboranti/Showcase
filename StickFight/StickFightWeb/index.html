@@ -196,6 +196,9 @@
   dash+PUÑO = piña con embalada · carrera+PATADA = patada voladora.<br>
   <b>Trepar:</b> saltá hacia un borde de plataforma para colgarte; hacia adentro o SALTO = subir ·
   contra una pared deslizás y podés saltar.<br>
+  <b>Si te agarran:</b> mientras volás, tocá SALTO/PUÑO/PATADA para <b>recuperarte en el aire</b> ·
+  al caer, sostené una dirección y aterrizás <b>rodando</b> en vez de quedar tirado ·
+  en el piso, cualquier botón o dirección te <b>levanta antes</b>.<br>
   <span class="fps" id="fpsInfo">FPS: --</span><br>
   <span style="opacity:0.55">© 2026 Franco Laboranti</span>
 </div>
@@ -268,6 +271,14 @@ const CFG = {
     // hitboxes agrandados (+25-30%): las piñas atravesaban al enemigo con los valores viejos,
     // sobre todo con la nueva velocidad de correr (72% max) que sumaba distancia por frame.
     kdInvuln: 0.30, hitR: 0.075, hurtHead: 0.12, hurtTorso: 0.115, hurtLegs: 0.10, cancelEnd: 0.5,
+    // ── ATURDIMIENTO ──────────────────────────────────────────────────────────────────────
+    // Antes cada golpe RESETEABA el stun al 100 %, así que un combo de 4 te dejaba 2.4 s sin
+    // poder hacer nada. Ahora se DEGRADA por cadena (misma idea que jugScale para el daño: el
+    // 2º, 3º y 4º golpe seguidos aturden cada vez menos, con piso) y el que la come tiene dos
+    // recuperaciones que puede PEDIR: techear en el aire y levantada rápida en el piso.
+    // El castigo sigue: lo que se acorta es el rato en que no podés hacer NADA.
+    stunDecay: 0.78, stunFloor: 0.42, stunChainT: 0.85,
+    kdT: 0.24, kdMax: 0.50, kdQuickT: 0.10, getupT: 0.24, airTechT: 0.26,
   },
   // Grab hitbox más estricto: antes te agarrabas de plataformas casi sin querer con grabW=0.30
   // y grabH=0.36. Ahora hay que apuntar más de cerca al borde para que enganche.
@@ -612,7 +623,14 @@ function ik2Blend(ax, ay, tx, ty, l1, l2, bendDir, pts, iMid, iEnd, w) {
 
 // ════════════════ POSES autoradas (pocas y marcadas > muchas y tibias) ════════════════
 const POSES = {
-  idle:    P({ torso: 0.06, head: 0.04, aLu: 0.42, aLl: 1.9, aRu: 0.62, aRl: 1.75, lLu: -0.22, lLl: -0.18, lRu: 0.2, lRl: -0.28, dy: 0.025 }),
+  // ── OJO con las manos de las poses de espera ──
+  // Acá estaba la razón de fondo de que los golpes se sintieran cortos: el brazo mide 76 px y la
+  // mano de la guardia vieja quedaba a 48 px del hombro, o sea el 63 % ya extendido. Un puño que
+  // arranca así sólo puede recorrer el 37 % que le queda: se lee como un movimiento de muñeca.
+  // Con la mano al mentón (~25-36 px) el mismo golpe, con el MISMO frame-data y el MISMO punto de
+  // contacto, recorre casi el doble. Los brazos no están en ninguna hurtbox, así que esto no toca
+  // el combate: sólo cambia de dónde SALE el golpe.
+  idle:    P({ torso: 0.06, head: 0.04, aLu: 0.22, aLl: 2.55, aRu: 0.50, aRl: 2.15, lLu: -0.22, lLl: -0.18, lRu: 0.2, lRl: -0.28, dy: 0.025 }),
   // Guardia de pelea (no es el bloqueo): más compacta que idle, rodillas cargadas, mano de
   // adelante alta y la de atrás al mentón. Se mezcla con idle según lo cerca que esté el rival
   // y encima le corre el rebote de CFG.anim.bounce* — por eso no parece un maniquí.
@@ -620,7 +638,7 @@ const POSES = {
   // de renderPts, así que bajar la cabeza o la pelvis en la guardia sería regalar (o robar)
   // centímetros de blanco. Medido: la cabeza queda ~6 px más baja y ~4 px más adelante que en
   // idle, sobre una hurtbox de cabeza de 29 px de radio.
-  stance:  P({ torso: 0.10, head: 0.03, aLu: 0.50, aLl: 2.25, aRu: 0.85, aRl: 1.62, lLu: -0.30, lLl: -0.32, lRu: 0.28, lRl: -0.44, dy: 0.045 }),
+  stance:  P({ torso: 0.10, head: 0.03, aLu: 0.18, aLl: 2.70, aRu: 0.55, aRl: 2.30, lLu: -0.30, lLl: -0.32, lRu: 0.28, lRl: -0.44, dy: 0.045 }),
   // run1/run2 quedan como BASE de piernas y para mezclas de entrada/salida. Ojo: las piernas
   // están en fase con el IK de marcha (en gaitPhase 0 la pierna IZQUIERDA está adelante); antes
   // estaban al revés y se notaba al saltar en plena zancada. Los brazos los calcula runCycle().
@@ -636,20 +654,20 @@ const POSES = {
   climbPush:  P({ torso: 0.40, head: 0.04, aLu: 1.05, aLl: 1.35, aRu: 0.82, aRl: 1.45, lLu: -0.30, lLl: -1.15, lRu: 0.58, lRl: -1.50, dy: 0.21 }),
   // Rodada: entrada (se tira y encoge) → bolita → salida (se despliega en cuclillas listo a correr).
   rollTuck: P({ torso: 0.45, head: 0.34, aLu: 1.20, aLl: 2.25, aRu: 1.25, aRl: 2.30, lLu: 0.38, lLl: -1.85, lRu: -0.28, lRl: -1.95, dy: 0.26 }),
-  rollOut:  P({ torso: 0.22, head: 0.06, aLu: 0.20, aLl: 1.55, aRu: 0.45, aRl: 1.45, lLu: -0.48, lLl: -1.25, lRu: 0.64, lRl: -1.05, dy: 0.17 }),
+  rollOut:  P({ torso: 0.22, head: 0.06, aLu: 0.08, aLl: 2.20, aRu: 0.32, aRl: 2.00, lLu: -0.48, lLl: -1.25, lRu: 0.64, lRl: -1.05, dy: 0.17 }),
   // Pose de IMPULSO de salto: brazos hacia arriba/atrás (aLu/aRu bien negativos), cuerpo estirado,
   // piernas casi rectas. Se usa durante los primeros ~0.15s tras despegar → sensación de "pop".
-  jumpPop: P({ torso: -0.04, head: -0.10, aLu: -1.45, aLl: 0.25, aRu: -1.55, aRl: 0.30, lLu: 0.08, lLl: -0.15, lRu: 0.12, lRl: -0.20, dy: -0.06 }),
+  jumpPop: P({ torso: -0.04, head: -0.10, aLu: -2.05, aLl: 0.55, aRu: -2.25, aRl: 0.62, lLu: 0.08, lLl: -0.15, lRu: 0.12, lRl: -0.20, dy: -0.06 }),
   // Pose de ROLL: cuerpo compacto (bolita). Todo doblado a fondo — arms wrapped, knees to chest,
   // dy alto (bajo al suelo). El giro visual lo aporta `f.rot` desde el estado ROLL.
   ballRoll: P({ torso: 0.55, head: 0.50, aLu: 1.55, aLl: 2.55, aRu: 1.55, aRl: 2.55, lLu: 0.55, lLl: -2.35, lRu: -0.55, lRl: -2.35, dy: 0.34 }),
-  airRise: P({ torso: 0.14, head: -0.06, aLu: -0.88, aLl: 0.92, aRu: -1.08, aRl: 1.02, lLu: 0.34, lLl: -0.95, lRu: 0.76, lRl: -1.35, dy: 0 }),
+  airRise: P({ torso: 0.14, head: -0.06, aLu: -1.40, aLl: 0.82, aRu: -1.62, aRl: 0.92, lLu: 0.34, lLl: -0.95, lRu: 0.76, lRl: -1.35, dy: 0 }),
   airApex: P({ torso: 0.08, head: 0, aLu: -0.42, aLl: 1.05, aRu: -0.32, aRl: 1.12, lLu: 0.10, lLl: -0.55, lRu: 0.46, lRl: -0.80, dy: 0 }),
-  airFall: P({ torso: 0.04, head: 0.08, aLu: -1.18, aLl: 0.70, aRu: -1.34, aRl: 0.78, lLu: -0.12, lLl: -0.26, lRu: 0.42, lRl: -0.44, dy: 0 }),
+  airFall: P({ torso: 0.04, head: 0.08, aLu: -0.92, aLl: 0.95, aRu: -1.12, aRl: 1.05, lLu: -0.12, lLl: -0.26, lRu: 0.42, lRl: -0.44, dy: 0 }),
   skid:    P({ torso: -0.28, head: 0.1, aLu: -0.55, aLl: 0.45, aRu: 0.9, aRl: 0.35, lLu: -0.34, lLl: -0.6, lRu: 0.68, lRl: -0.35, dy: 0.06 }),
-  block:   P({ torso: 0.14, head: 0.1, aLu: 0.72, aLl: 2.05, aRu: 0.95, aRl: 1.9, lLu: -0.25, lLl: -0.22, lRu: 0.22, lRl: -0.3, dy: 0.05 }),
-  blockLo: P({ torso: 0.35, head: 0.12, aLu: 0.7, aLl: 2.0, aRu: 0.95, aRl: 1.85, lLu: -0.35, lLl: -1.5, lRu: 0.5, lRl: -1.7, dy: 0.2 }),
-  crouch:  P({ torso: 0.3, head: 0.06, aLu: 0.4, aLl: 1.7, aRu: 0.6, aRl: 1.6, lLu: -0.4, lLl: -1.6, lRu: 0.55, lRl: -1.75, dy: 0.22 }),
+  block:   P({ torso: 0.14, head: 0.1, aLu: 0.45, aLl: 2.62, aRu: 0.70, aRl: 2.42, lLu: -0.25, lLl: -0.22, lRu: 0.22, lRl: -0.3, dy: 0.05 }),
+  blockLo: P({ torso: 0.35, head: 0.12, aLu: 0.42, aLl: 2.58, aRu: 0.68, aRl: 2.38, lLu: -0.35, lLl: -1.5, lRu: 0.5, lRl: -1.7, dy: 0.2 }),
+  crouch:  P({ torso: 0.3, head: 0.06, aLu: 0.22, aLl: 2.35, aRu: 0.44, aRl: 2.12, lLu: -0.4, lLl: -1.6, lRu: 0.55, lRl: -1.75, dy: 0.22 }),
   hang:    P({ torso: 0.08, head: -0.15, aLu: 2.75, aLl: 0.25, aRu: 2.95, aRl: 0.12, lLu: 0.04, lLl: -0.4, lRu: -0.08, lRl: -0.3, dy: 0 }),
   getup:   P({ torso: 0.55, head: 0.15, aLu: 0.5, aLl: 1.2, aRu: 0.8, aRl: 1.0, lLu: -0.45, lLl: -1.7, lRu: 0.6, lRl: -1.85, dy: 0.26 }),
 };
@@ -687,13 +705,13 @@ const MOVES = {
     // Jab: el tell tiene que ser MÍNIMO. Toda la anticipación es la mano libre subiendo al
     // mentón y el hombro que se carga medio frame; el peso casi no viaja (fw chico).
     poses: [
-      { p: { head: -0.07, aLu: 0.64, aLl: 2.16 }, at: 0.018, ease: easeOutCubic },
-      { p: { torso: 0.1, aRu: 0.4, aRl: 1.9, aLu: 0.6, aLl: 2.1 }, at: 0.035, ease: easeOutCubic },
+      { p: { head: -0.09, aLu: 0.34, aLl: 2.66 }, at: 0.018, ease: easeOutCubic },
+      { p: { torso: 0.02, aRu: 0.16, aRl: 2.48, aLu: 0.30, aLl: 2.62 }, at: 0.035, ease: easeOutCubic },   // carga: puno al menton
       { p: { torso: 0.24, head: 0.05, aRu: 1.52, aRl: 0.06, aLu: 0.6, aLl: 2.05 }, at: 0.07, ease: easeOutCubic },   // contacto (autorada 8% pasada)
-      { p: { torso: 0.2389, aRu: 1.5125, aRl: 0.0749, head: 0.02, aLu: 0.58, aLl: 2.0 }, at: 0.095 },    // PIN mitad activa
-      { p: { torso: 0.2313, aRu: 1.4602, aRl: 0.1796, head: -0.01, aLu: 0.56, aLl: 1.98 }, at: 0.12 },   // PIN fin activa
-      { p: { torso: 0.17, head: 0.02, aRu: 0.92, aRl: 1.38, aLu: 0.52, aLl: 1.94 }, at: 0.175, ease: easeOutCubic },
-      { p: { torso: 0.12, head: 0.04, aRu: 0.7, aRl: 1.7, aLu: 0.5, aLl: 1.9 }, at: 0.26, ease: easeInOutCubic },
+      { p: { torso: 0.2389, aRu: 1.5125, aRl: 0.0749, head: 0.02, aLu: 0.30, aLl: 2.60 }, at: 0.095 },    // PIN mitad activa
+      { p: { torso: 0.2313, aRu: 1.4602, aRl: 0.1796, head: -0.01, aLu: 0.28, aLl: 2.58 }, at: 0.12 },   // PIN fin activa
+      { p: { torso: 0.16, head: 0.03, aRu: 0.42, aRl: 2.46, aLu: 0.26, aLl: 2.60 }, at: 0.175, ease: easeOutCubic },   // recoge pasandose
+      { p: { torso: 0.10, head: 0.04, aRu: 0.52, aRl: 2.14, aLu: 0.22, aLl: 2.54 }, at: 0.26, ease: easeInOutCubic },
     ],
     startup: 0.07, active: 0.05, recovery: 0.14, dmg: 5, stop: 0.05, kbx: 0.10, kby: 0,
     hitstun: 0.22, mask: MASK_PUNCH, limb: P_.hanR, strike: [J.aRu, J.aRl],
@@ -704,13 +722,13 @@ const MOVES = {
     // Cross: el golpe de la cadera. El talón de atrás se despega y pivotea (fw.heel grande), el
     // torso rota de −0.05 a +0.42 y el brazo de adelante se recoge a la mejilla como contrapeso.
     poses: [
-      { p: { head: -0.09, aRu: 0.7, aRl: 2.0 }, at: 0.022, ease: easeOutCubic },
-      { p: { torso: 0.05, aLu: 0.3, aLl: 2.1, aRu: 0.74, aRl: 1.96 }, at: 0.045, ease: easeOutCubic },
+      { p: { head: -0.11, aRu: 0.60, aRl: 2.34 }, at: 0.022, ease: easeOutCubic },
+      { p: { torso: -0.10, aLu: 0.02, aLl: 2.62, aRu: 0.58, aRl: 2.28 }, at: 0.045, ease: easeOutCubic },   // carga: cadera atras, puno al menton
       { p: { torso: 0.42, head: 0.08, aLu: 1.55, aLl: 0.05, aRu: 0.65, aRl: 2.1 }, at: 0.09, ease: easeOutCubic },
-      { p: { torso: 0.4181, aLu: 1.5427, aLl: 0.0628, head: 0.05, aRu: 0.6, aRl: 2.18 }, at: 0.12 },     // PIN mitad activa
-      { p: { torso: 0.4051, aLu: 1.4919, aLl: 0.1523, head: 0.01, aRu: 0.57, aRl: 2.22 }, at: 0.15 },    // PIN fin activa
-      { p: { torso: 0.31, head: -0.02, aLu: 1.02, aLl: 1.12, aRu: 0.58, aRl: 2.1 }, at: 0.22, ease: easeOutCubic },
-      { p: { torso: 0.15, head: 0.04, aLu: 0.5, aLl: 1.9, aRu: 0.6, aRl: 1.8 }, at: 0.34, ease: easeInOutCubic },
+      { p: { torso: 0.4181, aLu: 1.5427, aLl: 0.0628, head: 0.05, aRu: 0.50, aRl: 2.34 }, at: 0.12 },     // PIN mitad activa
+      { p: { torso: 0.4051, aLu: 1.4919, aLl: 0.1523, head: 0.01, aRu: 0.47, aRl: 2.38 }, at: 0.15 },    // PIN fin activa
+      { p: { torso: 0.30, head: -0.03, aLu: 0.30, aLl: 2.54, aRu: 0.52, aRl: 2.26 }, at: 0.22, ease: easeOutCubic },
+      { p: { torso: 0.13, head: 0.04, aLu: 0.22, aLl: 2.55, aRu: 0.50, aRl: 2.15 }, at: 0.34, ease: easeInOutCubic },
     ],
     startup: 0.09, active: 0.06, recovery: 0.19, dmg: 8, stop: 0.075, kbx: 0.11, kby: -0.04,
     hitstun: 0.28, mask: MASK_PUNCH, limb: P_.hanL, strike: [J.aLu, J.aLl],
@@ -722,13 +740,13 @@ const MOVES = {
     // Torso rota hacia atrás cargando y suelta cruzado. Encadena a uppercut (finish) o spinkick.
     // El pie de adelante pivotea con el giro (fw.front) y el de atrás empuja: es un golpe de rotación.
     poses: [
-      { p: { head: -0.13, aLu: 0.68, aLl: 2.1 }, at: 0.024, ease: easeOutCubic },
-      { p: { torso: -0.15, head: -0.05, aRu: 2.15, aRl: 1.85, aLu: 0.62, aLl: 2.05 }, at: 0.05, ease: easeOutCubic },
+      { p: { head: -0.15, aLu: 0.38, aLl: 2.60 }, at: 0.024, ease: easeOutCubic },
+      { p: { torso: -0.26, head: -0.10, aRu: 2.30, aRl: 2.30, aLu: 0.40, aLl: 2.58 }, at: 0.05, ease: easeOutCubic },   // enrosque del gancho
       { p: { torso: 0.38, head: 0.08, aRu: 1.55, aRl: 0.05, aLu: 0.5, aLl: 1.95 }, at: 0.11, ease: easeOutCubic },   // contacto (giro cruzado)
-      { p: { torso: 0.3795, aRu: 1.5482, aRl: 0.0535, head: 0.06, aLu: 0.46, aLl: 2.0 }, at: 0.13 },     // PIN mitad activa
-      { p: { torso: 0.3723, aRu: 1.5212, aRl: 0.1044, head: 0.01, aLu: 0.44, aLl: 2.05 }, at: 0.16 },    // PIN fin activa
-      { p: { torso: 0.27, head: -0.05, aRu: 0.96, aRl: 1.22, aLu: 0.48, aLl: 2.0 }, at: 0.235, ease: easeOutCubic },
-      { p: { torso: 0.14, head: 0.04, aRu: 0.65, aRl: 1.75, aLu: 0.55, aLl: 1.9 }, at: 0.36, ease: easeInOutCubic },
+      { p: { torso: 0.3795, aRu: 1.5482, aRl: 0.0535, head: 0.06, aLu: 0.28, aLl: 2.56 }, at: 0.13 },     // PIN mitad activa
+      { p: { torso: 0.3723, aRu: 1.5212, aRl: 0.1044, head: 0.01, aLu: 0.26, aLl: 2.60 }, at: 0.16 },    // PIN fin activa
+      { p: { torso: 0.25, head: -0.06, aRu: 0.44, aRl: 2.48, aLu: 0.28, aLl: 2.58 }, at: 0.235, ease: easeOutCubic },
+      { p: { torso: 0.12, head: 0.04, aRu: 0.50, aRl: 2.15, aLu: 0.22, aLl: 2.55 }, at: 0.36, ease: easeInOutCubic },
     ],
     startup: 0.10, active: 0.06, recovery: 0.20, dmg: 10, stop: 0.09, kbx: 0.16, kby: -0.03,
     hitstun: 0.30, mask: MASK_PUNCH, limb: P_.hanR, strike: [J.aRu, J.aRl],
@@ -739,13 +757,13 @@ const MOVES = {
     // Uppercut: el único golpe donde la caída y el empuje de piernas YA viven en el keytrack
     // (dy 0.14 → −0.03). El rework le suma la cabeza que se va con el arco y el rebote de recupero.
     poses: [
-      { p: { head: 0.2, aLu: 0.55, aLl: 2.2 }, at: 0.032, ease: easeInOutCubic },
-      { p: { torso: 0.5, head: 0.1, aRu: -0.5, aRl: 1.3, aLu: 0.6, aLl: 1.9, dy: 0.14 }, at: 0.07, ease: easeInOutCubic },
+      { p: { head: 0.22, aLu: 0.30, aLl: 2.64 }, at: 0.032, ease: easeInOutCubic },
+      { p: { torso: 0.5, head: 0.1, aRu: -0.5, aRl: 1.3, aLu: 0.30, aLl: 2.62, dy: 0.14 }, at: 0.07, ease: easeInOutCubic },   // OJO: aRu/aRl acá gobiernan parte de la ACTIVA (0.10-0.13): intocables
       { p: { torso: -0.18, head: -0.12, aRu: 2.55, aRl: 0.25, aLu: 0.55, aLl: 2.0, dy: -0.03 }, at: 0.13, ease: easeOutCubic },
-      { p: { torso: -0.1799, aRu: 2.5493, aRl: 0.2504, dy: -0.03, head: -0.17, aLu: 0.5, aLl: 2.1 }, at: 0.15 },      // PIN mitad activa
-      { p: { torso: -0.1747, aRu: 2.5188, aRl: 0.2673, dy: -0.0288, head: -0.2, aLu: 0.46, aLl: 2.16 }, at: 0.20 },   // PIN fin activa
-      { p: { torso: 0.2, head: 0.12, aRu: 1.78, aRl: 0.52, aLu: 0.5, aLl: 2.02, dy: 0.09 }, at: 0.32, ease: easeOutCubic },
-      { p: { torso: 0.05, head: 0.02, aRu: 1.2, aRl: 1.0, aLu: 0.5, aLl: 1.9, dy: 0.02 }, at: 0.52, ease: easeInOutCubic },
+      { p: { torso: -0.1799, aRu: 2.5493, aRl: 0.2504, dy: -0.03, head: -0.17, aLu: 0.26, aLl: 2.62 }, at: 0.15 },      // PIN mitad activa
+      { p: { torso: -0.1747, aRu: 2.5188, aRl: 0.2673, dy: -0.0288, head: -0.2, aLu: 0.24, aLl: 2.66 }, at: 0.20 },   // PIN fin activa
+      { p: { torso: 0.2, head: 0.12, aRu: 1.45, aRl: 1.55, aLu: 0.26, aLl: 2.58, dy: 0.09 }, at: 0.32, ease: easeOutCubic },
+      { p: { torso: 0.05, head: 0.02, aRu: 0.56, aRl: 2.10, aLu: 0.22, aLl: 2.55, dy: 0.02 }, at: 0.52, ease: easeInOutCubic },
     ],
     // activa desde ANTES del keyframe de contacto: la barrida del arco (abajo→arriba) también pega
     startup: 0.10, active: 0.10, recovery: 0.32, dmg: 12, stop: 0.115, kbx: 0.12, kby: -0.75,
@@ -758,13 +776,13 @@ const MOVES = {
     // (las piernas no heredan el torso), así que acá está toda la compensación: el torso se tira
     // hacia atrás contra la pierna, el brazo de adelante se abre y el de atrás cruza al pecho.
     poses: [
-      { p: { torso: 0.34, head: 0.02, aRu: 1.0, aRl: 0.9, aLu: -0.15, aLl: 1.0, lRu: 0.22, lRl: -1.15, lLu: -0.1, lLl: -0.3, dy: 0.09 }, at: 0.045, ease: easeOutCubic },
-      { p: { torso: 0.28, head: 0.05, aRu: 0.85, aRl: 0.5, aLu: -0.4, aLl: 0.6, lRu: 0.5, lRl: -1.6, lLu: -0.15, lLl: -0.25, dy: 0.06 }, at: 0.08, ease: easeInOutCubic },
+      { p: { torso: 0.38, head: 0.0, aRu: 1.15, aRl: 1.35, aLu: -0.25, aLl: 1.55, lRu: 0.45, lRl: -1.95, lLu: -0.1, lLl: -0.32, dy: 0.10 }, at: 0.045, ease: easeOutCubic },
+      { p: { torso: 0.24, head: 0.06, aRu: 1.05, aRl: 0.75, aLu: -0.55, aLl: 1.15, lRu: 0.80, lRl: -2.52, lLu: -0.16, lLl: -0.28, dy: 0.07 }, at: 0.08, ease: easeInOutCubic },   // CHAMBER: rodilla arriba, talon a la cola
       { p: { torso: -0.42, head: 0.15, aRu: -0.6, aRl: 0.4, aLu: 0.9, aLl: 0.3, lRu: 1.62, lRl: -0.08, lLu: -0.2, lLl: -0.38, dy: 0.04 }, at: 0.145, ease: easeOutCubic },
       { p: { lRu: 1.6188, lRl: -0.0802, dy: 0.04, torso: -0.46, head: 0.18, aRu: -0.78, aRl: 0.34, aLu: 1.0, aLl: 0.28 }, at: 0.165 },    // PIN mitad activa
       { p: { lRu: 1.5957, lRl: -0.0848, dy: 0.04, torso: -0.48, head: 0.20, aRu: -0.88, aRl: 0.38, aLu: 1.08, aLl: 0.3 }, at: 0.20 },  // PIN fin activa
-      { p: { torso: -0.17, head: 0.1, aRu: 0.12, aRl: 1.12, aLu: 0.82, aLl: 0.9, lRu: 0.92, lRl: -0.78, lLu: -0.24, lLl: -0.3, dy: 0.085 }, at: 0.30, ease: easeOutCubic },
-      { p: { torso: 0.08, head: 0.0, aRu: 0.6, aRl: 1.7, aLu: 0.45, aLl: 1.85, lRu: 0.25, lRl: -0.35, lLu: -0.22, lLl: -0.2, dy: 0.04 }, at: 0.48, ease: easeInOutCubic },
+      { p: { torso: -0.17, head: 0.1, aRu: 0.05, aRl: 1.45, aLu: 0.88, aLl: 1.15, lRu: 1.02, lRl: -1.75, lLu: -0.24, lLl: -0.3, dy: 0.085 }, at: 0.30, ease: easeOutCubic },   // recoge la pierna antes de bajarla
+      { p: { torso: 0.08, head: 0.0, aRu: 0.50, aRl: 2.15, aLu: 0.22, aLl: 2.55, lRu: 0.25, lRl: -0.35, lLu: -0.22, lLl: -0.2, dy: 0.04 }, at: 0.48, ease: easeInOutCubic },
     ],
     startup: 0.13, active: 0.07, recovery: 0.28, dmg: 11, stop: 0.09, kbx: 0.30, kby: -0.06,
     hitstun: 0.32, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true,
@@ -775,12 +793,15 @@ const MOVES = {
     // Barrida: el cuerpo se va al piso. La mano de atrás baja casi a apoyarse (aLu negativo) y
     // la de adelante sube: contrapeso real, no un muñeco girando una pierna.
     poses: [
-      { p: { torso: 0.5, head: 0.14, aRu: 0.35, aRl: 1.5, aLu: 0.1, aLl: 1.2, lRu: 0.1, lRl: -1.2, lLu: -0.3, lLl: -1.2, dy: 0.12 }, at: 0.028, ease: easeOutCubic },
-      { p: { torso: 0.45, head: 0.12, aRu: 0.5, aRl: 1.2, aLu: 0.2, aLl: 1.0, lRu: 0.3, lRl: -1.5, lLu: -0.4, lLl: -1.6, dy: 0.2 }, at: 0.06, ease: easeInOutCubic },
+      { p: { torso: 0.5, head: 0.14, aRu: 0.30, aRl: 1.95, aLu: 0.05, aLl: 1.65, lRu: 0.25, lRl: -1.85, lLu: -0.3, lLl: -1.25, dy: 0.13 }, at: 0.028, ease: easeOutCubic },
+      { p: { lRu: 0.52, lRl: -2.42, torso: 0.48, head: 0.13, aRu: 0.38, aRl: 1.85, aLu: 0.10, aLl: 1.60, lLu: -0.38, lLl: -1.50, dy: 0.17 }, at: 0.045, ease: easeOutCubic },   // CHAMBER bajo
+      // Esta clave VUELVE a los valores originales de lRu/lRl/dy a propósito: gobierna el
+      // segmento que entra en la ventana activa, así que el chamber va en la clave de 0.045.
+      { p: { torso: 0.45, head: 0.12, aRu: 0.45, aRl: 1.65, aLu: 0.15, aLl: 1.45, lRu: 0.3, lRl: -1.5, lLu: -0.42, lLl: -1.68, dy: 0.2 }, at: 0.06, ease: easeInOutCubic },
       { p: { torso: 0.55, head: 0.1, aRu: 0.9, aRl: 0.4, aLu: -0.3, aLl: 0.5, lRu: 1.25, lRl: -0.06, lLu: -0.45, lLl: -1.9, dy: 0.24 }, at: 0.13, ease: easeOutCubic },
       { p: { lRu: 1.2469, lRl: -0.0652, dy: 0.2398, torso: 0.6, head: 0.13, aRu: 1.05, aRl: 0.32, aLu: -0.44, aLl: 0.46, lLu: -0.48, lLl: -1.95 }, at: 0.16 },   // PIN fin activa
-      { p: { torso: 0.5, head: 0.05, aRu: 0.8, aRl: 0.95, aLu: 0.06, aLl: 1.15, lRu: 0.78, lRl: -0.92, lLu: -0.44, lLl: -1.8, dy: 0.24 }, at: 0.26, ease: easeOutCubic },
-      { p: { torso: 0.3, head: 0.0, aRu: 0.55, aRl: 1.6, aLu: 0.4, aLl: 1.7, lRu: 0.4, lRl: -1.5, lLu: -0.4, lLl: -1.6, dy: 0.18 }, at: 0.44, ease: easeInOutCubic },
+      { p: { torso: 0.5, head: 0.05, aRu: 0.72, aRl: 1.35, aLu: 0.02, aLl: 1.55, lRu: 0.72, lRl: -1.85, lLu: -0.44, lLl: -1.8, dy: 0.24 }, at: 0.26, ease: easeOutCubic },
+      { p: { torso: 0.3, head: 0.0, aRu: 0.44, aRl: 2.10, aLu: 0.22, aLl: 2.30, lRu: 0.4, lRl: -1.5, lLu: -0.4, lLl: -1.6, dy: 0.18 }, at: 0.44, ease: easeInOutCubic },
     ],
     startup: 0.10, active: 0.06, recovery: 0.28, dmg: 7, stop: 0.07, kbx: 0.12, kby: 0,
     hitstun: 0.3, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true,
@@ -793,13 +814,13 @@ const MOVES = {
     // (K), roundhouse (K), o directamente dash+kick.
     // El enrosque es el tell: brazos cruzados al pecho y hombro adelante ANTES de abrir.
     poses: [
-      { p: { torso: 0.3, head: 0.16, aRu: 0.9, aRl: 1.9, aLu: 0.85, aLl: 1.95, lRu: 0.15, lRl: -1.0, lLu: -0.12, lLl: -0.26, dy: 0.10 }, at: 0.03, ease: easeOutCubic },
-      { p: { torso: 0.15, head: 0.1, aRu: 0.5, aRl: 1.7, aLu: 0.5, aLl: 1.7, lRu: 0.35, lRl: -1.4, lLu: -0.2, lLl: -0.3, dy: 0.05 }, at: 0.06, ease: easeInOutCubic },
+      { p: { torso: 0.34, head: 0.18, aRu: 0.95, aRl: 2.35, aLu: 0.90, aLl: 2.40, lRu: 0.30, lRl: -1.70, lLu: -0.12, lLl: -0.28, dy: 0.11 }, at: 0.03, ease: easeOutCubic },
+      { p: { torso: 0.12, head: 0.12, aRu: 0.70, aRl: 2.10, aLu: 0.68, aLl: 2.15, lRu: 0.64, lRl: -2.48, lLu: -0.22, lLl: -0.34, dy: 0.06 }, at: 0.06, ease: easeInOutCubic },   // CHAMBER del giro
       { p: { torso: -0.55, head: 0.2, aRu: -0.5, aRl: 0.3, aLu: 0.9, aLl: 0.35, lRu: 1.7, lRl: -0.03, lLu: -0.25, lLl: -0.42, dy: 0.03 }, at: 0.16, ease: easeOutCubic },
       { p: { lRu: 1.6999, lRl: -0.03, dy: 0.03, torso: -0.63, head: 0.24, aRu: -0.7, aRl: 0.28, aLu: 1.06, aLl: 0.3 }, at: 0.17 },      // PIN mitad activa
       { p: { lRu: 1.6822, lRl: -0.036, dy: 0.0301, torso: -0.68, head: 0.27, aRu: -0.88, aRl: 0.3, aLu: 1.16, aLl: 0.32 }, at: 0.21 }, // PIN fin activa
-      { p: { torso: -0.24, head: 0.12, aRu: 0.02, aRl: 1.02, aLu: 0.86, aLl: 0.95, lRu: 0.95, lRl: -0.9, lLu: -0.3, lLl: -0.5, dy: 0.09 }, at: 0.32, ease: easeOutCubic },
-      { p: { torso: 0.05, head: 0.0, aRu: 0.55, aRl: 1.65, aLu: 0.5, aLl: 1.9, lRu: 0.3, lRl: -0.5, lLu: -0.25, lLl: -0.35, dy: 0.04 }, at: 0.5, ease: easeInOutCubic },
+      { p: { torso: -0.24, head: 0.12, aRu: -0.05, aRl: 1.40, aLu: 0.92, aLl: 1.25, lRu: 1.05, lRl: -1.90, lLu: -0.3, lLl: -0.5, dy: 0.09 }, at: 0.32, ease: easeOutCubic },
+      { p: { torso: 0.05, head: 0.0, aRu: 0.50, aRl: 2.15, aLu: 0.22, aLl: 2.55, lRu: 0.3, lRl: -0.5, lLu: -0.25, lLl: -0.35, dy: 0.04 }, at: 0.5, ease: easeInOutCubic },
     ],
     startup: 0.13, active: 0.08, recovery: 0.32, dmg: 14, stop: 0.12, kbx: 0.36, kby: -0.10,
     hitstun: 0.42, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true,
@@ -811,12 +832,12 @@ const MOVES = {
     // El PIN de 0.59 congela la pierna estirada toda la activa; recién ahí arranca la caída y el
     // recupero (antes se quedaba con la pierna tiesa en el piso hasta que terminaba el move).
     poses: [
-      { p: { torso: 0.1, head: 0.05, aRu: -0.3, aRl: 0.9, aLu: -0.25, aLl: 0.85, lRu: 0.3, lRl: -1.7, lLu: 0.25, lLl: -1.6, dy: 0.02 }, at: 0.024, ease: easeOutCubic },
-      { p: { torso: -0.2, aRu: -0.7, aRl: 0.5, aLu: -0.6, aLl: 0.45, lRu: 0.6, lRl: -1.4, lLu: 0.5, lLl: -1.3, dy: 0 }, at: 0.05, ease: easeInOutCubic },
+      { p: { torso: 0.16, head: 0.05, aRu: -0.15, aRl: 1.40, aLu: -0.10, aLl: 1.35, lRu: 0.55, lRl: -2.20, lLu: 0.50, lLl: -2.10, dy: 0.03 }, at: 0.024, ease: easeOutCubic },
+      { p: { torso: -0.2, aRu: -0.7, aRl: 0.5, aLu: -0.6, aLl: 0.45, lRu: 0.90, lRl: -2.38, lLu: 0.78, lLl: -2.15, dy: 0 }, at: 0.05, ease: easeInOutCubic },   // CHAMBER: las dos rodillas al pecho
       { p: { torso: -0.62, head: 0.2, aRu: -0.9, aRl: 0.4, aLu: -0.8, aLl: 0.35, lRu: 1.45, lRl: -0.1, lLu: 1.3, lLl: -0.12, dy: 0 }, at: 0.11, ease: easeOutCubic },
       { p: { lRu: 1.45, lRl: -0.1, dy: 0 }, at: 0.59 },                                              // PIN: pierna extendida TODA la activa
-      { p: { torso: 0.18, head: 0.06, aRu: 0.3, aRl: 1.3, aLu: 0.2, aLl: 1.35, lRu: 0.55, lRl: -1.15, lLu: -0.15, lLl: -0.9, dy: 0.16 }, at: 0.66, ease: easeOutCubic },
-      { p: { torso: 0.05, head: 0.0, aRu: 0.6, aRl: 1.7, aLu: 0.45, aLl: 1.85, lRu: 0.2, lRl: -0.4, lLu: -0.2, lLl: -0.28, dy: 0.05 }, at: 0.79, ease: easeInOutCubic },
+      { p: { torso: 0.18, head: 0.06, aRu: 0.28, aRl: 1.85, aLu: 0.16, aLl: 1.90, lRu: 0.55, lRl: -1.15, lLu: -0.15, lLl: -0.9, dy: 0.16 }, at: 0.66, ease: easeOutCubic },
+      { p: { torso: 0.05, head: 0.0, aRu: 0.50, aRl: 2.15, aLu: 0.22, aLl: 2.55, lRu: 0.2, lRl: -0.4, lLu: -0.2, lLl: -0.28, dy: 0.05 }, at: 0.79, ease: easeInOutCubic },
     ],
     startup: 0.09, active: 0.5, recovery: 0.2, dmg: 9, stop: 0.09, kbx: 0.28, kby: -0.10,
     hitstun: 0.34, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true, aerial: true,
@@ -827,15 +848,15 @@ const MOVES = {
     // Patada aérea descendente: la pierna libre se recoge al pecho (lLl) como contrapeso y el
     // torso se abre; el recupero recoge la pierna en vez de dejarla colgando.
     poses: [
-      { p: { torso: 0.05, head: -0.08, aRu: -0.2, aRl: 0.9, aLu: 0.35, aLl: 1.2, lRu: 0.1, lRl: -1.75, lLu: 0.3, lLl: -1.1 }, at: 0.02, ease: easeOutCubic },
-      { p: { torso: 0.15, aRu: -0.5, aRl: 0.5, aLu: 0.6, aLl: 0.8, lRu: 0.4, lRl: -1.5, lLu: 0.45, lLl: -1.4 }, at: 0.045, ease: easeOutCubic },
+      { p: { torso: 0.02, head: -0.10, aRu: -0.15, aRl: 1.45, aLu: 0.30, aLl: 1.75, lRu: 0.30, lRl: -2.30, lLu: 0.32, lLl: -1.20 }, at: 0.02, ease: easeOutCubic },
+      { p: { torso: 0.15, aRu: -0.5, aRl: 0.5, aLu: 0.6, aLl: 0.8, lRu: 0.74, lRl: -2.46, lLu: 0.50, lLl: -1.55 }, at: 0.045, ease: easeOutCubic },   // CHAMBER: rodilla al pecho
       { p: { torso: 0.3, head: 0.1, aRu: -0.7, aRl: 0.4, aLu: 0.8, aLl: 0.5, lRu: 1.15, lRl: -0.12, lLu: 0.55, lLl: -1.6 }, at: 0.08, ease: easeOutCubic },
       // La activa de la airkick dura 0.15 s: partir el arco del pie en tramos le cambiaría la
       // forma. Con el sampler POR CANAL no hace falta — estas claves no mencionan lRu/lRl, así
       // que la pierna que pega sigue su curva original 0.08→0.3 intacta.
       { p: { torso: 0.34, head: 0.15, aRu: -0.86, aRl: 0.38, aLu: 0.92, aLl: 0.45, lLu: 0.6, lLl: -1.72 }, at: 0.155 },
       { p: { torso: 0.22, head: 0.08, aRu: -0.55, aRl: 0.45, aLu: 0.7, aLl: 0.6, lLu: 0.45, lLl: -1.4 }, at: 0.23 },
-      { p: { torso: 0.1, head: 0.0, aRu: -0.3, aRl: 0.5, aLu: 0.4, aLl: 0.7, lRu: 0.5, lRl: -0.8, lLu: 0.3, lLl: -0.9 }, at: 0.3, ease: easeInOutCubic },
+      { p: { torso: 0.1, head: 0.0, aRu: -0.25, aRl: 1.05, aLu: 0.35, aLl: 1.25, lRu: 0.5, lRl: -0.8, lLu: 0.3, lLl: -0.9 }, at: 0.3, ease: easeInOutCubic },
     ],
     startup: 0.08, active: 0.15, recovery: 0.1, dmg: 9, stop: 0.075, kbx: 0.20, kby: 0.10,
     hitstun: 0.3, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true, aerial: true,
@@ -844,13 +865,13 @@ const MOVES = {
   },
   airpunch: {
     poses: [
-      { p: { head: -0.06, aLu: 0.4, aLl: 1.5 }, at: 0.013, ease: easeOutCubic },
-      { p: { torso: 0.15, aRu: 0.5, aRl: 1.6, aLu: 0.35, aLl: 1.35 }, at: 0.03, ease: easeOutCubic },
+      { p: { head: -0.08, aLu: 0.26, aLl: 2.10 }, at: 0.013, ease: easeOutCubic },
+      { p: { torso: 0.05, aRu: 0.22, aRl: 2.35, aLu: 0.24, aLl: 2.15 }, at: 0.03, ease: easeOutCubic },
       { p: { torso: 0.28, head: 0.04, aRu: 1.5, aRl: 0.1, aLu: 0.45, aLl: 1.6 }, at: 0.06, ease: easeOutCubic },
       { p: { torso: 0.2779, aRu: 1.4895, aRl: 0.1152, head: 0.02, aLu: 0.42, aLl: 1.66 }, at: 0.08 },    // PIN mitad activa
       { p: { torso: 0.2632, aRu: 1.416, aRl: 0.2213, head: -0.01, aLu: 0.4, aLl: 1.7 }, at: 0.10 },      // PIN fin activa
-      { p: { torso: 0.17, head: 0.02, aRu: 0.86, aRl: 1.12, aLu: 0.38, aLl: 1.42 }, at: 0.145, ease: easeOutCubic },
-      { p: { torso: 0.1, head: 0.0, aRu: 0.6, aRl: 1.4, aLu: 0.35, aLl: 1.3 }, at: 0.2, ease: easeInOutCubic },
+      { p: { torso: 0.17, head: 0.02, aRu: 0.45, aRl: 2.30, aLu: 0.26, aLl: 2.10 }, at: 0.145, ease: easeOutCubic },
+      { p: { torso: 0.1, head: 0.0, aRu: 0.52, aRl: 2.00, aLu: 0.28, aLl: 1.95 }, at: 0.2, ease: easeInOutCubic },
     ],
     startup: 0.06, active: 0.04, recovery: 0.1, dmg: 5, stop: 0.05, kbx: 0.08, kby: 0,
     hitstun: 0.2, mask: MASK_PUNCH, limb: P_.hanR, strike: [J.aRu, J.aRl], aerial: true, sound: 'hit', trauma: 0.15,
@@ -859,13 +880,13 @@ const MOVES = {
   lunge: {
     // dash+P: hereda la velocidad del lunge como knockback/daño extra (momentum como recurso)
     poses: [
-      { p: { head: -0.1, aRu: 0.75, aRl: 1.95 }, at: 0.018, ease: easeOutCubic },
-      { p: { torso: 0.15, aLu: 0.2, aLl: 2.15, aRu: 0.72, aRl: 1.9 }, at: 0.04, ease: easeOutCubic },
+      { p: { head: -0.12, aRu: 0.62, aRl: 2.32 }, at: 0.018, ease: easeOutCubic },
+      { p: { torso: 0.0, aLu: -0.05, aLl: 2.65, aRu: 0.58, aRl: 2.26 }, at: 0.04, ease: easeOutCubic },   // carga con embalada
       { p: { torso: 0.55, head: 0.1, aLu: 1.6, aLl: 0.04, aRu: 0.6, aRl: 2.1, dy: 0.05 }, at: 0.085, ease: easeOutCubic },
-      { p: { torso: 0.5471, aLu: 1.5908, aLl: 0.0555, head: 0.06, aRu: 0.55, aRl: 2.2 }, at: 0.115 },    // PIN mitad activa
-      { p: { torso: 0.5267, aLu: 1.5268, aLl: 0.1638, head: 0.01, aRu: 0.52, aRl: 2.26 }, at: 0.145 },   // PIN fin activa
-      { p: { torso: 0.37, head: -0.03, aLu: 1.02, aLl: 1.1, aRu: 0.55, aRl: 2.1 }, at: 0.215, ease: easeOutCubic },
-      { p: { torso: 0.2, head: 0.03, aLu: 0.5, aLl: 1.9, aRu: 0.55, aRl: 1.85 }, at: 0.32, ease: easeInOutCubic },
+      { p: { torso: 0.5471, aLu: 1.5908, aLl: 0.0555, head: 0.06, aRu: 0.48, aRl: 2.34 }, at: 0.115 },    // PIN mitad activa
+      { p: { torso: 0.5267, aLu: 1.5268, aLl: 0.1638, head: 0.01, aRu: 0.45, aRl: 2.40 }, at: 0.145 },   // PIN fin activa
+      { p: { torso: 0.36, head: -0.04, aLu: 0.28, aLl: 2.56, aRu: 0.50, aRl: 2.24 }, at: 0.215, ease: easeOutCubic },
+      { p: { torso: 0.18, head: 0.03, aLu: 0.22, aLl: 2.55, aRu: 0.50, aRl: 2.15 }, at: 0.32, ease: easeInOutCubic },
     ],
     startup: 0.085, active: 0.06, recovery: 0.18, dmg: 8, stop: 0.075, kbx: 0.2, kby: -0.05,
     hitstun: 0.3, mask: MASK_PUNCH, limb: P_.hanL, strike: [J.aLu, J.aLl], sound: 'heavy', trauma: 0.3, momentumDmg: true,
@@ -955,6 +976,7 @@ class Fighter {
     this.hitstopT = 0; this.pendKbx = 0; this.pendKby = 0; this.pendKb = false;
     this.stun = 0; this.flinchW = 0; this.flinchDir = 1; this.hitFlash = 0;
     this.juggle = 0; this.combo = 0; this.comboT = 0; this.kdT = 0; this.invuln = 0;
+    this.hitChain = 0; this.hitChainT = 0;        // golpes seguidos recibidos → degradan el stun
     this.ledge = null; this.climbFrom = null; this.wallSide = 0; this.lastDashDir = 0; this.dashT = 9;
     this.dashCdT = 0;                                                 // cooldown del dash (bloquea nuevo dash mientras > 0)
     this.foe = null; this.dead = false;
@@ -986,6 +1008,7 @@ class Fighter {
     const simDt = this.hitstopT > 0 ? 0 : dt;
     this.T += dt;
     this.comboT -= dt; if (this.comboT <= 0) this.combo = 0;
+    this.hitChainT -= dt; if (this.hitChainT <= 0) this.hitChain = 0;
     this.hitFlash = Math.max(0, this.hitFlash - dt);
     this.invuln = Math.max(0, this.invuln - dt);
     this.flinchW *= Math.pow(2, -dt / CFG.anim.flinchHl);
@@ -1080,11 +1103,27 @@ class Fighter {
         if (this.stun <= 0) this.state = this.grounded ? ST.IDLE : ST.FALL;
         break;
       }
-      case ST.LAUNCHED: break;               // termina al tocar el piso (physics → KNOCKDOWN)
+      case ST.LAUNCHED: {
+        // TECHEO AÉREO: pasado airTechT, salto/puño/patada te devuelve el control. Seguís
+        // volando con el knockback intacto (el castigo no se toca), pero ya manejás el cuerpo
+        // en vez de mirar cómo caés. Es lo que corta los períodos largos sin reacción.
+        if (this.stateT >= CFG.fight.airTechT &&
+            (this.consume('jump') || this.consume('punch') || this.consume('kick'))) {
+          this.state = ST.FALL; this.stateT = 0; this.juggle = 0;
+          spawnDust(this.x, this.y + STAND * 0.45, 5); sfx.dash();
+        }
+        break;                               // si no, termina al tocar el piso (onLand)
+      }
       case ST.KNOCKDOWN: {
         this.kdT -= dt;
         const v = this.ragSpeed();
-        if (this.kdT <= 0 && v < CFG.rag.getupV * S) {
+        // LEVANTADA RÁPIDA: pasado kdQuickT, pedirla (dirección sostenida o cualquier botón)
+        // saltea lo que queda. La IA ya sostiene dirección cuando está en el piso, así que la
+        // tienen los dos lados. Y un TECHO duro (kdMax) por si el ragdoll no termina de frenar:
+        // antes te podías quedar tirado esperando a que una pierna dejara de rebotar.
+        if (this.stateT >= CFG.fight.kdQuickT &&
+            (Math.abs(i.mx) > 0.4 || i.jump || i.punch || i.kick)) this.kdT = Math.min(this.kdT, 0);
+        if ((this.kdT <= 0 && v < CFG.rag.getupV * S) || this.stateT >= CFG.fight.kdMax) {
           // levantarse: el root salta a la pelvis del ragdoll; tech-roll si hay dirección sostenida
           this.x = clamp(this.rag.pts[0], ARENA.pad, ARENA.w - ARENA.pad);
           const g = groundAt(this.x, this.rag.pts[1] + STAND);
@@ -1095,7 +1134,7 @@ class Fighter {
         break;
       }
       case ST.GETUP: {
-        if (this.stateT >= 0.32) this.state = ST.IDLE;
+        if (this.stateT >= CFG.fight.getupT) this.state = ST.IDLE;
         break;
       }
       case ST.HANG: {
@@ -1342,8 +1381,21 @@ class Fighter {
     this.squashT = 0; this.squashAmt = clamp(vyImpact / (1.2 * S), 0, 1);
     this.replantFeet();
     if (vyImpact > 0.3 * S) { spawnDust(this.x, this.y + STAND, 3 + Math.floor(this.squashAmt * 6)); sfx.step(); }
-    if (this.state === ST.LAUNCHED) {                                 // impacto → ragdoll en el piso
-      this.enterKnockdown(this.vx * 0.6, -Math.abs(vyImpact) * 0.25);
+    if (this.state === ST.LAUNCHED) {
+      // UKEMI: si venís pidiendo algo al tocar el piso, caés RODANDO en vez de quedar tirado.
+      // Sale más barato que knockdown + levantada (0.38 s contra ~0.6 s) y encima se ve mejor.
+      const i2 = this.input;
+      // vale el botón SOSTENIDO o uno del buffer (160 ms): machacar tiene que funcionar, si no
+      // el ukemi depende de acertar el frame exacto del aterrizaje
+      if (Math.abs(i2.mx) > 0.4 || i2.jump || i2.punch || i2.kick ||
+          this.hasBuf('jump') || this.hasBuf('punch') || this.hasBuf('kick')) {
+        this.state = ST.ROLL; this.stateT = 0; this.juggle = 0; this.rot = 0;
+        this.vx = (Math.sign(i2.mx) || this.facing) * 0.32 * S;
+        this.invuln = Math.max(this.invuln, 0.2); this.recordGhosts = true;
+        spawnDust(this.x, this.y + STAND, 6);
+        return;
+      }
+      this.enterKnockdown(this.vx * 0.6, -Math.abs(vyImpact) * 0.25);   // impacto → ragdoll en el piso
       return;
     }
     if (this.state === ST.JUMP || this.state === ST.FALL) {
@@ -1421,8 +1473,8 @@ class Fighter {
       tp[J.dy] += 0.10 * k; tp[J.torso] += 0.26 * k; tp[J.head] -= 0.10 * k;
       tp[J.lLl] -= 0.55 * k; tp[J.lRl] -= 0.62 * k;
       tp[J.lLu] += 0.30 * k; tp[J.lRu] += 0.26 * k;
-      tp[J.aLu] += 0.55 * k; tp[J.aRu] += 0.60 * k;
-      tp[J.aLl] += 0.20 * k; tp[J.aRl] += 0.20 * k;
+      tp[J.aLu] += 0.90 * k; tp[J.aRu] += 0.95 * k;   // arrancan abajo y se tiran arriba
+      tp[J.aLl] += 0.35 * k; tp[J.aRl] += 0.35 * k;
     }
     // ── ATERRIZAJE en dos tiempos ──
     // Antes era medio seno: bajaba y subía, simétrico y muerto. Ahora comprime rápido, REBOTA
@@ -1934,7 +1986,7 @@ class Fighter {
 
   // ═══ RAGDOLL verlet (KO / knockdown / lanzado al caer) ═══
   enterKnockdown(ix, iy) {
-    this.state = ST.KNOCKDOWN; this.stateT = 0; this.kdT = 0.55; this.invuln = CFG.fight.kdInvuln;
+    this.state = ST.KNOCKDOWN; this.stateT = 0; this.kdT = CFG.fight.kdT; this.invuln = CFG.fight.kdInvuln;
     this.startRagdoll(ix, iy);
   }
   startRagdoll(impX, impY) {
@@ -2071,6 +2123,12 @@ function resolveCombat(att, def) {
   }
   if (!hit) return;
   const dir = Math.sign(def.x - att.x) || att.facing;
+  // Degradación de aturdimiento: cada golpe seguido de la misma cadena aturde menos que el
+  // anterior (con piso). Es el análogo de jugScale para el daño y es lo que evita que cuatro
+  // golpes encadenados sumen medio segundo de parálisis cada uno.
+  def.hitChain = def.hitChainT > 0 ? def.hitChain + 1 : 0;
+  def.hitChainT = CFG.fight.stunChainT;
+  const sDec = Math.max(CFG.fight.stunFloor, Math.pow(CFG.fight.stunDecay, def.hitChain));
 
   // ── bloqueo: sostener ATRÁS (parado bloquea altos; agachado bloquea barridas) ──
   const away = Math.sign(def.x - att.x);
@@ -2084,11 +2142,12 @@ function resolveCombat(att, def) {
     if (att.atkHitSet) att.atkHitSet.add(def);                        // este defensor ya no recibe re-chip en este swing
     const chip = Math.max(1, Math.round(m.dmg * CFG.fight.chip));
     def.hp = Math.max(1, def.hp - chip);
-    def.state = ST.BLOCKSTUN; def.stateT = 0; def.stun = CFG.fight.blockstun + m.dmg * 0.004;
+    def.state = ST.BLOCKSTUN; def.stateT = 0; def.stun = (CFG.fight.blockstun + m.dmg * 0.004) * sDec;
     def.pendKb = true; def.pendKbx = dir * CFG.fight.blockPush * S * 3; def.pendKby = 0;
     att.vx -= dir * CFG.fight.blockPush * S * 2;
     att.hitstopT = def.hitstopT = 0.04;
     spawnSparks(cx2, cy2, 5, [90, 110, 140], dir); sfx.block();
+    addHitArc(cx2, cy2, dir, 0.2, [90, 110, 140]);
     addDmgNum(cx2, cy2 - 0.1 * CH, chip, false, true);
     return;
   }
@@ -2108,6 +2167,7 @@ function resolveCombat(att, def) {
   def.flinchW = 1; def.flinchDir = dir; def.hitFlash = 0.1;
   addTrauma(m.trauma || 0.2);
   spawnSparks(cx2, cy2, 6 + Math.min(8, Math.round(dmg * 0.8)), att.color, dir);
+  addHitArc(cx2, cy2, dir, dmg / 14, att.color);
   addDmgNum(cx2, cy2 - 0.12 * CH, dmg, dmg >= 10, false);
   if (m.sound === 'heavy') sfx.heavy(); else sfx.hit(dmg);
   if (m.launcher) sfx.launcher();
@@ -2138,14 +2198,22 @@ function resolveCombat(att, def) {
   } else if (def.state === ST.LAUNCHED) {
     // sigue en el aire (juggle)
   } else {
-    def.state = ST.HITSTUN; def.stateT = 0; def.stun = m.hitstun;
-    if (!def.grounded) def.stun += 0.1;
+    def.state = ST.HITSTUN; def.stateT = 0; def.stun = m.hitstun * sDec;
+    if (!def.grounded) def.stun += 0.1 * sDec;
   }
   def.atk = null;
 }
 
 // ════════════════ EFECTOS (motitas de tinta — nada aditivo: sobre papel claro el 'lighter' se lava) ════════════════
-const sparks = [], dusts = [], dmgNums = [], smears = [], ghosts = [];
+const sparks = [], dusts = [], dmgNums = [], smears = [], ghosts = [], hitArcs = [];
+const SMEAR_T = 0.18, HITARC_T = 0.22;
+// arco de impacto en el punto de contacto: abre en la dirección del golpe y se desvanece
+function addHitArc(x, y, dir, power, col) {
+  if (hitArcs.length > 8) hitArcs.shift();
+  const a = dir >= 0 ? 0 : PI;
+  const w = 0.6 + 0.5 * clamp(power, 0, 1);
+  hitArcs.push({ x: x, y: y, r: CH * (0.10 + 0.10 * clamp(power, 0, 1)), a0: a - w, a1: a + w, t: 0, col: col });
+}
 let trauma = 0;
 function addTrauma(x) { trauma = Math.min(1, trauma + x); }
 const _glowCache = new Map();                                         // (queda para compat de context-loss)
@@ -2166,16 +2234,21 @@ function addDmgNum(x, y, val, crit, chip) {
   if (dmgNums.length >= CFG.juice.dmgCap) dmgNums.shift();
   dmgNums.push({ x: x + rnd(-0.04, 0.04) * CH, y, val, t: 0, crit, chip });
 }
+// Estela del golpe. Antes era un triángulo raíz→mano→mano-anterior: con el arco chico del
+// wind-up viejo casi no se veía. Ahora barre el CUADRILÁTERO que dejan el codo y la mano entre
+// dos frames, o sea el barrido real del antebrazo/pantorrilla, y dura un toque más.
 function addSmear(f) {
   const m = f.atk; if (!m) return;
-  const rootI = m.strike[0] === J.lRu || m.strike[0] === J.lLu ? P_.pelvis : (m.limb === P_.hanL ? P_.shoL : P_.shoR);
+  const leg = m.strike[0] === J.lRu || m.strike[0] === J.lLu;
+  const midI = leg ? (m.limb === P_.ftL ? P_.kneL : P_.kneR) : (m.limb === P_.hanL ? P_.elbL : P_.elbR);
   smears.push({
-    x1: f.renderPts[rootI * 2], y1: f.renderPts[rootI * 2 + 1],
-    x2: f.renderPts[m.limb * 2], y2: f.renderPts[m.limb * 2 + 1],
-    x3: f.renderPtsPrev[m.limb * 2], y3: f.renderPtsPrev[m.limb * 2 + 1],
+    ax: f.renderPtsPrev[midI * 2], ay: f.renderPtsPrev[midI * 2 + 1],
+    bx: f.renderPtsPrev[m.limb * 2], by: f.renderPtsPrev[m.limb * 2 + 1],
+    cx: f.renderPts[m.limb * 2], cy: f.renderPts[m.limb * 2 + 1],
+    dx: f.renderPts[midI * 2], dy: f.renderPts[midI * 2 + 1],
     t: 0, col: f.color,
   });
-  if (smears.length > 24) smears.shift();
+  if (smears.length > 28) smears.shift();
 }
 function updateEffects(dt) {
   for (let k = sparks.length - 1; k >= 0; k--) {
@@ -2192,7 +2265,8 @@ function updateEffects(dt) {
     const n = dmgNums[k]; n.t += dt;
     if (n.t > 0.9) dmgNums.splice(k, 1);
   }
-  for (let k = smears.length - 1; k >= 0; k--) { smears[k].t += dt; if (smears[k].t > 0.13) smears.splice(k, 1); }
+  for (let k = smears.length - 1; k >= 0; k--) { smears[k].t += dt; if (smears[k].t > SMEAR_T) smears.splice(k, 1); }
+  for (let k = hitArcs.length - 1; k >= 0; k--) { hitArcs[k].t += dt; if (hitArcs[k].t > HITARC_T) hitArcs.splice(k, 1); }
   for (let k = ghosts.length - 1; k >= 0; k--) { ghosts[k].t += dt; if (ghosts[k].t > 0.3) ghosts.splice(k, 1); }
   trauma = Math.max(0, trauma - CFG.juice.trDecay * dt);
 }
@@ -2408,9 +2482,24 @@ function drawEffectsUnder() {
 }
 function drawEffects() {
   for (const s of smears) {
-    const a = 0.22 * (1 - s.t / 0.13);
+    const a = 0.30 * (1 - s.t / SMEAR_T);
     ctx.fillStyle = rgba(s.col, a);
-    ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.lineTo(s.x3, s.y3); ctx.closePath(); ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(s.ax, s.ay); ctx.lineTo(s.bx, s.by); ctx.lineTo(s.cx, s.cy); ctx.lineTo(s.dx, s.dy);
+    ctx.closePath(); ctx.fill();
+  }
+  // Arco de impacto: un trazo de tinta que se abre desde el punto de contacto. Sobre papel
+  // claro no se puede usar composite aditivo, así que el "flash" es un arco que crece y aclara.
+  ctx.lineCap = 'round';
+  for (const h of hitArcs) {
+    const u = h.t / HITARC_T, a = (1 - u) * (1 - u);
+    const r = h.r * (0.35 + 1.15 * easeOutCubic(u));
+    ctx.strokeStyle = rgba(h.col, a * 0.55);
+    ctx.lineWidth = h.r * 0.30 * (1 - u * 0.7);
+    ctx.beginPath(); ctx.arc(h.x, h.y, r, h.a0, h.a1); ctx.stroke();
+    ctx.strokeStyle = 'rgba(34,30,27,' + (a * 0.32).toFixed(3) + ')';
+    ctx.lineWidth = h.r * 0.13 * (1 - u * 0.7);
+    ctx.beginPath(); ctx.arc(h.x, h.y, r * 1.14, h.a0, h.a1); ctx.stroke();
   }
   for (const d of dusts) {
     const a = 0.3 * (1 - d.t / d.life);
@@ -2722,6 +2811,7 @@ function resetFighter(f, x) {
   f.y = g.y - STAND; f.surf = g.s; f.grounded = true;
   f.state = ST.IDLE; f.stateT = 0; f.atk = null; f.rot = 0; f.juggle = 0; f.combo = 0; f.stun = 0;
   f.hitstopT = 0; f.pendKb = false; f.rag.on = false; f.rag.w = 0; f.invuln = 0; f.ledge = null;
+  f.hitChain = 0; f.hitChainT = 0;
   f.buffer.length = 0; f.dead = false; f.leanAx = 0; f.prevVx = 0;
   f.popT = 9; f.squashT = 9; f.squashAmt = 0; f.guardW = 0; f.atkChained = false;
   f.poseCur.set(POSES.idle); f.poseVel.fill(0);
@@ -2733,7 +2823,7 @@ function startMatch() {
   resetFighter(P1, 180); P1.facing = 1;
   for (const e of enemies) { resetFighter(e, e.spawnX); e.facing = -1; e.brain = newBrain(); }
   hud.chip = hud.hpPrev = CFG.fight.hp; hud.chipT = 9;
-  sparks.length = 0; dmgNums.length = 0; smears.length = 0; ghosts.length = 0;
+  sparks.length = 0; dmgNums.length = 0; smears.length = 0; ghosts.length = 0; hitArcs.length = 0;
   trauma = 0;
   cam.x = 400; cam.y = ARENA.floorY - 1.2 * CH;
   game.state = 'intro'; game.t = 0;
@@ -2862,7 +2952,9 @@ function aiThink(me, dt) {
 
   if ([ST.HITSTUN, ST.LAUNCHED, ST.KNOCKDOWN, ST.KO, ST.BLOCKSTUN].includes(me.state)) {
     br.mx = 0; br.my = Math.random() < 0.5 ? 1 : 0;                  // a veces tech-roll direccional
-    if (me.state === ST.KNOCKDOWN) br.mx = Math.sign(me.x - foe.x) || 1;
+    // Lanzado o en el piso sostiene dirección: así la IA también cobra el ukemi al aterrizar y
+    // la levantada rápida. Si no, el recorte de aturdimiento sería sólo para el jugador.
+    if (me.state === ST.KNOCKDOWN || me.state === ST.LAUNCHED) br.mx = Math.sign(me.x - foe.x) || 1;
     return;
   }
   if (me.state === ST.HANG) { if (me.stateT > 0.25) aiPress(br, 'jump'); return; }
@@ -2955,7 +3047,7 @@ let ctxLost = false;
 canvas.addEventListener('contextlost', e => { e.preventDefault(); ctxLost = true; });
 canvas.addEventListener('contextrestored', () => {
   ctxLost = false;
-  bgCanvas = null; terrainCanvas = null; _glowCache.clear(); sparks.length = 0;   // los bakes se fueron con el contexto
+  bgCanvas = null; terrainCanvas = null; _glowCache.clear(); sparks.length = 0; hitArcs.length = 0;   // los bakes se fueron con el contexto
   resize();
   bakeBg(); bakeTerrain();
 });

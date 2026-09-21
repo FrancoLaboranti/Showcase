@@ -48,6 +48,37 @@ Ojo con un cuarto camino silencioso: la **capa base** se filtra a los joints que
 y con él el alcance — por eso `baseLoco` usa `idlePose(tp, quiet)` durante un golpe (sin rebote de
 guardia ni ruido, `dy` exactamente el de `POSES.idle`, como fue siempre).
 
+### Por qué los golpes se sentían cortos (2026-09-21) — medir el RECORRIDO, no el alcance
+
+Un golpe se lee como grande por lo que RECORRE el miembro, no por dónde termina. Medido con el
+probe: el brazo mide 76 px y en el wind-up viejo la mano quedaba a **46 px del hombro, o sea el
+63 % ya extendido**; la pierna mide 95 px y el pie del chamber quedaba a 65-78 px (rodilla casi
+recta). Con esos números el jab sólo podía recorrer el 37 % que le quedaba: por eso parecía un
+movimiento de muñeca, aunque la extensión final estuviera al máximo.
+
+La causa de fondo no estaba en los keytracks sino en las **poses de espera**: `idle`/`stance`/
+`block` tenían las manos estiradas hacia adelante en vez de al mentón. Todo golpe nace de ahí.
+
+Arreglo: manos al mentón (25-36 px) y chambers de verdad (pie a ~30 px). Resultado medido:
+
+| | recorrido | más recogido |
+|---|---|---|
+| jab | 77 → 124 px | 46 → 30 px |
+| cross | 110 → 145 px | 39 → 20 px |
+| roundhouse | 354 → 408 px | 65 → 28 px |
+| spinkick | 373 → 442 px | 72 → 29 px |
+
+**Lo que hace que esto NO sea un cambio de alcance**: el punto de contacto y el frame-data no se
+tocan. Plegar más el wind-up alarga la cápsula barrida del primer frame activo *hacia el cuerpo*
+(7-21 px), nunca hacia afuera — y esa zona ya estaba cubierta por el radio (`hitR` + hurt ≈ 46 px)
+de la cápsula del frame de contacto, así que no habilita ningún golpe nuevo. El probe mide las dos
+direcciones por separado: **`+ALCANCE` (crecimiento hacia afuera) ≤ +0.13 px en los 11 moves**.
+
+Dos claves que NO se pueden tocar aunque estén antes del startup, porque su segmento entra en la
+ventana activa: la de `0.07` del uppercut (gobierna 0.10-0.13, y la activa arranca en 0.10) y la
+de `0.06` del sweep. En el sweep el chamber se movió a una clave nueva en `0.045` y la de `0.06`
+volvió a sus valores originales; en el uppercut simplemente se dejó el brazo como estaba.
+
 ### Peso y footwork (dónde vive la transferencia de peso)
 
 La pelvis no se puede mover durante un golpe sin mover el alcance, así que el peso se cuenta con los
@@ -112,6 +143,19 @@ PIES, que no están en ninguna cadena de hitbox:
   el piso proyecta con offset de reposo POR PARTE (cabeza sobre su radio) — sin eso el cuerpo queda chato.
 - **Hitstop por entidad**: `hitstopT` congela el `simDt` del par; el knockback queda `pendKb` y se
   aplica al DESCONGELAR.
+- **Aturdimiento con degradación + recuperaciones pedidas** (`CFG.fight.stun*`/`kd*`/`airTechT`):
+  antes cada golpe RESETEABA el stun al 100 %, así que un combo de 4 dejaba al jugador 2.39 s sin
+  poder hacer nada (medido). Ahora:
+  1. `stunDecay`/`stunFloor`: cada golpe seguido de la misma cadena aturde menos (análogo de
+     `jugScale` para el daño). `hitChain`/`hitChainT` viven en el DEFENSOR.
+  2. **Techeo aéreo** (`airTechT`): en LANZADO, salto/puño/patada devuelve el control. El
+     knockback y el daño no se tocan; lo que se acorta es el rato sin poder reaccionar.
+  3. **Ukemi al aterrizar**: si venís pidiendo algo al tocar el piso, caés RODANDO (0.38 s) en vez
+     de knockdown + levantada (~0.6 s). Vale el botón sostenido o el del buffer: machacar funciona.
+  4. **Levantada rápida** (`kdQuickT`) y **techo duro** (`kdMax`) por si el ragdoll no frena.
+  La IA sostiene dirección en LANZADO/KNOCKDOWN, así que cobra el ukemi y la levantada rápida: el
+  recorte no es sólo para el jugador. El techeo aéreo sí es del que apriete un botón.
+  Medido: combo de 4 recibido pasa de **2.39 s → 2.15 s** pasivo, y **0.95 s** si te recuperás.
 - **IA con percepción honesta**: lee snapshots de hace `reactionMs` (nunca el estado actual);
   arquetipos como filas de datos (`ARCHS`); la dificultad SÓLO escala reacción/bloqueo/drop de combos.
 - `separateBodies`: clinch mínimo 0.24·CH — más corto que lo usual porque el uppercut llega apenas
@@ -139,8 +183,12 @@ aunque los timers corran**. El loop está preparado para bombearse a mano:
   **no** `inP1`: `pollInputs()` reescribe `inP1` entero en cada frame.
 - Tres harnesses de la sesión de animación (2026-09-20), en el scratchpad:
   1. **probe de moves**: reconstruye la capa (b) de `buildPose` y muestrea la trayectoria del limb
-     cada 1 ms → compara frame-data exacto, desvío dentro de la activa y **Hausdorff unilateral de la
-     cápsula barrida** a 60 y 30 Hz. Es la prueba de que un rework visual no movió un hitbox.
+     cada 1 ms → compara frame-data exacto, desvío dentro de la activa, **Hausdorff unilateral de
+     la cápsula barrida** y, la métrica que de verdad manda, **`+ALCANCE`**: cuánto más lejos de
+     la raíz llega el barrido nuevo. Positivo = el golpe llega más lejos (eso sí sería cambiar el
+     alcance); ≤0 = sólo creció hacia el cuerpo, que es inofensivo. Corre a 60 y 30 Hz.
+     También mide el **recorrido** del miembro y cuánto se pliega en el wind-up, que es el número
+     que hay que mirar cuando un golpe "se siente corto".
   2. **harness de simulación**: ~30 escenarios guionados con validador por frame (finitud, largos de
      hueso, pie sobre pelvis, pie lejos del cuerpo, patinaje en apoyo, jerk, desbalance pelvis/pies,
      alcance real punta a punta). Corre a 16.7 / 33.3 / 50 ms.

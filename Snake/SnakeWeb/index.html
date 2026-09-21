@@ -2541,7 +2541,14 @@
     img.onload = () => { const src = downscaleImg(img, SEAFLOOR_MAX_PX); seafloorTex = SEAFLOOR_PROCESS ? bakeSeafloor(src) : src; ready(); }; // downscale; crudo = máxima calidad
     img.onerror = () => { seafloorTex = null; ready(); };                      // sin archivo → fallback (se ve el lago), igual destraba el fade
     setTimeout(ready, 4000);                                                   // safety: si la imagen cuelga, no quedarse en negro para siempre
-    img.src = 'img.png?v=' + Date.now();                                        // CACHE-BUST: fuerza carga fresca cada vez. Al fijar la imagen final, ponelo 'img.png?v=1'.
+    // ?v=1 FIJO, no `Date.now()`. El cache-buster era para iterar la foto y quedo puesto: con
+    // una URL distinta en cada carga el navegador NUNCA la puede cachear, asi que se bajaban 13 MB
+    // en cada partida y el fondo llegaba tarde siempre, no solo la primera vez.
+    // Un cache-buster es una herramienta de iteracion, no de produccion.
+    // (La foto pasó de PNG 4000x3000 de 13 MB a WebP 2048x1536 de ~360 KB. 2048 es exactamente lo
+    // que `SEAFLOOR_MAX_PX` usaba, asi que `downscaleImg` ahora la devuelve directo, sin lienzo
+    // intermedio ni los ~48 MB de RAM que el propio comentario de arriba mencionaba.)
+    img.src = 'img.webp?v=1';
   }
   function drawSeaFloor() {                                                      // dibuja la foto del fondo recortada al disco del lago. 2 modos: 'cover' (1 imagen) o 'tile' (mosaico)
     if (!seafloorTex) return;                                                    // fallback: el gradiente del lago (drawLake) queda visible
