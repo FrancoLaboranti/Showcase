@@ -1434,6 +1434,35 @@ class Fighter {
         }
       }
     }
+    // ── paredes de los BLOQUES ──
+    // VA DESPUÉS del aterrizaje a propósito. Antes iba antes, y el primer frame en que los pies
+    // bajaban del techo de un bloque el resolvedor lo trataba como "estoy adentro" y lo
+    // expulsaba de costado 130 px ANTES de que el bucle de plataformas pudiera apoyarlo: la IA
+    // no se subía a un bloque NUNCA (medido 0 de 6 a cualquier altura). Con el orden correcto,
+    // si aterrizó, `feetNow == b.y` y la condición de abajo lo deja en paz.
+    for (let q = 0; q < ARENA.muros.length; q++) {
+      const b = ARENA.muros[q];
+      const pies = this.y + STAND;
+      if (pies <= b.y + 2 || pies - CUERPO_H >= b.y + b.h) continue;     // por arriba / por debajo
+      if (this.x + CUERPO_R <= b.x || this.x - CUERPO_R >= b.x + b.w) continue;
+      const dIzq = (this.x + CUERPO_R) - b.x, dDer = (b.x + b.w) - (this.x - CUERPO_R);
+      if (dIzq < dDer) { this.x = b.x - CUERPO_R; this.vx = Math.min(0, this.vx); this.wallSide = 1; }
+      else { this.x = b.x + b.w + CUERPO_R; this.vx = Math.max(0, this.vx); this.wallSide = -1; }
+    }
+    // ── RED DE SEGURIDAD BAJO EL PISO ──
+    // Desde que el piso se parte en tramos, por debajo de él no hay NADA. Si un empujón
+    // lateral (separación de cuerpos, knockback, el propio rebote de un bloque) deja a alguien
+    // dentro de un bloque, pierde su superficie, cae unos píxeles y ya no puede aterrizar:
+    // el chequeo de apoyo exige venir DESDE ARRIBA. Resultado medido antes de esto: un
+    // peleador cayendo para siempre hasta y = 184 686. Va después del rebote lateral, así que
+    // acá la x ya está fuera de cualquier bloque.
+    if (this.y + STAND > ARENA.floorY + 40) {
+      const g2 = groundAt(this.x, ARENA.floorY - 4);
+      this.y = g2.y - STAND; this.vy = 0;
+      this.grounded = true; this.surf = g2.s;
+      if (ACT_STATES.includes(this.state) || this.state === ST.FALL) { this.state = ST.IDLE; this.stateT = 0; }
+      this.replantFeet();
+    }
     // coyote-jump: me caí hace poquito y tenía el salto en el buffer
     if (!this.grounded && this.coyoteT < mv.coyote && COYOTE_STATES.includes(this.state) && this.consume('jump')) {
       this.grounded = true; this.doJump();
@@ -2744,13 +2773,22 @@ const ARENA = {
   w: CFG.world.arenaW, floorY: 620, surfs: [], ledges: [],
   exit: { x: 0, y: 0 }, pad: 0.15 * CH, topY: 0, seed: 0, plan: '',
   semilla: 0, nivel: 1, etapa: null,
+  // BLOQUES SOLIDOS: {x, y, w, h} con colisión lateral real. Su techo además entra en `surfs`
+  // como superficie NO-oneway, así que se camina por arriba y no se los atraviesa por abajo.
+  muros: [],
 };
+const CUERPO_R = 0.12 * CH;                  // medio ancho del muñeco para chocar paredes
+const CUERPO_H = 0.92 * CH;                  // alto del cuerpo desde los pies
 // Alturas de salto reales del personaje, que son las que acotan el diseño:
 //   subida útil = jumpApex·CH ≈ 343 px. Ningún escalón autorado pasa de ~250 px.
 const LVL = {
   riseMax: CFG.move.jumpApex * CH * 0.78,   // subida con margen (lo que la IA se anima a saltar)
   gapMin: 230, gapMax: 360,                  // separación entre secciones
   margen: 0.70,                              // la IA no corre ni salta perfecto
+  // Subirse al techo de un BLOQUE no es lo mismo que a una losa flotante: contra la pared no
+  // se puede tomar carrera ni pasar por debajo. Medido con 4 arquetipos: 6/6 hasta 230 px,
+  // 2/6 a 250 y 0/6 de 270 para arriba. El tope de las losas (riseMax = 267) acá no sirve.
+  riseBloque: 228,
 };
 // Cuánto x se puede cubrir en un salto que TERMINE a `rise` px de altura. Sale de la parábola
 // real del personaje, no de una constante inventada: se resuelve el instante en que la altura
@@ -2889,6 +2927,43 @@ const SECCIONES = [
       p.push([ancho * 0.5 - w * 0.6, paso * (k + 1) + 44, w * 1.25]);
       return { p };
   } },
+  { n: 'meseta', lvl: 1, make(R) {       // RELIEVE DE PISO: el suelo deja de ser una línea
+      const h1 = 106 + R() * 36, h2 = h1 + 98 + R() * 42;
+      const w1 = 188 + R() * 54, w2 = 480 + R() * 210;
+      return { b: [[0, h1, w1], [w1, h2, w2]],
+               p: [[w1 + w2 * 0.28, h2 + 198 + R() * 38, 266 + R() * 62],
+                   [w1 + w2 + 262 + R() * 66, 206 + R() * 42, 260 + R() * 56]] };
+  } },
+  { n: 'muralla', lvl: 2, make(R) {      // muro de dos escalones: se sube y se baja raspando
+      const e = 148 + R() * 40, alto = e + 168 + R() * 40;    // 316-396: NO se salta de una
+      const we = 182 + R() * 42, wm = 228 + R() * 58;
+      // La repisa de la derecha se alcanza DESDE EL PISO (≤ riseMax) y desde ella se llega al
+      // techo del muro: sin eso el muro era de un solo sentido y el lado derecho quedaba
+      // aislado para la IA (medido: 60 superficies malas en 30 tiradas).
+      return { b: [[0, e, we], [we, alto, wm]],
+               p: [[we + wm + 244 + R() * 58, 198 + R() * 44, 276 + R() * 62]] };
+  } },
+  { n: 'chimenea', lvl: 3, make(R) {     // dos torres con un hueco: walljump como ATAJO
+      const e = 146 + R() * 36, alto = e + 172 + R() * 38;    // torres de 318-392
+      const we = 172 + R() * 36, wt = 184 + R() * 36, hueco = 292 + R() * 56;
+      // escalón + torre izq · HUECO · torre der. La ruta normal es el escalón; el hueco es un
+      // pozo con pared a los dos lados: se sale a walljump o saltando a un techo (la altura
+      // del hueco al techo entra en un salto, así que la IA también sale).
+      // Repisa DENTRO del hueco: el pozo tiene pared a los dos lados y la IA no sabe hacer
+      // walljump, así que sin ella quedaba encerrada (medido: 30 de 30 tiradas). Con la repisa
+      // se sale en dos saltos; el walljump sigue siendo el atajo rápido del jugador.
+      return { b: [[0, e, we], [we, alto, wt], [we + wt + hueco, alto, wt]],
+               p: [[we + wt + hueco * 0.12, 186 + R() * 38, hueco * 0.76],
+                   [we + wt + hueco * 0.1, alto + 192 + R() * 34, hueco + wt * 1.3],
+                   [we + wt * 2 + hueco + 248 + R() * 58, 210 + R() * 44, 258 + R() * 56]] };
+  } },
+  { n: 'pilares', lvl: 2, make(R) {      // tres bloques de distinta altura: silueta de terreno
+      const w = 146 + R() * 44, sep = 226 + R() * 68;
+      const hs = [118 + R() * 54, 186 + R() * 38, 148 + R() * 58];
+      const b = hs.map((h, i) => [i * (w + sep), h, w]);
+      return { b, p: [[w + sep * 0.5, 296 + R() * 58, 246 + R() * 58],
+                      [3 * (w + sep) + 212 + R() * 58, 204 + R() * 46, 258 + R() * 56]] };
+  } },
   { n: 'voladizo', lvl: 4, make(R) {     // ASIMETRICA: una losa larguísima y un muñón corto arriba
       const lo = 228 + R() * 40, hi = lo + 204 + R() * 32;
       const wl = 740 + R() * 220, ws = 158 + R() * 38, wf = 262 + R() * 58;
@@ -2897,21 +2972,53 @@ const SECCIONES = [
   } },
 ];
 
-// Torre final con la SALIDA arriba. Zigzag vertical: el lado de arranque y la cantidad de
-// escalones varían, pero el paso siempre entra cómodo en un salto.
-function seccionTorre(R, E) {
-  let pasos = E.torre + (R() < 0.5 ? 0 : 1);
-  const paso = 216 + R() * 30;
-  // el tope no puede salirse del terreno horneado (bakeTerrain arranca en floorY − 1850):
-  // si la torre se pasa, se le sacan escalones en vez de achicar el paso (que la haría fea)
-  while (pasos > 4 && paso * pasos + 224 > 1680) pasos--;
-  const w = 252 + R() * 48, offset = 402 + R() * 96, lado = R() < 0.5 ? 0 : 1;
-  const p = [];
-  for (let i = 0; i < pasos; i++) p.push([(i % 2 === lado ? 0 : offset), paso * (i + 1), w]);
-  const topW = 452 + R() * 78, topUp = paso * pasos + 190 + R() * 34;
-  p.push([offset * 0.5 - (topW - w) * 0.5, topUp, topW]);
-  return { p, w: offset + w, topIdx: p.length - 1 };
-}
+// ── REMATES: dónde y cómo está la SALIDA ────────────────────────────────────────────
+// Antes había uno solo (la torre zigzag pegada al borde derecho) y por eso todos los niveles
+// terminaban igual. Cada remate devuelve sus plataformas, sus bloques y cuál es la de salida.
+// El tope de altura lo pone `bakeTerrain`: el terreno se hornea desde floorY − 1850.
+const REMATES = [
+  { n: 'torre', make(R, E) {                 // el clásico: zigzag vertical
+      let pasos = E.torre + (R() < 0.5 ? 0 : 1);
+      const paso = 216 + R() * 30;
+      while (pasos > 4 && paso * pasos + 224 > 1680) pasos--;
+      const w = 274 + R() * 54, offset = 398 + R() * 88, lado = R() < 0.5 ? 0 : 1;
+      const p = [];
+      for (let i = 0; i < pasos; i++) p.push([(i % 2 === lado ? 0 : offset), paso * (i + 1), w]);
+      const topW = 452 + R() * 78;
+      p.push([offset * 0.5 - (topW - w) * 0.5, paso * pasos + 190 + R() * 34, topW]);
+      return { p, b: [], top: p.length - 1 };
+  } },
+  { n: 'meseta', make(R, E) {                // SALIDA sobre una meseta maciza, dos accesos
+      const h = 192 + R() * 32, wm = 620 + R() * 220;
+      const wa = 252 + R() * 54, sep = 262 + R() * 58;
+      const p = [[0, 214 + R() * 40, wa],                                   // rampa izquierda
+                 [wa + sep + wm + sep, 208 + R() * 42, wa],                 // rampa derecha
+                 [wa + sep + wm * 0.18, h + 224 + R() * 34, wm * 0.64]];    // salida arriba
+      return { p, b: [[wa + sep, h, wm]], top: 2 };
+  } },
+  { n: 'chimenea', make(R, E) {              // SALIDA arriba de un pozo entre dos torres
+      const e = 150 + R() * 34, alto = e + 174 + R() * 38;
+      const we = 178 + R() * 38, wt = 192 + R() * 38, hueco = 296 + R() * 54;
+      const p = [[we + wt + hueco * 0.12, 190 + R() * 36, hueco * 0.76],    // repisa del pozo
+                 [we + wt, alto + 196 + R() * 32, hueco + wt * 1.2],        // tapa
+                 [we + wt + hueco * 0.1, alto + 196 + 212 + R() * 34, 396 + R() * 76]];
+      // El escalón va a los DOS lados: con uno solo, el piso de la derecha quedaba sin retorno
+      // (las torres miden 318-392 y desde el suelo no se suben). Medido: 30 de 30 rechazadas.
+      return { p, b: [[0, e, we], [we, alto, wt], [we + wt + hueco, alto, wt],
+                      [we + wt + hueco + wt, e, we]], top: 2 };
+  } },
+  { n: 'espiral', make(R, E) {               // SALIDA rodeando un pilar, alternando de lado
+      const wp = 206 + R() * 46, hp = 194 + R() * 30;
+      const w = 278 + R() * 58, paso = 202 + R() * 26, brazo = 352 + R() * 74;
+      const pasos = 5 + (R() < 0.5 ? 0 : 1);
+      const p = [];
+      for (let i = 0; i < pasos; i++)
+        p.push([i % 2 ? wp + brazo : Math.max(0, wp - brazo - w + wp), hp + paso * (i + 1), w]);
+      const topW = 452 + R() * 74;
+      p.push([wp * 0.5 - topW * 0.5 + brazo * 0.5, hp + paso * pasos + 196 + R() * 30, topW]);
+      return { p, b: [[Math.max(0, wp - brazo - w + wp) + w * 0.3, hp, wp]], top: p.length - 1 };
+  } },
+];
 
 // ── Grafo de navegación: nodos = superficies, aristas = "se puede pasar de A a B" ──
 // Lo usan DOS cosas: la IA para perseguir entre alturas, y el generador para verificar que el
@@ -2926,6 +3033,64 @@ function surfIndexBelow(x, y) {                    // superficie más alta estri
   }
   return best;
 }
+// ¿Se puede ESTAR parado en (x, y), o hay un bloque ocupando ese lugar?
+// Techo del bloque que tengo delante (el más bajo por encima de mis pies), o null.
+function techoMuro(x, pies) {
+  let best = null;
+  for (let q = 0; q < ARENA.muros.length; q++) {
+    const b = ARENA.muros[q];
+    if (x < b.x - CUERPO_R || x > b.x + b.w + CUERPO_R) continue;
+    if (b.y >= pies - 4) continue;
+    if (best === null || b.y > best) best = b.y;
+  }
+  return best;
+}
+function xLibre(x, y) {
+  for (let q = 0; q < ARENA.muros.length; q++) {
+    const b = ARENA.muros[q];
+    if (x > b.x - CUERPO_R && x < b.x + b.w + CUERPO_R && y > b.y + 2) return false;
+  }
+  return true;
+}
+// ¿Hay ALGUNA trayectoria limpia de A a B esquivando los bloques? Se modela lo que hace
+// cualquiera con control aéreo: SUBIR, cruzar por arriba y BAJAR. Muestrear una sola parábola
+// con avance horizontal lineal rechazaba saltos perfectamente posibles — subir casi vertical
+// pegado a la pared y meterse al final es justo como se sube a una repisa que tenés al lado.
+function tramoLibre(ax, ay, bx, by) {
+  for (let k = 0; k <= 16; k++) {
+    const u = k / 16, px = ax + (bx - ax) * u, py = ay + (by - ay) * u;
+    for (let q = 0; q < ARENA.muros.length; q++) {
+      const b = ARENA.muros[q];
+      if (px + CUERPO_R < b.x || px - CUERPO_R > b.x + b.w) continue;
+      if (py <= b.y + 2 || py - CUERPO_H >= b.y + b.h) continue;
+      return false;
+    }
+  }
+  return true;
+}
+function vueloLibre(x0, y0, x1, y1) {
+  if (!ARENA.muros.length) return true;
+  const yTop = Math.min(y0, y1) - 0.34 * CH;        // por encima del más alto de los dos
+  if (y0 - yTop > JUMP_HA) return false;            // no se llega tan arriba de un salto
+  return tramoLibre(x0, y0, x0, yTop) &&
+         tramoLibre(x0, yTop, x1, yTop) &&
+         tramoLibre(x1, yTop, x1, y1);
+}
+// Corre un punto de despegue hasta sacarlo de un bloque, sin salirse de la plataforma.
+function despegueLibre(x, y, aL, aR) {
+  if (xLibre(x, y)) return x;
+  for (let q = 0; q < ARENA.muros.length; q++) {
+    const b = ARENA.muros[q];
+    if (!(x > b.x - CUERPO_R && x < b.x + b.w + CUERPO_R && y > b.y + 2)) continue;
+    const iz = b.x - CUERPO_R - 2, de = b.x + b.w + CUERPO_R + 2;
+    const cIz = iz >= aL && xLibre(iz, y), cDe = de <= aR && xLibre(de, y);
+    if (cIz && (!cDe || Math.abs(iz - x) <= Math.abs(de - x))) return iz;
+    if (cDe) return de;
+    return NaN;                                  // el bloque tapa la plataforma entera
+  }
+  return NaN;
+}
+
 function buildNav() {
   const S = ARENA.surfs, n = S.length;
   NAV.n = n;
@@ -2940,28 +3105,41 @@ function buildNav() {
     const gapX = Math.max(0, Math.max(A.x - (Bs.x + Bs.w), Bs.x - (A.x + A.w)));
     const rise = A.y - Bs.y;                       // > 0 = B está ARRIBA
     if (rise > 0) {
-      if (rise > LVL.riseMax || gapX > alcanceSubiendo(rise)) continue;
+      const topeSube = (!Bs.oneway && Bs.y < ARENA.floorY - 2) ? LVL.riseBloque : LVL.riseMax;
+      if (rise > topeSube || gapX > alcanceSubiendo(rise)) continue;
       // despegue: bajo el tramo común si lo hay, si no en el borde de A que mira a B
-      const x = ovR > ovL ? clamp((ovL + ovR) / 2, aL, aR) : (Bs.x > A.x ? aR : aL);
+      let x = ovR > ovL ? clamp((ovL + ovR) / 2, aL, aR) : (Bs.x > A.x ? aR : aL);
+      x = despegueLibre(x, A.y, aL, aR);         // no se despega desde adentro de un bloque
+      if (!(x === x)) continue;
       // Cuánto se puede correr el despegue sin perder el salto: sólo lo que da el solape con
       // el destino. Sin este tope, el carril de cada enemigo movía el despegue hasta 83 px y
       // el salto no llegaba nunca (medido: 2 de 4 arquetipos no subían jamás).
       const carril = Math.max(0, Math.min(ovR - ovL, A.w, Bs.w) / 2 - 0.30 * CH);
-      link[a * n + b] = { k: 'jump', x: x, lane: carril, gap: gapX,
-                          tx: clamp(Bs.x + Bs.w / 2, Bs.x + m, Bs.x + Bs.w - m) };
+      // Se apunta a la parte de B MÁS CERCANA al despegue, no a su centro. El piso es una
+      // sola superficie de 8400 px: apuntar a su centro mandaba el vuelo de prueba a cruzar
+      // el nivel entero (y a la IA, tras cada caída, a caminar hacia el medio del mapa).
+      const txJ = clamp(ovR > ovL ? (ovL + ovR) / 2 : x, Bs.x + m, Bs.x + Bs.w - m);
+      if (!vueloLibre(x, A.y, txJ, Bs.y)) continue;
+      link[a * n + b] = { k: 'jump', x: x, lane: carril, gap: gapX, tx: txJ };
     } else {
       if (gapX > alcanceCayendo(-rise)) continue;
       let x, through = false;
-      if (ovR > ovL + 2 * m) {                     // se puede soltar DERECHO hacia abajo
+      // OJO: soltarse derecho hacia abajo sólo se puede a través de una plataforma
+      // ONE-WAY. El techo de un BLOQUE es macizo: de ahí se sale caminando al borde.
+      if (ovR > ovL + 2 * m && A.oneway) {       // se puede soltar DERECHO hacia abajo
         x = clamp((ovL + ovR) / 2, aL, aR);
         if (surfIndexBelow(x, A.y) !== b) continue;   // hay otra superficie en el medio
         through = true;
       } else {
         x = Bs.x > A.x ? aR : aL;                  // caminar hasta el borde y dejarse caer
       }
+      x = despegueLibre(x, A.y, aL, aR);
+      if (!(x === x)) continue;
+      const txD = clamp(through ? x : x + Math.sign(Bs.x - A.x) * 0.5 * CH,
+                        Bs.x + m, Bs.x + Bs.w - m);
+      if (!vueloLibre(x, A.y, txD, Bs.y)) continue;
       link[a * n + b] = { k: 'drop', x: x, through: through,
-                          lane: Math.max(0, Math.min(ovR - ovL, A.w) / 2 - 0.22 * CH),
-                          tx: clamp(Bs.x + Bs.w / 2, Bs.x + m, Bs.x + Bs.w - m) };
+                          lane: Math.max(0, Math.min(ovR - ovL, A.w) / 2 - 0.22 * CH), tx: txD };
     }
   }
   // próximo salto por BFS inversa desde cada destino (n ≤ ~30: se hace una vez por nivel)
@@ -2995,42 +3173,88 @@ function buildLevel(seed, nivel) {
     const R = lvlRnd(seed + intento * 7919);
     const floorY = ARENA.floorY;
     const surfs = [{ x: -200, y: floorY, w: ARENA.w + 400, oneway: false, i: 0 }];
+    const muros = [];
+    ARENA.muros = muros;                        // buildNav/vueloLibre lo consultan enseguida
     const plan = [];
-    // barajar el pool y tomar 5-6 secciones, sin repetir dos iguales seguidas
+    // ── Se arma la LISTA de tramos y recién después se la dibuja de izquierda a derecha ──
+    // El REMATE (el tramo que lleva la SALIDA) entra en un slot cualquiera, no siempre al
+    // final: antes el nivel terminaba SIEMPRE donde aparecía la puerta, y por eso los ocho
+    // niveles que miré tenían la salida en el mismo lugar de la pantalla.
     const pool = SECCIONES.filter(sc => sc.lvl <= E.lvl);
     for (let i = pool.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; const t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
-    const cuantas = E.secs;
-    let x = 360;
-    const torreW = 900;
-    for (let i = 0; i < cuantas; i++) {
-      const sec = pool[i % pool.length];
-      const g = sec.make(R);
+    const rem = REMATES[(R() * REMATES.length) | 0];
+    const piezas = [];
+    for (let i = 0; i < E.secs; i++) piezas.push({ sec: pool[i % pool.length] });
+    // nunca en el slot 0: el jugador spawnea a la izquierda y la puerta encima sería absurdo.
+    // El tope es 4 porque en 8000 px entran 4-5 tramos: más allá el remate no entraría nunca.
+    piezas.splice(1 + ((R() * 5) | 0), 0, { rem: rem });
+
+    let x = 360, topSurf = null;
+    for (const pz of piezas) {
+      const g = pz.rem ? pz.rem.make(R, E) : pz.sec.make(R);
+      g.b = g.b || [];
       // El ancho de cada plataforma lo escala la etapa: más avanzada = menos superficie donde
       // caer (y por lo tanto huecos efectivos más grandes) SIN mover un solo salto de sitio.
-      // El piso es 0.62·CH: por debajo de eso no entra el muñeco y la validación lo rechaza.
-      for (const q of g.p) q[2] = Math.max(0.62 * CH, q[2] * E.wK);
-      // …y el ancho TOTAL se deriva de las plataformas en vez de autorarse a mano.
-      const gw = g.p.reduce((a, q) => Math.max(a, q[0] + q[2]), 0);
-      if (x + gw + torreW + 500 > ARENA.w) break;
-      const espejar = R() < 0.4;
-      for (const [dx, up, w] of g.p) {
+      // Los BLOQUES no se afinan: son terreno, y angostarlos los volvería postes.
+      if (!pz.rem) for (const q of g.p) q[2] = Math.max(0.62 * CH, q[2] * E.wK);
+      // El ancho TOTAL se deriva de la geometría en vez de autorarse a mano.
+      const gw = g.p.concat(g.b).reduce((a, q) => Math.max(a, q[0] + q[2]), 0);
+      if (x + gw + 420 > ARENA.w) { if (pz.rem) { topSurf = null; break; } else continue; }
+      const espejar = !pz.rem && R() < 0.4;
+      g.p.forEach(([dx, up, w], i) => {
         const px = espejar ? x + gw - dx - w : x + dx;
-        surfs.push({ x: Math.round(px), y: Math.round(floorY - up), w: Math.round(w), oneway: true });
+        const sf = { x: Math.round(px), y: Math.round(floorY - up), w: Math.round(w), oneway: true };
+        surfs.push(sf);
+        if (pz.rem && i === g.top) topSurf = sf;
+      });
+      for (const [dx, up, w] of g.b) {
+        const px = espejar ? x + gw - dx - w : x + dx;
+        const bl = { x: Math.round(px), y: Math.round(floorY - up), w: Math.round(w),
+                     h: Math.round(up) + 320 };            // enterrado bajo el piso: se ve macizo
+        muros.push(bl);
+        surfs.push({ x: bl.x, y: bl.y, w: bl.w, oneway: false });   // su techo se camina
       }
-      plan.push(sec.n + (espejar ? '~' : ''));
-      x += gw + E.gap[0] + R() * (E.gap[1] - E.gap[0]);
+      plan.push((pz.rem ? pz.rem.n + '!' : pz.sec.n) + (espejar ? '~' : ''));
+      const hueco = E.gap[0] + R() * (E.gap[1] - E.gap[0]);
+      // ── RELIEVE ──
+      // Sin esto, entre tramo y tramo el piso es una línea recta y el nivel se lee PLANO por
+      // más plataformas flotantes que tenga. Un promontorio suelto en el hueco cambia la
+      // silueta del suelo, da una pared para raspar y parte el piso en un tramo más.
+      if (R() < 0.5 && hueco > 250) {
+        const bw = Math.max(170, Math.min(hueco - 130, 190 + R() * 300));
+        const bh = 96 + R() * 122;
+        const bx = x + gw + (hueco - bw) * (0.2 + R() * 0.6);
+        const bl = { x: Math.round(bx), y: Math.round(floorY - bh), w: Math.round(bw),
+                     h: Math.round(bh) + 320 };
+        muros.push(bl);
+        surfs.push({ x: bl.x, y: bl.y, w: bl.w, oneway: false });
+      }
+      x += gw + hueco;
     }
-    // torre final, pegada al fondo del mapa
-    const T = seccionTorre(R, E);
-    const tx = Math.min(x + 180, ARENA.w - T.w - 320);
-    let topSurf = null;
-    T.p.forEach(([dx, up, w], i) => {
-      const s = { x: Math.round(tx + dx), y: Math.round(floorY - up), w: Math.round(w), oneway: true };
-      surfs.push(s);
-      if (i === T.topIdx) topSurf = s;
-    });
-    plan.push('torre');
+    if (!topSurf) continue;                      // el remate no entró: otra tirada
 
+    // ── EL PISO SE PARTE EN TRAMOS ──
+    // Cada bloque apoyado en el suelo corta el piso. Dos bloques más cerca que el ancho de un
+    // muñeco se FUSIONAN: un tramo de piso más angosto que eso sería un pozo donde se cae y no
+    // se sale (y la validación lo descartaría como isla, desperdiciando la tirada).
+    {
+      const suelo = muros.filter(b => b.y + b.h > floorY + 4).sort((a2, b2) => a2.x - b2.x);
+      const fus = [];
+      for (const b of suelo) {
+        const u = fus[fus.length - 1];
+        if (u && b.x - (u.x + u.w) < 0.95 * CH) u.w = Math.max(u.w, b.x + b.w - u.x);
+        else fus.push({ x: b.x, w: b.w });
+      }
+      const segs = [];
+      let cur = -200;
+      for (const b of fus) {
+        if (b.x - cur > 0.95 * CH) segs.push({ x: cur, y: floorY, w: b.x - cur, oneway: false });
+        cur = Math.max(cur, b.x + b.w);
+      }
+      segs.push({ x: cur, y: floorY, w: ARENA.w + 200 - cur, oneway: false });
+      surfs[0] = segs[0];                       // el 0 sigue siendo donde spawnea el jugador
+      for (let k = 1; k < segs.length; k++) surfs.push(segs[k]);
+    }
     ARENA.surfs = surfs;
     ARENA.exit.x = topSurf.x + topSurf.w / 2;
     ARENA.exit.y = topSurf.y;
@@ -3052,9 +3276,12 @@ function buildLevel(seed, nivel) {
     if (trampa) continue;
 
     ARENA.ledges = [];
+    surfs[0].i = 0;                              // el tramo 0 es un objeto nuevo tras partir el
+                                                 // piso: sin esto navSurfOf() se cae al fallback
     for (let i = 1; i < surfs.length; i++) {
       const s = surfs[i];
       s.i = i;                                   // índice cacheado (lookup O(1) en la nav)
+      if (s.y >= floorY - 2) continue;           // no hay borde para colgarse a ras del piso
       ARENA.ledges.push({ x: s.x, y: s.y, side: -1, surf: s });
       ARENA.ledges.push({ x: s.x + s.w, y: s.y, side: 1, surf: s });
     }
@@ -3066,11 +3293,15 @@ function buildLevel(seed, nivel) {
   return false;
 }
 function groundAt(x, y) {
-  let by = ARENA.floorY, bs = ARENA.surfs[0];
-  for (let i = 1; i < ARENA.surfs.length; i++) {
+  // Arranca en i = 0 porque el piso ya no es UNA superficie: los bloques lo parten en tramos y
+  // cada tramo es una `surf` distinta. Devolver siempre surfs[0] dejaba al peleador asignado a
+  // un tramo que no estaba pisando, y al frame siguiente se caía de él.
+  let by = Infinity, bs = null;
+  for (let i = 0; i < ARENA.surfs.length; i++) {
     const s = ARENA.surfs[i];
     if (x >= s.x && x <= s.x + s.w && s.y >= y - 2 && s.y < by) { by = s.y; bs = s; }
   }
+  if (!bs) { by = ARENA.floorY; bs = ARENA.surfs[0]; }
   return { y: by, bs: bs, s: bs };
 }
 // ════════════════ FONDO estilo Fancy Pants: papel + sombras de hojas + terreno a tinta ════════════════
@@ -3156,6 +3387,8 @@ function bakeTerrain() {
     c2.fillStyle = 'rgba(240,200,90,0.9)';
     c2.fillRect(s.x - 3, s.y - 3, 9, 6); c2.fillRect(s.x + s.w - 6, s.y - 3, 9, 6);
   }
+  // bloques sólidos: mismo tratamiento que el piso (son terreno, no plataformas flotantes)
+  for (const b of ARENA.muros) slab(b.x, b.y, b.w, b.h, 9);
   // paredes laterales
   slab(-420, ARENA.topY - 300, 420, ARENA.floorY - ARENA.topY + 950, 0);
   slab(ARENA.w, ARENA.topY - 300, 420, ARENA.floorY - ARENA.topY + 950, 0);
@@ -3237,7 +3470,7 @@ function drawHUD(dt, p) {
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   ctx.font = '900 ' + Math.max(13, Math.round(0.032 * H)) + 'px system-ui,sans-serif';
   ctx.fillStyle = INK;
-  ctx.fillText('K.O.  ' + game.kos + '/' + enemies.length, x0, y0 + bh + 8);
+  ctx.fillText('K.O.  ' + game.kos + '/' + game.totalEnem, x0, y0 + bh + 8);
   // nivel y etapa de la corrida (la progresión tiene que verse)
   ctx.font = '800 ' + Math.max(11, Math.round(0.024 * H)) + 'px system-ui,sans-serif';
   ctx.fillStyle = 'rgba(34,30,27,0.62)';
@@ -3297,7 +3530,7 @@ function drawBanner() {
 
 // ════════════════ FLUJO sandbox: menú → nivel → (te bajan → respawn) → salida ════════════════
 const game = {
-  state: 'menu', diff: 1, t: 0, kos: 0, levelT: 0, nivel: 1, runT: 0,
+  state: 'menu', diff: 1, t: 0, kos: 0, levelT: 0, nivel: 1, runT: 0, totalEnem: 9,
   banner: '', bannerT: 0, bannerLife: 0, bannerCol: '', bannerSub: '',
   paused: false, mode: 'sandbox',
 };
@@ -3320,6 +3553,23 @@ function resetFighter(f, x) {
 // Reparte los enemigos por el nivel GENERADO: la mitad en el piso, la mitad arriba de
 // plataformas, ordenados de izquierda a derecha y sin amontonarse. Antes las x eran fijas y con
 // nivel variable quedaban todos apilados o en el aire.
+// Cuántos enemigos y de qué tipo. Antes eran SIEMPRE los 9, siempre los mismos colores y con
+// arquetipos al azar: todas las partidas se sentían iguales. Ahora la cantidad sale de la etapa
+// y quiénes salen (y con qué cerebro) sale de la semilla del nivel, así que es reproducible.
+function plantelDeNivel() {
+  const R = lvlRnd((ARENA.seed ^ 0x9e3b) >>> 0);
+  const E = ARENA.etapa || ETAPAS[0];
+  const base = 3 + E.lvl;                                   // 4 · 5 · 6 · 7
+  const cuantos = clamp(base + ((R() * 3) | 0), 4, enemies.length);
+  const orden = enemies.map((e, i) => i);
+  for (let i = orden.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; const t = orden[i]; orden[i] = orden[j]; orden[j] = t; }
+  const vivos = orden.slice(0, cuantos);
+  // mezcla de arquetipos: siempre al menos uno que presiona y uno que aguanta, el resto libre
+  const mezcla = [ARCHS[1], ARCHS[2]];
+  while (mezcla.length < cuantos) mezcla.push(ARCHS[(R() * ARCHS.length) | 0]);
+  for (let i = mezcla.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; const t = mezcla[i]; mezcla[i] = mezcla[j]; mezcla[j] = t; }
+  return { vivos: vivos, mezcla: mezcla };
+}
 function repartirEnemigos() {
   const n = enemies.length;
   const plats = ARENA.surfs.slice(1)
@@ -3347,7 +3597,14 @@ function armarNivel(semilla) {
   bakeBg(); bakeTerrain();
   repartirEnemigos();
   resetFighter(P1, 180); P1.facing = 1;
-  for (const e of enemies) { resetFighter(e, e.spawnX); e.facing = -1; e.brain = newBrain(); }
+  const plantel = plantelDeNivel();
+  for (const e of enemies) { resetFighter(e, e.spawnX); e.facing = -1; e.brain = newBrain(); e.dead = true; }
+  plantel.vivos.forEach((idx, k) => {
+    const e = enemies[idx];
+    e.dead = false;
+    e.brain.arch = plantel.mezcla[k];
+  });
+  game.totalEnem = plantel.vivos.length;
   hud.chipT = 9;
   sparks.length = 0; dmgNums.length = 0; smears.length = 0; ghosts.length = 0; hitArcs.length = 0;
   trauma = 0;
@@ -3382,7 +3639,7 @@ function onKO(att, def) {
     def.dead = true;
     game.kos++;
     addTrauma(0.25);
-    if (game.kos === enemies.length) setBanner('¡LIMPIO!', 1.4, '#e2781e', 'andá a la SALIDA →');
+    if (game.kos === game.totalEnem) setBanner('¡LIMPIO!', 1.4, '#e2781e', 'andá a la SALIDA →');
   }
 }
 function stepGameFlow(dt) {
@@ -3402,7 +3659,7 @@ function stepGameFlow(dt) {
         game.state = 'win'; game.t = 0;
         const secs = Math.round(game.levelT);
         setBanner('¡NIVEL ' + game.nivel + ' LIMPIO!', 2.8, '#2e7d32',
-          'K.O. ' + game.kos + '/' + enemies.length + ' · ' + secs + ' s · sigue ' + etapaDe(game.nivel + 1).n);
+          'K.O. ' + game.kos + '/' + game.totalEnem + ' · ' + secs + ' s · sigue ' + etapaDe(game.nivel + 1).n);
         sfx.win();
       }
       break;
@@ -3583,6 +3840,17 @@ function aiThink(me, dt) {
   // salidas por default: sostener lo decidido en el último tick
   for (const k in br.hold) { br.hold[k] -= dt; i[k] = br.hold[k] > 0; }
   i.mx = br.mx; i.my = br.my;
+  // ── REFLEJO DE MURO ──────────────────────────────────────────────────────────────────
+  // El grafo ve TODO el piso como un solo nodo, así que un bloque apoyado en el suelo no
+  // genera ninguna ruta: la IA camina hacia el rival y se queda empujando la pared. Si estoy
+  // en el piso empujando contra una pared y su techo me entra en el salto, salto. Ocho líneas,
+  // no toca el cerebro de combate, y es lo que haría cualquiera.
+  if (me.grounded && me.wallSide !== 0 && i.mx * me.wallSide > 0.2 && br.jumpCd <= 0) {
+    const techo = techoMuro(me.x + me.wallSide * (CUERPO_R + 6), me.y + STAND);
+    if (techo !== null && me.y + STAND - techo < LVL.riseMax) {
+      aiPress(br, 'jump', 0.22); br.jumpCd = 0.45;
+    }
+  }
   if (!foe || foe.dead) { br.mx = 0; br.my = 0; return; }
 
   const gap = Math.abs(foe.x - me.x), dir = Math.sign(foe.x - me.x) || 1;
@@ -3612,6 +3880,16 @@ function aiThink(me, dt) {
     return;
   }
   if (me.state === ST.HANG) { if (me.stateT > 0.25) aiPress(br, 'jump'); return; }
+  // ── WALLJUMP ──
+  // Con bloques sólidos en el nivel, la IA que saltaba contra una pared entraba en WALLSLIDE y
+  // se dejaba caer hasta el piso una y otra vez (medido: no subía NUNCA una torre que arranca
+  // con un bloque de 256 px). Ahora rebota. El acróbata rebota casi al toque, el técnico espera
+  // un poco más: sigue siendo una diferencia de arquetipo.
+  if (me.state === ST.WALLSLIDE) {
+    br.mx = me.wallSide;                                   // sostener contra la pared
+    if (me.stateT > 0.16 - 0.10 * br.arch.jumpy) aiPress(br, 'jump', 0.12);
+    return;
+  }
   // ¿está en otra plataforma? Entonces el problema es LLEGAR, no pelear.
   if (me.state !== ST.ATTACK && aiNavegar(me, br, foe, dir, dt)) return;
 

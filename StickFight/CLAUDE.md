@@ -325,6 +325,61 @@ por abajo o por arriba), **bifurcacion** (dos ramas que salen del mismo rellano 
 sola entrada), **pozo** (sector compacto: dos paredes de repisas y una tapa) y **voladizo**
 (asimétrica: una losa larguísima y un muñón corto arriba).
 
+#### Bloques sólidos, piso partido y remates (2026-09-21c)
+
+Franco: *«los niveles se sienten todos iguales. misma cantidad de enemigos en todos. salida
+siempre en el mismo lugar escalando unas plataformas. 0 diseño novedoso en lo que envuelve al
+piso y las paredes»*. Tenía razón en los tres, y el tercero escondía algo peor: **las únicas
+paredes del juego eran los dos bordes del mapa** (todas las plataformas son `oneway`, se
+atraviesan de costado), así que wallslide, walljump y colgarse de un borde casi nunca aparecían.
+
+**`ARENA.muros`** es el primitivo que faltaba: un AABB con colisión lateral real cuyo techo se
+registra además en `surfs` como superficie NO-oneway. Con ese único primitivo salen mesetas
+(relieve de piso), murallas, chimeneas, pilares y promontorios.
+
+Cuatro cosas que hubo que resolver para que funcionara, todas medidas:
+
+1. **El orden de la colisión.** La resolución horizontal iba ANTES del aterrizaje, así que el
+   primer frame en que los pies bajaban del techo de un bloque el resolvedor lo tomaba como
+   «estoy adentro» y lo expulsaba **130 px de costado** antes de que el bucle de plataformas
+   pudiera apoyarlo. La IA no se subía a un bloque *nunca*, a ninguna altura (0/6). Con el
+   orden correcto: 6/6 hasta 230 px.
+2. **El piso se parte en tramos.** Un bloque apoyado en el suelo lo corta, y cada tramo es un
+   nodo del grafo. Sin esto el grafo veía TODO el piso como un único nodo, nunca generaba la
+   ruta «tramo izquierdo → techo → tramo derecho» y la IA se quedaba empujando la pared.
+   Dos bloques a menos de 0.95·CH se FUSIONAN (si no, queda un pozo del que no se sale).
+3. **`LVL.riseBloque = 228`, distinto de `LVL.riseMax = 267`.** Subirse al techo de un bloque
+   no es lo mismo que a una losa flotante: contra la pared no se puede tomar carrera ni pasar
+   por debajo. Medido con los 4 arquetipos: **6/6 hasta 230 px, 2/6 a 250, 0/6 de 270**.
+4. **Red de seguridad bajo el piso.** Desde que el piso se parte, debajo no hay nada. Un
+   empujón lateral (separación de cuerpos, knockback) que meta a alguien dentro de un bloque
+   le hace perder la superficie, y el chequeo de apoyo exige venir DESDE ARRIBA: caía para
+   siempre (medido: y = 184 686). Ahora se lo devuelve al terreno más cercano.
+
+En la IA se agregaron dos reflejos, ninguno toca el cerebro de combate: **saltar el muro** que
+tenga delante si su techo entra en el salto (el grafo no genera esa ruta porque el piso, del
+otro lado, es el mismo nodo) y **walljump** al entrar en WALLSLIDE — pero sólo si el techo está
+FUERA de alcance, porque si está a mano rebotar la alejaba justo de donde quería subir.
+
+**Remates**: la SALIDA tiene cuatro formas (`torre` zigzag, `meseta` maciza con dos accesos,
+`chimenea` sobre un pozo entre dos torres, `espiral` alrededor de un pilar) y entra en un
+**slot cualquiera** de la secuencia de tramos, no al final. Antes `tx` era siempre el extremo
+derecho: medido, la salida pasó de estar a ~78 % del ancho en todos los niveles a repartirse
+entre ~23 % y ~50 %. Y los huecos entre tramos llevan **promontorios** (50 % de probabilidad):
+sin eso, entre sección y sección el piso es una línea recta y el nivel se lee plano por más
+plataformas flotantes que tenga.
+
+**Plantel por nivel** (`plantelDeNivel`): la cantidad de enemigos sale de la etapa y quiénes
+salen (y con qué arquetipo) de la semilla. Medido: **4-6 / 5-7 / 6-8 / 7-9** por etapa y 68
+mezclas de arquetipo distintas en 192 niveles. `game.totalEnem` reemplaza a `enemies.length`
+en el HUD y en el chequeo de «¡LIMPIO!».
+
+**Trampa del generador**: `tx` de un enlace apuntaba al CENTRO de la superficie destino. Con el
+piso partido eso sigue siendo razonable, pero con el piso entero era el centro del mapa: el
+vuelo de prueba cruzaba el nivel y se rechazaban casi todas las secciones con bloques (y la IA,
+al caer al piso, caminaba hacia el medio de la arena). Ahora apunta al punto ÚTIL más cercano
+al despegue.
+
 #### Etapas de dificultad (2026-09-21b)
 
 `game.nivel` crece al llegar a la SALIDA (`siguienteNivel()`, cura 45 %) y la etapa sale de
