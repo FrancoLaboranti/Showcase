@@ -242,6 +242,7 @@ const CFG = {
     idleAmp: 1.0,                      // multiplicador global del wobble de idle/guardia
     bounceHz: 2.15, bounceAmp: 0.014,  // rebote de guardia (boxeador que no se queda quieto)
     popT: 0.085, popAmt: 0.55,         // compresión post-despegue (anticipación sin retrasar física)
+    swayAmp: 0.020,                    // balanceo lateral de pelvis parado (peso de una pierna a la otra)
     landT: 0.26,                       // duración total del ciclo de aterrizaje (squash + rebote)
   },
   // ciclo de marcha procedural (apoyo/vuelo por pierna) — EL dial de "correr como humano"
@@ -254,6 +255,7 @@ const CFG = {
     elbC: 1.62, elbCSpd: -0.25, elbA: 0.18, elbASpd: 0.36, elbLag: 0.55,   // codo: flexión + retraso
     leanBase: 0.10, leanSpd: 0.30, sway: 0.035,                            // inclinación y balanceo del torso
     headLead: 0.10, headSpd: 0.10, headCounter: 0.85, headBob: 0.035,      // la cabeza se nivela sola
+    chestCounter: 0.55, chestOsc: 0.06, swayRun: 0.013,                    // pecho erguido sobre cadera inclinada
     dyCrouch: 0.018,                                                       // sprint = pelvis más baja
   },
   spr: {
@@ -533,21 +535,47 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// ════════════════ ESQUELETO: 11 DOF autorables, FK a 13 puntos, IK analítica ════════════════
+// ════════════════ ESQUELETO: 13 DOF autorables, FK a 14 puntos, IK analítica ════════════════
 // Ángulos en radianes RELATIVOS al reposo del hueso padre, autorados mirando a la DERECHA;
 // facing = ±1 espeja la componente x en FK/draw. dy = offset vertical de la pelvis (en CH).
-const J = { torso: 0, head: 1, aLu: 2, aLl: 3, aRu: 4, aRl: 5, lLu: 6, lLl: 7, lRu: 8, lRl: 9, dy: 10 };
-const NJ = 11;
-const JNAMES = ['torso', 'head', 'aLu', 'aLl', 'aRu', 'aRl', 'lLu', 'lLl', 'lRu', 'lRl', 'dy'];
+//
+// ── COLUMNA EN DOS SEGMENTOS (2026-09-21) ────────────────────────────────────────────────────
+// El torso era UN hueso rígido pelvis→cuello. Eso topaba con todo: el cuerpo no podía encorvarse
+// (la rodada nunca era una bolita), los hombros no podían girar independientes de la cadera
+// (que es LO que hace que correr y pegar se lean como una persona) y no había forma de
+// contrapesar. Ahora la columna es pelvis → `chest` → cuello, con dos DOF nuevos:
+//   · `chest` = flexión del segmento superior respecto del inferior. Los hombros, los brazos y
+//     la cabeza cuelgan del segmento SUPERIOR, así que rotarlo gira el tren superior entero
+//     dejando la cadera donde está: separación hombro/cadera de verdad.
+//   · `dx` = desplazamiento lateral de la pelvis (en CH, espacio local). El torso se balancea
+//     SOBRE los pies plantados en vez de arrastrarlos: eso es el peso y el equilibrio.
+//
+// PROPIEDAD DE MIGRACIÓN, y es la que hace que esto sea seguro: con `chest = 0` y `dx = 0` la FK
+// da EXACTAMENTE los mismos puntos que la versión de un solo hueso. Toda pose y todo keytrack
+// que no los menciona sigue funcionando bit a bit igual, y cada animación se migra cuando toca.
+//
+// Los índices viejos NO se tocan (los nuevos se agregan al final): las máscaras, los `strike` y
+// los pines medidos de los golpes siguen apuntando a lo mismo.
+const J = {
+  torso: 0, head: 1, aLu: 2, aLl: 3, aRu: 4, aRl: 5, lLu: 6, lLl: 7, lRu: 8, lRl: 9, dy: 10,
+  chest: 11, dx: 12,
+};
+const NJ = 13;
+const JNAMES = ['torso', 'head', 'aLu', 'aLl', 'aRu', 'aRl', 'lLu', 'lLl', 'lRu', 'lRl', 'dy',
+                'chest', 'dx'];
+// Canales que son LONGITUDES, no ángulos: no se los puede envolver con wrapPi ni interpolar por arco.
+const J_LINEAR = [J.dy, J.dx];
 // Lado IZQUIERDO = lejano (se dibuja atrás, más oscuro) · DERECHO = cercano (adelante). El lead es el derecho.
-const P_ = { pelvis: 0, neck: 1, head: 2, shoL: 3, elbL: 4, hanL: 5, shoR: 6, elbR: 7, hanR: 8, kneL: 9, ftL: 10, kneR: 11, ftR: 12 };
-const NP = 13;
+const P_ = { pelvis: 0, neck: 1, head: 2, shoL: 3, elbL: 4, hanL: 5, shoR: 6, elbR: 7, hanR: 8, kneL: 9, ftL: 10, kneR: 11, ftR: 12, chest: 13 };
+const NP = 14;
 // Largos de hueso (fracciones de CH) — sanity: piernas 0.39 + torso 0.30 + cuello 0.08 + cabeza 0.20 ≈ 0.97
 const B = {
   torso: 0.30 * CH, neck: 0.08 * CH, headR: 0.10 * CH,
   uArm: 0.16 * CH, fArm: 0.15 * CH, thigh: 0.20 * CH, shin: 0.19 * CH,
   shoOff: 0.025 * CH, hipOff: 0.02 * CH, shoDrop: 0.07 * CH,
 };
+// La columna se parte en la unión lumbar/torácica: 42 % abajo, 58 % arriba.
+B.spineLo = B.torso * 0.42; B.spineUp = B.torso - B.spineLo;   // la resta garantiza suma EXACTA
 const LEG = B.thigh + B.shin;
 
 // Construye un Float64Array(11) desde un objeto pose {torso:…, aRu:…}; claves ausentes = 0
@@ -561,22 +589,29 @@ function P(o) {
 // dirDown(a) = (sin·facing, cos); el torso apunta hacia arriba: dirUp(a) = (sin·facing, −cos).
 function fk(pose, pts, x, y, facing) {
   const f = facing;
-  const px = x, py = y + pose[J.dy] * CH;
+  const px = x + pose[J.dx] * CH * f, py = y + pose[J.dy] * CH;
   pts[0] = px; pts[1] = py;                                          // pelvis
+  // ── columna baja: pelvis → chest ──
   const ta = pose[J.torso];
   const tx = Math.sin(ta) * f, ty = -Math.cos(ta);
-  const nx = px + B.torso * tx, ny = py + B.torso * ty;
+  const cx0 = px + B.spineLo * tx, cy0 = py + B.spineLo * ty;
+  pts[P_.chest * 2] = cx0; pts[P_.chest * 2 + 1] = cy0;
+  // ── columna alta: chest → cuello. Con chest = 0 el ángulo es el mismo y el cuello cae
+  //    exactamente donde caía con el torso de un solo hueso (spineLo + spineUp = torso).
+  const ua = ta + pose[J.chest];
+  const ux = Math.sin(ua) * f, uy = -Math.cos(ua);
+  const nx = cx0 + B.spineUp * ux, ny = cy0 + B.spineUp * uy;
   pts[2] = nx; pts[3] = ny;                                          // cuello (tope del torso)
-  const ha = ta + pose[J.head];
+  const ha = ua + pose[J.head];                                      // la cabeza cuelga del torso ALTO
   pts[4] = nx + (B.neck + B.headR) * Math.sin(ha) * f;               // centro de cabeza
   pts[5] = ny - (B.neck + B.headR) * Math.cos(ha);
-  // hombros: sobre el torso, apenas bajo el cuello, con offset de profundidad (L atrás, R adelante)
-  const sx = nx - B.shoDrop * tx, sy = ny - B.shoDrop * ty;
+  // hombros: sobre el torso ALTO, apenas bajo el cuello, con offset de profundidad (L atrás, R adelante)
+  const sx = nx - B.shoDrop * ux, sy = ny - B.shoDrop * uy;
   pts[P_.shoL * 2] = sx - B.shoOff * f; pts[P_.shoL * 2 + 1] = sy;
   pts[P_.shoR * 2] = sx + B.shoOff * f; pts[P_.shoR * 2 + 1] = sy;
-  // brazos (hijos del torso: heredan su ángulo)
+  // brazos (hijos del torso ALTO: heredan torso + chest)
   for (const [sho, elb, han, ju, jl] of [[P_.shoL, P_.elbL, P_.hanL, J.aLu, J.aLl], [P_.shoR, P_.elbR, P_.hanR, J.aRu, J.aRl]]) {
-    const au = ta + pose[ju], al = au + pose[jl];
+    const au = ua + pose[ju], al = au + pose[jl];
     const ex = pts[sho * 2] + B.uArm * Math.sin(au) * f, ey = pts[sho * 2 + 1] + B.uArm * Math.cos(au);
     pts[elb * 2] = ex; pts[elb * 2 + 1] = ey;
     pts[han * 2] = ex + B.fArm * Math.sin(al) * f; pts[han * 2 + 1] = ey + B.fArm * Math.cos(al);
@@ -638,38 +673,40 @@ const POSES = {
   // de renderPts, así que bajar la cabeza o la pelvis en la guardia sería regalar (o robar)
   // centímetros de blanco. Medido: la cabeza queda ~6 px más baja y ~4 px más adelante que en
   // idle, sobre una hurtbox de cabeza de 29 px de radio.
-  stance:  P({ torso: 0.10, head: 0.03, aLu: 0.18, aLl: 2.70, aRu: 0.55, aRl: 2.30, lLu: -0.30, lLl: -0.32, lRu: 0.28, lRl: -0.44, dy: 0.045 }),
+  stance:  P({ torso: 0.10, head: 0.03, aLu: 0.18, aLl: 2.70, aRu: 0.55, aRl: 2.30, lLu: -0.30, lLl: -0.32, lRu: 0.28, lRl: -0.44, dy: 0.045, chest: 0.06 }),
   // run1/run2 quedan como BASE de piernas y para mezclas de entrada/salida. Ojo: las piernas
   // están en fase con el IK de marcha (en gaitPhase 0 la pierna IZQUIERDA está adelante); antes
   // estaban al revés y se notaba al saltar en plena zancada. Los brazos los calcula runCycle().
   run1:    P({ torso: 0.2, head: -0.04, aLu: -0.5, aLl: 0.85, aRu: 0.65, aRl: 1.25, lLu: 0.58, lLl: -0.5, lRu: -0.42, lRl: -0.95, dy: 0.03 }),
   run2:    P({ torso: 0.2, head: -0.04, aLu: 0.65, aLl: 1.25, aRu: -0.5, aRl: 0.85, lLu: -0.42, lLl: -0.95, lRu: 0.58, lRl: -0.5, dy: 0.03 }),
   // Dash: cuerpo tirado adelante, brazo de atrás estirado hacia atrás (el clásico "zip").
-  dash:    P({ torso: 0.46, head: -0.16, aLu: -0.95, aLl: 0.50, aRu: 0.80, aRl: 1.30, lLu: -0.55, lLl: -0.72, lRu: 0.72, lRl: -0.92, dy: 0.06 }),
+  dash:    P({ torso: 0.46, head: -0.16, aLu: -0.95, aLl: 0.50, aRu: 0.80, aRl: 1.30, lLu: -0.55, lLl: -0.72, lRu: 0.72, lRl: -0.92, dy: 0.06, chest: -0.1 }),
   // Anticipación de aterrizaje: las piernas se estiran a buscar el piso y los brazos suben.
-  airLand: P({ torso: 0.10, head: 0.06, aLu: -0.32, aLl: 0.80, aRu: -0.50, aRl: 0.90, lLu: 0.16, lLl: -0.26, lRu: 0.30, lRl: -0.40, dy: -0.012 }),
+  airLand: P({ torso: 0.10, head: 0.06, aLu: -0.32, aLl: 0.80, aRu: -0.50, aRl: 0.90, lLu: 0.16, lLl: -0.26, lRu: 0.30, lRl: -0.40, dy: -0.012, chest: 0.14 }),
   // Trepada en 3 tiempos (tracción → plantar el pie → empujar y subir).
-  climbPull:  P({ torso: 0.20, head: -0.10, aLu: 2.60, aLl: 0.55, aRu: 2.80, aRl: 0.42, lLu: 0.55, lLl: -1.55, lRu: 0.88, lRl: -1.95, dy: 0.10 }),
-  climbPlant: P({ torso: 0.46, head: 0.10, aLu: 2.15, aLl: 0.95, aRu: 2.45, aRl: 0.80, lLu: 0.22, lLl: -1.10, lRu: 1.28, lRl: -1.98, dy: 0.18 }),
-  climbPush:  P({ torso: 0.40, head: 0.04, aLu: 1.05, aLl: 1.35, aRu: 0.82, aRl: 1.45, lLu: -0.30, lLl: -1.15, lRu: 0.58, lRl: -1.50, dy: 0.21 }),
+  climbPull:  P({ torso: 0.20, head: -0.10, aLu: 2.60, aLl: 0.55, aRu: 2.80, aRl: 0.42, lLu: 0.55, lLl: -1.55, lRu: 0.88, lRl: -1.95, dy: 0.10, chest: 0.32 }),
+  climbPlant: P({ torso: 0.46, head: 0.10, aLu: 2.15, aLl: 0.95, aRu: 2.45, aRl: 0.80, lLu: 0.22, lLl: -1.10, lRu: 1.28, lRl: -1.98, dy: 0.18, chest: 0.16 }),
+  climbPush:  P({ torso: 0.40, head: 0.04, aLu: 1.05, aLl: 1.35, aRu: 0.82, aRl: 1.45, lLu: -0.30, lLl: -1.15, lRu: 0.58, lRl: -1.50, dy: 0.21, chest: -0.12 }),
   // Rodada: entrada (se tira y encoge) → bolita → salida (se despliega en cuclillas listo a correr).
-  rollTuck: P({ torso: 0.45, head: 0.34, aLu: 1.20, aLl: 2.25, aRu: 1.25, aRl: 2.30, lLu: 0.38, lLl: -1.85, lRu: -0.28, lRl: -1.95, dy: 0.26 }),
-  rollOut:  P({ torso: 0.22, head: 0.06, aLu: 0.08, aLl: 2.20, aRu: 0.32, aRl: 2.00, lLu: -0.48, lLl: -1.25, lRu: 0.64, lRl: -1.05, dy: 0.17 }),
+  rollTuck: P({ torso: 0.45, head: 0.34, aLu: 1.20, aLl: 2.25, aRu: 1.25, aRl: 2.30, lLu: 0.38, lLl: -1.85, lRu: -0.28, lRl: -1.95, dy: 0.26, chest: 0.55 }),
+  rollOut:  P({ torso: 0.22, head: 0.06, aLu: 0.08, aLl: 2.20, aRu: 0.32, aRl: 2.00, lLu: -0.48, lLl: -1.25, lRu: 0.64, lRl: -1.05, dy: 0.17, chest: 0.3 }),
   // Pose de IMPULSO de salto: brazos hacia arriba/atrás (aLu/aRu bien negativos), cuerpo estirado,
   // piernas casi rectas. Se usa durante los primeros ~0.15s tras despegar → sensación de "pop".
-  jumpPop: P({ torso: -0.04, head: -0.10, aLu: -2.05, aLl: 0.55, aRu: -2.25, aRl: 0.62, lLu: 0.08, lLl: -0.15, lRu: 0.12, lRl: -0.20, dy: -0.06 }),
+  jumpPop: P({ torso: -0.04, head: -0.10, aLu: -2.05, aLl: 0.55, aRu: -2.25, aRl: 0.62, lLu: 0.08, lLl: -0.15, lRu: 0.12, lRl: -0.20, dy: -0.06, chest: -0.2 }),
   // Pose de ROLL: cuerpo compacto (bolita). Todo doblado a fondo — arms wrapped, knees to chest,
   // dy alto (bajo al suelo). El giro visual lo aporta `f.rot` desde el estado ROLL.
-  ballRoll: P({ torso: 0.55, head: 0.50, aLu: 1.55, aLl: 2.55, aRu: 1.55, aRl: 2.55, lLu: 0.55, lLl: -2.35, lRu: -0.55, lRl: -2.35, dy: 0.34 }),
-  airRise: P({ torso: 0.14, head: -0.06, aLu: -1.40, aLl: 0.82, aRu: -1.62, aRl: 0.92, lLu: 0.34, lLl: -0.95, lRu: 0.76, lRl: -1.35, dy: 0 }),
-  airApex: P({ torso: 0.08, head: 0, aLu: -0.42, aLl: 1.05, aRu: -0.32, aRl: 1.12, lLu: 0.10, lLl: -0.55, lRu: 0.46, lRl: -0.80, dy: 0 }),
-  airFall: P({ torso: 0.04, head: 0.08, aLu: -0.92, aLl: 0.95, aRu: -1.12, aRl: 1.05, lLu: -0.12, lLl: -0.26, lRu: 0.42, lRl: -0.44, dy: 0 }),
-  skid:    P({ torso: -0.28, head: 0.1, aLu: -0.55, aLl: 0.45, aRu: 0.9, aRl: 0.35, lLu: -0.34, lLl: -0.6, lRu: 0.68, lRl: -0.35, dy: 0.06 }),
-  block:   P({ torso: 0.14, head: 0.1, aLu: 0.45, aLl: 2.62, aRu: 0.70, aRl: 2.42, lLu: -0.25, lLl: -0.22, lRu: 0.22, lRl: -0.3, dy: 0.05 }),
-  blockLo: P({ torso: 0.35, head: 0.12, aLu: 0.42, aLl: 2.58, aRu: 0.68, aRl: 2.38, lLu: -0.35, lLl: -1.5, lRu: 0.5, lRl: -1.7, dy: 0.2 }),
-  crouch:  P({ torso: 0.3, head: 0.06, aLu: 0.22, aLl: 2.35, aRu: 0.44, aRl: 2.12, lLu: -0.4, lLl: -1.6, lRu: 0.55, lRl: -1.75, dy: 0.22 }),
-  hang:    P({ torso: 0.08, head: -0.15, aLu: 2.75, aLl: 0.25, aRu: 2.95, aRl: 0.12, lLu: 0.04, lLl: -0.4, lRu: -0.08, lRl: -0.3, dy: 0 }),
-  getup:   P({ torso: 0.55, head: 0.15, aLu: 0.5, aLl: 1.2, aRu: 0.8, aRl: 1.0, lLu: -0.45, lLl: -1.7, lRu: 0.6, lRl: -1.85, dy: 0.26 }),
+  // Con el torso de un solo hueso esto nunca pudo ser una bolita: la distancia pelvis→cabeza
+  // era fija. Con la columna partida, `chest` cierra el cuerpo de verdad.
+  ballRoll: P({ torso: 0.50, head: 0.55, aLu: 1.55, aLl: 2.55, aRu: 1.55, aRl: 2.55, lLu: 0.55, lLl: -2.35, lRu: -0.55, lRl: -2.35, dy: 0.34, chest: 0.95 }),
+  airRise: P({ torso: 0.14, head: -0.06, aLu: -1.40, aLl: 0.82, aRu: -1.62, aRl: 0.92, lLu: 0.34, lLl: -0.95, lRu: 0.76, lRl: -1.35, dy: 0, chest: -0.08 }),
+  airApex: P({ torso: 0.08, head: 0, aLu: -0.42, aLl: 1.05, aRu: -0.32, aRl: 1.12, lLu: 0.10, lLl: -0.55, lRu: 0.46, lRl: -0.80, dy: 0, chest: 0.2 }),
+  airFall: P({ torso: 0.04, head: 0.08, aLu: -0.92, aLl: 0.95, aRu: -1.12, aRl: 1.05, lLu: -0.12, lLl: -0.26, lRu: 0.42, lRl: -0.44, dy: 0, chest: 0.04 }),
+  skid:    P({ torso: -0.28, head: 0.1, aLu: -0.55, aLl: 0.45, aRu: 0.9, aRl: 0.35, lLu: -0.34, lLl: -0.6, lRu: 0.68, lRl: -0.35, dy: 0.06, chest: -0.16 }),
+  block:   P({ torso: 0.14, head: 0.1, aLu: 0.45, aLl: 2.62, aRu: 0.70, aRl: 2.42, lLu: -0.25, lLl: -0.22, lRu: 0.22, lRl: -0.3, dy: 0.05, chest: 0.07 }),
+  blockLo: P({ torso: 0.35, head: 0.12, aLu: 0.42, aLl: 2.58, aRu: 0.68, aRl: 2.38, lLu: -0.35, lLl: -1.5, lRu: 0.5, lRl: -1.7, dy: 0.2, chest: 0.07 }),
+  crouch:  P({ torso: 0.3, head: 0.06, aLu: 0.22, aLl: 2.35, aRu: 0.44, aRl: 2.12, lLu: -0.4, lLl: -1.6, lRu: 0.55, lRl: -1.75, dy: 0.22, chest: 0.09 }),
+  hang:    P({ torso: 0.08, head: -0.15, aLu: 2.75, aLl: 0.25, aRu: 2.95, aRl: 0.12, lLu: 0.04, lLl: -0.4, lRu: -0.08, lRl: -0.3, dy: 0, chest: -0.14 }),
+  getup:   P({ torso: 0.55, head: 0.15, aLu: 0.5, aLl: 1.2, aRu: 0.8, aRl: 1.0, lLu: -0.45, lLl: -1.7, lRu: 0.6, lRl: -1.85, dy: 0.26, chest: 0.34 }),
 };
 
 // ════════════════ MOVIMIENTOS: puro dato — poses parciales + frame data ════════════════
@@ -693,8 +730,8 @@ const POSES = {
 // igual al frame-data exacto en el contacto, porque hStrike lo clava.
 // `fw` = footwork (offset de los pies durante el golpe, ver feetIK) · `drive` = envolvente de
 // peso/torso que SÓLO existe fuera de la ventana activa (ver atkDrive).
-const MASK_PUNCH = [J.torso, J.head, J.aLu, J.aLl, J.aRu, J.aRl];
-const MASK_ALL = [J.torso, J.head, J.aLu, J.aLl, J.aRu, J.aRl, J.lLu, J.lLl, J.lRu, J.lRl, J.dy];
+const MASK_PUNCH = [J.torso, J.head, J.aLu, J.aLl, J.aRu, J.aRl, J.chest, J.dx];
+const MASK_ALL = [J.torso, J.head, J.aLu, J.aLl, J.aRu, J.aRl, J.lLu, J.lLl, J.lRu, J.lRl, J.dy, J.chest, J.dx];
 const MOVES = {
   // ═══ CADENAS DE COMBO (chain = próximo move si tocás PUÑO durante recovery; chainAlt = PATADA)
   //  · Puños puros:  jab → cross → hook → uppercut  (4-hit terminado en launcher)
@@ -705,13 +742,13 @@ const MOVES = {
     // Jab: el tell tiene que ser MÍNIMO. Toda la anticipación es la mano libre subiendo al
     // mentón y el hombro que se carga medio frame; el peso casi no viaja (fw chico).
     poses: [
-      { p: { head: -0.09, aLu: 0.34, aLl: 2.66 }, at: 0.018, ease: easeOutCubic },
-      { p: { torso: 0.02, aRu: 0.16, aRl: 2.48, aLu: 0.30, aLl: 2.62 }, at: 0.035, ease: easeOutCubic },   // carga: puno al menton
-      { p: { torso: 0.24, head: 0.05, aRu: 1.52, aRl: 0.06, aLu: 0.6, aLl: 2.05 }, at: 0.07, ease: easeOutCubic },   // contacto (autorada 8% pasada)
-      { p: { torso: 0.2389, aRu: 1.5125, aRl: 0.0749, head: 0.02, aLu: 0.30, aLl: 2.60 }, at: 0.095 },    // PIN mitad activa
-      { p: { torso: 0.2313, aRu: 1.4602, aRl: 0.1796, head: -0.01, aLu: 0.28, aLl: 2.58 }, at: 0.12 },   // PIN fin activa
-      { p: { torso: 0.16, head: 0.03, aRu: 0.42, aRl: 2.46, aLu: 0.26, aLl: 2.60 }, at: 0.175, ease: easeOutCubic },   // recoge pasandose
-      { p: { torso: 0.10, head: 0.04, aRu: 0.52, aRl: 2.14, aLu: 0.22, aLl: 2.54 }, at: 0.26, ease: easeInOutCubic },
+      { p: { chest: -0.08, dx: -0.025, head: -0.09, aLu: 0.34, aLl: 2.66 }, at: 0.018, ease: easeOutCubic },
+      { p: { torso: 0.02, aRu: 0.16, aRl: 2.48, aLu: 0.30, aLl: 2.62, chest: -0.13, dx: 0 }, at: 0.035, ease: easeOutCubic },   // carga: puno al menton
+      { p: { torso: 0.24, head: 0.05, aRu: 1.2298, aRl: 0.4882, aLu: 0.6, aLl: 2.05, chest: 0.1, dx: 0 }, at: 0.07, ease: easeOutCubic },   // contacto (autorada 8% pasada)
+      { p: { torso: 0.2389, aRu: 1.2092, aRl: 0.5132, head: 0.02, aLu: 0.30, aLl: 2.60, chest: 0.11, dx: 0 }, at: 0.095 },    // PIN mitad activa
+      { p: { torso: 0.2313, aRu: 1.2122, aRl: 0.5194, head: -0.01, aLu: 0.28, aLl: 2.58, chest: 0.1, dx: 0 }, at: 0.12 },   // PIN fin activa
+      { p: { torso: 0.16, head: 0.03, aRu: 0.42, aRl: 2.46, aLu: 0.26, aLl: 2.60, chest: 0.24, dx: 0.03 }, at: 0.175, ease: easeOutCubic },   // recoge pasandose
+      { p: { torso: 0.10, head: 0.04, aRu: 0.52, aRl: 2.14, aLu: 0.22, aLl: 2.54, chest: 0.03, dx: 0 }, at: 0.26, ease: easeInOutCubic },
     ],
     startup: 0.07, active: 0.05, recovery: 0.14, dmg: 5, stop: 0.05, kbx: 0.10, kby: 0,
     hitstun: 0.22, mask: MASK_PUNCH, limb: P_.hanR, strike: [J.aRu, J.aRl],
@@ -722,13 +759,13 @@ const MOVES = {
     // Cross: el golpe de la cadera. El talón de atrás se despega y pivotea (fw.heel grande), el
     // torso rota de −0.05 a +0.42 y el brazo de adelante se recoge a la mejilla como contrapeso.
     poses: [
-      { p: { head: -0.11, aRu: 0.60, aRl: 2.34 }, at: 0.022, ease: easeOutCubic },
-      { p: { torso: -0.10, aLu: 0.02, aLl: 2.62, aRu: 0.58, aRl: 2.28 }, at: 0.045, ease: easeOutCubic },   // carga: cadera atras, puno al menton
-      { p: { torso: 0.42, head: 0.08, aLu: 1.55, aLl: 0.05, aRu: 0.65, aRl: 2.1 }, at: 0.09, ease: easeOutCubic },
-      { p: { torso: 0.4181, aLu: 1.5427, aLl: 0.0628, head: 0.05, aRu: 0.50, aRl: 2.34 }, at: 0.12 },     // PIN mitad activa
-      { p: { torso: 0.4051, aLu: 1.4919, aLl: 0.1523, head: 0.01, aRu: 0.47, aRl: 2.38 }, at: 0.15 },    // PIN fin activa
-      { p: { torso: 0.30, head: -0.03, aLu: 0.30, aLl: 2.54, aRu: 0.52, aRl: 2.26 }, at: 0.22, ease: easeOutCubic },
-      { p: { torso: 0.13, head: 0.04, aLu: 0.22, aLl: 2.55, aRu: 0.50, aRl: 2.15 }, at: 0.34, ease: easeInOutCubic },
+      { p: { chest: -0.14, dx: -0.03, head: -0.11, aRu: 0.60, aRl: 2.34 }, at: 0.022, ease: easeOutCubic },
+      { p: { torso: -0.10, aLu: 0.02, aLl: 2.62, aRu: 0.58, aRl: 2.28, chest: -0.24, dx: 0 }, at: 0.045, ease: easeOutCubic },   // carga: cadera atras, puno al menton
+      { p: { torso: 0.42, head: 0.08, aLu: 1.2141, aLl: 0.5052, aRu: 0.65, aRl: 2.1, chest: 0.16, dx: 0 }, at: 0.09, ease: easeOutCubic },
+      { p: { torso: 0.4181, aLu: 1.198, aLl: 0.5216, head: 0.05, aRu: 0.50, aRl: 2.34, chest: 0.17, dx: 0 }, at: 0.12 },     // PIN mitad activa
+      { p: { torso: 0.4051, aLu: 1.1884, aLl: 0.5383, head: 0.01, aRu: 0.47, aRl: 2.38, chest: 0.16, dx: 0 }, at: 0.15 },    // PIN fin activa
+      { p: { torso: 0.30, head: -0.03, aLu: 0.30, aLl: 2.54, aRu: 0.52, aRl: 2.26, chest: 0.34, dx: 0.036 }, at: 0.22, ease: easeOutCubic },
+      { p: { torso: 0.13, head: 0.04, aLu: 0.22, aLl: 2.55, aRu: 0.50, aRl: 2.15, chest: 0.04, dx: 0 }, at: 0.34, ease: easeInOutCubic },
     ],
     startup: 0.09, active: 0.06, recovery: 0.19, dmg: 8, stop: 0.075, kbx: 0.11, kby: -0.04,
     hitstun: 0.28, mask: MASK_PUNCH, limb: P_.hanL, strike: [J.aLu, J.aLl],
@@ -740,13 +777,13 @@ const MOVES = {
     // Torso rota hacia atrás cargando y suelta cruzado. Encadena a uppercut (finish) o spinkick.
     // El pie de adelante pivotea con el giro (fw.front) y el de atrás empuja: es un golpe de rotación.
     poses: [
-      { p: { head: -0.15, aLu: 0.38, aLl: 2.60 }, at: 0.024, ease: easeOutCubic },
-      { p: { torso: -0.26, head: -0.10, aRu: 2.30, aRl: 2.30, aLu: 0.40, aLl: 2.58 }, at: 0.05, ease: easeOutCubic },   // enrosque del gancho
-      { p: { torso: 0.38, head: 0.08, aRu: 1.55, aRl: 0.05, aLu: 0.5, aLl: 1.95 }, at: 0.11, ease: easeOutCubic },   // contacto (giro cruzado)
-      { p: { torso: 0.3795, aRu: 1.5482, aRl: 0.0535, head: 0.06, aLu: 0.28, aLl: 2.56 }, at: 0.13 },     // PIN mitad activa
-      { p: { torso: 0.3723, aRu: 1.5212, aRl: 0.1044, head: 0.01, aLu: 0.26, aLl: 2.60 }, at: 0.16 },    // PIN fin activa
-      { p: { torso: 0.25, head: -0.06, aRu: 0.44, aRl: 2.48, aLu: 0.28, aLl: 2.58 }, at: 0.235, ease: easeOutCubic },
-      { p: { torso: 0.12, head: 0.04, aRu: 0.50, aRl: 2.15, aLu: 0.22, aLl: 2.55 }, at: 0.36, ease: easeInOutCubic },
+      { p: { chest: -0.16, dx: -0.03, head: -0.15, aLu: 0.38, aLl: 2.60 }, at: 0.024, ease: easeOutCubic },
+      { p: { torso: -0.26, head: -0.10, aRu: 2.30, aRl: 2.30, aLu: 0.40, aLl: 2.58, chest: -0.28, dx: 0 }, at: 0.05, ease: easeOutCubic },   // enrosque del gancho
+      { p: { torso: 0.38, head: 0.08, aRu: 1.2276, aRl: 0.5015, aLu: 0.5, aLl: 1.95, chest: 0.14, dx: 0 }, at: 0.11, ease: easeOutCubic },   // contacto (giro cruzado)
+      { p: { torso: 0.3795, aRu: 1.2124, aRl: 0.5178, head: 0.06, aLu: 0.28, aLl: 2.56, chest: 0.15, dx: 0 }, at: 0.13 },     // PIN mitad activa
+      { p: { torso: 0.3723, aRu: 1.2332, aRl: 0.4986, head: 0.01, aLu: 0.26, aLl: 2.60, chest: 0.13, dx: 0 }, at: 0.16 },    // PIN fin activa
+      { p: { torso: 0.25, head: -0.06, aRu: 0.44, aRl: 2.48, aLu: 0.28, aLl: 2.58, chest: 0.32, dx: 0.034 }, at: 0.235, ease: easeOutCubic },
+      { p: { torso: 0.12, head: 0.04, aRu: 0.50, aRl: 2.15, aLu: 0.22, aLl: 2.55, chest: 0.03, dx: 0 }, at: 0.36, ease: easeInOutCubic },
     ],
     startup: 0.10, active: 0.06, recovery: 0.20, dmg: 10, stop: 0.09, kbx: 0.16, kby: -0.03,
     hitstun: 0.30, mask: MASK_PUNCH, limb: P_.hanR, strike: [J.aRu, J.aRl],
@@ -757,13 +794,13 @@ const MOVES = {
     // Uppercut: el único golpe donde la caída y el empuje de piernas YA viven en el keytrack
     // (dy 0.14 → −0.03). El rework le suma la cabeza que se va con el arco y el rebote de recupero.
     poses: [
-      { p: { head: 0.22, aLu: 0.30, aLl: 2.64 }, at: 0.032, ease: easeInOutCubic },
-      { p: { torso: 0.5, head: 0.1, aRu: -0.5, aRl: 1.3, aLu: 0.30, aLl: 2.62, dy: 0.14 }, at: 0.07, ease: easeInOutCubic },   // OJO: aRu/aRl acá gobiernan parte de la ACTIVA (0.10-0.13): intocables
-      { p: { torso: -0.18, head: -0.12, aRu: 2.55, aRl: 0.25, aLu: 0.55, aLl: 2.0, dy: -0.03 }, at: 0.13, ease: easeOutCubic },
-      { p: { torso: -0.1799, aRu: 2.5493, aRl: 0.2504, dy: -0.03, head: -0.17, aLu: 0.26, aLl: 2.62 }, at: 0.15 },      // PIN mitad activa
-      { p: { torso: -0.1747, aRu: 2.5188, aRl: 0.2673, dy: -0.0288, head: -0.2, aLu: 0.24, aLl: 2.66 }, at: 0.20 },   // PIN fin activa
-      { p: { torso: 0.2, head: 0.12, aRu: 1.45, aRl: 1.55, aLu: 0.26, aLl: 2.58, dy: 0.09 }, at: 0.32, ease: easeOutCubic },
-      { p: { torso: 0.05, head: 0.02, aRu: 0.56, aRl: 2.10, aLu: 0.22, aLl: 2.55, dy: 0.02 }, at: 0.52, ease: easeInOutCubic },
+      { p: { chest: 0.34, dx: -0.02, head: 0.22, aLu: 0.30, aLl: 2.64 }, at: 0.032, ease: easeInOutCubic },
+      { p: { torso: 0.5, head: 0.1, aRu: -0.5, aRl: 1.3, aLu: 0.30, aLl: 2.62, dy: 0.14, chest: 0.06, dx: 0 }, at: 0.07, ease: easeInOutCubic },   // OJO: aRu/aRl acá gobiernan parte de la ACTIVA (0.10-0.13): intocables
+      { p: { torso: -0.18, head: -0.12, aRu: 2.4213, aRl: 0.4219, aLu: 0.55, aLl: 2.0, dy: -0.03, chest: 0.06, dx: 0 }, at: 0.13, ease: easeOutCubic },
+      { p: { torso: -0.1799, aRu: 2.4206, aRl: 0.4221, dy: -0.03, head: -0.17, aLu: 0.26, aLl: 2.62, chest: 0.06, dx: 0 }, at: 0.15 },      // PIN mitad activa
+      { p: { torso: -0.1747, aRu: 2.4108, aRl: 0.4116, dy: -0.0288, head: -0.2, aLu: 0.24, aLl: 2.66, chest: 0.05, dx: 0 }, at: 0.20 },   // PIN fin activa
+      { p: { torso: 0.2, head: 0.12, aRu: 1.45, aRl: 1.55, aLu: 0.26, aLl: 2.58, dy: 0.09, chest: -0.28, dx: 0.026 }, at: 0.32, ease: easeOutCubic },
+      { p: { torso: 0.05, head: 0.02, aRu: 0.56, aRl: 2.10, aLu: 0.22, aLl: 2.55, dy: 0.02, chest: 0.02, dx: 0 }, at: 0.52, ease: easeInOutCubic },
     ],
     // activa desde ANTES del keyframe de contacto: la barrida del arco (abajo→arriba) también pega
     startup: 0.10, active: 0.10, recovery: 0.32, dmg: 12, stop: 0.115, kbx: 0.12, kby: -0.75,
@@ -776,13 +813,13 @@ const MOVES = {
     // (las piernas no heredan el torso), así que acá está toda la compensación: el torso se tira
     // hacia atrás contra la pierna, el brazo de adelante se abre y el de atrás cruza al pecho.
     poses: [
-      { p: { torso: 0.38, head: 0.0, aRu: 1.15, aRl: 1.35, aLu: -0.25, aLl: 1.55, lRu: 0.45, lRl: -1.95, lLu: -0.1, lLl: -0.32, dy: 0.10 }, at: 0.045, ease: easeOutCubic },
-      { p: { torso: 0.24, head: 0.06, aRu: 1.05, aRl: 0.75, aLu: -0.55, aLl: 1.15, lRu: 0.80, lRl: -2.52, lLu: -0.16, lLl: -0.28, dy: 0.07 }, at: 0.08, ease: easeInOutCubic },   // CHAMBER: rodilla arriba, talon a la cola
-      { p: { torso: -0.42, head: 0.15, aRu: -0.6, aRl: 0.4, aLu: 0.9, aLl: 0.3, lRu: 1.62, lRl: -0.08, lLu: -0.2, lLl: -0.38, dy: 0.04 }, at: 0.145, ease: easeOutCubic },
-      { p: { lRu: 1.6188, lRl: -0.0802, dy: 0.04, torso: -0.46, head: 0.18, aRu: -0.78, aRl: 0.34, aLu: 1.0, aLl: 0.28 }, at: 0.165 },    // PIN mitad activa
-      { p: { lRu: 1.5957, lRl: -0.0848, dy: 0.04, torso: -0.48, head: 0.20, aRu: -0.88, aRl: 0.38, aLu: 1.08, aLl: 0.3 }, at: 0.20 },  // PIN fin activa
-      { p: { torso: -0.17, head: 0.1, aRu: 0.05, aRl: 1.45, aLu: 0.88, aLl: 1.15, lRu: 1.02, lRl: -1.75, lLu: -0.24, lLl: -0.3, dy: 0.085 }, at: 0.30, ease: easeOutCubic },   // recoge la pierna antes de bajarla
-      { p: { torso: 0.08, head: 0.0, aRu: 0.50, aRl: 2.15, aLu: 0.22, aLl: 2.55, lRu: 0.25, lRl: -0.35, lLu: -0.22, lLl: -0.2, dy: 0.04 }, at: 0.48, ease: easeInOutCubic },
+      { p: { chest: 0.22, dx: -0.03, torso: 0.38, head: 0.0, aRu: 1.15, aRl: 1.35, aLu: -0.25, aLl: 1.55, lRu: 0.45, lRl: -1.95, lLu: -0.1, lLl: -0.32, dy: 0.10 }, at: 0.045, ease: easeOutCubic },
+      { p: { torso: 0.24, head: 0.06, aRu: 1.05, aRl: 0.75, aLu: -0.55, aLl: 1.15, lRu: 0.80, lRl: -2.52, lLu: -0.16, lLl: -0.28, dy: 0.07, chest: 0.1, dx: 0 }, at: 0.08, ease: easeInOutCubic },   // CHAMBER: rodilla arriba, talon a la cola
+      { p: { torso: -0.42, head: 0.15, aRu: -0.6, aRl: 0.4, aLu: 0.9, aLl: 0.3, lRu: 1.62, lRl: -0.08, lLu: -0.2, lLl: -0.38, dy: 0.04, chest: -0.3, dx: 0 }, at: 0.145, ease: easeOutCubic },
+      { p: { lRu: 1.6188, lRl: -0.0802, dy: 0.04, torso: -0.46, head: 0.18, aRu: -0.78, aRl: 0.34, aLu: 1.0, aLl: 0.28, chest: -0.35, dx: 0 }, at: 0.165 },    // PIN mitad activa
+      { p: { lRu: 1.5957, lRl: -0.0848, dy: 0.04, torso: -0.48, head: 0.20, aRu: -0.88, aRl: 0.38, aLu: 1.08, aLl: 0.3, chest: -0.37, dx: 0 }, at: 0.20 },  // PIN fin activa
+      { p: { torso: -0.17, head: 0.1, aRu: 0.05, aRl: 1.45, aLu: 0.88, aLl: 1.15, lRu: 1.02, lRl: -1.75, lLu: -0.24, lLl: -0.3, dy: 0.085, chest: -0.08, dx: 0.03 }, at: 0.30, ease: easeOutCubic },   // recoge la pierna antes de bajarla
+      { p: { torso: 0.08, head: 0.0, aRu: 0.50, aRl: 2.15, aLu: 0.22, aLl: 2.55, lRu: 0.25, lRl: -0.35, lLu: -0.22, lLl: -0.2, dy: 0.04, chest: 0.02, dx: 0 }, at: 0.48, ease: easeInOutCubic },
     ],
     startup: 0.13, active: 0.07, recovery: 0.28, dmg: 11, stop: 0.09, kbx: 0.30, kby: -0.06,
     hitstun: 0.32, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true,
@@ -793,15 +830,15 @@ const MOVES = {
     // Barrida: el cuerpo se va al piso. La mano de atrás baja casi a apoyarse (aLu negativo) y
     // la de adelante sube: contrapeso real, no un muñeco girando una pierna.
     poses: [
-      { p: { torso: 0.5, head: 0.14, aRu: 0.30, aRl: 1.95, aLu: 0.05, aLl: 1.65, lRu: 0.25, lRl: -1.85, lLu: -0.3, lLl: -1.25, dy: 0.13 }, at: 0.028, ease: easeOutCubic },
-      { p: { lRu: 0.52, lRl: -2.42, torso: 0.48, head: 0.13, aRu: 0.38, aRl: 1.85, aLu: 0.10, aLl: 1.60, lLu: -0.38, lLl: -1.50, dy: 0.17 }, at: 0.045, ease: easeOutCubic },   // CHAMBER bajo
+      { p: { chest: 0.28, dx: -0.024, torso: 0.5, head: 0.14, aRu: 0.30, aRl: 1.95, aLu: 0.05, aLl: 1.65, lRu: 0.25, lRl: -1.85, lLu: -0.3, lLl: -1.25, dy: 0.13 }, at: 0.028, ease: easeOutCubic },
+      { p: { lRu: 0.52, lRl: -2.42, torso: 0.48, head: 0.13, aRu: 0.38, aRl: 1.85, aLu: 0.10, aLl: 1.60, lLu: -0.38, lLl: -1.50, dy: 0.17, chest: 0.34, dx: 0 }, at: 0.045, ease: easeOutCubic },   // CHAMBER bajo
       // Esta clave VUELVE a los valores originales de lRu/lRl/dy a propósito: gobierna el
       // segmento que entra en la ventana activa, así que el chamber va en la clave de 0.045.
-      { p: { torso: 0.45, head: 0.12, aRu: 0.45, aRl: 1.65, aLu: 0.15, aLl: 1.45, lRu: 0.3, lRl: -1.5, lLu: -0.42, lLl: -1.68, dy: 0.2 }, at: 0.06, ease: easeInOutCubic },
-      { p: { torso: 0.55, head: 0.1, aRu: 0.9, aRl: 0.4, aLu: -0.3, aLl: 0.5, lRu: 1.25, lRl: -0.06, lLu: -0.45, lLl: -1.9, dy: 0.24 }, at: 0.13, ease: easeOutCubic },
-      { p: { lRu: 1.2469, lRl: -0.0652, dy: 0.2398, torso: 0.6, head: 0.13, aRu: 1.05, aRl: 0.32, aLu: -0.44, aLl: 0.46, lLu: -0.48, lLl: -1.95 }, at: 0.16 },   // PIN fin activa
-      { p: { torso: 0.5, head: 0.05, aRu: 0.72, aRl: 1.35, aLu: 0.02, aLl: 1.55, lRu: 0.72, lRl: -1.85, lLu: -0.44, lLl: -1.8, dy: 0.24 }, at: 0.26, ease: easeOutCubic },
-      { p: { torso: 0.3, head: 0.0, aRu: 0.44, aRl: 2.10, aLu: 0.22, aLl: 2.30, lRu: 0.4, lRl: -1.5, lLu: -0.4, lLl: -1.6, dy: 0.18 }, at: 0.44, ease: easeInOutCubic },
+      { p: { torso: 0.45, head: 0.12, aRu: 0.45, aRl: 1.65, aLu: 0.15, aLl: 1.45, lRu: 0.3, lRl: -1.5, lLu: -0.42, lLl: -1.68, dy: 0.2, chest: 0.3, dx: 0 }, at: 0.06, ease: easeInOutCubic },
+      { p: { torso: 0.55, head: 0.1, aRu: 0.9, aRl: 0.4, aLu: -0.3, aLl: 0.5, lRu: 1.25, lRl: -0.06, lLu: -0.45, lLl: -1.9, dy: 0.24, chest: 0.22, dx: 0 }, at: 0.13, ease: easeOutCubic },
+      { p: { lRu: 1.2469, lRl: -0.0652, dy: 0.2398, torso: 0.6, head: 0.13, aRu: 1.05, aRl: 0.32, aLu: -0.44, aLl: 0.46, lLu: -0.48, lLl: -1.95, chest: 0.2, dx: 0 }, at: 0.16 },   // PIN fin activa
+      { p: { torso: 0.5, head: 0.05, aRu: 0.72, aRl: 1.35, aLu: 0.02, aLl: 1.55, lRu: 0.72, lRl: -1.85, lLu: -0.44, lLl: -1.8, dy: 0.24, chest: 0.3, dx: 0.026 }, at: 0.26, ease: easeOutCubic },
+      { p: { torso: 0.3, head: 0.0, aRu: 0.44, aRl: 2.10, aLu: 0.22, aLl: 2.30, lRu: 0.4, lRl: -1.5, lLu: -0.4, lLl: -1.6, dy: 0.18, chest: 0.06, dx: 0 }, at: 0.44, ease: easeInOutCubic },
     ],
     startup: 0.10, active: 0.06, recovery: 0.28, dmg: 7, stop: 0.07, kbx: 0.12, kby: 0,
     hitstun: 0.3, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true,
@@ -814,13 +851,13 @@ const MOVES = {
     // (K), roundhouse (K), o directamente dash+kick.
     // El enrosque es el tell: brazos cruzados al pecho y hombro adelante ANTES de abrir.
     poses: [
-      { p: { torso: 0.34, head: 0.18, aRu: 0.95, aRl: 2.35, aLu: 0.90, aLl: 2.40, lRu: 0.30, lRl: -1.70, lLu: -0.12, lLl: -0.28, dy: 0.11 }, at: 0.03, ease: easeOutCubic },
-      { p: { torso: 0.12, head: 0.12, aRu: 0.70, aRl: 2.10, aLu: 0.68, aLl: 2.15, lRu: 0.64, lRl: -2.48, lLu: -0.22, lLl: -0.34, dy: 0.06 }, at: 0.06, ease: easeInOutCubic },   // CHAMBER del giro
-      { p: { torso: -0.55, head: 0.2, aRu: -0.5, aRl: 0.3, aLu: 0.9, aLl: 0.35, lRu: 1.7, lRl: -0.03, lLu: -0.25, lLl: -0.42, dy: 0.03 }, at: 0.16, ease: easeOutCubic },
-      { p: { lRu: 1.6999, lRl: -0.03, dy: 0.03, torso: -0.63, head: 0.24, aRu: -0.7, aRl: 0.28, aLu: 1.06, aLl: 0.3 }, at: 0.17 },      // PIN mitad activa
-      { p: { lRu: 1.6822, lRl: -0.036, dy: 0.0301, torso: -0.68, head: 0.27, aRu: -0.88, aRl: 0.3, aLu: 1.16, aLl: 0.32 }, at: 0.21 }, // PIN fin activa
-      { p: { torso: -0.24, head: 0.12, aRu: -0.05, aRl: 1.40, aLu: 0.92, aLl: 1.25, lRu: 1.05, lRl: -1.90, lLu: -0.3, lLl: -0.5, dy: 0.09 }, at: 0.32, ease: easeOutCubic },
-      { p: { torso: 0.05, head: 0.0, aRu: 0.50, aRl: 2.15, aLu: 0.22, aLl: 2.55, lRu: 0.3, lRl: -0.5, lLu: -0.25, lLl: -0.35, dy: 0.04 }, at: 0.5, ease: easeInOutCubic },
+      { p: { chest: 0.28, dx: -0.032, torso: 0.34, head: 0.18, aRu: 0.95, aRl: 2.35, aLu: 0.90, aLl: 2.40, lRu: 0.30, lRl: -1.70, lLu: -0.12, lLl: -0.28, dy: 0.11 }, at: 0.03, ease: easeOutCubic },
+      { p: { torso: 0.12, head: 0.12, aRu: 0.70, aRl: 2.10, aLu: 0.68, aLl: 2.15, lRu: 0.64, lRl: -2.48, lLu: -0.22, lLl: -0.34, dy: 0.06, chest: 0.18, dx: 0 }, at: 0.06, ease: easeInOutCubic },   // CHAMBER del giro
+      { p: { torso: -0.55, head: 0.2, aRu: -0.5, aRl: 0.3, aLu: 0.9, aLl: 0.35, lRu: 1.7, lRl: -0.03, lLu: -0.25, lLl: -0.42, dy: 0.03, chest: -0.34, dx: 0 }, at: 0.16, ease: easeOutCubic },
+      { p: { lRu: 1.6999, lRl: -0.03, dy: 0.03, torso: -0.63, head: 0.24, aRu: -0.7, aRl: 0.28, aLu: 1.06, aLl: 0.3, chest: -0.39, dx: 0 }, at: 0.17 },      // PIN mitad activa
+      { p: { lRu: 1.6822, lRl: -0.036, dy: 0.0301, torso: -0.68, head: 0.27, aRu: -0.88, aRl: 0.3, aLu: 1.16, aLl: 0.32, chest: -0.42, dx: 0 }, at: 0.21 }, // PIN fin activa
+      { p: { torso: -0.24, head: 0.12, aRu: -0.05, aRl: 1.40, aLu: 0.92, aLl: 1.25, lRu: 1.05, lRl: -1.90, lLu: -0.3, lLl: -0.5, dy: 0.09, chest: -0.1, dx: 0.034 }, at: 0.32, ease: easeOutCubic },
+      { p: { torso: 0.05, head: 0.0, aRu: 0.50, aRl: 2.15, aLu: 0.22, aLl: 2.55, lRu: 0.3, lRl: -0.5, lLu: -0.25, lLl: -0.35, dy: 0.04, chest: 0.02, dx: 0 }, at: 0.5, ease: easeInOutCubic },
     ],
     startup: 0.13, active: 0.08, recovery: 0.32, dmg: 14, stop: 0.12, kbx: 0.36, kby: -0.10,
     hitstun: 0.42, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true,
@@ -832,12 +869,12 @@ const MOVES = {
     // El PIN de 0.59 congela la pierna estirada toda la activa; recién ahí arranca la caída y el
     // recupero (antes se quedaba con la pierna tiesa en el piso hasta que terminaba el move).
     poses: [
-      { p: { torso: 0.16, head: 0.05, aRu: -0.15, aRl: 1.40, aLu: -0.10, aLl: 1.35, lRu: 0.55, lRl: -2.20, lLu: 0.50, lLl: -2.10, dy: 0.03 }, at: 0.024, ease: easeOutCubic },
-      { p: { torso: -0.2, aRu: -0.7, aRl: 0.5, aLu: -0.6, aLl: 0.45, lRu: 0.90, lRl: -2.38, lLu: 0.78, lLl: -2.15, dy: 0 }, at: 0.05, ease: easeInOutCubic },   // CHAMBER: las dos rodillas al pecho
-      { p: { torso: -0.62, head: 0.2, aRu: -0.9, aRl: 0.4, aLu: -0.8, aLl: 0.35, lRu: 1.45, lRl: -0.1, lLu: 1.3, lLl: -0.12, dy: 0 }, at: 0.11, ease: easeOutCubic },
-      { p: { lRu: 1.45, lRl: -0.1, dy: 0 }, at: 0.59 },                                              // PIN: pierna extendida TODA la activa
-      { p: { torso: 0.18, head: 0.06, aRu: 0.28, aRl: 1.85, aLu: 0.16, aLl: 1.90, lRu: 0.55, lRl: -1.15, lLu: -0.15, lLl: -0.9, dy: 0.16 }, at: 0.66, ease: easeOutCubic },
-      { p: { torso: 0.05, head: 0.0, aRu: 0.50, aRl: 2.15, aLu: 0.22, aLl: 2.55, lRu: 0.2, lRl: -0.4, lLu: -0.2, lLl: -0.28, dy: 0.05 }, at: 0.79, ease: easeInOutCubic },
+      { p: { chest: 0.32, dx: 0, torso: 0.16, head: 0.05, aRu: -0.15, aRl: 1.40, aLu: -0.10, aLl: 1.35, lRu: 0.55, lRl: -2.20, lLu: 0.50, lLl: -2.10, dy: 0.03 }, at: 0.024, ease: easeOutCubic },
+      { p: { torso: -0.2, aRu: -0.7, aRl: 0.5, aLu: -0.6, aLl: 0.45, lRu: 0.90, lRl: -2.38, lLu: 0.78, lLl: -2.15, dy: 0, chest: 0.12 }, at: 0.05, ease: easeInOutCubic },   // CHAMBER: las dos rodillas al pecho
+      { p: { torso: -0.62, head: 0.2, aRu: -0.9, aRl: 0.4, aLu: -0.8, aLl: 0.35, lRu: 1.45, lRl: -0.1, lLu: 1.3, lLl: -0.12, dy: 0, chest: -0.34 }, at: 0.11, ease: easeOutCubic },
+      { p: { lRu: 1.45, lRl: -0.1, dy: 0, chest: -0.34 }, at: 0.59 },                                              // PIN: pierna extendida TODA la activa
+      { p: { torso: 0.18, head: 0.06, aRu: 0.28, aRl: 1.85, aLu: 0.16, aLl: 1.90, lRu: 0.55, lRl: -1.15, lLu: -0.15, lLl: -0.9, dy: 0.16, chest: 0.26 }, at: 0.66, ease: easeOutCubic },
+      { p: { torso: 0.05, head: 0.0, aRu: 0.50, aRl: 2.15, aLu: 0.22, aLl: 2.55, lRu: 0.2, lRl: -0.4, lLu: -0.2, lLl: -0.28, dy: 0.05, chest: 0.03 }, at: 0.79, ease: easeInOutCubic },
     ],
     startup: 0.09, active: 0.5, recovery: 0.2, dmg: 9, stop: 0.09, kbx: 0.28, kby: -0.10,
     hitstun: 0.34, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true, aerial: true,
@@ -848,15 +885,15 @@ const MOVES = {
     // Patada aérea descendente: la pierna libre se recoge al pecho (lLl) como contrapeso y el
     // torso se abre; el recupero recoge la pierna en vez de dejarla colgando.
     poses: [
-      { p: { torso: 0.02, head: -0.10, aRu: -0.15, aRl: 1.45, aLu: 0.30, aLl: 1.75, lRu: 0.30, lRl: -2.30, lLu: 0.32, lLl: -1.20 }, at: 0.02, ease: easeOutCubic },
-      { p: { torso: 0.15, aRu: -0.5, aRl: 0.5, aLu: 0.6, aLl: 0.8, lRu: 0.74, lRl: -2.46, lLu: 0.50, lLl: -1.55 }, at: 0.045, ease: easeOutCubic },   // CHAMBER: rodilla al pecho
-      { p: { torso: 0.3, head: 0.1, aRu: -0.7, aRl: 0.4, aLu: 0.8, aLl: 0.5, lRu: 1.15, lRl: -0.12, lLu: 0.55, lLl: -1.6 }, at: 0.08, ease: easeOutCubic },
+      { p: { chest: 0.3, dx: 0, torso: 0.02, head: -0.10, aRu: -0.15, aRl: 1.45, aLu: 0.30, aLl: 1.75, lRu: 0.30, lRl: -2.30, lLu: 0.32, lLl: -1.20 }, at: 0.02, ease: easeOutCubic },
+      { p: { torso: 0.15, aRu: -0.5, aRl: 0.5, aLu: 0.6, aLl: 0.8, lRu: 0.74, lRl: -2.46, lLu: 0.50, lLl: -1.55, chest: 0.16 }, at: 0.045, ease: easeOutCubic },   // CHAMBER: rodilla al pecho
+      { p: { torso: 0.3, head: 0.1, aRu: -0.7, aRl: 0.4, aLu: 0.8, aLl: 0.5, lRu: 1.15, lRl: -0.12, lLu: 0.55, lLl: -1.6, chest: 0.1 }, at: 0.08, ease: easeOutCubic },
       // La activa de la airkick dura 0.15 s: partir el arco del pie en tramos le cambiaría la
       // forma. Con el sampler POR CANAL no hace falta — estas claves no mencionan lRu/lRl, así
       // que la pierna que pega sigue su curva original 0.08→0.3 intacta.
-      { p: { torso: 0.34, head: 0.15, aRu: -0.86, aRl: 0.38, aLu: 0.92, aLl: 0.45, lLu: 0.6, lLl: -1.72 }, at: 0.155 },
-      { p: { torso: 0.22, head: 0.08, aRu: -0.55, aRl: 0.45, aLu: 0.7, aLl: 0.6, lLu: 0.45, lLl: -1.4 }, at: 0.23 },
-      { p: { torso: 0.1, head: 0.0, aRu: -0.25, aRl: 1.05, aLu: 0.35, aLl: 1.25, lRu: 0.5, lRl: -0.8, lLu: 0.3, lLl: -0.9 }, at: 0.3, ease: easeInOutCubic },
+      { p: { torso: 0.34, head: 0.15, aRu: -0.86, aRl: 0.38, aLu: 0.92, aLl: 0.45, lLu: 0.6, lLl: -1.72, chest: 0.15 }, at: 0.155 },
+      { p: { torso: 0.22, head: 0.08, aRu: -0.55, aRl: 0.45, aLu: 0.7, aLl: 0.6, lLu: 0.45, lLl: -1.4, chest: 0.22 }, at: 0.23 },
+      { p: { torso: 0.1, head: 0.0, aRu: -0.25, aRl: 1.05, aLu: 0.35, aLl: 1.25, lRu: 0.5, lRl: -0.8, lLu: 0.3, lLl: -0.9, chest: 0.12 }, at: 0.3, ease: easeInOutCubic },
     ],
     startup: 0.08, active: 0.15, recovery: 0.1, dmg: 9, stop: 0.075, kbx: 0.20, kby: 0.10,
     hitstun: 0.3, mask: MASK_ALL, limb: P_.ftR, strike: [J.lRu, J.lRl], unplantR: true, aerial: true,
@@ -865,13 +902,13 @@ const MOVES = {
   },
   airpunch: {
     poses: [
-      { p: { head: -0.08, aLu: 0.26, aLl: 2.10 }, at: 0.013, ease: easeOutCubic },
-      { p: { torso: 0.05, aRu: 0.22, aRl: 2.35, aLu: 0.24, aLl: 2.15 }, at: 0.03, ease: easeOutCubic },
-      { p: { torso: 0.28, head: 0.04, aRu: 1.5, aRl: 0.1, aLu: 0.45, aLl: 1.6 }, at: 0.06, ease: easeOutCubic },
-      { p: { torso: 0.2779, aRu: 1.4895, aRl: 0.1152, head: 0.02, aLu: 0.42, aLl: 1.66 }, at: 0.08 },    // PIN mitad activa
-      { p: { torso: 0.2632, aRu: 1.416, aRl: 0.2213, head: -0.01, aLu: 0.4, aLl: 1.7 }, at: 0.10 },      // PIN fin activa
-      { p: { torso: 0.17, head: 0.02, aRu: 0.45, aRl: 2.30, aLu: 0.26, aLl: 2.10 }, at: 0.145, ease: easeOutCubic },
-      { p: { torso: 0.1, head: 0.0, aRu: 0.52, aRl: 2.00, aLu: 0.28, aLl: 1.95 }, at: 0.2, ease: easeInOutCubic },
+      { p: { chest: -0.1, dx: 0, head: -0.08, aLu: 0.26, aLl: 2.10 }, at: 0.013, ease: easeOutCubic },
+      { p: { torso: 0.05, aRu: 0.22, aRl: 2.35, aLu: 0.24, aLl: 2.15, chest: -0.17 }, at: 0.03, ease: easeOutCubic },
+      { p: { torso: 0.28, head: 0.04, aRu: 1.1979, aRl: 0.5252, aLu: 0.45, aLl: 1.6, chest: 0.12 }, at: 0.06, ease: easeOutCubic },
+      { p: { torso: 0.2779, aRu: 1.1751, aRl: 0.5492, head: 0.02, aLu: 0.42, aLl: 1.66, chest: 0.13 }, at: 0.08 },    // PIN mitad activa
+      { p: { torso: 0.2632, aRu: 1.1661, aRl: 0.5511, head: -0.01, aLu: 0.4, aLl: 1.7, chest: 0.11 }, at: 0.10 },      // PIN fin activa
+      { p: { torso: 0.17, head: 0.02, aRu: 0.45, aRl: 2.30, aLu: 0.26, aLl: 2.10, chest: 0.28 }, at: 0.145, ease: easeOutCubic },
+      { p: { torso: 0.1, head: 0.0, aRu: 0.52, aRl: 2.00, aLu: 0.28, aLl: 1.95, chest: 0.03 }, at: 0.2, ease: easeInOutCubic },
     ],
     startup: 0.06, active: 0.04, recovery: 0.1, dmg: 5, stop: 0.05, kbx: 0.08, kby: 0,
     hitstun: 0.2, mask: MASK_PUNCH, limb: P_.hanR, strike: [J.aRu, J.aRl], aerial: true, sound: 'hit', trauma: 0.15,
@@ -880,13 +917,13 @@ const MOVES = {
   lunge: {
     // dash+P: hereda la velocidad del lunge como knockback/daño extra (momentum como recurso)
     poses: [
-      { p: { head: -0.12, aRu: 0.62, aRl: 2.32 }, at: 0.018, ease: easeOutCubic },
-      { p: { torso: 0.0, aLu: -0.05, aLl: 2.65, aRu: 0.58, aRl: 2.26 }, at: 0.04, ease: easeOutCubic },   // carga con embalada
-      { p: { torso: 0.55, head: 0.1, aLu: 1.6, aLl: 0.04, aRu: 0.6, aRl: 2.1, dy: 0.05 }, at: 0.085, ease: easeOutCubic },
-      { p: { torso: 0.5471, aLu: 1.5908, aLl: 0.0555, head: 0.06, aRu: 0.48, aRl: 2.34 }, at: 0.115 },    // PIN mitad activa
-      { p: { torso: 0.5267, aLu: 1.5268, aLl: 0.1638, head: 0.01, aRu: 0.45, aRl: 2.40 }, at: 0.145 },   // PIN fin activa
-      { p: { torso: 0.36, head: -0.04, aLu: 0.28, aLl: 2.56, aRu: 0.50, aRl: 2.24 }, at: 0.215, ease: easeOutCubic },
-      { p: { torso: 0.18, head: 0.03, aLu: 0.22, aLl: 2.55, aRu: 0.50, aRl: 2.15 }, at: 0.32, ease: easeInOutCubic },
+      { p: { chest: -0.14, dx: -0.028, head: -0.12, aRu: 0.62, aRl: 2.32 }, at: 0.018, ease: easeOutCubic },
+      { p: { torso: 0.0, aLu: -0.05, aLl: 2.65, aRu: 0.58, aRl: 2.26, chest: -0.26, dx: 0 }, at: 0.04, ease: easeOutCubic },   // carga con embalada
+      { p: { torso: 0.55, head: 0.1, aLu: 1.3125, aLl: 0.3825, aRu: 0.6, aRl: 2.1, dy: 0.05, chest: 0.18, dx: 0 }, at: 0.085, ease: easeOutCubic },
+      { p: { torso: 0.5471, aLu: 1.2978, aLl: 0.3953, head: 0.06, aRu: 0.48, aRl: 2.34, chest: 0.19, dx: 0 }, at: 0.115 },    // PIN mitad activa
+      { p: { torso: 0.5267, aLu: 1.2776, aLl: 0.439, head: 0.01, aRu: 0.45, aRl: 2.40, chest: 0.17, dx: 0 }, at: 0.145 },   // PIN fin activa
+      { p: { torso: 0.36, head: -0.04, aLu: 0.28, aLl: 2.56, aRu: 0.50, aRl: 2.24, chest: 0.36, dx: 0.038 }, at: 0.215, ease: easeOutCubic },
+      { p: { torso: 0.18, head: 0.03, aLu: 0.22, aLl: 2.55, aRu: 0.50, aRl: 2.15, chest: 0.04, dx: 0 }, at: 0.32, ease: easeInOutCubic },
     ],
     startup: 0.085, active: 0.06, recovery: 0.18, dmg: 8, stop: 0.075, kbx: 0.2, kby: -0.05,
     hitstun: 0.3, mask: MASK_PUNCH, limb: P_.hanL, strike: [J.aLu, J.aLl], sound: 'heavy', trauma: 0.3, momentumDmg: true,
@@ -943,7 +980,8 @@ const SLIDE_STATES = [ST.SKID, ST.DASH];     // pies que ARRASTRAN con el cuerpo
 const landCurve = u => Math.sin(u * 5.341) * Math.exp(-2 * u) * 1.681;
 // pares de constraint del ragdoll (rest length se toma de los puntos al activarlo)
 const RAG_BONES = [
-  [P_.pelvis, P_.neck], [P_.neck, P_.head], [P_.neck, P_.shoL], [P_.neck, P_.shoR],
+  [P_.pelvis, P_.chest], [P_.chest, P_.neck], [P_.neck, P_.head],
+  [P_.chest, P_.shoL], [P_.chest, P_.shoR], [P_.neck, P_.shoL], [P_.neck, P_.shoR],
   [P_.shoL, P_.elbL], [P_.elbL, P_.hanL], [P_.shoR, P_.elbR], [P_.elbR, P_.hanR],
   [P_.pelvis, P_.kneL], [P_.kneL, P_.ftL], [P_.pelvis, P_.kneR], [P_.kneR, P_.ftR],
 ];
@@ -1129,6 +1167,7 @@ class Fighter {
           const g = groundAt(this.x, this.rag.pts[1] + STAND);
           this.y = g.y - STAND; this.surf = g.s; this.grounded = true; this.vx = 0; this.vy = 0;
           this.state = ST.GETUP; this.stateT = 0; this.invuln = 0.45; this.juggle = 0;
+          this.replantFeet();                    // si no, el pie queda a la altura de otra plataforma
           if (Math.abs(i.mx) > 0.4) { this.vx = Math.sign(i.mx) * 0.35 * S; }   // tech-roll
         }
         break;
@@ -1463,6 +1502,9 @@ class Fighter {
       tp[J.aLu] -= 0.3 * this.flinchW; tp[J.aRu] -= 0.3 * this.flinchW;   // brazos aflojan
       tp[J.aLl] += 0.22 * this.flinchW; tp[J.aRl] += 0.18 * this.flinchW; // y se cierran al cuerpo
       tp[J.dy] += 0.03 * this.flinchW;                                // el cuerpo cede un poco
+      // lo que faltaba: el torso se DOBLA por el golpe y la cadera se va para atrás
+      tp[J.chest] += 0.42 * d * this.flinchW * safe;
+      tp[J.dx] -= 0.045 * d * this.flinchW * safe;
     }
     // ── Anticipación de DESPEGUE ──
     // La física del salto no se retrasa ni un frame (eso sería cambiar la jugabilidad), pero la
@@ -1471,6 +1513,7 @@ class Fighter {
     if (this.popT < CFG.anim.popT) {
       const k = CFG.anim.popAmt * (1 - this.popT / CFG.anim.popT) * safe;
       tp[J.dy] += 0.10 * k; tp[J.torso] += 0.26 * k; tp[J.head] -= 0.10 * k;
+      tp[J.chest] -= 0.34 * k;                       // se arquea al empujar con las piernas
       tp[J.lLl] -= 0.55 * k; tp[J.lRl] -= 0.62 * k;
       tp[J.lLu] += 0.30 * k; tp[J.lRu] += 0.26 * k;
       tp[J.aLu] += 0.90 * k; tp[J.aRu] += 0.95 * k;   // arrancan abajo y se tiran arriba
@@ -1483,6 +1526,7 @@ class Fighter {
     if (this.squashT < CFG.anim.landT && this.squashAmt > 0.01) {
       const k = landCurve(this.squashT / CFG.anim.landT) * this.squashAmt * safe;
       tp[J.dy] += 0.17 * k; tp[J.torso] += 0.30 * k; tp[J.head] -= 0.24 * k;
+      tp[J.chest] += 0.40 * k;                       // el torso se pliega y rebota con la curva
       tp[J.lLl] -= 0.55 * k; tp[J.lRl] -= 0.60 * k;
       tp[J.lLu] += 0.26 * k; tp[J.lRu] += 0.22 * k;
       tp[J.aLu] -= 0.45 * k; tp[J.aRu] -= 0.40 * k;
@@ -1518,6 +1562,8 @@ class Fighter {
     sink *= w; tw *= w;
     tp[J.dy] += sink;
     tp[J.torso] += tw;
+    tp[J.chest] += tw * 1.25;              // el pecho lidera: rota más que la cadera
+    tp[J.dx] += (d.shift || 0) * (t < m.startup ? -1 : 1) * Math.abs(sink / Math.max(1e-4, d.sink || d.rise || 1));
     tp[J.head] -= tw * 0.45;                                          // la cabeza se queda atrás
     // en el aire no hay IK de piernas: las rodillas tienen que acompañar el hundido a mano
     if (!this.grounded) { tp[J.lLl] -= sink * 2.2; tp[J.lRl] -= sink * 2.2; }
@@ -1536,7 +1582,7 @@ class Fighter {
       const v = Math.sin(this.T * 26) * clamp(this.vy / (0.5 * S), 0, 1);
       tp[J.aRu] = -1.9 + 0.08 * v; tp[J.aRl] = 0.35; tp[J.aLu] = -0.45 + 0.1 * v; tp[J.aLl] = 0.9;
       tp[J.lRu] = 0.35; tp[J.lRl] = -0.95; tp[J.lLu] = -0.15; tp[J.lLl] = -0.35;
-      tp[J.head] = 0.1 + 0.05 * v; tp[J.dy] = 0.03;
+      tp[J.head] = 0.1 + 0.05 * v; tp[J.dy] = 0.03; tp[J.chest] = -0.12; tp[J.dx] = 0.03;
       return;
     }
     if (st === ST.BLOCKSTUN) {
@@ -1545,6 +1591,7 @@ class Fighter {
       const k = clamp(this.stun / Math.max(0.05, CFG.fight.blockstun), 0, 1);
       const v = Math.sin(this.stateT * 34) * k;
       tp[J.torso] += 0.10 * k + 0.05 * v; tp[J.head] += 0.12 * k;
+      tp[J.chest] += 0.26 * k;                       // bloquear = meterse detrás de la guardia
       tp[J.aLu] += 0.14 * k + 0.06 * v; tp[J.aRu] += 0.12 * k;
       tp[J.dy] += 0.03 * k;
       return;
@@ -1556,6 +1603,7 @@ class Fighter {
       tp[J.aLu] += -0.5 + 0.25 * s; tp[J.aRu] += -0.45 + 0.22 * s2;
       tp[J.aLl] += 0.3 * s2; tp[J.aRl] += 0.28 * s;
       tp[J.head] += -0.2 + 0.12 * s2; tp[J.torso] += 0.1 * s;
+      tp[J.chest] += -0.30 + 0.16 * s;               // lanzado: el cuerpo se abre en el aire
       tp[J.lLu] += 0.2 * s2; tp[J.lRu] += 0.18 * s;
       return;
     }
@@ -1600,6 +1648,11 @@ class Fighter {
     tp[J.aRl] += 0.045 * Math.sin(t * 0.67 + 0.9) * A;
     tp[J.head] += (0.05 * Math.sin(t * 0.47 + 1.1) - 0.3 * a.breatheAmp * br) * A;
     tp[J.dy] += 0.008 * Math.sin(t * 1.13) * A;
+    // Con la columna partida la respiración por fin se VE: el pecho se abre al inhalar en vez
+    // de inclinar el cuerpo entero. Y el peso pasa de una pierna a la otra moviendo la PELVIS
+    // sobre los pies plantados (antes se movían los pies, que es el gesto al revés).
+    tp[J.chest] += (-a.breatheAmp * 1.5 * br + 0.022 * Math.sin(t * 0.61 + 0.5)) * A;
+    tp[J.dx] += a.swayAmp * Math.sin(t * 0.9) * A;
     if (gd > 0.01) {                                                  // rebote de guardia
       const b = Math.sin(t * TAU * a.bounceHz);
       tp[J.dy] += a.bounceAmp * gd * (0.5 - 0.5 * b);
@@ -1607,6 +1660,7 @@ class Fighter {
       tp[J.aRu] += 0.05 * gd * b; tp[J.aLu] -= 0.04 * gd * b;
       tp[J.aRl] -= 0.06 * gd * b; tp[J.aLl] += 0.05 * gd * b;
       tp[J.head] += 0.03 * gd * Math.sin(t * TAU * a.bounceHz - 0.8);
+      tp[J.chest] -= 0.035 * gd * b;                                  // el pecho acompaña el rebote
       // la cabeza acompaña la altura del rival: intención, no sólo ruido
       tp[J.head] += clamp((foe.y - this.y) / (1.6 * CH), -1, 1) * 0.09 * gd;
     }
@@ -1651,7 +1705,14 @@ class Fighter {
     const elbC = r.elbC + r.elbCSpd * sN, elbA = r.elbA + r.elbASpd * sN;
     tp[J.aRl] = elbC + elbA * cl;
     tp[J.aLl] = elbC - elbA * cl;
-    tp[J.head] = r.headLead + r.headSpd * sN - r.headCounter * tor + r.headBob * c2;
+    // La cadera se inclina con la velocidad pero el PECHO se mantiene erguido: ésa es la
+    // separación hombro/cadera que hace que una carrera se lea como una persona corriendo y no
+    // como una tabla inclinada. Oscila al doble de frecuencia (cada apoyo comprime la columna).
+    const che = -r.chestCounter * tor + r.chestOsc * sN * Math.cos(2 * ph + 1.0);
+    tp[J.chest] = che;
+    tp[J.dx] = r.swayRun * sN * Math.sin(2 * ph + 0.3);
+    // la cabeza cuelga del torso ALTO: para nivelarla hay que descontar torso + chest
+    tp[J.head] = r.headLead + r.headSpd * sN - r.headCounter * (tor + che) + r.headBob * c2;
     tp[J.dy] = 0.012 + r.dyCrouch * sN + CFG.anim.bob * sN * (0.5 - 0.5 * Math.cos(2 * ph + 0.55));
     if (wRun < 1) blendPose(POSES.idle, tp, wRun, tp);                // caminar = versión atenuada
   }
@@ -1718,7 +1779,7 @@ class Fighter {
     else if (u < 0.72) tp.set(POSES.ballRoll);
     else blendPose(POSES.ballRoll, POSES.rollOut, smoothstep((u - 0.72) / 0.28), tp);
     const sq = hump(clamp((u - 0.08) / 0.78, 0, 1));                  // se aprieta más en el medio
-    tp[J.dy] += 0.03 * sq;
+    tp[J.dy] += 0.03 * sq; tp[J.chest] += 0.22 * sq;
     tp[J.lLl] -= 0.18 * sq; tp[J.lRl] -= 0.18 * sq;
     tp[J.aLl] += 0.12 * sq; tp[J.aRl] += 0.12 * sq;
     tp[J.head] += 0.10 * sq;
@@ -1731,7 +1792,7 @@ class Fighter {
     else if (u < 0.75) blendPose(POSES.climbPlant, POSES.climbPush, smoothstep((u - 0.40) / 0.35), tp);
     else blendPose(POSES.climbPush, POSES.idle, smoothstep((u - 0.75) / 0.25) * 0.7, tp);
     const e = hump(clamp(u / 0.45, 0, 1));                            // el tirón de brazos
-    tp[J.torso] -= 0.10 * e; tp[J.head] -= 0.16 * e;
+    tp[J.torso] -= 0.10 * e; tp[J.head] -= 0.16 * e; tp[J.chest] += 0.22 * e;
     tp[J.dy] += 0.03 * Math.sin(u * 11);                              // esfuerzo entrecortado
   }
 
@@ -1745,7 +1806,7 @@ class Fighter {
     tp[J.torso] += 0.035 * s + 0.02 * s2;
     tp[J.head] += -0.06 + 0.05 * s2;
     const pull = Math.exp(-this.stateT * 6) * Math.sin(this.stateT * 22);
-    tp[J.torso] += 0.10 * pull; tp[J.dy] += 0.035 * pull;
+    tp[J.torso] += 0.10 * pull; tp[J.dy] += 0.035 * pull; tp[J.chest] -= 0.20 * pull;
   }
 
   // ── LEVANTARSE: empuja con las manos y se endereza hacia idle ──
@@ -1755,7 +1816,7 @@ class Fighter {
     const push = hump(clamp(u / 0.55, 0, 1));
     tp[J.aLu] += 0.50 * push; tp[J.aRu] += 0.45 * push;
     tp[J.aLl] -= 0.35 * push; tp[J.aRl] -= 0.30 * push;
-    tp[J.torso] += 0.16 * push; tp[J.head] -= 0.12 * push;
+    tp[J.torso] += 0.16 * push; tp[J.head] -= 0.12 * push; tp[J.chest] -= 0.28 * push;
   }
   guarding() {                                                        // bloqueo = sostener ATRÁS (sin botón)
     if (!this.foe || !this.grounded) return false;
@@ -1795,12 +1856,13 @@ class Fighter {
     // cabeza y mano libre siempre van más atrás (overlapping action gratis)
     h[J.head] *= sp.lagMul; z[J.head] = sp.zHead;
     if (!(this.state === ST.ATTACK && this.atk.strike.includes(J.aLl))) h[J.aLl] = Math.max(h[J.aLl], base * sp.lagMul);
-    z[J.dy] = 1;                                                       // la pelvis no rebota sola (la IK de piernas ya lo hace)
+    z[J.dy] = 1; z[J.dx] = 1;                                          // la pelvis no rebota sola (la IK de piernas ya lo hace)
     if (this.state === ST.CLIMB || this.state === ST.GETUP) for (let j = 0; j < NJ; j++) { h[j] = 0.08; z[j] = 1; }
     for (let j = 0; j < NJ; j++) {
       // los ángulos son continuos (arcLerp en target): resortear el delta envuelto evita vueltas de 2π
-      const tgt = this.poseCur[j] + wrapPi(this.targetPose[j] - this.poseCur[j]);
-      springToZ(this.poseCur, this.poseVel, j, j === J.dy ? this.targetPose[j] : tgt, h[j], dt, z[j]);
+      const lin = j === J.dy || j === J.dx;             // canales lineales: sin envolver
+      const tgt = lin ? this.targetPose[j] : this.poseCur[j] + wrapPi(this.targetPose[j] - this.poseCur[j]);
+      springToZ(this.poseCur, this.poseVel, j, tgt, h[j], dt, z[j]);
     }
   }
 
@@ -1921,6 +1983,11 @@ class Fighter {
         }
         const trig = (atking ? 0.10 : 0.16) * CH;
         const sdur = atking ? CFG.feet.stepT * 0.6 : CFG.feet.stepT;
+        // Un pie PLANTADO está, por definición, sobre el piso que pisa el cuerpo. Si su altura
+        // no coincide con la superficie actual es que quedó de otra plataforma: se corrige de
+        // una, sin pasito. (Con un pasito de por medio, a 20 fps el arco pasaba por la altura
+        // vieja durante varios frames y el pie terminaba por encima de la pelvis.)
+        if (Math.abs(f.py - gy) > 2) { f.py = gy; f.fromY = gy; }
         if (f.stepT >= 1 && other.planted && other.stepT >= 1 && Math.abs(f.px - stanceX[k]) > trig) {
           f.fromX = f.px; f.fromY = f.py;                             // acomodarse a la stance con un pasito
           f.px = stanceX[k]; f.py = gy; f.stepT = 0;
@@ -1944,10 +2011,10 @@ class Fighter {
           tx += this.facing * (rear ? fw.rear : fw.front) * CH * fwW;
           if (rear && fw.heel) ty -= fw.heel * CH * Math.max(0, fwW);
         } else if (still) {
-          // transferencia de peso parado: la pelvis "flota" sobre los pies y la pierna
-          // descargada despega apenas el talón
-          tx += wsh * 0.016 * CH * this.facing;
-          ty -= (k === 0 ? -wsh : wsh) * 0.009 * CH;
+          // La parte lateral de la transferencia de peso ahora la hace la PELVIS (`dx` en
+          // idlePose): los pies quedan plantados y el cuerpo se balancea encima, que es el
+          // gesto correcto. Acá sólo queda el talón de la pierna descargada, que se despega.
+          ty -= (k === 0 ? -wsh : wsh) * 0.010 * CH;
         }
       }
       // IK en AMBOS esqueletos (los hitboxes de piernas también son deterministas)
@@ -2038,7 +2105,8 @@ class Fighter {
         // (la cabeza sobre su radio, el resto sobre el grosor del trazo) — sin esto el cuerpo queda chato
         for (let p2 = 0; p2 < NP; p2++) {
           const ix = p2 * 2, iy = ix + 1;
-          const rest = p2 === P_.head ? B.headR * 0.9 : (p2 === P_.pelvis || p2 === P_.neck ? 0.045 * CH : 0.025 * CH);
+          const rest = p2 === P_.head ? B.headR * 0.9
+            : (p2 === P_.pelvis || p2 === P_.neck || p2 === P_.chest ? 0.045 * CH : 0.025 * CH);
           const g2 = groundAt(r.pts[ix], r.pts[iy]);
           if (r.pts[iy] > g2.y - rest) { r.pts[iy] = g2.y - rest; r.prev[ix] = lerp(r.prev[ix], r.pts[ix], 0.35); }
           r.pts[ix] = clamp(r.pts[ix], ARENA.pad * 0.4, ARENA.w - ARENA.pad * 0.4);
@@ -2300,6 +2368,16 @@ function drawStick(f, pts, alpha) {
   const shoeCol   = flash ? '#3b1a13' : (f.shoe      || '#1a1614');
   ctx.lineCap = 'round'; ctx.lineJoin = 'round';
   ctx.globalAlpha = alpha;
+  // ── Rodadura del pie: SIN DOF nuevo, se deriva de la pierna ──
+  // El pie se dibujaba siempre horizontal, así que apoyar era estampar un sello. Ahora el pie
+  // plantado queda plano y el que está en vuelo (o pateando) se pone en punta siguiendo la
+  // pantorrilla. No agrega ni un grado de libertad ni un punto: sale de lo que ya hay.
+  const groundY = f.grounded ? (f.surf ? f.surf.y : f.y + STAND) : 1e9;
+  const footRoll = (kneI, ftI) => {
+    let ra = Math.atan2(pts[ftI * 2 + 1] - pts[kneI * 2 + 1], pts[ftI * 2] - pts[kneI * 2]);
+    if (ra > PI / 2) ra -= PI; else if (ra < -PI / 2) ra += PI;    // la elipse es simétrica: mod π
+    return ra * clamp((groundY - pts[ftI * 2 + 1]) / (0.13 * CH), 0, 1) * 0.8;
+  };
   // ── lado LEJANO (brazo + pierna al fondo, más muted) ──
   // Brazo: sleeve de la camisa (upper) + piel/tinta (lower).
   ctx.strokeStyle = shirtDark; seg(pts, P_.shoL, P_.elbL, wU * 0.95);
@@ -2311,28 +2389,36 @@ function drawStick(f, pts, alpha) {
   ctx.strokeStyle = inkFar; seg(pts, P_.kneL, P_.ftL, wL * 0.9);
   ctx.fillStyle = shoeCol;
   ctx.beginPath();
-  ctx.ellipse(pts[P_.ftL * 2] + f.facing * 0.008 * CH, pts[P_.ftL * 2 + 1], 0.052 * CH, 0.028 * CH, 0, 0, TAU);
+  ctx.ellipse(pts[P_.ftL * 2] + f.facing * 0.008 * CH, pts[P_.ftL * 2 + 1], 0.052 * CH, 0.028 * CH, footRoll(P_.kneL, P_.ftL), 0, TAU);
   ctx.fill();
   // ── torso: spine + CAMISA como polígono coloreado ──
   ctx.strokeStyle = ink; ctx.fillStyle = ink;
-  seg(pts, P_.pelvis, P_.neck, wT);
+  seg(pts, P_.pelvis, P_.chest, wT); seg(pts, P_.chest, P_.neck, wT);   // columna en dos tramos
   // Camisa (parche coloreado desde los hombros hasta la pelvis). Se dibuja DESPUÉS del spine
   // así lo cubre casi entero; el culote (pantalón) va encima abajo — se ve como cintura.
   {
     const plx = pts[P_.pelvis * 2],     ply = pts[P_.pelvis * 2 + 1];
+    const chx = pts[P_.chest * 2],      chy = pts[P_.chest * 2 + 1];
     const nx  = pts[P_.neck * 2],       ny  = pts[P_.neck * 2 + 1];
     const slx = pts[P_.shoL * 2],       sly = pts[P_.shoL * 2 + 1];
     const srx = pts[P_.shoR * 2],       sry = pts[P_.shoR * 2 + 1];
-    // Ancho de cintura chico, hombros amplios → silueta de camisa.
-    const wx = (nx - plx) * 0.08, wy = (ny - ply) * 0.08;
-    const waistL_x = plx - 0.05 * CH * -Math.sin(0) + wx * -1;    // fudge
+    // La camisa pasa POR el chest y sus anchos son perpendiculares a cada tramo de columna:
+    // con el cuerpo encorvado el torso se ve curvo, no un trapecio rígido. Con la columna
+    // derecha da la misma silueta trapezoidal de siempre.
+    const d1x = chx - plx, d1y = chy - ply, l1 = Math.hypot(d1x, d1y) || 1;
+    const p1x = -d1y / l1, p1y = d1x / l1;                            // perpendicular tramo bajo
+    const d2x = nx - chx, d2y = ny - chy, l2 = Math.hypot(d2x, d2y) || 1;
+    const p2x = -d2y / l2, p2y = d2x / l2;                            // perpendicular tramo alto
+    const wWaist = 0.055 * CH, wChest = 0.072 * CH;
     ctx.fillStyle = shirt;
     ctx.strokeStyle = shirtDark;
     ctx.lineWidth = 0.014 * CH;
     ctx.beginPath();
     ctx.moveTo(slx, sly);                                             // hombro izq
-    ctx.lineTo(plx - 0.055 * CH, ply);                                // cintura izq
-    ctx.lineTo(plx + 0.055 * CH, ply);                                // cintura der
+    ctx.lineTo(chx - p2x * wChest, chy - p2y * wChest);               // pecho izq
+    ctx.lineTo(plx - p1x * wWaist, ply - p1y * wWaist);               // cintura izq
+    ctx.lineTo(plx + p1x * wWaist, ply + p1y * wWaist);               // cintura der
+    ctx.lineTo(chx + p2x * wChest, chy + p2y * wChest);               // pecho der
     ctx.lineTo(srx, sry);                                             // hombro der
     ctx.closePath();
     ctx.fill(); ctx.stroke();
@@ -2370,7 +2456,7 @@ function drawStick(f, pts, alpha) {
   ctx.strokeStyle = ink; seg(pts, P_.kneR, P_.ftR, wL * 1.05);
   ctx.fillStyle = shoeCol;
   ctx.beginPath();
-  ctx.ellipse(pts[P_.ftR * 2] + f.facing * 0.010 * CH, pts[P_.ftR * 2 + 1], 0.06 * CH, 0.032 * CH, 0, 0, TAU);
+  ctx.ellipse(pts[P_.ftR * 2] + f.facing * 0.010 * CH, pts[P_.ftR * 2 + 1], 0.06 * CH, 0.032 * CH, footRoll(P_.kneR, P_.ftR), 0, TAU);
   ctx.fill();
   ctx.globalAlpha = 1;
 }
@@ -2449,7 +2535,7 @@ function drawHat(f, hx, hy, ink) {
   ctx.stroke();
 }
 function drawStickPass(pts, wT, wU, wL) {                             // esqueleto simple (fantasmas del dash)
-  seg(pts, P_.pelvis, P_.neck, wT);
+  seg(pts, P_.pelvis, P_.chest, wT); seg(pts, P_.chest, P_.neck, wT);
   seg(pts, P_.shoL, P_.elbL, wU); seg(pts, P_.elbL, P_.hanL, wL);
   seg(pts, P_.shoR, P_.elbR, wU); seg(pts, P_.elbR, P_.hanR, wL);
   seg(pts, P_.pelvis, P_.kneL, wU); seg(pts, P_.kneL, P_.ftL, wL);
@@ -2522,56 +2608,262 @@ function drawEffects() {
   }
 }
 
-// ════════════════ ARENA-NIVEL (sandbox: recorrés el nivel bajando enemigos, la salida está ARRIBA
-// en la torre final — hay que trepar para llegar). Mapa 8000×~1700 con secciones escalonadas
-// y una torre vertical alternada al final. ════════════════
-const ARENA = (() => {
-  const w = CFG.world.arenaW, floorY = 620;
-  const surfs = [
-    { x: -200, y: floorY, w: w + 400, oneway: false },               // piso principal
+// ════════════════ ARENA: NIVEL GENERADO POR SECCIONES AUTORADAS ════════════════
+// La variedad NO sale de tirar plataformas al azar: sale de combinar SECCIONES hechas a mano
+// (escalera, puente, arco de dos rutas, pirámide, zigzag, balcón, columnas, doble ruta), cada una
+// con sus proporciones elegidas, y de variar CUÁLES salen, en qué orden, con qué parámetros y si
+// van espejadas. Después el grafo de navegación VALIDA que el nivel se recorra de punta a punta;
+// si la salida no es alcanzable desde el spawn, se descarta la tirada y se genera otra.
+//
+// `ARENA` es un objeto que se MUTA (no se reemplaza): todo el resto del juego lo referencia por
+// `ARENA.surfs` / `ARENA.exit` / … y sigue funcionando sin tocar una línea.
+const ARENA = {
+  w: CFG.world.arenaW, floorY: 620, surfs: [], ledges: [],
+  exit: { x: 0, y: 0 }, pad: 0.15 * CH, topY: 0, seed: 0, plan: '',
+};
+// Alturas de salto reales del personaje, que son las que acotan el diseño:
+//   subida útil = jumpApex·CH ≈ 343 px. Ningún escalón autorado pasa de ~250 px.
+const LVL = {
+  riseMax: CFG.move.jumpApex * CH * 0.78,   // subida con margen (lo que la IA se anima a saltar)
+  gapMin: 230, gapMax: 360,                  // separación entre secciones
+  margen: 0.70,                              // la IA no corre ni salta perfecto
+};
+// Cuánto x se puede cubrir en un salto que TERMINE a `rise` px de altura. Sale de la parábola
+// real del personaje, no de una constante inventada: se resuelve el instante en que la altura
+// vuelve a bajar de `rise` y se multiplica por la velocidad de carrera.
+//   v0 = √(2·gUp·S·jumpApex·CH) ≈ 916 px/s · gUp·S = 1224 px/s²
+// Antes esto era un 320 fijo: con separaciones de sección de hasta 392 px, la mitad de las
+// plataformas altas quedaban como ISLAS a las que la IA no sabía subir (medido: 281 en 300
+// niveles). El número correcto va de ~390 px para un salto al máximo a ~540 px al mismo nivel.
+const JUMP_V0 = Math.sqrt(2 * CFG.move.gUp * S * CFG.move.jumpApex * CH);
+const JUMP_G = CFG.move.gUp * S;
+function alcanceSubiendo(rise) {
+  const disc = JUMP_V0 * JUMP_V0 - 2 * JUMP_G * Math.max(0, rise);
+  if (disc < 0) return -1;                                  // no se llega a esa altura
+  return CFG.move.maxRun * S * ((JUMP_V0 + Math.sqrt(disc)) / JUMP_G) * LVL.margen;
+}
+// Tiempo de vuelo hasta volver a BAJAR a una altura `rise` sobre los pies. La gravedad no es
+// simétrica (gUp ≠ gDown), así que sube con una y cae con la otra.
+const JUMP_HA = CFG.move.jumpApex * CH;                    // altura del ápice
+function tiempoVuelo(rise) {
+  if (rise > JUMP_HA) return -1;
+  return JUMP_V0 / JUMP_G + Math.sqrt(2 * Math.max(0, JUMP_HA - rise) / (CFG.move.gDown * S));
+}
+function alcanceCayendo(drop) {
+  const t = Math.sqrt(2 * Math.max(40, drop) / (CFG.move.gDown * S));
+  return CFG.move.maxRun * S * t * (LVL.margen + 0.15) + 0.4 * CH;
+}
 
-    // — Sección A: entrada — 2 escalones bien espaciados
-    { x: 500,  y: floorY - 200, w: 240, oneway: true },
-    { x: 960,  y: floorY - 380, w: 240, oneway: true },
+// Cada sección devuelve plataformas [dx, altura sobre el piso, ancho] y su ancho total.
+// Las proporciones están elegidas a mano; lo que varía es el rango de cada parámetro.
+const SECCIONES = [
+  { n: 'escalera', make(R) {                       // subida limpia en escalones
+      const k = R() < 0.45 ? 3 : 4, rise = 178 + R() * 52, step = 372 + R() * 96, w = 232 + R() * 62;
+      const p = [];
+      for (let i = 0; i < k; i++) p.push([i * step, rise * (i + 1), w]);
+      return { p, w: (k - 1) * step + w };
+  } },
+  { n: 'puente', make(R) {                         // dos losas largas con un hueco al medio
+      const up = 244 + R() * 76, w1 = 336 + R() * 88, w2 = 322 + R() * 96, hueco = 286 + R() * 78;
+      return { p: [[0, up, w1], [w1 + hueco, up + (R() < 0.5 ? 0 : 88), w2]], w: w1 + hueco + w2 };
+  } },
+  { n: 'arco', make(R) {                           // alto al medio + dos bajos: DOS rutas
+      const bajo = 224 + R() * 44, alto = bajo + 208 + R() * 34;
+      const wb = 232 + R() * 46, wa = 258 + R() * 54, sep = 286 + R() * 62;
+      return { p: [[0, bajo, wb], [wb + sep, alto, wa], [wb + sep + wa + sep, bajo, wb]],
+               w: wb * 2 + wa + sep * 2 };
+  } },
+  { n: 'piramide', make(R) {                       // sube tres, baja dos
+      const rise = 186 + R() * 44, step = 352 + R() * 72, w = 238 + R() * 52;
+      const alt = [1, 2, 3, 2, 1];
+      return { p: alt.map((a, i) => [i * step, rise * a, w]), w: 4 * step + w };
+  } },
+  { n: 'zigzag', make(R) {                         // alterna alto/bajo: obliga a subir y bajar
+      const lo = 228 + R() * 42, hi = lo + 198 + R() * 40, step = 318 + R() * 54, w = 228 + R() * 44;
+      return { p: [0, 1, 2, 3].map(i => [i * step, i % 2 ? hi : lo, w]), w: 3 * step + w };
+  } },
+  { n: 'balcon', make(R) {                         // losa larga arriba con acceso por LOS DOS lados
+      const up = 418 + R() * 58, wB = 706 + R() * 196, acc = up - (198 + R() * 38), wa = 216 + R() * 44;
+      const sep = 268 + R() * 58;
+      return { p: [[0, acc, wa], [wa + sep, up, wB], [wa + sep + wB + sep, acc, wa]],
+               w: wa * 2 + wB + sep * 2 };
+  } },
+  { n: 'columnas', make(R) {                       // cinco columnas angostas a distintas alturas
+      const w = 152 + R() * 42, step = 268 + R() * 58, base = 208 + R() * 42;
+      const p = []; let up = base;
+      for (let i = 0; i < 5; i++) {
+        p.push([i * step, up, w]);
+        up = clamp(up + (R() < 0.5 ? -1 : 1) * (124 + R() * 84), 186, 664);
+      }
+      return { p, w: 4 * step + w };
+  } },
+  { n: 'dobleRuta', make(R) {                      // carril bajo y carril alto en paralelo
+      const lo = 196 + R() * 42, hi = lo + 206 + R() * 36, w = 296 + R() * 66, step = w + 242 + R() * 48;
+      return { p: [[0, lo, w], [step, lo, w], [step * 0.5, hi, w * 0.86], [step * 1.5, hi, w * 0.86]],
+               w: step * 1.5 + w * 0.86 };
+  } },
+];
 
-    // — Sección B: puentes en diagonal (ruta baja + alta)
-    { x: 1520, y: floorY - 240, w: 260, oneway: true },
-    { x: 2020, y: floorY - 420, w: 260, oneway: true },
+// Torre final con la SALIDA arriba. Zigzag vertical: el lado de arranque y la cantidad de
+// escalones varían, pero el paso siempre entra cómodo en un salto.
+function seccionTorre(R) {
+  let pasos = 6 + (R() < 0.5 ? 0 : 1);
+  const paso = 216 + R() * 30;
+  // el tope no puede salirse del terreno horneado (bakeTerrain arranca en floorY − 1850):
+  // si la torre se pasa, se le sacan escalones en vez de achicar el paso (que la haría fea)
+  while (pasos > 4 && paso * pasos + 224 > 1680) pasos--;
+  const w = 252 + R() * 48, offset = 402 + R() * 96, lado = R() < 0.5 ? 0 : 1;
+  const p = [];
+  for (let i = 0; i < pasos; i++) p.push([(i % 2 === lado ? 0 : offset), paso * (i + 1), w]);
+  const topW = 452 + R() * 78, topUp = paso * pasos + 190 + R() * 34;
+  p.push([offset * 0.5 - (topW - w) * 0.5, topUp, topW]);
+  return { p, w: offset + w, topIdx: p.length - 1 };
+}
 
-    // — Sección C: gap con arco (2 saltos)
-    { x: 2620, y: floorY - 300, w: 240, oneway: true },
-    { x: 3020, y: floorY - 480, w: 240, oneway: true },
-
-    // — Sección D: pirámide (subir escalonado)
-    { x: 3560, y: floorY - 280, w: 260, oneway: true },
-    { x: 4000, y: floorY - 480, w: 260, oneway: true },
-    { x: 4440, y: floorY - 680, w: 260, oneway: true },
-
-    // — Sección E: zigzag mid-air
-    { x: 4960, y: floorY - 460, w: 240, oneway: true },
-    { x: 5400, y: floorY - 260, w: 240, oneway: true },
-
-    // — Sección F: TORRE final (zigzag vertical hasta la salida ARRIBA).
-    //   Steps de ~240 px entre plataformas → cómodo para el salto (apex ~415 px de rise).
-    { x: 6000, y: floorY - 220, w: 280, oneway: true },
-    { x: 6480, y: floorY - 460, w: 260, oneway: true },
-    { x: 6000, y: floorY - 700, w: 260, oneway: true },
-    { x: 6480, y: floorY - 940, w: 260, oneway: true },
-    { x: 6000, y: floorY - 1180, w: 260, oneway: true },
-    { x: 6480, y: floorY - 1420, w: 260, oneway: true },
-    { x: 6000, y: floorY - 1620, w: 500, oneway: true },              // plataforma tope (salida)
-  ];
-  const ledges = [];
-  for (let i = 1; i < surfs.length; i++) {
-    const s = surfs[i];
-    ledges.push({ x: s.x, y: s.y, side: -1, surf: s });              // esquina izq (se cuelga desde afuera-izq)
-    ledges.push({ x: s.x + s.w, y: s.y, side: 1, surf: s });
+// ── Grafo de navegación: nodos = superficies, aristas = "se puede pasar de A a B" ──
+// Lo usan DOS cosas: la IA para perseguir entre alturas, y el generador para verificar que el
+// nivel se pueda recorrer. Se calcula una vez por nivel; después es todo lookup O(1).
+const NAV = { n: 0, next: null, link: null, dist: null };
+function surfIndexBelow(x, y) {                    // superficie más alta estrictamente por debajo de y
+  let best = -1, by = Infinity;
+  for (let i = 0; i < ARENA.surfs.length; i++) {
+    const s = ARENA.surfs[i];
+    if (x < s.x || x > s.x + s.w) continue;
+    if (s.y > y + 1 && s.y < by) { by = s.y; best = i; }
   }
-  // Salida ahora ARRIBA de la torre: hay que trepar la sección F para completar el nivel.
-  const topSurf = surfs[surfs.length - 1];
-  const exit = { x: topSurf.x + topSurf.w / 2, y: topSurf.y };
-  return { w, floorY, surfs, ledges, exit, pad: 0.15 * CH, topY: floorY - 1700 };
-})();
+  return best;
+}
+function buildNav() {
+  const S = ARENA.surfs, n = S.length;
+  NAV.n = n;
+  const link = new Array(n * n).fill(null);
+  const m = 0.13 * CH;                             // margen para no pararse justo en el filo
+  for (let a = 0; a < n; a++) for (let b = 0; b < n; b++) {
+    if (a === b) continue;
+    const A = S[a], Bs = S[b];
+    const aL = A.x + m, aR = A.x + A.w - m;
+    if (aR <= aL) continue;
+    const ovL = Math.max(A.x, Bs.x), ovR = Math.min(A.x + A.w, Bs.x + Bs.w);
+    const gapX = Math.max(0, Math.max(A.x - (Bs.x + Bs.w), Bs.x - (A.x + A.w)));
+    const rise = A.y - Bs.y;                       // > 0 = B está ARRIBA
+    if (rise > 0) {
+      if (rise > LVL.riseMax || gapX > alcanceSubiendo(rise)) continue;
+      // despegue: bajo el tramo común si lo hay, si no en el borde de A que mira a B
+      const x = ovR > ovL ? clamp((ovL + ovR) / 2, aL, aR) : (Bs.x > A.x ? aR : aL);
+      // Cuánto se puede correr el despegue sin perder el salto: sólo lo que da el solape con
+      // el destino. Sin este tope, el carril de cada enemigo movía el despegue hasta 83 px y
+      // el salto no llegaba nunca (medido: 2 de 4 arquetipos no subían jamás).
+      const carril = Math.max(0, Math.min(ovR - ovL, A.w, Bs.w) / 2 - 0.30 * CH);
+      link[a * n + b] = { k: 'jump', x: x, lane: carril, gap: gapX,
+                          tx: clamp(Bs.x + Bs.w / 2, Bs.x + m, Bs.x + Bs.w - m) };
+    } else {
+      if (gapX > alcanceCayendo(-rise)) continue;
+      let x, through = false;
+      if (ovR > ovL + 2 * m) {                     // se puede soltar DERECHO hacia abajo
+        x = clamp((ovL + ovR) / 2, aL, aR);
+        if (surfIndexBelow(x, A.y) !== b) continue;   // hay otra superficie en el medio
+        through = true;
+      } else {
+        x = Bs.x > A.x ? aR : aL;                  // caminar hasta el borde y dejarse caer
+      }
+      link[a * n + b] = { k: 'drop', x: x, through: through,
+                          lane: Math.max(0, Math.min(ovR - ovL, A.w) / 2 - 0.22 * CH),
+                          tx: clamp(Bs.x + Bs.w / 2, Bs.x + m, Bs.x + Bs.w - m) };
+    }
+  }
+  // próximo salto por BFS inversa desde cada destino (n ≤ ~30: se hace una vez por nivel)
+  const next = new Int16Array(n * n).fill(-1), dist = new Int16Array(n * n).fill(-1);
+  const q = new Int16Array(n);
+  for (let b = 0; b < n; b++) {
+    const d = new Int16Array(n).fill(-1);
+    d[b] = 0; q[0] = b;
+    for (let h = 0, tail = 1; h < tail; h++) {
+      const v = q[h];
+      for (let u = 0; u < n; u++) if (d[u] < 0 && link[u * n + v]) { d[u] = d[v] + 1; q[tail++] = u; }
+    }
+    for (let a = 0; a < n; a++) {
+      dist[a * n + b] = d[a];
+      if (d[a] <= 0) continue;
+      for (let v = 0; v < n; v++)
+        if (link[a * n + v] && d[v] === d[a] - 1) { next[a * n + b] = v; break; }
+    }
+  }
+  NAV.link = link; NAV.next = next; NAV.dist = dist;
+}
+
+// ── Generador de nivel ──
+function lvlRnd(seed) {
+  let s = (seed >>> 0) || 1;
+  return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296);
+}
+function buildLevel(seed) {
+  for (let intento = 0; intento < 24; intento++) {
+    const R = lvlRnd(seed + intento * 7919);
+    const floorY = ARENA.floorY;
+    const surfs = [{ x: -200, y: floorY, w: ARENA.w + 400, oneway: false, i: 0 }];
+    const plan = [];
+    // barajar el pool y tomar 5-6 secciones, sin repetir dos iguales seguidas
+    const pool = SECCIONES.slice();
+    for (let i = pool.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; const t = pool[i]; pool[i] = pool[j]; pool[j] = t; }
+    const cuantas = 5 + (R() < 0.5 ? 0 : 1);
+    let x = 360;
+    const torreW = 900;
+    for (let i = 0; i < cuantas; i++) {
+      const sec = pool[i % pool.length];
+      const g = sec.make(R);
+      if (x + g.w + torreW + 500 > ARENA.w) break;
+      const espejar = R() < 0.4;
+      for (const [dx, up, w] of g.p) {
+        const px = espejar ? x + g.w - dx - w : x + dx;
+        surfs.push({ x: Math.round(px), y: Math.round(floorY - up), w: Math.round(w), oneway: true });
+      }
+      plan.push(sec.n + (espejar ? '~' : ''));
+      x += g.w + LVL.gapMin + R() * (LVL.gapMax - LVL.gapMin);
+    }
+    // torre final, pegada al fondo del mapa
+    const T = seccionTorre(R);
+    const tx = Math.min(x + 180, ARENA.w - T.w - 320);
+    let topSurf = null;
+    T.p.forEach(([dx, up, w], i) => {
+      const s = { x: Math.round(tx + dx), y: Math.round(floorY - up), w: Math.round(w), oneway: true };
+      surfs.push(s);
+      if (i === T.topIdx) topSurf = s;
+    });
+    plan.push('torre');
+
+    ARENA.surfs = surfs;
+    ARENA.exit.x = topSurf.x + topSurf.w / 2;
+    ARENA.exit.y = topSurf.y;
+    ARENA.topY = topSurf.y - 80;
+    buildNav();
+
+    // ── validación: la SALIDA tiene que ser alcanzable desde el piso ──
+    const iTop = surfs.indexOf(topSurf);
+    if (NAV.dist[0 * NAV.n + iTop] < 0) continue;              // isla inalcanzable → otra tirada
+    // …y ninguna plataforma puede ser una trampa sin salida (de todas se vuelve al piso)
+    let trampa = false;
+    for (let i = 1; i < surfs.length; i++) {
+      // de toda plataforma se tiene que poder BAJAR al piso…
+      if (NAV.dist[i * NAV.n + 0] < 0) { trampa = true; break; }
+      // …y SUBIR a toda plataforma desde el piso. Una a la que sólo se cae es una isla: ni la
+      // IA te persigue ahí ni el nivel se recorre entero.
+      if (NAV.dist[0 * NAV.n + i] < 0) { trampa = true; break; }
+    }
+    if (trampa) continue;
+
+    ARENA.ledges = [];
+    for (let i = 1; i < surfs.length; i++) {
+      const s = surfs[i];
+      s.i = i;                                   // índice cacheado (lookup O(1) en la nav)
+      ARENA.ledges.push({ x: s.x, y: s.y, side: -1, surf: s });
+      ARENA.ledges.push({ x: s.x + s.w, y: s.y, side: 1, surf: s });
+    }
+    ARENA.seed = seed + intento * 7919;
+    ARENA.plan = plan.join(' · ');
+    return true;
+  }
+  return false;
+}
 function groundAt(x, y) {
   let by = ARENA.floorY, bs = ARENA.surfs[0];
   for (let i = 1; i < ARENA.surfs.length; i++) {
@@ -2580,7 +2872,6 @@ function groundAt(x, y) {
   }
   return { y: by, bs: bs, s: bs };
 }
-
 // ════════════════ FONDO estilo Fancy Pants: papel + sombras de hojas + terreno a tinta ════════════════
 // Paleta papel/tinta
 const PAPER = '#eee3d4', PAPER_DARK = 'rgba(196,163,152,0.4)';
@@ -2594,7 +2885,7 @@ function bakeBg() {
   bgCanvas.width = Math.ceil(BG_W * bgK); bgCanvas.height = Math.ceil(BG_H * bgK);
   const c2 = bgCanvas.getContext('2d');
   c2.setTransform(bgK, 0, 0, bgK, -BG_X0 * bgK, -BG_Y0 * bgK);
-  let seed = 13;
+  let seed = (13 + (ARENA.seed % 9973)) | 0 || 13;
   const rndS = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   c2.fillStyle = PAPER_DARK;
   for (let k = 0; k < 26; k++) {                                     // hojas: dos arcos cuadráticos punta a punta
@@ -2618,7 +2909,7 @@ function bakeTerrain() {
   terrainCanvas._x0 = TX0; terrainCanvas._y0 = TY0; terrainCanvas._w = TW; terrainCanvas._h = TH;
   const c2 = terrainCanvas.getContext('2d');
   c2.setTransform(terrK, 0, 0, terrK, -TX0 * terrK, -TY0 * terrK);
-  let seed = 29;
+  let seed = (29 + (ARENA.seed % 7919)) | 0 || 29;
   const rndS = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   c2.lineCap = 'round'; c2.lineJoin = 'round';
   const inkW = 7, scratch = (x, y, w2, h2, n) => {                   // rayones blancos tipo lápiz
@@ -2818,8 +3109,35 @@ function resetFighter(f, x) {
   fk(f.poseCur, f.renderPts, f.x, f.y, f.facing);
   f.replantFeet();
 }
+// Reparte los enemigos por el nivel GENERADO: la mitad en el piso, la mitad arriba de
+// plataformas, ordenados de izquierda a derecha y sin amontonarse. Antes las x eran fijas y con
+// nivel variable quedaban todos apilados o en el aire.
+function repartirEnemigos() {
+  const n = enemies.length;
+  const plats = ARENA.surfs.slice(1)
+    .filter(sf => sf.w > 0.9 * CH && sf.x > 700 && sf.x + sf.w < ARENA.exit.x - 200)
+    .sort((a, b) => a.x - b.x);
+  const x0 = 900, x1 = Math.max(x0 + 600, ARENA.exit.x - 260);
+  for (let i = 0; i < n; i++) {
+    const t = n > 1 ? i / (n - 1) : 0.5;
+    const xf = x0 + (x1 - x0) * t;
+    // impares al piso; pares a la plataforma útil más cercana a ese tramo (si la hay)
+    let sx = xf;
+    if (i % 2 === 0 && plats.length) {
+      let best = plats[0];
+      for (const sf of plats) if (Math.abs(sf.x + sf.w / 2 - xf) < Math.abs(best.x + best.w / 2 - xf)) best = sf;
+      sx = best.x + best.w / 2;
+    }
+    enemies[i].spawnX = clamp(sx, ARENA.pad + 40, ARENA.w - ARENA.pad - 40);
+  }
+}
 function startMatch() {
   game.kos = 0; game.levelT = 0;
+  // NIVEL NUEVO por partida (secciones autoradas combinadas + validación de recorrido) y
+  // re-horneo de los bakes world-space, que dependen de las plataformas.
+  buildLevel((Math.random() * 1e9) | 0);
+  bakeBg(); bakeTerrain();
+  repartirEnemigos();
   resetFighter(P1, 180); P1.facing = 1;
   for (const e of enemies) { resetFighter(e, e.spawnX); e.facing = -1; e.brain = newBrain(); }
   hud.chip = hud.hpPrev = CFG.fight.hp; hud.chipT = 9;
@@ -2921,16 +3239,121 @@ function newBrain() {
     arch: ARCHS[rndi(0, ARCHS.length - 1)], snaps: [], tick: rnd(0, 0.25), mx: 0, my: 0,
     hold: { jump: 0, punch: 0, kick: 0 }, blockUntil: 0, t: rnd(0, 9),
     blockStreak: 0, lastChain: '', campT: 0, engaged: false,
+    // navegación entre plataformas
+    jumpCd: 0, navStuck: 0, navLastSurf: -1, navBail: 0, navPrevD: 1e9,
+    navLane: rnd(-0.34, 0.34) * CH,       // carril propio: ver aiNavegar
   };
 }
 function aiReaction(br) {                                             // la dificultad SOLO toca reacción/bloqueo/drop
   return [0.34, 0.20, 0.15][game.diff] * br.arch.reactMul;
 }
 function aiPress(br, k, dur) { br.hold[k] = Math.max(br.hold[k], dur || 0.06); }
+// ════════════════ NAVEGACIÓN DE LA IA ENTRE PLATAFORMAS ════════════════
+// Esto NO reemplaza el cerebro de combate: sólo resuelve CÓMO llegar cuando el jugador está en
+// otra superficie. Apenas comparten plataforma devuelve false y manda el brain de siempre, así
+// que cada arquetipo sigue peleando como peleaba. Lo que sí modulan los arquetipos es el estilo
+// de navegación: el acróbata se anima a saltar antes, el técnico se alinea mejor.
+//
+// El problema que arregla (medido antes de tocar nada): con el jugador tres plataformas arriba,
+// 0 de 4 enemigos llegaban y los 4 se quedaban literalmente QUIETOS — el aggro exigía
+// |Δy| < 2.2·CH para siquiera engancharse, así que ni lo intentaban.
+function navSurfOf(f) {
+  if (f.grounded && f.surf && f.surf.i !== undefined) return f.surf.i;
+  const b = surfIndexBelow(f.x, f.y + STAND - 4);
+  return b >= 0 ? b : 0;
+}
+function navHops(me, foe) {
+  if (!NAV.dist) return -1;
+  return NAV.dist[navSurfOf(me) * NAV.n + navSurfOf(foe)];
+}
+function aiNavegar(me, br, foe, dir, dt) {
+  const a = navSurfOf(me), b = navSurfOf(foe), n = NAV.n;
+  if (a === b) { br.navStuck = 0; br.navBail = 0; return false; }
+  br.my = 0;
+
+  // ── anti-atasco: si no cambia de superficie durante demasiado tiempo, plan B ──
+  if (me.grounded) {
+    if (a === br.navLastSurf) br.navStuck += dt; else { br.navStuck = 0; br.navLastSurf = a; }
+    if (br.navStuck > 2.0) { br.navStuck = 0; br.navBail = 1.4; }
+  }
+  if (br.navBail > 0) {
+    // bajarse de donde esté y rehacer la ruta desde abajo: rompe cualquier ciclo de saltos
+    br.navBail -= dt;
+    const S = ARENA.surfs[a];
+    if (a !== 0 && me.grounded) {
+      const salida = (me.x - S.x) < (S.x + S.w - me.x) ? S.x - 0.2 * CH : S.x + S.w + 0.2 * CH;
+      br.mx = Math.sign(salida - me.x);
+      if (S.oneway && Math.abs(me.x - (S.x + S.w / 2)) < 0.35 * S.w) {
+        br.my = 1;
+        if (br.jumpCd <= 0) { aiPress(br, 'jump', 0.12); br.jumpCd = 0.4; }
+      }
+    } else br.mx = dir;
+    return true;
+  }
+
+  const hop = NAV.next[a * n + b];
+  if (hop < 0) {                            // sin ruta: encarar igual, y saltar si está arriba
+    br.mx = dir;
+    if (me.grounded && foe.y < me.y - 0.3 * CH && br.jumpCd <= 0) {
+      aiPress(br, 'jump', 0.24); br.jumpCd = 0.55;
+    }
+    return true;
+  }
+  const lk = NAV.link[a * n + hop];
+  if (!lk) { br.mx = dir; return true; }
+
+  // Carril propio por enemigo: sin esto los nueve apuntan al MISMO punto de despegue, se
+  // empujan con separateBodies y ninguno logra alinearse para saltar (medido: 0/9 llegaban).
+  const S1 = ARENA.surfs[a], m1 = 0.13 * CH;
+  const carril = clamp(br.navLane, -(lk.lane || 0), lk.lane || 0);
+  const lx = clamp(lk.x + carril, S1.x + m1, S1.x + S1.w - m1);
+  const dx = lx - me.x, ad = Math.abs(dx);
+  const cerca = ad < 0.22 * CH;
+  // frena al acercarse al punto de despegue para no pasarse de largo
+  br.mx = cerca ? Math.sign(lk.tx - me.x) * 0.45 : clamp(dx / (0.9 * CH), -1, 1);
+  if (!me.grounded) {                        // ya está en el aire: corregir hacia el destino
+    br.mx = clamp((lk.tx - me.x) / (0.8 * CH), -1, 1);
+    return true;
+  }
+  if (lk.k === 'jump') {
+    // ── SALTO PREDICTIVO ──
+    // Nada de "saltar cuando estoy cerca de un punto mágico": se resuelve la parábola REAL con
+    // la velocidad que lleva ahora y se salta en el frame en que el aterrizaje cae DENTRO de la
+    // plataforma destino. Antes, con una anticipación fija por arquetipo, el que más saltaba
+    // despegaba 96 px antes y subía al lado de la plataforma (2 de 6 intentos llegaban).
+    const B = ARENA.surfs[hop];
+    const tv = tiempoVuelo((me.y + STAND) - B.y);
+    let saltar = false;
+    if (tv > 0) {
+      const bm = 0.16 * CH;
+      // se prueba con la velocidad actual y con la que ganaría acelerando en el aire
+      for (const k2 of [1, 1.35]) {
+        const lx2 = me.x + me.vx * k2 * tv;
+        if (lx2 > B.x + bm && lx2 < B.x + B.w - bm) { saltar = true; break; }
+      }
+    }
+    if (saltar && br.jumpCd <= 0) {
+      aiPress(br, 'jump', 0.30); br.jumpCd = 0.40;
+      br.mx = Math.sign(lk.tx - me.x) || dir;             // empujar hacia la plataforma destino
+      // sabor de arquetipo que NO rompe la función: el saltarín cruza huecos con dash
+      if (lk.gap > 0.9 * CH && Math.random() < br.arch.jumpy * 0.5) me.input.dashPulse = br.mx;
+    }
+  } else if (cerca) {                          // bajar
+    if (lk.through) {                          // soltarse DERECHO por una plataforma one-way
+      br.my = 1;
+      if (br.jumpCd <= 0) { aiPress(br, 'jump', 0.12); br.jumpCd = 0.35; }
+    } else {
+      br.mx = Math.sign(lk.tx - me.x) || dir;  // caminar más allá del borde y dejarse caer
+    }
+  }
+  return true;
+}
+
 function aiThink(me, dt) {
   const br = me.brain, foe = me.foe, i = me.input;
   if (!br || me.dead) return;
   br.t += dt;
+  br.jumpCd -= dt;
   // salidas por default: sostener lo decidido en el último tick
   for (const k in br.hold) { br.hold[k] -= dt; i[k] = br.hold[k] > 0; }
   i.mx = br.mx; i.my = br.my;
@@ -2938,10 +3361,15 @@ function aiThink(me, dt) {
 
   const gap = Math.abs(foe.x - me.x), dir = Math.sign(foe.x - me.x) || 1;
   // ── aggro con histéresis: lejos = quedarse tranquilo en su zona ──
+  // El gate vertical (|Δy| < 2.2·CH) era el bug: un jugador tres plataformas arriba quedaba
+  // fuera del aggro y los enemigos ni se movían. Ahora la condición es que EXISTA UNA RUTA por
+  // el grafo de navegación; el radio horizontal sigue igual, así que cada uno sigue cuidando su
+  // zona y no se despierta medio nivel.
+  const rutaHops = navHops(me, foe);
   if (!br.engaged) {
-    if (gap < 3.2 * CH && Math.abs(foe.y - me.y) < 2.2 * CH) br.engaged = true;
+    if (gap < 3.2 * CH && rutaHops >= 0) br.engaged = true;
     else { br.mx = 0; br.my = 0; return; }
-  } else if (gap > 7 * CH) { br.engaged = false; br.mx = 0; return; }
+  } else if (gap > 7 * CH && rutaHops !== 0) { br.engaged = false; br.mx = 0; return; }
 
   // snapshot del jugador (ring ~0.6 s) → vista RETRASADA
   br.snaps.push({ t: br.t, x: foe.x, y: foe.y, state: foe.state, atk: foe.atk ? foe.atk.name : '', atkT: foe.atkClock, grounded: foe.grounded });
@@ -2958,6 +3386,8 @@ function aiThink(me, dt) {
     return;
   }
   if (me.state === ST.HANG) { if (me.stateT > 0.25) aiPress(br, 'jump'); return; }
+  // ¿está en otra plataforma? Entonces el problema es LLEGAR, no pelear.
+  if (me.state !== ST.ATTACK && aiNavegar(me, br, foe, dir, dt)) return;
 
   const away = -dir;
   const kickReach = 0.58 * CH, punchReach = 0.42 * CH;
@@ -3007,13 +3437,10 @@ function aiThink(me, dt) {
     if (Math.random() < br.arch.aggr * 0.4 && gap < kickReach) aiPress(br, Math.random() < 0.5 ? 'punch' : 'kick');
     return;
   }
-  // ── CHASE: el jugador campea arriba ──
+  // (El viejo CHASE —caminar y saltar a ciegas si el jugador estaba arriba— lo reemplazó
+  //  aiNavegar(), que sí sabe por dónde subir. Queda el contador de campeo para que un jugador
+  //  que se queda arriba de todo igual empuje a la IA a insistir.)
   if (foe.y < me.y - 0.6 * CH && foe.grounded) br.campT += br.tick; else br.campT = 0;
-  if (br.campT > 1.5) {
-    br.mx = dir;
-    if (me.grounded && Math.abs(foe.x - me.x) < 1.4 * CH) aiPress(br, 'jump', 0.3);
-    return;
-  }
   // ── NEUTRAL / APPROACH / STRIKE ──
   if (gap > prefD * 1.25) {
     br.mx = dir;
@@ -3159,6 +3586,7 @@ const ENEMY_LOADOUTS = [
   { x: 7000, shirt: '#7f8c8d', shirtDark: '#4a5556', pants: '#2c2c2c', pantsDark: '#161616', shoe: '#0e0e0e', hairStyle: 'plain',    hairCol: '#4a3220' },
   { x: 7700, shirt: '#c0392b', shirtDark: '#7a2018', pants: '#1a1a1a', pantsDark: '#0e0e0e', shoe: '#080808', hairStyle: 'mohawk',   hairCol: '#080808' },
 ];
+buildLevel((Math.random() * 1e9) | 0);      // nivel inicial (el del menú); startMatch arma otro
 const enemies = [];
 for (const L of ENEMY_LOADOUTS) {
   const e = new Fighter(L.x, [70, 60, 55], null, newInput());
