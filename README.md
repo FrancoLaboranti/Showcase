@@ -1,84 +1,78 @@
 # Showcase
 
-A collection of standalone games, simulations and visual toys. Each one started as
-a [Pygame](https://www.pygame.org/) prototype and most also have a hand-rolled
-**browser port** (plain HTML + Canvas 2D, no build step) living in a `<Folder>Web/`
-subfolder next to the Python original.
+Twenty-two games, simulations and visual toys, each one a self-contained prototype. Most began as
+[Pygame](https://www.pygame.org/) experiments and every one of them now has a **browser version** —
+plain HTML and Canvas 2D, hand-rolled, no framework and no build step.
 
-A landing page at [index.html](index.html) ties them together: a grid of cards that
-links straight to each game's web version. It's published with GitHub Pages at:
+### ▶ Play them: **https://francolaboranti.github.io/Showcase/**
 
-**https://francolaboranti.github.io/Showcase/**
+> The URL is case-sensitive — `Showcase` with a capital `S`.
 
-> The URL is case-sensitive — it's `Showcase` (capital `S`, the rest lowercase).
+That link opens the **Arcade**: an installable web app that launches every game. On a phone, "Add
+to Home Screen" and it runs fullscreen like a native app. Landscape games rotate themselves, so you
+just turn the phone sideways.
 
-## Arcade (installable PWA)
+## The games
 
-[Arcade/](Arcade/index.html) is a separate, fullscreen **Progressive Web App**
-launcher — its own [manifest.json](Arcade/manifest.json), [icon.svg](Arcade/icon.svg)
-and a minimal [service worker](Arcade/sw.js) (registered only so the app is
-*installable*; it's network-only and caches nothing yet). On a phone you can "Add to
-Home Screen" and it opens fullscreen like a native app, with safe-area insets and an
-orientation-lock reset on back-navigation.
+Four of them were born in the browser and have no Python original.
 
-It's an early prototype curating a hand-picked subset of the games (currently Pong,
-with more "próximamente") — distinct from the root [index.html](index.html), which is
-the full directory of every web port. Reachable at
-`https://francolaboranti.github.io/Showcase/Arcade/`.
+| | Play | Python |
+|---|---|---|
+| **Loop** — arena arcade roguelite that fuses every other game in the repo | [▶](Loop/LoopWeb/index.html) | — |
+| **Stick Fight** — platformer-brawler sandbox | [▶](StickFight/StickFightWeb/index.html) | — |
+| **Donkey Kong** | [▶](DonkeyKong/DonkeyKongWeb/index.html) | — |
+| **Pac-Man** | [▶](Pacman/PacmanWeb/index.html) | — |
+| Canicas — marble physics sandbox | [▶](Balls/BallsWeb/index.html) | [Balls.py](Balls/Balls.py) |
+| Mini Canicas | [▶](MiniBalls/MiniBallsWeb/index.html) | [MiniBalls.py](MiniBalls/MiniBalls.py) |
+| Tank Wars | [▶](TankWARS/TankWARSWeb/index.html) | [TankWARS.py](TankWARS/TankWARS.py) |
+| Crazy Tanks | [▶](CrazyTanks/CrazyTanksWeb/index.html) | [CrazyTanks.py](CrazyTanks/CrazyTanks.py) |
+| Sleepy Pong | [▶](Pong/PongWeb/index.html) | [Pong.py](Pong/Pong.py) |
+| Snake | [▶](Snake/SnakeWeb/index.html) | [Snake.py](Snake/Snake.py) |
+| Tron | [▶](Tron/TronWeb/index.html) | [Tron.py](Tron/Tron.py) |
+| Tron V2 | [▶](TronV2/TronV2Web/index.html) | [TronV2.py](TronV2/TronV2.py) |
+| Fuegos Artificiales | [▶](Fireworks/FireworksWeb/index.html) | [Fireworks.py](Fireworks/Fireworks.py) |
+| Fuegos Artificiales V2 | [▶](FireworksV2/FireworksV2Web/index.html) | [FireworksV2.py](FireworksV2/FireworksV2.py) |
+| Ajedrez | [▶](Chess/ChessWeb/index.html) | [Chess.py](Chess/Chess.py) |
+| Póker | [▶](Poker/PokerWeb/index.html) | [Poker.py](Poker/Poker.py) |
+| Buscaminas | [▶](MineSweeperGPT/MineSweeperWeb/index.html) | [MineSweeperGPT.py](MineSweeperGPT/MineSweeperGPT.py) |
+| Ahorcado | [▶](Hangman/HangmanWeb/index.html) | [Hangman.py](Hangman/Hangman.py) |
+| Ta-Te-Ti | [▶](Tateti/TatetiWeb/index.html) | [Tateti.py](Tateti/Tateti.py) |
+| Simón Dice | [▶](SimonSays/SimonSaysWeb/index.html) | [SimonSays.py](SimonSays/SimonSays.py) |
+| Péndulo de Newton | [▶](Newton's%20Cradle/NewtonsCradleWeb/index.html) | [Newton's Cradle.py](Newton's%20Cradle/Newton's%20Cradle.py) |
+| Reloj | [▶](Clock/ClockWeb/index.html) | [Clock.py](Clock/Clock.py) |
 
-## Games
+## How it's built
 
-| Game | Python | Web |
-|------|--------|-----|
-| **Loop** (arena arcade roguelite) | — | [Loop/LoopWeb](Loop/LoopWeb/index.html) |
-| **Stick Fight** (platformer-brawler sandbox) | — | [StickFight/StickFightWeb](StickFight/StickFightWeb/index.html) |
-| Canicas (marble physics sandbox) | — | [Balls/BallsWeb](Balls/BallsWeb/index.html) |
-| Ajedrez | [Chess](Chess/Chess.py) | [Chess/ChessWeb](Chess/ChessWeb/index.html) |
-| Reloj | [Clock](Clock/Clock.py) | [Clock/ClockWeb](Clock/ClockWeb/index.html) |
-| Crazy Tanks | [CrazyTanks](CrazyTanks/CrazyTanks.py) | [CrazyTanks/CrazyTanksWeb](CrazyTanks/CrazyTanksWeb/index.html) |
-| Fuegos Artificiales | [Fireworks](Fireworks/Fireworks.py) | [Fireworks/FireworksWeb](Fireworks/FireworksWeb/index.html) |
-| Fuegos Artificiales V2 | [FireworksV2](FireworksV2/FireworksV2.py) | [FireworksV2/FireworksV2Web](FireworksV2/FireworksV2Web/index.html) |
-| Ahorcado | [Hangman](Hangman/Hangman.py) | [Hangman/HangmanWeb](Hangman/HangmanWeb/index.html) |
-| Buscaminas | [MineSweeperGPT](MineSweeperGPT/MineSweeperGPT.py) | [MineSweeperGPT/MineSweeperWeb](MineSweeperGPT/MineSweeperWeb/index.html) |
-| Mini Canicas | [MiniBalls](MiniBalls/MiniBalls.py) | [MiniBalls/MiniBallsWeb](MiniBalls/MiniBallsWeb/index.html) |
-| Péndulo de Newton | [Newton's Cradle](Newton's%20Cradle/Newton's%20Cradle.py) | [Newton's Cradle/NewtonsCradleWeb](Newton's%20Cradle/NewtonsCradleWeb/index.html) |
-| Póker | [Poker](Poker/Poker.py) | [Poker/PokerWeb](Poker/PokerWeb/index.html) |
-| Pong | [Pong](Pong/Pong.py) | [Pong/PongWeb](Pong/PongWeb/index.html) |
-| Simón Dice | [SimonSays](SimonSays/SimonSays.py) | [SimonSays/SimonSaysWeb](SimonSays/SimonSaysWeb/index.html) |
-| Snake | [Snake](Snake/Snake.py) | [Snake/SnakeWeb](Snake/SnakeWeb/index.html) |
-| Tank Wars | [TankWARS](TankWARS/TankWARS.py) | [TankWARS/TankWARSWeb](TankWARS/TankWARSWeb/index.html) |
-| Ta-Te-Ti | [Tateti](Tateti/Tateti.py) | [Tateti/TatetiWeb](Tateti/TatetiWeb/index.html) |
-| Tron | [Tron](Tron/Tron.py) | [Tron/TronWeb](Tron/TronWeb/index.html) |
-| Tron V2 | [TronV2](TronV2/TronV2.py) | [TronV2/TronV2Web](TronV2/TronV2Web/index.html) |
+Each folder is independent — no shared modules, no package, no bundler. A game is one HTML file
+with its CSS and JavaScript inside it, drawing to a single `<canvas>`.
 
-## Running the web version
+The browser versions are **reimplementations, not ports run through a transpiler**: the Python and
+the JavaScript are edited separately and have drifted apart on purpose, since a phone wants
+different controls than a keyboard.
 
-The browser ports are static files, but some fetch assets (sounds, etc.), so open
-them through a local web server rather than `file://`:
+Almost everything is written from scratch, including the physics, the audio synthesis and the
+touch joysticks. The one third-party library in the whole repo is
+[Matter.js](https://brm.io/matter-js/) for rigid-body physics, used by four of the games.
+
+[Arcade/](Arcade/index.html) is the launcher: a Progressive Web App with its own
+[manifest](Arcade/manifest.json), icons and service worker. It runs each game in an iframe without
+navigating away, so the fullscreen it asks for on the first tap lasts the whole session.
+
+## Running it yourself
+
+The web versions are static files, but they fetch assets, so serve them rather than opening
+`file://`:
 
 ```powershell
-# from the repo root
 python -m http.server 8000
-# then open http://localhost:8000 in a browser
+# then open http://localhost:8000
 ```
 
-Any static server works. The landing page and every game are reachable from there.
-
-## Running the Python version
-
-The only dependency is `pygame` (install with `pip install pygame`). Each project is
-launched directly — there is no entry-point script:
+The Python originals need `pygame` (`pip install pygame`), plus `pymunk` for Canicas. Each one runs
+on its own — there is no entry point:
 
 ```powershell
 python <Folder>\<Folder>.py
 ```
 
-The folder `Newton's Cradle` contains an apostrophe — quote the path when running it.
-
-## Notes
-
-- The web ports are faithful reimplementations of the Pygame originals, **not**
-  transpiled from the `.py` — the two are edited independently.
-- [Balls/BallsWeb](Balls/BallsWeb/index.html) (the marble sandbox) is the reference
-  port and the only one with a vendored dependency (`matter.min.js` for physics);
-  every other port is dependency-free hand-rolled JS.
+The folder `Newton's Cradle` has an apostrophe in its name; quote the path when running it.

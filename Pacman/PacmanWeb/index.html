@@ -341,6 +341,7 @@
   let actx = null, master = null;
   let sirenOsc = null, sirenLfo = null, sirenLfoG = null, sirenGain = null, sirenMode = 'off';
   let muted = localStorage.getItem('pacmanMuted') === '1';
+  let Pacman_visWired = false;                      // el listener de pestana oculta se cablea una sola vez
   function ensureAudio() {
     try {
       if (!actx) {
@@ -386,6 +387,17 @@
         return;
       }
       if (!sirenOsc) {
+        // La sirena es el UNICO nodo continuo del juego: dos osciladores arrancados una vez y
+        // nunca detenidos. Con la pestana al fondo el rAF se frena pero el grafo de audio no, asi
+        // que seguia sonando indefinidamente — y en el Arcade eso significa la sirena de Pacman
+        // encima del juego que abriste despues.
+        if (!Pacman_visWired) {
+          Pacman_visWired = true;
+          document.addEventListener('visibilitychange', () => {
+            if (document.hidden) { if (actx && actx.state === 'running') actx.suspend().catch(() => {}); }
+            else if (actx) actx.resume().catch(() => {});
+          });
+        }
         sirenOsc = actx.createOscillator(); sirenOsc.type = 'triangle';
         sirenGain = actx.createGain(); sirenGain.gain.value = 0.03;
         sirenLfo = actx.createOscillator(); sirenLfo.type = 'sine';

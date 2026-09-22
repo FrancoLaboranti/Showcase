@@ -86,6 +86,12 @@
 </head>
 <body>
   <canvas id="c"></canvas>
+  <style>
+    /* Sonido: ondas cuando suena, cruz cuando esta muteado. */
+    #btnMute .ic-off { display: none; }
+    #btnMute.muted .ic-on  { display: none; }
+    #btnMute.muted .ic-off { display: block; }
+  </style>
   <div id="bar">
   <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -100,6 +106,9 @@
     <button id="btnRaise" class="btn">RAISE</button>
     <button id="btnAllIn" class="btn allin">ALL IN</button>
     <button id="btnDeal"  class="btn primary">DEAL</button>
+    <button id="btnMute" aria-label="sonido" title="Sonido">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
+    </button>
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
@@ -260,6 +269,7 @@
     }
   }
   function revealCpuCards() {
+    sfx.reveal();
     for (const c of cards) if (c.owner === 'cpu') { c.hidden = false; c.flipTarget = 1; }
   }
   function clearCards() { cards.length = 0; }
@@ -449,6 +459,9 @@
   }
 
   function postBet(who, amount) {
+    // EL embudo de toda la plata: ciegas, call, raise, all-in y la apuesta de la CPU pasan por aca.
+    // Engancharlo en un solo lugar y no en cada accion evita que una rama nueva nazca muda.
+    if (amount > 0) sfx.chips(amount, who === 'cpu', amount >= G.playerChips + G.cpuChips ? true : false);
     if (who === 'player') {
       amount = Math.min(amount, G.playerChips);
       G.playerChips -= amount;
@@ -493,7 +506,7 @@
   function dealHand() {
     if (G.phase !== 'idle' && G.phase !== 'hand_end') return;
     if (G.playerChips <= 0 || G.cpuChips <= 0) {
-      G.playerChips = 1000;
+      G.playerChips = 1000; sfx.tray();
       G.cpuChips = 1000;
       G.displayedPlayerChips = 1000;
       G.displayedCpuChips = 1000;
@@ -526,14 +539,15 @@
       G.cpuHole.push(G.deck.pop());
     }
     for (let i = 0; i < 2; i++) {
-      makeCard(G.playerHole[i], i, 'player', false);
-      makeCard(G.cpuHole[i],    i, 'cpu',    true);
+      makeCard(G.playerHole[i], i, 'player', false); sfx.card(false);
+      makeCard(G.cpuHole[i],    i, 'cpu',    true);   sfx.card(false);
     }
     G.phase = 'preflop';
   }
 
   function actFold() {
     if (!inBetting() || G.currentPlayer !== 'player') return;
+    sfx.fold(false); sfx.pot(G.pot, true);
     G.cpuChips += G.pot; G.pot = 0;
     setMsg('CPU wins (you folded)');
     G.phase = 'hand_end';
@@ -542,7 +556,8 @@
   function actCall() {
     if (!inBetting() || G.currentPlayer !== 'player') return;
     const diff = G.cpuBet - G.playerBet;
-    if (diff > 0) postBet('player', diff);
+    if (diff > 0) postBet('player', diff);                 // call: las fichas las toca postBet
+    else sfx.knock(false);                                 // check: nudillos, cero fichas
     resolveAllIn();
     G.acted.add('player');
     G.currentPlayer = 'cpu';
@@ -589,8 +604,10 @@
     const maxR = G.playerBet + G.playerChips;                                      // tope = todo lo que podés llegar a poner
     G.raiseAmount = Math.max(minR, Math.min(maxR, G.raiseAmount));
   }
-  function decRaise() { G.raiseAmount -= BIG_BLIND; clampRaiseAmount(); }
-  function incRaise() { G.raiseAmount += BIG_BLIND; clampRaiseAmount(); }
+  // El tick SOLO si el monto cambio de verdad: contra el tope, seguir apretando no puede seguir
+  // sonando o el boton miente sobre lo que hizo.
+  function decRaise() { const a = G.raiseAmount; G.raiseAmount -= BIG_BLIND; clampRaiseAmount(); if (G.raiseAmount !== a) sfx.tick(); }
+  function incRaise() { const a = G.raiseAmount; G.raiseAmount += BIG_BLIND; clampRaiseAmount(); if (G.raiseAmount !== a) sfx.tick(); }
 
   // Baseline por categoría (índice = score[0]). Spread más amplio que el viejo score[0]/9: ahora
   // un par no se hunde por debajo del fold-threshold ante una bet normal, y las categorías altas
@@ -730,20 +747,20 @@
       for (let i = 0; i < 3; i++) {
         const code = G.deck.pop();
         G.community.push(code);
-        makeCard(code, i, 'community', false);
+        makeCard(code, i, 'community', false); sfx.card(true);
       }
       recomputePlayerHand();
     } else if (G.phase === 'flop') {
       G.phase = 'turn';
       const code = G.deck.pop();
       G.community.push(code);
-      makeCard(code, 3, 'community', false);
+      makeCard(code, 3, 'community', false); sfx.card(true);
       recomputePlayerHand();
     } else if (G.phase === 'turn') {
       G.phase = 'river';
       const code = G.deck.pop();
       G.community.push(code);
-      makeCard(code, 4, 'community', false);
+      makeCard(code, 4, 'community', false); sfx.card(true);
       recomputePlayerHand();
     } else if (G.phase === 'river') {
       showdown();
@@ -761,14 +778,17 @@
     const cName = HAND_NAMES[cBest.rank[0]];
     const cmp = rankCmp(pBest.rank, cBest.rank);
     if (cmp > 0) {
+      sfx.win(); sfx.pot(G.pot, false);
       G.playerChips += G.pot;
       setMsg(`You win! ${pName} beats ${cName}`);
       G.winningCodes = new Set(pBest.combo);
     } else if (cmp < 0) {
+      sfx.lose(); sfx.pot(G.pot, true);
       G.cpuChips += G.pot;
       setMsg(`CPU wins! ${cName} beats ${pName}`);
       G.winningCodes = new Set(cBest.combo);
     } else {
+      sfx.split(); sfx.pot(G.pot, false);
       const half = Math.floor(G.pot / 2);
       G.playerChips += half;
       G.cpuChips += G.pot - half;
@@ -780,6 +800,129 @@
     G.phase = 'hand_end';
     G.handEndTimer = 4.5;                                                          // un poco más largo: hay highlight para mirar
   }
+
+  // ════════════════ AUDIO ════════════════
+  let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
+  try { muted = localStorage.getItem('pokerMuted') === '1'; } catch (e) {}
+  const voiceLast = {};
+  // 12 y no 4: ver el comentario de arriba sobre presupuesto por evento. Una mano repartida son 4
+  // disparos de carta + 2 de ciegas en el mismo frame, y el showdown suma revelado + resultado +
+  // cascada del pote. No hay fisica que pueda ametrallar esto.
+  const SND_PER_FRAME = 12;
+
+  function audioResume() {
+    if (!AC) {
+      try {
+        AC = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = AC.createGain();
+        masterGain.gain.value = muted ? 0 : 1;
+        masterGain.connect(AC.destination);
+      } catch (e) { AC = null; return; }
+    }
+    if (AC.state === 'suspended') AC.resume().catch(() => {});
+  }
+  function acOk() { return !!(AC && masterGain && AC.state === 'running'); }
+  function ac() { return acOk() && sndThisFrame < SND_PER_FRAME; }
+
+  // Los dos primitivos NO tocan `sndThisFrame`: lo hace `voice()`, una vez por evento.
+  function aNote(f0, f1, t0, dur, type, vol) {
+    const a = AC; if (!a) return;
+    const o = a.createOscillator(), g = a.createGain(), t = a.currentTime + t0;
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(Math.max(20, f0), t);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(masterGain);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function aNoise(t0, dur, vol, freq, q, type) {
+    const a = AC; if (!a) return;
+    const n = Math.floor(a.sampleRate * dur);
+    const buf = a.createBuffer(1, Math.max(1, n), a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = a.createBufferSource(); src.buffer = buf;
+    const bp = a.createBiquadFilter(); bp.type = type || 'bandpass';
+    bp.frequency.value = freq; bp.Q.value = q;
+    const t = a.currentTime + t0;
+    const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(bp); bp.connect(g); g.connect(masterGain);
+    src.start(t); src.stop(t + dur + 0.02);
+  }
+  function voice(name, cdMs, fn) {
+    if (!ac()) return;
+    const now = performance.now();
+    if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
+    voiceLast[name] = now; sndThisFrame++;
+    try { fn(); } catch (e) {}
+  }
+  const rndf = (a, b) => a + Math.random() * (b - a);
+
+  // ── Los tres materiales ──
+  // Papel sobre pano: banda ancha y grave, sin ataque duro. Una carta no golpea, se DESLIZA.
+  function paper(t0, vol, freq) { aNoise(t0, 0.055, vol, freq || 1700, 1.3, 'bandpass'); }
+  // Arcilla contra arcilla: ataque brillante con Q alto + un cuerpo tonal cortisimo que cae.
+  // `far` = la ficha la tiro la CPU, del otro lado de la mesa: el filtro se cierra y baja el volumen.
+  function chipHit(t0, vol, far, hard) {
+    aNoise(t0, 0.035, vol, far ? 1800 : (hard ? 2600 : 2300), hard ? 8 : 7, 'bandpass');
+    aNote(780, 620, t0, 0.045, 'triangle', vol * 0.55);
+  }
+  // La plata se cuenta en fichas, no en decibeles.
+  function chipBurst(amount, t0, far, hard) {
+    const n = Math.max(2, Math.min(10, 2 + Math.round(Math.log2(Math.max(1, amount / BIG_BLIND)))))
+            + (hard ? 1 : 0);
+    let t = t0;
+    for (let i = 0; i < n; i++) {
+      chipHit(t, (far ? 0.030 : 0.042) * (hard ? 1.3 : 1) * (1 - i / (n * 2.6)), far, hard);
+      t += rndf(0.022, 0.050);
+    }
+  }
+
+  // Varias cartas en el mismo frame tienen que salir una atras de otra, no encimadas: el reparto
+  // es un gesto con ritmo. El contador se reinicia si paso mas de 150 ms desde la ultima.
+  let cardSeq = 0, cardSeqT = -1e9;
+  const sfx = {
+    card(comunitaria) {
+      const now = performance.now();
+      if (now - cardSeqT > 150) cardSeq = 0;
+      cardSeqT = now;
+      const t0 = cardSeq * 0.105; cardSeq++;
+      // La carta comunitaria es LA carta: un poco mas presente que una del reparto inicial.
+      voice('card' + cardSeq, 0, () => paper(t0, comunitaria ? 0.050 : 0.042, comunitaria ? 1700 : 1900));
+    },
+    chips(amount, far, hard) { voice('chips', 0, () => chipBurst(amount, 0, far, hard)); },
+    // Nudillos sobre la madera de la mesa. CERO fichas: pasar es justamente no poner plata.
+    knock(far) {
+      voice('knock', 120, () => {
+        aNote(far ? 150 : 168, far ? 112 : 124, 0, 0.055, 'triangle', far ? 0.038 : 0.05);
+        aNoise(0, 0.03, far ? 0.024 : 0.032, 430, 2.2, 'bandpass');
+      });
+    },
+    // Tirar las cartas: papel que se suelta, opaco y corto. La version de la CPU es mas grave
+    // (esta del otro lado) y mas floja.
+    fold(far) { voice('fold', 200, () => aNoise(0, 0.075, far ? 0.022 : 0.030, far ? 660 : 900, 1.0, 'bandpass')); },
+    // Se dan vuelta las cartas de la CPU: dos "tack" secos y brillantes, mas agudos y mas cortos
+    // que el slide del reparto — una carta que se voltea golpea, no desliza.
+    reveal() { voice('reveal', 300, () => { aNoise(0, 0.028, 0.048, 2900, 3.5, 'bandpass'); aNoise(0.12, 0.028, 0.044, 2900, 3.5, 'bandpass'); }); },
+    // El pote se vuelca al ganador. Arranca 0.18 s DESPUES de la resolucion para que no pise el
+    // resultado, y es lo unico que dice cuanto se llevo.
+    pot(amount, far) { voice('pot', 300, () => chipBurst(Math.max(amount, BIG_BLIND * 8), 0.18, far, false)); },
+    // El resultado vive POR DEBAJO de los materiales y llega despues de las fichas.
+    win()   { voice('res', 500, () => { aNote(523.25, 0, 0.30, 0.20, 'triangle', 0.05); aNote(784, 0, 0.40, 0.26, 'triangle', 0.042); }); },
+    lose()  { voice('res', 500, () => aNote(311, 233, 0.30, 0.32, 'sine', 0.032)); },
+    split() { voice('res', 500, () => aNote(440, 0, 0.28, 0.22, 'triangle', 0.034)); },
+    // El monto de la raise: 18 ms al fondo de la mezcla. Si sonara como una ficha, subir el monto
+    // se confundiria con apostar.
+    tick() { voice('tick', 45, () => aNote(1400, 1150, 0, 0.018, 'square', 0.02)); },
+    // Rebuy: la bandeja de fichas que entra. Mas graves y sin el cuerpo de arcilla — es el sonido
+    // del stack completo, no de una apuesta.
+    tray() { voice('tray', 500, () => { let t = 0.35; for (let i = 0; i < 6; i++) { aNoise(t, 0.04, 0.034, 1500, 5, 'bandpass'); t += rndf(0.03, 0.06); } }); },
+  };
+
+  window.addEventListener('pointerdown', audioResume, true);
+  window.addEventListener('keydown', audioResume, true);
 
   // ── UI WIRING ──
   const $ = id => document.getElementById(id);
@@ -807,6 +950,25 @@
   tap(btnRaise, actRaise);
   tap(btnAllIn, actAllIn);
   tap(btnDeal,  dealHand);
+
+  const btnMute = document.getElementById('btnMute');
+  if (btnMute) {
+    btnMute.classList.toggle('muted', muted);
+    btnMute.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      muted = !muted;
+      if (masterGain && AC) { masterGain.gain.cancelScheduledValues(AC.currentTime); masterGain.gain.value = muted ? 0 : 1; }
+      btnMute.classList.toggle('muted', muted);
+      try { localStorage.setItem('pokerMuted', muted ? '1' : '0'); } catch (e) {}
+      audioResume();
+    });
+  }
+  // Sin nodos continuos no queda nada sonando al fondo; se suspende igual para no dejar un
+  // contexto vivo por cada juego que se abrio en el Arcade.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (AC && AC.state === 'running') AC.suspend().catch(() => {}); }
+    else audioResume();
+  });
 
   function refreshButtons() {
     // Después de un all-in no hay decisión: ambos bets están commit y los streets se revelan solos.
@@ -1093,6 +1255,7 @@
   let lastT = performance.now();
   function loop(now) {
     if (typeof now !== 'number') now = performance.now();
+    sndThisFrame = 0;                                      // OBLIGATORIO: sin esto queda mudo tras SND_PER_FRAME
     const dt = Math.min(0.05, (now - lastT) / 1000);
     lastT = now;
 

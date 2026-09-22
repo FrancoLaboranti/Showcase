@@ -3534,7 +3534,11 @@ const game = {
   banner: '', bannerT: 0, bannerLife: 0, bannerCol: '', bannerSub: '',
   paused: false, mode: 'sandbox',
 };
-function setBanner(txt, life, col, sub) { game.banner = txt; game.bannerT = 0; game.bannerLife = life; game.bannerCol = col || INK; game.bannerSub = sub || ''; sfx.banner(); }
+// `snd` elige la voz del cartel. Por defecto el par ASCENDENTE de celebracion, que es lo que un
+// cartel quiere decir casi siempre — salvo cuando anuncia que te bajaron. Antes `setBanner` tocaba
+// `sfx.banner()` incondicionalmente y `onKO` lo usa para la muerte del jugador: morir sonaba
+// exactamente igual que ganar.
+function setBanner(txt, life, col, sub, snd) { game.banner = txt; game.bannerT = 0; game.bannerLife = life; game.bannerCol = col || INK; game.bannerSub = sub || ''; (snd === null ? 0 : (snd || sfx.banner)()); }
 function resetFighter(f, x) {
   f.hp = f.maxHp; f.x = x; f.vx = 0; f.vy = 0;
   const g = groundAt(x, -1e4);
@@ -3634,7 +3638,7 @@ function siguienteNivel() {
 function onKO(att, def) {
   if (def === P1) {
     game.state = 'dead'; game.t = 0;
-    setBanner('TE BAJARON…', 1.6, '#c0392b');
+    setBanner('TE BAJARON…', 1.6, '#c0392b', '', sfx.ko);   // el cartel de la muerte NO celebra
   } else {
     def.dead = true;
     game.kos++;

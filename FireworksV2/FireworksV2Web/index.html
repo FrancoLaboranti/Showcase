@@ -726,14 +726,25 @@
   }
 
   function audioResume() {                                                         // llamar en el PRIMER gesto (pointerdown / tap de botón)
+    // try/catch OBLIGATORIO: si el constructor tira, la excepcion se lleva puesto el handler que
+    // llamo a esto y el juego queda INMANEJABLE — no lanza cohetes y ningun boton responde.
     if (!actx) {
-      actx = new (window.AudioContext || window.webkitAudioContext)();
-      masterGain = actx.createGain(); masterGain.gain.value = muted ? 0 : 1; masterGain.connect(actx.destination);
+      try {
+        actx = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = actx.createGain(); masterGain.gain.value = muted ? 0 : 1; masterGain.connect(actx.destination);
+      } catch (e) { actx = null; return; }
     }
-    if (actx.state === 'suspended') actx.resume();
-    loadSamples();
-    startBackground();
+    if (actx.state === 'suspended') actx.resume().catch(() => {});
+    try { loadSamples(); startBackground(); } catch (e) {}
   }
+
+  // `background.mp3` es un BufferSource con `loop = true`: es el unico nodo continuo del juego y
+  // sigue sonando con la pestana oculta o el telefono en otra app. El rAF se frena, el juego se
+  // congela, y el ambiente sigue.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (actx && actx.state === 'running') actx.suspend().catch(() => {}); }
+    else if (actx) actx.resume().catch(() => {});
+  });
 
   function startBackground() {                                                     // ambiente en loop (idempotente: no arranca dos veces)
     if (!actx || bgNode || muted || !soundBuffers.background) return;

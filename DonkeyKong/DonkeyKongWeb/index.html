@@ -607,7 +607,10 @@
   let AC = null;
   function ac() {
     if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = null; } }
-    if (AC && AC.state === 'suspended') AC.resume();
+    // Sin el `.catch()`, un resume rechazado es un `unhandledrejection` — y este archivo tiene un
+    // handler que ante eso pinta un panel rojo FIJO en el centro de la pantalla. Como el div no
+    // lleva `pointer-events: none`, se come el tap del centro, que en este juego ES el salto.
+    if (AC && AC.state === 'suspended') AC.resume().catch(() => {});
     return AC;
   }
   function note(f0, f1, t0, dur, type, vol) {

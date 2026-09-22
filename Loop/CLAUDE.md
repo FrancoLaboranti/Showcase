@@ -12,6 +12,114 @@ todo lo que quedó encerrado. Los enemigos son piezas de ajedrez que telegrafía
 la aguja del reloj marca las oleadas, y cada hora elegís **una sola cosa, alternando**:
 una **regla** para la arena o una **carta** (las 5 equipadas forman una mano de póker).
 
+## AUDIO: el techo de voces tenia una inversion de prioridad (2026-09-21)
+
+**Te morias en silencio.** No es una forma de hablar: esta trazado frame a frame.
+
+`ac()` cortaba en `sndThisFrame < CFG.perf.sndPerFrame` (5) y el presupuesto se lo llevaba el que
+llegaba primero. En un frame de cierre de bucle el orden de ejecucion es
+
+    hurtEnemy (hit, 1 nodo) -> killEnemy (kill, 2) -> detonateMine (pulse, 2) = 5
+
+y a partir de ahi se caen, **en este orden**: `claim`, `tateti`, `frenzy`, `hand` y `tight`. O sea
+el cierre de bucle entero, que es el acto central del juego. Sin minas tambien pasa:
+hit(1) + kill(2) + claim(2) = 5 y se pierden `tateti`, `frenzy` y `tight`. Y el comentario de
+`closeLoop` dice textual *"Que el bucle fue cenido ya lo dicen el fantasma dorado y EL SONIDO"* —
+en ese frame el sonido no estaba.
+
+Peor: `killPlayer` llama `sfx.lose()` DESPUES de `sfx.hurt()` (2 nodos). Con tres voces rutinarias
+previas en el mismo frame — `wall` + `deflect` + `clack`, perfectamente alcanzables con 14 orbes
+vivos — el presupuesto llega a 5 y **la muerte del jugador no suena**. Y `endRun` ademas llama
+`droneOff()`, asi que la habitacion tambien se calla: silencio absoluto justo en el unico momento
+que no puede pasar desapercibido.
+
+### El arreglo no es subir el techo
+
+Subirlo seria devolver el problema que el techo resuelve. El techo existe para defenderse de las
+voces **rutinarias** — el rebote contra el aro, el clack, el tictac, el silbido —, que se disparan
+muchas veces en el mismo frame y son las unicas que pueden ametrallar. Las voces **narrativas**
+(moriste, ganaste, cerraste el bucle, entro el frenesi) ocurren como mucho una vez por frame por
+construccion y son justamente lo que hay que oir.
+
+Asi que hay **dos presupuestos**, no uno:
+
+```js
+function ac(prio) {
+  if (!(AC && AC.state === 'running')) return false;
+  return prio ? sndPrioThisFrame < CFG.perf.sndPrioPerFrame : sndThisFrame < CFG.perf.sndPerFrame;
+}
+```
+
+`voice(name, cdMs, fn, prio)` levanta una bandera mientras corre el cuerpo (`enPrio`, restaurada en
+un `finally` para que no quede pegada si el cuerpo tira), y `note()`/`noiseHit()` llaman a `bump()`,
+que carga el disparo al carril que corresponde. Ni `note()` ni `noiseHit()` saben nada de esto.
+
+**`prio` no significa "mas fuerte" ni "antes".** Significa que no comparte presupuesto con el ruido
+de fondo. La reserva tiene su propio techo (`sndPrioPerFrame: 4`), asi que no es un agujero: se
+verifico que con `sndPrioThisFrame = 99` una voz narrativa tampoco suena.
+
+**`CFG.perf.sndPerFrame` esta expuesto en el panel de afinado (tecla T) y ahora significa otra
+cosa**: el techo de las rutinarias, no de todo. Esta documentado en el comentario de `CFG.perf`.
+
+Son narrativas: `loop`, `tight`, `claim`, `tateti`, `hand`, `hurt`, `chime`, `hour`, `promote`,
+`boss`, `bossWind`, `frenzy`, `win`, `lose`, `mine`, `barrel`, `simon`, `simonGo` y la muerte de
+dama. Todo lo demas sigue compitiendo por el techo de siempre.
+
+### Cinco sonidos que estaban mal asociados
+
+El patron es el mismo en los cinco: una voz compartida entre dos eventos que el juego YA distingue
+visualmente.
+
+| evento | usaba | problema |
+|---|---|---|
+| mina detonada | `pulse` | **el pulso es lo que la detona**, en el mismo frame: el cooldown de 200 ms se comia la mina SIEMPRE. El codigo se tomo el trabajo de que el fogonazo "diga MINA" y el oido no se enteraba |
+| barril que nace | `wall` | el aviso de un peligro de 21 de dano sonaba igual que el rebote del orbe contra el aro, **el ruido de fondo mas frecuente del juego**, y compartia su cooldown de 40 ms |
+| salto del caballo | `shot` | `shot` es el obus del tanque y el abanico del jefe, o sea la senal de *esquiva esto*. El caballo no dispara: SALTA |
+| aviso del jefe (`wind`) | `ui` | el segundo de lectura del climax sonaba al click de 30 ms de los botones de menu |
+| muerte de enemigo | `kill` unico | el juego distingue peon/torre/dama con chispas, anillo y sacudon distintos — y las tres sonaban igual |
+
+`kill(val)` ahora tiene tres escalones que salen de `e.T.score`, que es el dato que el juego ya
+tenia una linea antes y no usaba. Mas grave, mas largo y con mas cuerpo cuanto mas vale la pieza:
+**432 / 340 / 234 Hz** medidos, con volumenes 0.06 / 0.075 / 0.095. El cooldown es **por escalon**
+(`'kill' + k`): con un solo nombre, un peon muerto 20 ms antes se comia a la dama.
+
+### Lo demas
+
+- **La pestana al fondo no apagaba el colchon.** Es el unico nodo continuo del juego: dos
+  osciladores arrancados una vez y nunca detenidos. Con la pestana oculta el rAF se frena,
+  `updateAmbience` deja de correr y el zumbido de 55 Hz sigue sonando indefinidamente — en
+  escritorio el navegador no suspende el audio de una pestana de fondo, asi que no se arreglaba
+  solo. Ahora `visibilitychange` llama `droneOff()` + `AC.suspend()`, y a la vuelta `audioResume()`
+  (en movil el contexto se auto-suspende y el juego quedaba mudo hasta el primer toque).
+- **`simonFlash` y `updateSimon` llamaban `note()` directo**, salteando `voice()` y por lo tanto la
+  guarda de estado del contexto — justo la leccion de la seccion de las guardas mas abajo. Ademas
+  gastaban presupuesto de frame sin poder ser frenados por el. Ahora son `sfx.simon(f)` y
+  `sfx.simonGo()`.
+- **`noiseHit` no clampeaba el volumen** antes de la rampa exponencial y `note()` si, a medio
+  archivo de distancia. Hoy ningun llamador puede pasar 0 (el mas bajo es `wall` con 0.005), asi
+  que era una mina latente y no un sintoma — pero el proximo `noiseHit` escalado por intensidad la
+  pisaba, y falla en silencio.
+- **`sndThisFrame = 0` estaba DESPUES de los returns tempranos de `loop()`.** Con el contexto de
+  canvas perdido el frame se va por el return, pero los handlers de DOM siguen disparando sonidos
+  (`onCanvasTap` toca `ui`/`hour`/`card`) y el contador se clavaba por encima del techo. Se
+  auto-curaba al restaurarse el contexto, por eso era menor — pero resetear arriba de todo no
+  cuesta nada y el par `contextlost`/`contextrestored` ya existe, o sea que el estado es real.
+
+### Como se verifico
+
+Con un arnes headless que envuelve el `AudioContext` y anota cada nodo, cada rampa y cada
+start/stop, corriendo un escenario que provoca los eventos de a uno. La prueba decisiva fuerza
+`sndThisFrame = 99` y comprueba que **las rutinarias se caen (0 voces) y `lose()` suena igual**
+(2 osciladores a 330 y 247 Hz, que son sus dos notas). Vive fuera del repo, en el scratchpad, junto
+a `qa.py`/`qa2.py`.
+
+**Ninguno de los 68 escenarios de la suite mide audio** — miden comportamiento y recursos. Estos
+cambios no los tocan: no se movio una sola mecanica, ni un numero de balance, ni una condicion de
+victoria. Lo unico que cambio de semantica es que `sndPerFrame` ahora cuenta solo las rutinarias.
+
+**Esto no se escucho.** El arnes verifica que suene lo que se diseno, cuando se diseno y con los
+parametros que se disenaron; no tiene placa de sonido. La evaluacion auditiva es de Franco.
+
 ## BARRILES: lo que DonkeyKong aportaba de mecánica (2026-09-18)
 
 DonkeyKong venía dando sólo estructura — el draft, las semillas, la ventana de combo — y ni una

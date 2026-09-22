@@ -760,9 +760,16 @@
   }
 
   function audioResume() {
-    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
-    if (actx.state === 'suspended') actx.resume();
-    loadSamples();
+    // try/catch OBLIGATORIO: esta funcion es la PRIMERA sentencia del handler de pointerdown del
+    // canvas. Si el constructor tira, la excepcion se lleva puesto el resto del handler y nunca
+    // corren `setPointerCapture` ni la creacion del estado del puntero: el juego no queda mudo,
+    // queda SIN INPUT. Y `resume()` devuelve una promesa que hay que atrapar.
+    if (!actx) {
+      try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { actx = null; return; }
+    }
+    if (actx.state === 'suspended') actx.resume().catch(() => {});
+    try { loadSamples(); } catch (e) {}
   }
 
   function pitchForBall(b) { return b.mbPitch || 1; }                              // pitch propio de cada bola (set en makeBall)

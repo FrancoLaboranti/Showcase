@@ -148,13 +148,19 @@
   let actx = null;
   let heldOsc = null, heldGain = null;
   function audioResume() {
-    if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
-    if (actx.state === 'suspended') actx.resume();
+    // `playTone()` se llama desde `update()`, que corre dentro de `loop()` — y el
+    // `requestAnimationFrame` esta al final. Si la creacion del contexto tira, Simon no queda
+    // mudo: queda CONGELADO para siempre.
+    if (!actx) {
+      try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { actx = null; return; }
+    }
+    if (actx.state === 'suspended') actx.resume().catch(() => {});
   }
   function playTone(freq, dur) {
     if (!soundOn) return;
     audioResume();
-    if (!actx) return;
+    if (!actx || actx.state !== 'running') return;   // un contexto interrumpido tira al crear el nodo
     const t = actx.currentTime;
     const osc = actx.createOscillator(), g = actx.createGain();
     osc.type = 'sine'; osc.frequency.value = freq;

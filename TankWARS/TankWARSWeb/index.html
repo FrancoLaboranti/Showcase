@@ -121,6 +121,10 @@
   #btnPause .ic-play { display: none; }
   #btnPause.on .ic-pause { display: none; }
   #btnPause.on .ic-play  { display: block; }
+  /* botón de sonido: ondas cuando suena, cruz cuando está muteado (mismo patrón que Loop/StickFight) */
+  #btnMute .ic-off { display: none; }
+  #btnMute.muted .ic-on  { display: none; }
+  #btnMute.muted .ic-off { display: block; }
 
   /* Aviso de orientación: el juego es horizontal. Se muestra (vía JS) cuando la pantalla está vertical. */
   #rotate {
@@ -268,6 +272,7 @@
     <!-- orden estilo Pong, de afuera (derecha) hacia adentro: salir · info · pantalla · reiniciar · pausa -->
     <button class="btn" id="btnPause" aria-label="pause" title="Pause (P)"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg></button>
     <button class="btn" id="btnReset" aria-label="restart" title="Back to menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></button>
+    <button class="btn" id="btnMute" aria-label="sound" title="Sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg></button>
     <button class="btn" id="btnFs" aria-label="fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
     <button class="btn" id="btnInfo" aria-label="stats" title="FPS / stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg></button>
     <button class="btn" id="btnExit" aria-label="exit to menu" title="Exit to menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
@@ -801,6 +806,152 @@
   }
 
   // ════════════════ TANK ════════════════
+  // ════════════════ AUDIO ════════════════
+  let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
+  try { muted = localStorage.getItem('tankwarsMuted') === '1'; } catch (e) {}
+  const voiceLast = {};
+  // 8: una oleada tardia puede tener seis enemigos disparando y una explosion en el mismo frame.
+  // Mas abajo que eso se pierden impactos que el jugador necesita para saber que le estan pegando.
+  const SND_PER_FRAME = 8;
+  let shieldOsc = null, shieldOsc2 = null, shieldGain = null;
+
+  function audioResume() {
+    if (!AC) {
+      try {
+        AC = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = AC.createGain(); masterGain.gain.value = muted ? 0 : 1;
+        masterGain.connect(AC.destination);
+      } catch (e) { AC = null; return; }
+    }
+    if (AC.state === 'suspended') AC.resume().catch(() => {});
+  }
+  function acOk() { return !!(AC && masterGain && AC.state === 'running'); }
+  function ac() { return acOk() && sndThisFrame < SND_PER_FRAME; }
+
+  function note(f0, f1, t0, dur, type, vol, jitter) {
+    const a = AC; if (!a) return;
+    const j = jitter === 0 ? 1 : 1 + (Math.random() - 0.5) * (jitter === undefined ? 0.07 : jitter);
+    const o = a.createOscillator(), g = a.createGain(), t = a.currentTime + t0;
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(Math.max(20, f0 * j), t);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * j), t + dur);
+    g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(masterGain);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  function noiseHit(t0, dur, vol, freq, q, type) {
+    const a = AC; if (!a) return;
+    const n = Math.floor(a.sampleRate * dur);
+    const buf = a.createBuffer(1, Math.max(1, n), a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = a.createBufferSource(); src.buffer = buf;
+    const bp = a.createBiquadFilter(); bp.type = type || 'bandpass';
+    bp.frequency.value = freq; bp.Q.value = q || 1;
+    const t = a.currentTime + (t0 || 0);
+    const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(bp); bp.connect(g); g.connect(masterGain);
+    src.start(t); src.stop(t + dur + 0.02);
+  }
+  function voice(name, cdMs, fn) {
+    if (!ac()) return;
+    const now = performance.now();
+    if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
+    voiceLast[name] = now; sndThisFrame++;
+    try { fn(); } catch (e) {}
+  }
+
+  const sfx = {
+    // CORDITA. Lo tuyo lleva sub; lo ajeno no. Mismo evento, distinta distancia.
+    fire(mio) {
+      voice(mio ? 'fire' : 'fireE', mio ? 50 : 35, () => {
+        if (mio) { noiseHit(0, 0.045, 0.075, 1100, 0.8, 'lowpass'); note(88, 62, 0, 0.09, 'sine', 0.045); }
+        else     { noiseHit(0, 0.028, 0.028, 1800, 0.8, 'lowpass'); }
+      });
+    },
+    missile(mio) {
+      voice(mio ? 'msl' : 'mslE', 120, () => {
+        if (mio) { noiseHit(0, 0.22, 0.07, 700, 0.6, 'lowpass'); note(140, 90, 0, 0.22, 'sine', 0.04); }
+        else     { noiseHit(0, 0.20, 0.045, 1100, 0.6, 'lowpass'); note(210, 140, 0, 0.18, 'sine', 0.025); }
+      });
+    },
+    // CHAPA. El volumen escala con el dano REAL, no con el nominal: un tiro que casi no hizo nada
+    // no puede sonar como uno que sacó un cuarto de la vida.
+    hit(dmg, maxhp) {
+      const k = Math.max(0.2, Math.min(1, dmg / (maxhp * 0.12)));
+      voice('hit', 28, () => noiseHit(0, 0.055, 0.03 + 0.05 * k, 240, 3.2));
+    },
+    // El critico es una capa ADITIVA sobre el impacto, no un reemplazo: primero se oye que pegaste
+    // y despues que pegaste bien.
+    crit() { voice('crit', 60, () => note(1750, 1750, 0, 0.035, 'sine', 0.035, 0)); },
+    // ELECTRICIDAD: el disparo se lo comio el escudo. No hubo chapa, asi que no suena a chapa.
+    absorb() { voice('absorb', 45, () => { note(1250, 1250, 0, 0.04, 'sine', 0.05, 0); noiseHit(0, 0.02, 0.02, 2600, 6); }); },
+    // CORDITA grande, escalada por el tamano del que murio.
+    enemyDie(r) {
+      const k = Math.max(0.3, Math.min(1, (r || 0.02) / 0.035));
+      voice('eDie', 70, () => { noiseHit(0, 0.16 + 0.22 * k, 0.05 + 0.05 * k, 520 - 220 * k, 0.7, 'lowpass');
+                                note(150 - 60 * k, 45, 0, 0.25 + 0.2 * k, 'sine', 0.05 + 0.05 * k); });
+    },
+    blast() { voice('blast', 90, () => { note(95, 38, 0, 0.42, 'sine', 0.10); noiseHit(0, 0.30, 0.07, 800, 0.5, 'lowpass');
+                                         noiseHit(0.02, 0.18, 0.04, 2200, 1.2); }); },
+    // La MAS grave del juego, para que no se confunda con un misil.
+    mine() { voice('mine', 120, () => { note(70, 28, 0, 0.55, 'sine', 0.11); noiseHit(0, 0.40, 0.075, 500, 0.4, 'lowpass'); }); },
+    // MADERA: la unica vez que aparece esta familia en todo el juego.
+    crate(rota) { voice('crate', 50, () => rota ? (noiseHit(0, 0.14, 0.06, 520, 1.2), note(180, 110, 0, 0.14, 'triangle', 0.03))
+                                                : noiseHit(0, 0.045, 0.035, 600, 1.5)); },
+    // ORO: el unico registro brillante y limpio. El ping SUBE con lo poco que le queda a la caja,
+    // asi que se oye que esta por romperse sin mirar la barra.
+    loot(salud) { voice('loot', 40, () => note(900 + (10 - Math.max(0, Math.min(10, salud))) * 85, 0, 0, 0.045, 'sine', 0.04, 0)); },
+    lootBreak() { voice('lootB', 250, () => [660, 880, 1100].forEach((f, i) => note(f, 0, i * 0.06, 0.2, 'triangle', 0.05, 0))); },
+    coin() { voice('coin', 35, () => note(1560, 0, 0, 0.05, 'sine', 0.03, 0.04)); },
+    // El escudo es el UNICO nodo continuo: dos senos a un hercio de distancia que baten lento.
+    // No es un tono, es una presencia: sabes que lo tenes puesto sin que te tape nada.
+    shieldSet(on) {
+      if (!acOk()) return;
+      try {
+        if (!shieldOsc) {
+          shieldGain = AC.createGain(); shieldGain.gain.value = 0; shieldGain.connect(masterGain);
+          shieldOsc = AC.createOscillator(); shieldOsc.type = 'sine'; shieldOsc.frequency.value = 420;
+          shieldOsc2 = AC.createOscillator(); shieldOsc2.type = 'sine'; shieldOsc2.frequency.value = 421.3;
+          shieldOsc.connect(shieldGain); shieldOsc2.connect(shieldGain);
+          shieldOsc.start(); shieldOsc2.start();
+        }
+        shieldGain.gain.setTargetAtTime(on ? 0.012 : 0, AC.currentTime, on ? 0.12 : 0.25);
+      } catch (e) {}
+    },
+    // La UNICA disonancia de todo el juego: un semitono. Por eso se entiende al instante que algo
+    // se rompio y que era tuyo.
+    shieldBreak() { voice('shB', 300, () => { note(1400, 1400, 0, 0.35, 'sine', 0.05, 0); note(1483, 1483, 0, 0.35, 'sine', 0.05, 0);
+                                              noiseHit(0.02, 0.12, 0.03, 3000, 5); }); },
+    ui() { voice('ui', 45, () => note(700, 700, 0, 0.035, 'square', 0.03, 0)); },
+  };
+
+  // Todo el juego vive dentro de un IIFE, asi que el arnes headless de audio no puede alcanzar
+  // `sfx` con un eval indirecto. Se expone el vocabulario (solo lectura, no toca estado de juego)
+  // para poder verificar que cada voz suene lo que se diseno. Mismo criterio que el objeto `QA` de Loop.
+  window.__sfx = sfx;
+  window.addEventListener('pointerdown', audioResume, true);
+  window.addEventListener('keydown', audioResume, true);
+  (function () {
+    const bm = document.getElementById('btnMute');
+    if (!bm) return;
+    bm.classList.toggle('muted', muted);
+    bm.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      muted = !muted;
+      if (masterGain && AC) { masterGain.gain.cancelScheduledValues(AC.currentTime); masterGain.gain.value = muted ? 0 : 1; }
+      bm.classList.toggle('muted', muted);
+      try { localStorage.setItem('tankwarsMuted', muted ? '1' : '0'); } catch (e) {}
+      audioResume();
+    });
+  })();
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { sfx.shieldSet(false); if (AC && AC.state === 'running') AC.suspend().catch(() => {}); }
+    else audioResume();
+  });
+
   class Tank {
     constructor() {
       this.isPlayer = false;
@@ -899,6 +1050,7 @@
               shot.isPlayerShot = true;            // rebota como disparo del jugador
               shot.color = modifyColor(player.color, 150);
             } else {
+              sfx.absorb();                        // ELECTRICIDAD: no hubo chapa, no suena a chapa
               toRemove.add(shot);                  // absorbido por el escudo
             }
           }
@@ -910,6 +1062,8 @@
           let dmg = MAXHP*0.05*atk*this.defense*pscale;   // daño en HP reales (def parejo → cañón base 25 vs cualquier enemigo)
           const crit = isP && Math.random() < (player.critChance||0);   // GOLPE CRÍTICO (prob + daño se compran en la tienda) — también durante la FURIA
           if (crit) dmg *= (player.critMult||2);
+          sfx.hit(dmg, MAXHP);
+          if (crit) sfx.crit();                              // capa ADITIVA: primero pegaste, despues pegaste BIEN
           this.health = Math.max(this.health - dmg, 0);
           this.hitCD = 0.03;
           if (isP) dmgNum(this.x, this.y - this.radius, Math.max(1, Math.round(dmg)), crit);   // número de daño = HP reales
@@ -2174,6 +2328,7 @@
       this.isPlayerShot = tank.isPlayer;
       this.attack = tank.attack;
       if (tank.isPlayer && tank.powerUps.pierce) { this.pierce = true; this.hit = new Set(); }   // mejora PERFORANTE: atraviesa enemigos
+      sfx.fire(this.isPlayerShot);
       shots.push(this);
     }
     process() {
@@ -2206,6 +2361,7 @@
       this.lifeSpan = ri(7,10); this.missile = true;
       this.isPlayerShot = tank.isPlayer; this.attack = tank.attack;
       this.areaMult = (tank.isPlayer && tank.powerUps && tank.powerUps.bigMissiles) ? 2 : 1;   // BIG MISSILES: ×2 el radio de detonación (daño + explosión)
+      sfx.missile(this.isPlayerShot);
       shots.push(this);
     }
     process() {
@@ -2417,6 +2573,7 @@
         const e = shot.radius*0.75, sl = shot.x - e, st = shot.y - e, sz = shot.radius*1.5;
         if (sl+sz > wx && sl < wr && st+sz > wy && st < wb) {
           if (shot.isPlayerShot) {                          // sólo el jugador la rompe; al enemigo le frena el tiro
+            sfx.crate(shot.missile || this.health <= 1);     // MADERA: la unica vez que aparece esta familia
             this.health -= shot.missile ? this.health : 1;  // el misil la revienta de un toque
             this.hitCD = 0.06; if (player) player.score += 5;
           }
@@ -2691,6 +2848,7 @@
       for (const shot of shots) {
         if (toRemove.has(shot)) continue;
         if (shot.isPlayerShot && getDistSq([shot.x,shot.y],[this.x,this.y]) < this.radius*this.radius) {
+          if (shot.missile || this.health <= 1) sfx.lootBreak(); else sfx.loot(this.health);
           this.health -= shot.missile ? this.health : 1;   // el MISIL la revienta de un toque; el cañón le saca 1
           this.hitCD = 0.05;
           if (player) player.score += 100;
@@ -3868,6 +4026,7 @@
   let dtSmoothed = 1/60;
   function loop(now) {
     if (typeof now !== 'number') now = performance.now();
+    sndThisFrame = 0;                                        // OBLIGATORIO: sin esto queda mudo tras SND_PER_FRAME
     dt = Math.min(0.05, (now - lastT) / 1000);
     lastT = now;
     fr = dt * 60;

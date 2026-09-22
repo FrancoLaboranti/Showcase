@@ -266,7 +266,12 @@
 
 // ─── CONFIG: todo lo tuneable en un solo lugar (panel de debug con tecla T) ───
 const CFG = {
-  perf:   { dtMax: 0.05, dprCap: 2, sparkCap: 300, dustCap: 140, dmgCap: 14, sndPerFrame: 5,
+  // `sndPerFrame` es el techo de las voces RUTINARIAS (rebote, clack, tictac, silbido): las que
+  // pueden dispararse muchas veces en un mismo frame y ametrallar. `sndPrioPerFrame` es un
+  // presupuesto aparte para las voces NARRATIVAS, que ocurren como mucho una vez por frame y son
+  // lo que hay que oir si. Antes habia uno solo y lo gastaba el que llegaba primero, asi que el
+  // climax del juego se quedaba mudo: ver el comentario de `ac()`.
+  perf:   { dtMax: 0.05, dprCap: 2, sparkCap: 300, dustCap: 140, dmgCap: 14, sndPerFrame: 5, sndPrioPerFrame: 4,
             // Fracción de chispas que se emiten. En táctil se bajan: en un efecto ADITIVO
             // veinte chispas y treinta se ven casi igual, y lo que cuesta es el relleno de
             // píxeles - justo lo que escasea en un móvil. No se toca ni la resolución ni
@@ -549,8 +554,12 @@ const LS = {
 // ════════════════ AUDIO: síntesis WebAudio, cero archivos ════════════════
 // Patrón DonkeyKong/Pacman (tone) + guardas de StickFight (voice con cooldown por
 // nombre + techo de sonidos por frame). Sin esto, 30 rebotes en un frame = metralleta.
-let AC = null, masterGain = null, muted = LS.get('muted', false), sndThisFrame = 0;
+let AC = null, masterGain = null, muted = LS.get('muted', false), sndThisFrame = 0, sndPrioThisFrame = 0;
 const voiceLast = {};
+// Cual de los dos presupuestos gasta el disparo que se esta ejecutando. Lo pone `voice()` mientras
+// corre el cuerpo de una voz prioritaria; `note()` y `noiseHit()` no necesitan saber nada.
+let enPrio = false;
+function bump() { if (enPrio) sndPrioThisFrame++; else sndThisFrame++; }
 function audioResume() {
   if (!AC) {
     try {
@@ -562,11 +571,19 @@ function audioResume() {
   }
   if (AC.state === 'suspended') AC.resume().catch(() => {});
 }
-function ac() { return AC && AC.state === 'running' && sndThisFrame < CFG.perf.sndPerFrame; }
+// La UNICA compuerta, ahora con dos carriles. `prio` no significa "mas fuerte" ni "antes": significa
+// que no comparte presupuesto con el ruido de fondo. Sin esto, un frame con un golpe, una muerte y
+// una mina agotaba el techo y se caian — en este orden — claim, tateti, frenzy, hand y tight, o sea
+// el cierre de bucle entero. Y en el frame en que te matan, `sfx.lose()` corre DESPUES de
+// `sfx.hurt()`: con tres rebotes previos te morias sin que sonara nada.
+function ac(prio) {
+  if (!(AC && AC.state === 'running')) return false;
+  return prio ? sndPrioThisFrame < CFG.perf.sndPrioPerFrame : sndThisFrame < CFG.perf.sndPerFrame;
+}
 // Un oscilador desechable por disparo: Web Audio los GC-ea solo tras stop().
 function note(f0, f1, t0, dur, type, vol, jitter) {
   const a = AC; if (!a) return;
-  sndThisFrame++;
+  bump();
   const o = a.createOscillator(), g = a.createGain();
   const j = jitter === 0 ? 1 : 1 + (Math.random() - 0.5) * (jitter === undefined ? 0.12 : jitter);
   const t = a.currentTime + t0;
@@ -582,14 +599,14 @@ function note(f0, f1, t0, dur, type, vol, jitter) {
 // Ruido blanco filtrado (impactos secos, explosiones). Buffer generado al vuelo.
 function noiseHit(dur, vol, freq, q) {
   const a = AC; if (!a) return;
-  sndThisFrame++;
+  bump();
   const n = Math.floor(a.sampleRate * dur);
   const buf = a.createBuffer(1, Math.max(1, n), a.sampleRate);
   const d = buf.getChannelData(0);
   for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
   const src = a.createBufferSource(); src.buffer = buf;
   const bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq || 900; bp.Q.value = q || 1.1;
-  const g = a.createGain(); g.gain.setValueAtTime(vol, a.currentTime);
+  const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol), a.currentTime);
   g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + dur);
   src.connect(bp); bp.connect(g); g.connect(masterGain);
   src.start(); src.stop(a.currentTime + dur + 0.02);
@@ -648,11 +665,13 @@ function audioHush(dur, piso) {
   masterGain.gain.linearRampToValueAtTime(1, t + dur + 0.40);
 }
 
-function voice(name, cdMs, fn) {
-  if (!ac()) return;
+function voice(name, cdMs, fn, prio) {
+  if (!ac(prio)) return;
   const now = performance.now();
   if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
-  voiceLast[name] = now; fn();
+  voiceLast[name] = now;
+  const antes = enPrio; enPrio = !!prio;
+  try { fn(); } finally { enPrio = antes; }   // finally: si el cuerpo tira, el carril no queda pegado
 }
 // Escala pentatónica menor (La): cualquier combinación de estas notas suena bien
 // junta, así los arpegios procedurales nunca desafinan.
@@ -683,35 +702,65 @@ const sfx = {
     voice('loop', 90, () => {
       const base = Math.min(n, 6);
       for (let i = 0; i < 3; i++) note(PENTA[clamp(base + i * 2, 0, 9)], 0, i * 0.045, 0.16, 'triangle', 0.055, 0.03);
-    });
+    }, true);
   },
-  tight()     { voice('tight', 120, () => { note(1320, 1980, 0, 0.1, 'square', 0.05); note(660, 990, 0.02, 0.12, 'triangle', 0.04); }); },
-  claim()     { voice('claim', 110, () => { note(523, 0, 0, 0.09, 'square', 0.05); note(784, 0, 0.08, 0.13, 'square', 0.05); }); },
-  tateti()    { voice('tateti', 400, () => { [0, 2, 4, 7].forEach((s, i) => note(PENTA[s], 0, i * 0.09, 0.28, 'triangle', 0.075, 0.01)); }); },
+  tight()     { voice('tight', 120, () => { note(1320, 1980, 0, 0.1, 'square', 0.05); note(660, 990, 0.02, 0.12, 'triangle', 0.04); }, true); },
+  claim()     { voice('claim', 110, () => { note(523, 0, 0, 0.09, 'square', 0.05); note(784, 0, 0.08, 0.13, 'square', 0.05); }, true); },
+  tateti()    { voice('tateti', 400, () => { [0, 2, 4, 7].forEach((s, i) => note(PENTA[s], 0, i * 0.09, 0.28, 'triangle', 0.075, 0.01)); }, true); },
   dash()      { voice('dash', 90, () => note(300, 720, 0, 0.1, 'sawtooth', 0.045)); },
   pulse()     { voice('pulse', 200, () => { note(180, 40, 0, 0.3, 'sawtooth', 0.09); noiseHit(0.22, 0.06, 220, 0.8); }); },
   hit(d)      { const k = clamp(d / 20, 0.25, 1); voice('hit', 34, () => { note(200 - 70 * k, 90, 0, 0.07 + 0.05 * k, 'square', 0.045 + 0.04 * k); }); },
-  hurt()      { voice('hurt', 220, () => { note(320, 70, 0, 0.26, 'sawtooth', 0.11); noiseHit(0.16, 0.07, 400, 0.7); }); },
-  kill()      { voice('kill', 55, () => { note(420, 90, 0, 0.16, 'square', 0.06); noiseHit(0.12, 0.05, 700, 0.9); }); },
+  hurt()      { voice('hurt', 220, () => { note(320, 70, 0, 0.26, 'sawtooth', 0.11); noiseHit(0.16, 0.07, 400, 0.7); }, true); },
+  // El valor de la pieza YA decide las chispas, el anillo y el sacudon (`killEnemy`), y el
+  // archivo se toma seis lineas explicando por que hace falta esa jerarquia — pero el sonido era
+  // uno solo, asi que matar una dama se oia exactamente igual que matar un peon. Mismo
+  // instrumento, tres pesos: mas grave, mas largo y con mas cuerpo cuanto mas vale.
+  // Cooldown POR ESCALON: con un solo nombre, un peon muerto 20 ms antes se comia a la dama.
+  kill(val)   {
+    const k = val >= 800 ? 2 : val >= 200 ? 1 : 0;
+    voice('kill' + k, 55, () => {
+      note([420, 330, 240][k], [90, 70, 50][k], 0, [0.16, 0.22, 0.34][k], 'square', [0.06, 0.075, 0.095][k]);
+      noiseHit([0.12, 0.17, 0.26][k], [0.05, 0.065, 0.085][k], [700, 520, 340][k], 0.9);
+    }, k === 2);
+  },
+  // La mina compartia voz con el pulso — y el pulso es justamente LO QUE LA DETONA, en el mismo
+  // frame, asi que el cooldown de 200 ms se comia el sonido de la mina siempre. El juego ya se
+  // tomo el trabajo de distinguirla visualmente ("ahora el fogonazo dice MINA"); faltaba el oido.
+  mine()      { voice('mine', 90, () => { note(150, 38, 0, 0.34, 'sawtooth', 0.10); noiseHit(0.30, 0.075, 160, 0.6); note(1200, 300, 0, 0.05, 'square', 0.03); }, true); },
+  // El barril usaba `wall`, el rebote del orbe contra el aro: el unico aviso de un peligro de 21
+  // de dano sonaba igual que el ruido de fondo mas frecuente del juego, y encima compartia su
+  // cooldown de 40 ms. Madera hueca y pesada rodando, con la altura cayendo: "esto viene".
+  barrel()    { voice('barrel', 200, () => { noiseHit(0.26, 0.07, 190, 3.2); note(240, 120, 0, 0.22, 'triangle', 0.05); }, true); },
+  // El caballo usaba `shot`, la voz del obus del tanque y del abanico del jefe, o sea la senal de
+  // "esquiva esto". El caballo ni dispara: SALTA. Un envion corto que sube, no un proyectil.
+  hop()       { voice('hop', 60, () => note(300, 560, 0, 0.11, 'triangle', 0.04)); },
+  // El aviso del jefe usaba `ui`, el click de 30 ms de los botones de menu: el segundo de lectura
+  // del climax sonaba a tocar un boton. Es lo contrario de un click — una inhalacion que sube.
+  bossWind()  { voice('bwind', 300, () => { note(110, 330, 0, 0.55, 'sawtooth', 0.045, 0); noiseHit(0.5, 0.025, 900, 0.5); }, true); },
+  // Los dos unicos sonidos del juego que llamaban `note()` DIRECTO, salteando `voice()` y por lo
+  // tanto la guarda de estado del contexto — justo la leccion que este archivo aprendio a golpes.
+  // Ademas gastaban presupuesto de frame sin poder ser frenados por el.
+  simon(f)    { voice('simon', 40, () => note(f, 0, 0, 0.26, 'triangle', 0.075, 0), true); },
+  simonGo()   { voice('simonGo', 40, () => note(660, 0, 0, 0.09, 'triangle', 0.05, 0), true); },
   // Silbido del golpe: ruido corto y grave para el envion, agudo y seco para el jab. Que suenen
   // distinto es parte de la lectura - se escucha cual de los tres viene.
   // `pie` baja el centro del ruido: una patada es el mismo golpe de aire con mas cuerpo. Mismo
   // instrumento, no uno nuevo - lo que cambia es de donde sale.
   swing(big, pie) { voice('swing', 55, () => noiseHit(big ? 0.13 : 0.06, big ? 0.075 : 0.035, (big ? 240 : 620) * (pie ? 0.55 : 1), big ? 1.7 : 0.9)); },
   shot()      { voice('shot', 55, () => note(520, 200, 0, 0.06, 'square', 0.033)); },
-  chime(q)    { voice('chime', 150, () => { const f = [523.25, 392, 329.63, 261.63][q & 3]; note(f, 0, 0, 0.85, 'sine', 0.10, 0); note(f * 2, 0, 0, 0.42, 'sine', 0.045, 0); note(f * 0.5, 0, 0, 1.1, 'sine', 0.05, 0); }); },
-  hour()      { voice('hour', 400, () => [392, 523, 659].forEach((f, i) => note(f, 0, i * 0.1, 0.3, 'triangle', 0.07, 0))); },
+  chime(q)    { voice('chime', 150, () => { const f = [523.25, 392, 329.63, 261.63][q & 3]; note(f, 0, 0, 0.85, 'sine', 0.10, 0); note(f * 2, 0, 0, 0.42, 'sine', 0.045, 0); note(f * 0.5, 0, 0, 1.1, 'sine', 0.05, 0); }, true); },
+  hour()      { voice('hour', 400, () => [392, 523, 659].forEach((f, i) => note(f, 0, i * 0.1, 0.3, 'triangle', 0.07, 0)), true); },
   card()      { voice('card', 90, () => note(700, 1100, 0, 0.07, 'sine', 0.045)); },
-  hand(k)     { voice('hand', 300, () => { for (let i = 0; i <= clamp(k, 0, 5); i++) note(PENTA[i * 2 % 10] * 2, 0, i * 0.06, 0.2, 'triangle', 0.05, 0.01); }); },
-  promote()   { voice('promote', 300, () => { note(110, 220, 0, 0.5, 'sawtooth', 0.1); note(165, 330, 0.06, 0.5, 'sawtooth', 0.06); }); },
+  hand(k)     { voice('hand', 300, () => { for (let i = 0; i <= clamp(k, 0, 5); i++) note(PENTA[i * 2 % 10] * 2, 0, i * 0.06, 0.2, 'triangle', 0.05, 0.01); }, true); },
+  promote()   { voice('promote', 300, () => { note(110, 220, 0, 0.5, 'sawtooth', 0.1); note(165, 330, 0.06, 0.5, 'sawtooth', 0.06); }, true); },
   // El jefe suena DESPUES del silencio, no encima. `spawnBoss` agacha todo 0.75 s y estas dos
   // voces estan programadas para entrar justo cuando el volumen vuelve: se oye el vacio primero
   // y el golpe despues, que es la unica forma de que un golpe se sienta grande.
-  boss()      { voice('boss', 700, () => { note(82, 55, 0.72, 1.5, 'sawtooth', 0.12, 0); note(110, 82, 0.82, 1.4, 'square', 0.05, 0); }); },
-  win()       { voice('win', 600, () => [392, 523, 659, 784, 1047].forEach((f, i) => note(f, 0, i * 0.13, 0.4, 'triangle', 0.08, 0))); },
-  lose()      { voice('lose', 600, () => { note(330, 60, 0, 1.2, 'sawtooth', 0.11, 0); note(247, 45, 0.18, 1.2, 'square', 0.06, 0); }); },
+  boss()      { voice('boss', 700, () => { note(82, 55, 0.72, 1.5, 'sawtooth', 0.12, 0); note(110, 82, 0.82, 1.4, 'square', 0.05, 0); }, true); },
+  win()       { voice('win', 600, () => [392, 523, 659, 784, 1047].forEach((f, i) => note(f, 0, i * 0.13, 0.4, 'triangle', 0.08, 0)), true); },
+  lose()      { voice('lose', 600, () => { note(330, 60, 0, 1.2, 'sawtooth', 0.11, 0); note(247, 45, 0.18, 1.2, 'square', 0.06, 0); }, true); },
   ui()        { voice('ui', 40, () => note(880, 0, 0, 0.03, 'square', 0.03)); },
-  frenzy()    { voice('frenzy', 400, () => { note(660, 1320, 0, 0.3, 'square', 0.07); note(330, 660, 0.05, 0.35, 'triangle', 0.05); }); },
+  frenzy()    { voice('frenzy', 400, () => { note(660, 1320, 0, 0.3, 'square', 0.07); note(330, 660, 0.05, 0.35, 'triangle', 0.05); }, true); },
 };
 // ════════════════ CANVAS - RESIZE - PÉRDIDA DE CONTEXTO ════════════════
 // El trío de context-loss es obligatorio en este repo: en el Arcade todos los juegos
@@ -1493,6 +1542,16 @@ document.addEventListener('visibilitychange', () => {
     for (const k in keys) keys[k] = false;
     inP.mx = inP.my = 0;
     for (const el of document.querySelectorAll('.abtn.on')) el.classList.remove('on');
+    // El colchon es el UNICO nodo continuo del juego: dos osciladores arrancados una sola vez y
+    // nunca detenidos. Con la pestana al fondo el rAF se frena, `updateAmbience` deja de correr y
+    // el zumbido de 55 Hz queda sonando indefinidamente — en escritorio el navegador no suspende
+    // el audio de una pestana de fondo, asi que esto no se arregla solo.
+    droneOff();
+    if (AC && AC.state === 'running') AC.suspend().catch(() => {});
+  } else {
+    // Y a la vuelta: en movil el contexto SI se auto-suspende (una llamada, cambiar de app), y sin
+    // esto el juego quedaba mudo hasta el primer toque.
+    audioResume();
   }
 });
 // ── HOVER (sólo escritorio) ──
@@ -3394,7 +3453,7 @@ function detonateMine(m, by) {
   screenFlash(safe ? 0.20 : 0.34, safe ? [255, 210, 120] : [255, 90, 70]);
   addPop(m.x, m.y - CELL * 0.6, safe ? 'MINE' : 'MINE!', safe ? '#ffd23f' : '#ff6b81');
   addTrauma(0.30);
-  sfx.pulse();
+  sfx.mine();
   for (const e of enemies) if (!e.dead && hyp(e.x - m.x, e.y - m.y) < CELL * 1.5) hurtEnemy(e, 34 * P.dmgMul, m.x, m.y, 1);
   if (by === 'player') { addScore(260 * comboMul() * P.greedMul, m.x, m.y, '#ff9f43'); addCombo(1); unlockAch('mina'); }
   else if (by === 'step') hurtPlayer(16, m.x, m.y);
@@ -3665,7 +3724,7 @@ function killEnemy(e) {
   // El escalon no se inventa: `e.T.score` YA dice cuanto vale cada pieza (peon 90, torre 260,
   // dama 900). Es el dato que el juego ya tiene para decir "esto valio la pena".
   const val = e.T.score;
-  sfx.kill();
+  sfx.kill(val);
   if (val < 200) {                                    // RUTINA: se oye y se ve, nada mas
     spawnSparks(e.x, e.y, 9, e.T.col, 1.0);
   } else if (val < 800) {                             // BUENA: + anillo chico
@@ -3904,7 +3963,7 @@ function updateSlider(e, dt) {
       // re-anclar: hubo una version que lo hacia y era un segundo mecanismo haciendo el mismo
       // trabajo, que es como nacen los bugs que despues nadie entiende.
       e.dur = hyp(e.tx - e.sxp, e.ty - e.syp) / (e.T.spd * (RULE.enemySpd || 1)) + 0.02;
-      if (e.kind === 'caballo') { e.dur = 0.34; sfx.shot(); }
+      if (e.kind === 'caballo') { e.dur = 0.34; sfx.hop(); }
     }
   } else {
     const u = clamp(e.t / e.dur, 0, 1);
@@ -5212,7 +5271,7 @@ function spawnBarrel() {
     // ojo se lea como rodar y no como una licuadora.
     roll: rnd(0, TAU), rollV: sp / CFG.barrel.r * 0.55,
   });
-  sfx.wall(0.5);
+  sfx.barrel();
 }
 function updateBarrels(dt) {
   for (let i = barrels.length - 1; i >= 0; i--) {
@@ -5432,7 +5491,7 @@ function startSimon() {
 }
 function simonFlash(sec, dur) {
   simon.lit = sec; simon.litT = dur || 0.34;
-  note(SIMON_NOTE[SECT_CI[sec]], 0, 0, 0.26, 'triangle', 0.075, 0);
+  sfx.simon(SIMON_NOTE[SECT_CI[sec]]);
   addRing(sectCX(sec), sectCY(sec), 0.05, 0.30, 0.35, SECT_COL[sec], 0.009);
 }
 
@@ -5464,7 +5523,7 @@ function updateSimon(dt) {
     if (simon.t >= CFG.simon.readyT) {
       simon.phase = 'input'; simon.t = 0;
       simon.wrongSec = -1; simon.wrongT = 0;       // el castigo arranca recién acá
-      note(660, 0, 0, 0.09, 'triangle', 0.05, 0);  // "ya"
+      sfx.simonGo();                                    // "ya"
     }
     return;
   }
@@ -5996,7 +6055,7 @@ function updateBoss(e, dt) {
   if (e.stT <= 0) {
     if (e.st === 'idle') {
       e.st = 'wind'; e.stT = CFG.boss.wind;
-      sfx.ui();
+      sfx.bossWind();
     } else if (e.st === 'wind') {
       // ALTERNAN, no se sortean: un patrón se aprende, una moneda no.
       if (e.nextAtk === 0 && ph >= 1) bossFan(e, ph);
@@ -7428,6 +7487,11 @@ function updateAmbience(dt) {
 
 function loop(now) {
   scheduleRaf();
+  // Arriba de todo y ANTES de los returns tempranos. Con el contexto de canvas perdido el frame se
+  // va por el return de abajo, pero los handlers de DOM siguen disparando sonidos (`onCanvasTap`
+  // toca ui/hour/card) y sin este reseteo el contador se clava por encima del techo: `ac()` queda
+  // cerrada y el juego se queda mudo hasta que se restaura el contexto.
+  sndThisFrame = 0; sndPrioThisFrame = 0;
   if (ctxLost) { lastT = now; return; }
   if (window.innerWidth !== lastW || window.innerHeight !== lastH) {
     lastW = window.innerWidth; lastH = window.innerHeight; resize();
@@ -7441,7 +7505,6 @@ function loop(now) {
   updateAmbience(dt);
   if (dbgSlow) dt *= 0.2;
   if (dbgFreeze) dt = 0;
-  sndThisFrame = 0;
 
   syncTouchUI();
   ensureBtnRects();                                   // rearma el cache al aparecer los botones

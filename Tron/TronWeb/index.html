@@ -79,7 +79,24 @@
     z-index: 9;
   }
 
-
+  /* Mute (🔊/🔇): arcade-shell.css estila #btnInfo/#btnFs/#btnExit POR ID, así que un botón nuevo
+     nace SIN estilo y hay que clonarles la regla. Va fuera de #ui a propósito: ahí heredaría los
+     48 px de `#ui button` y rompería el ritmo de la barra. */
+  #btnMute {
+    width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; align-self: flex-end; margin-bottom: 6px;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.45);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+  }
+  #btnMute svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnMute:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  #btnMute .ic-off { display: none; }
+  #btnMute.muted .ic-on { display: none; }
+  #btnMute.muted .ic-off { display: block; }
+  #btnMute.muted { color: rgba(255,255,255,0.24); }
 
 </style>
 </head>
@@ -126,6 +143,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg>
       </button>
     </div>
+    <button id="btnMute" aria-label="sonido" title="Sonido">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
+    </button>
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
@@ -165,6 +185,258 @@
   const AI_PANIC     = 16;                                                         // si el frente tiene menos px libres que esto → dobla ya al lado más despejado
   const AI_GREED     = 80;                                                         // un costado debe superar al frente por esto (px) para doblar "por gusto"
   const AI_ERRATIC   = 0.07;                                                       // prob. por decisión de un giro errático (sólo si es seguro)
+
+  // ════════════════════════════════════════════════════════════════════
+  //  AUDIO — síntesis WebAudio, cero archivos.
+  //
+  //  Tron no está hecho de materia: no hay madera, metal, goma ni piel. El mundo entero son líneas
+  //  de luz sobre negro. Lo único que existe ahí es SEÑAL ELÉCTRICA, así que el material del audio
+  //  es señal eléctrica: onda de SIERRA por un lowpass RESONANTE cuyo cutoff BARRE. Ese barrido es
+  //  la firma — no un clic mecánico, no un golpe, no un pitido puro. Sintetizador del 82, no sampler.
+  //
+  //  Consecuencias concretas:
+  //   · el giro de 90° suena como un snap de filtro cuya DIRECCIÓN te dice hacia dónde doblaste
+  //     (izquierda barre hacia abajo, derecha hacia arriba);
+  //   · el motor se vuelve más agudo y más abierto cuanto menos espacio libre tenés adelante;
+  //   · el ruido blanco aparece UNA sola vez en todo el vocabulario — el derezz — porque ése es el
+  //     único momento en que el juego destruye algo y el cuerpo se descompone en píxeles;
+  //   · el menú es de OTRO material: triangle puro, sin filtro. La interfaz no es la arena.
+  //   · cada cycle tiene su altura fija igual que tiene su color: oís QUIÉN murió.
+  // ════════════════════════════════════════════════════════════════════
+  const NOTE_OF = [110, 146.83, 174.61, 220];                                      // TÚ / RINZLER / SARK / CLU
+  const MAX_VOICES = 4;                                                            // techo de voces por frame (se resetea al tope del loop)
+  let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
+  const voiceLast = {};                                                            // cooldown por voz
+  try { muted = localStorage.getItem('tronMuted') === '1'; } catch (e) {}
+
+  // Nodos CONTINUOS del motor: se crean una sola vez por sesión y se modulan (PATRON §8).
+  let engGain = null, engFilt = null, engA = null, engB = null, engSwarm = null, engSwarmGain = null;
+  let engAcc = 0;                                                                  // acumulador: el motor se reescribe a 20 Hz, no a 60
+  let engLastG = -1, engLastF = -1, engLastP = -1, engLastS = -1;                   // últimos targets escritos (evita rampas redundantes)
+
+  function audioResume() {
+    if (!AC) {
+      try {
+        AC = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = AC.createGain();
+        masterGain.gain.value = muted ? 0 : 1;
+        masterGain.connect(AC.destination);
+        buildEngine();
+      } catch (e) { AC = null; return; }                                           // sin audio el juego SIGUE andando
+    }
+    if (AC.state === 'suspended') AC.resume().catch(() => {});
+  }
+
+  // El contexto se suspende SOLO en mobile (llamada entrante, cambio de app, pestaña al fondo) y ahí
+  // escribir cualquier AudioParam tira InvalidStateError. Acá eso no sería un fallo silencioso: el
+  // handler de window.onerror de arriba pinta un panel rojo enorme TAPANDO la partida. Nada toca el
+  // grafo sin pasar por acá primero.
+  function acOk() { return !!(AC && AC.state === 'running'); }
+  // La única compuerta de los one-shots. Sin el techo, los 4 wraps simultáneos del arranque (todos
+  // nacen en y=0.95·H mirando arriba) o 4 muertes en el mismo frame son una metralleta.
+  function ac() { return acOk() && sndThisFrame < MAX_VOICES; }
+
+  // Oscilador desechable. NO chequea ac(): la compuerta está en voice(), así un sonido de varias
+  // capas (el derezz son tres) nunca sale cortado por la mitad.
+  function note(f0, f1, t0, dur, type, vol, jitter) {
+    const a = AC; if (!a) return;
+    sndThisFrame++;
+    const o = a.createOscillator(), g = a.createGain();
+    const j = jitter === 0 ? 1 : 1 + (Math.random() - 0.5) * (jitter === undefined ? 0.12 : jitter);
+    const t = a.currentTime + t0;
+    o.type = type || 'sawtooth';
+    o.frequency.setValueAtTime(Math.max(20, f0 * j), t);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * j), t + dur);
+    g.gain.setValueAtTime(Math.max(0.0001, vol), t);                               // exponentialRamp nunca toca el 0 (lo dice la spec)
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(masterGain);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  // LA voz del juego: sierra por un lowpass resonante cuyo cutoff barre de c0 a c1. La dirección
+  // del barrido es información, no adorno.
+  function sweep(f0, f1, c0, c1, t0, dur, vol, q, jitter) {
+    const a = AC; if (!a) return;
+    sndThisFrame++;
+    const t = a.currentTime + t0;
+    const j = jitter === 0 ? 1 : 1 + (Math.random() - 0.5) * (jitter === undefined ? 0.12 : jitter);
+    const o = a.createOscillator(); o.type = 'sawtooth';
+    const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = q === undefined ? 6 : q;
+    const g = a.createGain();
+    o.frequency.setValueAtTime(Math.max(20, f0 * j), t);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * j), t + dur);
+    lp.frequency.setValueAtTime(Math.max(40, c0), t);
+    if (c1 !== c0) lp.frequency.exponentialRampToValueAtTime(Math.max(40, c1), t + dur);
+    g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(lp); lp.connect(g); g.connect(masterGain);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  // El ÚNICO ruido blanco del vocabulario. Barre la frecuencia del bandpass porque el derezz es un
+  // movimiento (300 → 6000 Hz = el cuerpo desarmándose hacia arriba), no un golpe estático.
+  function noiseSweep(t0, dur, vol, f0, f1, q) {
+    const a = AC; if (!a) return;
+    sndThisFrame++;
+    const n = Math.max(1, Math.floor(a.sampleRate * dur));
+    const buf = a.createBuffer(1, n, a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = a.createBufferSource(); src.buffer = buf;
+    const bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = q || 1.4;
+    const g = a.createGain();
+    const t = a.currentTime + t0;
+    bp.frequency.setValueAtTime(Math.max(40, f0), t);
+    if (f1 !== f0) bp.frequency.exponentialRampToValueAtTime(Math.max(40, f1), t + dur);
+    g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(bp); bp.connect(g); g.connect(masterGain);
+    src.start(t); src.stop(t + dur + 0.02);
+  }
+
+  function voice(name, cdMs, fn) {
+    if (!ac()) return;
+    const now = performance.now();
+    if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
+    voiceLast[name] = now;
+    try { fn(); } catch (e) {}                                                     // ningún sfx puede tirar (ver el panel rojo)
+  }
+
+  // ── Motor de la light-cycle (continuo) ──
+  // Dos sierras desafinadas 7 cents + una tercera a media frecuencia que representa al ENJAMBRE de
+  // IAs vivas, todo por un lowpass resonante. Un solo grafo por sesión: se modula, no se recrea.
+  function buildEngine() {
+    engFilt = AC.createBiquadFilter(); engFilt.type = 'lowpass';
+    engFilt.frequency.value = 420; engFilt.Q.value = 4;
+    engGain = AC.createGain(); engGain.gain.value = 0;
+    engFilt.connect(engGain); engGain.connect(masterGain);
+    engA = AC.createOscillator(); engA.type = 'sawtooth'; engA.frequency.value = 58;
+    engB = AC.createOscillator(); engB.type = 'sawtooth'; engB.frequency.value = 58; engB.detune.value = 7;
+    engA.connect(engFilt); engB.connect(engFilt);
+    engSwarmGain = AC.createGain(); engSwarmGain.gain.value = 0;
+    engSwarm = AC.createOscillator(); engSwarm.type = 'sawtooth'; engSwarm.frequency.value = 29;
+    engSwarm.connect(engSwarmGain); engSwarmGain.connect(engFilt);
+    engA.start(); engB.start(); engSwarm.start();
+  }
+
+  function engSet(g, f, p, s, t) {
+    try {
+      if (Math.abs(g - engLastG) > 0.0005) { engGain.gain.setTargetAtTime(g, t, 0.08); engLastG = g; }
+      if (Math.abs(f - engLastF) > 8)      { engFilt.frequency.setTargetAtTime(f, t, 0.06); engLastF = f; }
+      if (Math.abs(p - engLastP) > 0.5)    { engA.frequency.setTargetAtTime(p, t, 0.08);
+                                             engB.frequency.setTargetAtTime(p, t, 0.08);
+                                             engSwarm.frequency.setTargetAtTime(p * 0.5, t, 0.08); engLastP = p; }
+      if (Math.abs(s - engLastS) > 0.0005) { engSwarmGain.gain.setTargetAtTime(s, t, 0.12); engLastS = s; }
+    } catch (e) {}
+  }
+
+  // Convierte en sonido el dato que el juego YA calcula para la IA: cuánto espacio libre hay adelante.
+  // Cuanto menos queda, más agudo y más abierto. Pasar raspando una estela deja de ser sólo visual.
+  // 90 px con paso 2 son 45 lecturas de un Uint8Array — nada al lado del bloom del frame.
+  function engineUpdate(dt) {
+    if (!acOk() || !engGain) return;
+    engAcc += dt;
+    if (engAcc < 0.05) return;                                                     // 20 Hz: escribir 4 AudioParam por frame no aporta nada
+    engAcc = 0;
+    const t = AC.currentTime;
+    const p0 = players.find(p => p.id === 0);
+    if (!p0 || !p0.alive || p0.stop) { engSet(0, 420, 58, 0, t); return; }
+    const tens = 1 - clearDist(p0.x, p0.y, p0.direction, 90) / 90;                 // 0 = campo abierto, 1 = estela pegada al frente
+    engSet(0.020 + 0.016 * tens,                                                   // ambiente: 0.020 → 0.036
+           420 + 1400 * tens,                                                      // cutoff:   420 → 1820 Hz
+           58 + 26 * tens,                                                         // altura:   58 → 84 Hz
+           0.006 * Math.max(0, aliveCount() - 1), t);                              // enjambre: una capa por IA viva
+  }
+
+  // Bajar a 0, nunca parar: un oscilador parado no se puede volver a arrancar, y cortar en seco clickea.
+  function engineOff() {
+    if (!acOk() || !engGain) return;
+    try {
+      const t = AC.currentTime;
+      engGain.gain.setTargetAtTime(0, t, 0.12); engLastG = 0;
+      engSwarmGain.gain.setTargetAtTime(0, t, 0.12); engLastS = 0;
+    } catch (e) {}
+  }
+
+  // ── El vocabulario ──
+  const sfx = {
+    // PRINCIPAL. El giro es la ÚNICA acción que el jugador ejecuta y hoy no tiene ninguna
+    // confirmación: si el tap cae mal y no registra, te enterás recién cuando chocás.
+    turn(side) {
+      voice('turn', 45, () => side < 0
+        ? sweep(NOTE_OF[0], NOTE_OF[0], 1600, 380, 0, 0.06, 0.05, 9, 0.08)         // izquierda: el filtro baja
+        : sweep(NOTE_OF[0], NOTE_OF[0], 380, 1600, 0, 0.06, 0.05, 9, 0.08));       // derecha: el filtro sube
+    },
+
+    // PRINCIPAL. El clímax, y el único ruido blanco del juego.
+    derezz(id) {
+      if (id === 0) {
+        // El humano: grave y largo. Ruido ASCENDENTE (el cuerpo desarmándose en píxeles) + la sierra
+        // que se apaga dos octavas abajo + un segundo golpe corto de ruido, el eco del cristal.
+        voice('derezzP0', 120, () => {
+          noiseSweep(0, 0.22, 0.09, 300, 6000, 1.4);
+          sweep(180, 28, 2200, 200, 0, 0.45, 0.07, 7, 0.05);
+          noiseSweep(0.02, 0.07, 0.05, 2600, 900, 2.2);
+        });
+      } else {
+        // Las IAs: corto y AGUDO para que no compita con el tuyo, y en la altura de ESE jugador.
+        // voice() compartida por las tres: dos que chocan de frente mueren en el mismo frame.
+        voice('derezzAI', 80, () => {
+          const f = NOTE_OF[id] || 220;
+          noiseSweep(0, 0.10, 0.035, 900, 4500, 1.6);
+          sweep(f * 2, f, 3000, 600, 0, 0.12, 0.035, 6, 0.06);
+        });
+      }
+    },
+
+    // SECUNDARIO. El evento visualmente más confuso: tu cycle desaparece y reaparece lejísimos.
+    // Un tick de 50 ms lo desambigua; el de las IAs va cuatro veces más bajo y con voz compartida
+    // porque los 4 wrappean JUNTOS a los ~2 s del arranque (todos nacen en la misma fila).
+    wrap(id) {
+      if (id === 0) voice('wrapP0', 150, () => sweep(NOTE_OF[0] * 2, NOTE_OF[0] * 4, 4000, 4000, 0, 0.05, 0.03, 3, 0.06));
+      else          voice('wrapAI', 250, () => { const f = NOTE_OF[id] || 220; sweep(f, f * 2, 3000, 3000, 0, 0.05, 0.012, 3, 0.06); });
+    },
+
+    // SECUNDARIO. Entrada a la Grid: un motor por cycle, escalonados. Oís cuántas entraron.
+    roundStart(n) {
+      voice('roundStart', 400, () => {
+        for (let i = 0; i < n; i++) sweep(NOTE_OF[i] || 220, (NOTE_OF[i] || 220) * 2, 200, 3000, i * 0.06, 0.35, 0.05, 5, 0.04);
+      });
+    },
+
+    // SECUNDARIO. Ganaste la ronda: quinta ascendente con el filtro abriéndose.
+    // La perdiste: tres notas bajando con el filtro cerrándose.
+    roundEnd(won) {
+      voice('roundEnd', 400, () => {
+        if (won) { sweep(330, 330, 500, 2600, 0, 0.18, 0.06, 5, 0); sweep(440, 440, 700, 3000, 0.14, 0.18, 0.06, 5, 0); }
+        else {
+          sweep(440, 440, 2500, 900, 0,    0.16, 0.055, 5, 0);
+          sweep(330, 330, 1600, 600, 0.14, 0.16, 0.055, 5, 0);
+          sweep(220, 220, 1000, 400, 0.28, 0.50, 0.055, 5, 0);
+        }
+      });
+    },
+
+    // SECUNDARIO. El único desenlace real (las rondas son parciales). Tríada mayor si ganaste,
+    // menor + glissando del sub a 35 Hz si perdiste: un corte de corriente. Sin fanfarria: esto
+    // sigue siendo la Grid.
+    setEnd(won) {
+      voice('setEnd', 800, () => {
+        const tri = won ? [220, 277.18, 329.63] : [220, 261.63, 329.63];
+        for (let i = 0; i < 3; i++) sweep(tri[i], tri[i], won ? 400 : 2200, won ? 3600 : 500, i * 0.16, won ? 0.50 : 0.55, 0.055, 5, 0);
+        if (!won) sweep(110, 35, 800, 120, 0.20, 1.2, 0.05, 3, 0);
+      });
+    },
+
+    // INTERFAZ. Triangle PURO, sin filtro, a propósito: la interfaz es de otro material que la arena
+    // y así un tick de menú no se puede confundir con un giro dentro del juego.
+    menuTick(delta) { voice('menuTick', 60, () => note(delta > 0 ? 780 : 520, 0, 0, 0.035, 'triangle', 0.04, 0)); },
+    menuNav()       { voice('menuNav',  60, () => note(390, 0, 0, 0.03, 'triangle', 0.03, 0)); },
+    confirm()       { voice('confirm', 250, () => { note(523.25, 0, 0,    0.10, 'triangle', 0.05, 0);
+                                                    note(783.99, 0, 0.06, 0.10, 'triangle', 0.05, 0); }); },
+    // Salir de la Grid: corte de corriente. Cierra el arco que abre el swell de arranque.
+    powerDown()     { voice('powerDown', 300, () => sweep(300, 60, 2400, 150, 0, 0.28, 0.05, 6, 0.04)); },
+  };
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
@@ -376,17 +648,20 @@
       this.lastX = null; this.lastY = null;                                       // última posición estampada (para conectar la estela con línea)
     }
 
-    // giro manual (botones / mitades de pantalla) — sólo el humano
-    turnLeft()  { this.direction = (this.direction - 1 + 4) % 4; }
-    turnRight() { this.direction = (this.direction + 1) % 4; }
+    // giro manual (botones / mitades de pantalla / teclado) — sólo el humano.
+    // El sfx vive acá y no en los tres call sites: la rama humana de process() también pasa por acá
+    // (antes repetía la aritmética inline), así que un solo lugar cubre tap, botones ◄► y teclas.
+    // Las IAs NO pasan por acá: escriben this.direction directo, que es justo lo que queremos.
+    turnLeft()  { this.direction = (this.direction - 1 + 4) % 4; if (this.id === 0) sfx.turn(-1); }
+    turnRight() { this.direction = (this.direction + 1) % 4;     if (this.id === 0) sfx.turn(+1); }
 
     process(dt) {
       const d = this.directions;
 
       if (this.id === 0 || this.mode === 1) {
         // ── HUMANO ── latch igual que el original: un giro por pulsación.
-        if (!this.leftpressed && keys[this.left])  { this.direction = (this.direction - 1 + 4) % 4; this.leftpressed = true; }
-        if (!this.rightpressed && keys[this.right]) { this.direction = (this.direction + 1) % 4;     this.rightpressed = true; }
+        if (!this.leftpressed && keys[this.left])  { this.turnLeft();  this.leftpressed = true; }
+        if (!this.rightpressed && keys[this.right]) { this.turnRight(); this.rightpressed = true; }
         if (!keys[this.left])  this.leftpressed = false;
         if (!keys[this.right]) this.rightpressed = false;
       } else {
@@ -421,10 +696,12 @@
       }
 
       // wrap toroidal en los bordes (idéntico al original)
-      if (this.x > W) this.x = 0;
-      if (this.x < 0) this.x = W;
-      if (this.y > H) this.y = 0;
-      if (this.y < 0) this.y = H;
+      let wrapped = false;
+      if (this.x > W) { this.x = 0; wrapped = true; }
+      if (this.x < 0) { this.x = W; wrapped = true; }
+      if (this.y > H) { this.y = 0; wrapped = true; }
+      if (this.y < 0) { this.y = H; wrapped = true; }
+      if (wrapped) sfx.wrap(this.id);
 
       // muerte: COLISIÓN BARRIDA (no un solo punto). Muestreo todo el tramo que recorrerá la cycle este
       // frame —de 2px adelante hasta donde llega la cabeza + margen— así no salta por encima de una estela
@@ -435,7 +712,7 @@
         const moveDist = Math.hypot(d[dir][0], d[dir][1]) * dt * SPEED_MULT;
         const reach = moveDist + 2;
         for (let s = 2; s <= reach; s += 1) {
-          if (occ(this.x + ux * s, this.y + uy * s)) { this.alive = false; return; }
+          if (occ(this.x + ux * s, this.y + uy * s)) { this.alive = false; sfx.derezz(this.id); return; }   // el ÚNICO punto donde alive pasa a false
         }
         this.x += d[dir][0] * dt * SPEED_MULT;
         this.y += d[dir][1] * dt * SPEED_MULT;
@@ -504,6 +781,7 @@
     bindControls();
     gh.menu = false;
     gh.roundScored = false;
+    sfx.roundStart(n);                                                            // entrada a la Grid: un motor por cycle, escalonados
   }
   function startGame() {                                                           // set nuevo (resetea marcador)
     const bo = BEST_OF[gh.bestOfIdx];
@@ -525,9 +803,15 @@
       const aiAlive = players.filter(p => p.alive && p.id !== 0);
       gh.lastWinnerName = aiAlive.length === 1 ? aiAlive[0].name : null;
     }
+    engineOff();                                                                  // la ronda terminó: el motor se apaga antes del desenlace
+    // Una ronda es un parcial y el set es el desenlace real. Si el set terminó suena SÓLO `setEnd`:
+    // apilar los dos convierte el final en un choque de dos jingles y ninguno se entiende.
+    if (setOver()) sfx.setEnd(youW);
+    else           sfx.roundEnd(youW);
   }
   function advance() { setOver() ? startGame() : nextRound(); }                    // tap/Enter en fin de ronda
   function backToMenu() {
+    engineOff();                                                                  // no hay cycle en la Grid: el motor no puede seguir sonando
     clearField();
     players = [];
     gh.menu = true;
@@ -727,6 +1011,39 @@
   });
   window.addEventListener('keyup', e => { keys[e.code] = false; });
 
+  // ── Desbloqueo del audio ──
+  // Sin esto NADA de todo lo de arriba existe: el navegador no deja crear un AudioContext sin un
+  // gesto, `audioResume()` es el único lugar donde se crea, y `buildEngine()` vive adentro. Fase de
+  // captura y a nivel window para que lo dispare el primer toque, sea sobre el canvas o sobre un botón.
+  window.addEventListener('pointerdown', audioResume, true);
+  window.addEventListener('keydown', audioResume, true);
+
+  // ── Mute ──
+  const btnMute = document.getElementById('btnMute');
+  if (btnMute) {
+    btnMute.classList.toggle('muted', muted);
+    btnMute.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      muted = !muted;
+      if (masterGain && AC) { masterGain.gain.cancelScheduledValues(AC.currentTime); masterGain.gain.value = muted ? 0 : 1; }
+      btnMute.classList.toggle('muted', muted);
+      try { localStorage.setItem('tronMuted', muted ? '1' : '0'); } catch (e) {}   // Safari privado tira al escribir
+      audioResume();                                                              // el toque de "desmutear" también sirve de gesto
+    });
+  }
+
+  // ── Pestaña al fondo ──
+  // El motor es un nodo continuo: tres osciladores arrancados una vez y nunca detenidos. Con la
+  // pestaña oculta el rAF se frena, `engineUpdate` deja de correr y el zumbido queda sonando.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      engineOff();
+      if (AC && AC.state === 'running') AC.suspend().catch(() => {});
+    } else {
+      audioResume();                                                              // en mobile el contexto se auto-suspende
+    }
+  });
+
   // Toque en el canvas: en menú toca la opción (mitad izq/der cicla su valor); en juego, tocar la mitad
   // izquierda dobla a la izquierda y la derecha dobla a la derecha; en game over reinicia.
   canvas.addEventListener('pointerdown', e => {
@@ -773,6 +1090,8 @@
     lastT = now;
     if (!(dt >= 0) || dt > 0.05) dt = 0.01;                                       // descarta NaN / saltos raros / desfase de épocas
     T += dt;                                                                      // tiempo para los pulsos del menú
+    sndThisFrame = 0;                                                             // OBLIGATORIO: sin esto el juego queda mudo tras MAX_VOICES
+    engineUpdate(dt);                                                             // el motor se reescribe a 20 Hz (el acumulador está adentro)
 
     if (gh.menu) {
       processMenu();

@@ -46,14 +46,23 @@
      seleccionado). Con (hover: hover) los teléfonos no lo aplican. */
   @media (hover: hover) { .cbtn:hover { color: #fff; border-color: rgba(120,200,255,0.5); } }
   .cbtn:active { transform: scale(0.9); }
-  /* cluster derecho, de afuera hacia adentro: ✕ salir · ⓘ info · ⛶ pantalla · ⮌ atrás · ⏸ pausa */
+  /* cluster derecho, de afuera hacia adentro: ✕ salir · ⓘ info · ⛶ pantalla · 🔊 sonido · ⮌ atrás · ⏸ pausa.
+     Los cuatro de afuera están SIEMPRE visibles; atrás/pausa son condicionales y por eso van adentro:
+     si el mute fuera el último, en el menú quedarían dos huecos entre ⛶ y él. */
   #btnExit  { right: calc(8px + env(safe-area-inset-right)); }
   #btnInfo  { right: calc(46px + env(safe-area-inset-right)); }
   #btnFull  { right: calc(84px + env(safe-area-inset-right)); }
-  #btnBack  { right: calc(122px + env(safe-area-inset-right)); }
-  #btnPause { right: calc(160px + env(safe-area-inset-right)); }
+  #btnMute  { right: calc(122px + env(safe-area-inset-right)); }
+  #btnBack  { right: calc(160px + env(safe-area-inset-right)); }
+  #btnPause { right: calc(198px + env(safe-area-inset-right)); }
   #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; }
   #btnInfo.on     { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+  /* ícono de sonido: ondas / tachado según .muted (el botón NO se oculta nunca — se tiene que
+     poder mutear desde el menú, antes de que exista una partida) */
+  #btnMute .ic-off { display: none; }
+  #btnMute.muted .ic-on  { display: none; }
+  #btnMute.muted .ic-off { display: block; }
+  #btnMute.muted { color: rgba(255,255,255,0.28); }
   /* atrás: visible en setup del menú y en partido. pausa: sólo en partido. (clases las pone syncUI) */
   #btnBack, #btnPause { display: none; }
   body.canback #btnBack  { display: flex; }
@@ -106,7 +115,7 @@
   <canvas id="c"></canvas>
   <div id="hint">tocá una opción del menú · en partido: ↑/↓ (W/S en 2P)</div>
 
-  <!-- UI de esquina (estilo CrazyTanks), de afuera hacia adentro: salir · info · pantalla · atrás · pausa -->
+  <!-- UI de esquina (estilo CrazyTanks), de afuera hacia adentro: salir · info · pantalla · sonido · atrás · pausa -->
   <button class="cbtn" id="btnExit" aria-label="salir" title="Salir">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
@@ -115,6 +124,9 @@
   </button>
   <button class="cbtn" id="btnFull" aria-label="pantalla completa" title="Pantalla completa">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+  </button>
+  <button class="cbtn" id="btnMute" aria-label="sonido" title="Sonido">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
   </button>
   <button class="cbtn" id="btnBack" aria-label="atrás" title="Atrás / salir al menú">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg>
@@ -181,6 +193,10 @@
   const FIRE_STREAK     = 2;       // racha para prenderse fuego
   const SERVE_DELAY     = 0.7;     // pausa (s) antes de lanzar el saque
   const RALLY_TIERS     = [6, 12, 20];  // devoluciones seguidas que disparan un "hito" de peloteo (flash + cartel)
+  // Escalera del peloteo (semitonos sobre la tónica): pentatónica menor, dos octavas. La devolución
+  // número N suena en RALLY_SCALE[N-1] → la escalada de BOUNCE_ACCEL que VES es la que ESCUCHÁS.
+  // Sólo sonido: no la lee ni la toca nada de la física.
+  const RALLY_SCALE     = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22, 24, 27];
 
   // IA (modo 1 jugador) — juega con intención: predice el rebote, se posiciona y "tira" angulando
   // la pelota lejos del rival. Buena pero no perfecta (error de puntería + despistes ocasionales).
@@ -210,26 +226,28 @@
   };
   // Contrincantes (modo 1 jugador): color de la paleta + overrides de IA → cada uno juega distinto.
   // glow = color del resplandor (para el negro, que es oscuro, usa un gris claro para que se vea).
+  // tone/jitter son SÓLO de audio: semitonos que transponen la escalera del peloteo cuando devuelve
+  // ESTE rival, y desafinación de su voz. No tocan nada de la IA (ver el bloque AUDIO).
   const OPPONENTS = [
     // Magenta — equilibrada (la de siempre): sin overrides.
-    { name: 'Magenta', letter: 'M', col: [255, 95, 205], glow: [255, 95, 205], ai: {} },
+    { name: 'Magenta', letter: 'M', col: [255, 95, 205], glow: [255, 95, 205], tone: 0, ai: {} },
     // Verde — agresiva/tryhard: rápida, precisa, reacciona temprano, angula mucho, casi no se despista ni duerme.
-    { name: 'Verde', letter: 'V', col: [80, 230, 140], glow: [90, 245, 150], ai: {
+    { name: 'Verde', letter: 'V', col: [80, 230, 140], glow: [90, 245, 150], tone: 4, ai: {
       SPEED_MULT: 1.08, ERROR_FRAC: 0.025, REACT_FRAC: 0.92, MIX_CHANCE: 0.45, FLICK_TIME: 0.22,
       SMART_MIN: 4, SMART_MAX: 7, DUMB_MIN: 0.4, DUMB_MAX: 0.9, DUMB_SPEED: 0.7,
       AWAKE_MIN: 8, AWAKE_MAX: 14, SLEEP_MIN: 0.4, SLEEP_MAX: 0.9 } },
     // Negro — el muro/defensivo: muy precisa posicionándose pero casi nunca angula (devuelve plano), no duerme.
-    { name: 'Negro', letter: 'N', col: [58, 60, 76], glow: [185, 195, 215], ai: {
+    { name: 'Negro', letter: 'N', col: [58, 60, 76], glow: [185, 195, 215], tone: -7, ai: {
       SPEED_MULT: 1.05, ERROR_FRAC: 0.02, REACT_FRAC: 0.95, MIX_CHANCE: 0.05, FLICK_TIME: 0.10, AIM_FRAC: 0.18,
       SMART_MIN: 6, SMART_MAX: 10, DUMB_MIN: 0.3, DUMB_MAX: 0.6, DUMB_SPEED: 0.8, IDLE_AMP: 0.02,
       AWAKE_MIN: 14, AWAKE_MAX: 22, SLEEP_MIN: 0.3, SLEEP_MAX: 0.6, FIREPROOF: true } },
     // Amarillo — errático/payaso: tira para cualquier lado, mucho vaivén, se despista y duerme seguido. Fácil/gracioso.
-    { name: 'Amarillo', letter: 'A', col: [255, 225, 70], glow: [255, 235, 90], ai: {
+    { name: 'Amarillo', letter: 'A', col: [255, 225, 70], glow: [255, 235, 90], tone: 2, jitter: 0.35, ai: {
       SPEED_MULT: 0.95, ERROR_FRAC: 0.09, MIX_CHANCE: 0.7, IDLE_AMP: 0.09, IDLE_FREQ: 3.2,
       SMART_MIN: 1.5, SMART_MAX: 3, DUMB_MIN: 1.2, DUMB_MAX: 2.6, DUMB_SPEED: 0.45,
       AWAKE_MIN: 2.5, AWAKE_MAX: 5, SLEEP_MIN: 1.0, SLEEP_MAX: 2.2, PADDLE_H_MULT: 0.85 } },
     // Celeste — principiante tranquilo: lenta, reacciona tarde, error grande, dead-zone amplia. Fácil.
-    { name: 'Celeste', letter: 'C', col: [120, 210, 255], glow: [140, 220, 255], ai: {
+    { name: 'Celeste', letter: 'C', col: [120, 210, 255], glow: [140, 220, 255], tone: -3, ai: {
       SPEED_MULT: 0.85, ERROR_FRAC: 0.11, REACT_FRAC: 0.62, FLICK_TIME: 0.12, MIX_CHANCE: 0.2,
       DUMB_DEADZONE: 0.16, DUMB_SPEED: 0.4, SMART_MIN: 2, SMART_MAX: 4, DUMB_MIN: 1.0, DUMB_MAX: 2.2,
       AWAKE_MIN: 3.5, AWAKE_MAX: 7, SLEEP_MIN: 1.0, SLEEP_MAX: 2.0, PADDLE_H_MULT: 0.9 } },
@@ -1923,6 +1941,306 @@
     ctx.closePath();
   }
 
+  // ════════════════════════════════════════════════════════════════════════════════════
+  //  AUDIO — síntesis Web Audio, cero archivos, cero dependencias.
+  //
+  //  IDENTIDAD. Acá no hay madera ni goma: el mundo está hecho de luz cargada y vidrio. El fondo es
+  //  un degradé casi negro, TODO se dibuja con shadowBlur y las partículas van en 'lighter' — no hay
+  //  una sola superficie mate en pantalla. Por eso ningún impacto puede ser un golpe: es una
+  //  DESCARGA, un transitorio vidrioso de 20-30 ms con una cola resonante AFINADA, nunca un thud.
+  //  El único material con materia real en todo el juego es el fuego (brasas, llamas corriendo por
+  //  los bordes y la red), así que el fuego es el único timbre con ruido largo: prenderse fuego es
+  //  el vidrio volviéndose combustión. Ese contraste limpio/sucio es el eje vertical de la paleta.
+  //
+  //  El eje horizontal es cromático, porque el juego lo es: cian contra el color del rival, y cada
+  //  contrincante suena en su propia altura (OPPONENTS.tone) — Verde arriba y punzante, Negro siete
+  //  semitonos abajo y sin brillo porque es el muro, Amarillo desafinado porque es el payaso.
+  //
+  //  Y arriba de todo, la idea que hace a ESTE juego y no a otro: el peloteo sube por la pentatónica
+  //  menor de RALLY_SCALE golpe a golpe siguiendo `rallyHits`. La aceleración que ves (BOUNCE_ACCEL
+  //  1.05 por rebote) es exactamente la que escuchás, y cuando fallás la escala se derrumba dentro
+  //  del sonido del punto. La cancha es un instrumento afinado y la pelota es la púa.
+  //
+  //  JERARQUÍA DE MEZCLA (bajo, para el parlante de un teléfono):
+  //    principal  0.05-0.09 → devolución de paleta, punto, fin de partido, escudo, encendido
+  //    secundario 0.025-0.05 → pared, ladrillo, tokens, hito de peloteo, saque, regeneración
+  //    interfaz   0.028-0.05 → menú, pausa, atrás, arranque
+  //    ambiente   — no hay: la música de este juego ES la escalera del peloteo (ver CLAUDE.md)
+  // ════════════════════════════════════════════════════════════════════════════════════
+  let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
+  const voiceLast = {};                                // cooldown por voz (ms de performance.now)
+  const SFX_BASE = 392;                                // sol4 — la tónica: la voz del jugador (paleta derecha, cian)
+
+  function audioResume() {
+    if (!AC) {
+      try {
+        AC = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = AC.createGain();
+        masterGain.gain.value = muted ? 0 : 1;
+        masterGain.connect(AC.destination);
+      } catch (e) { return; }                          // sin audio el juego SIGUE andando
+    }
+    if (AC.state === 'suspended') AC.resume().catch(() => {});
+  }
+
+  // La única compuerta. El techo por frame es 10 y no los 4 del patrón, y es una medición: casi
+  // todos los sonidos de acá son de dos nodos (cola afinada + transitorio de ruido) y un punto puede
+  // encadenar legítimamente punto (4) + encendido (2) + saque (2) = 8 en el mismo frame. Con 4 se
+  // comía el cue del saque sin avisar. Lo que corta las ráfagas de verdad son los cooldowns por voz.
+  function ac() { return AC && AC.state === 'running' && sndThisFrame < 10; }
+
+  // Un oscilador desechable por disparo: es la cola AFINADA de la descarga.
+  function note(f0, f1, t0, dur, type, vol, jitter) {
+    const a = AC; if (!a) return;
+    sndThisFrame++;
+    const o = a.createOscillator(), g = a.createGain();
+    const j = jitter === 0 ? 1 : 1 + (Math.random() - 0.5) * (jitter === undefined ? 0.12 : jitter);
+    const t = a.currentTime + (t0 || 0);
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(Math.max(20, f0 * j), t);
+    // exponentialRamp NUNCA a 0 ni desde 0 (lo dice la spec): de ahí los Math.max.
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * j), t + dur);
+    g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(masterGain);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  // Los ruidos largos (encendidos, regeneración: ≥0.15 s) se cachean por duración; los cortos se
+  // generan al vuelo, que además les da variación. Las FUENTES son de un solo uso, los buffers no.
+  const noiseBufs = {};
+  function noiseBuf(dur) {
+    const key = Math.round(dur * 1000);
+    if (dur >= 0.15 && noiseBufs[key]) return noiseBufs[key];
+    const n = Math.max(1, Math.floor(AC.sampleRate * dur));
+    const buf = AC.createBuffer(1, n, AC.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    if (dur >= 0.15) noiseBufs[key] = buf;
+    return buf;
+  }
+
+  // Ruido filtrado con el filtro FIJO: el transitorio de contacto del vidrio.
+  function noiseHit(dur, vol, freq, q, type) {
+    const a = AC; if (!a) return;
+    sndThisFrame++;
+    const src = a.createBufferSource(); src.buffer = noiseBuf(dur);
+    const bp = a.createBiquadFilter(); bp.type = type || 'bandpass';
+    bp.frequency.value = freq || 900; bp.Q.value = q || 1.1;
+    const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol), a.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + dur);
+    src.connect(bp); bp.connect(g); g.connect(masterGain);
+    src.start(); src.stop(a.currentTime + dur + 0.02);
+  }
+
+  // Igual que noiseHit pero BARRIENDO el filtro: es el fuego. Un encendido no es un impacto, es una
+  // línea de gas que prende — y eso en el espectro es un barrido, no un filtro quieto.
+  function noiseSweep(dur, vol, f0, f1, q) {
+    const a = AC; if (!a) return;
+    sndThisFrame++;
+    const src = a.createBufferSource(); src.buffer = noiseBuf(dur);
+    const bp = a.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.value = Math.max(20, f0); bp.Q.value = q || 0.8;
+    bp.frequency.exponentialRampToValueAtTime(Math.max(20, f1), a.currentTime + dur);
+    const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol), a.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + dur);
+    src.connect(bp); bp.connect(g); g.connect(masterGain);
+    src.start(); src.stop(a.currentTime + dur + 0.02);
+  }
+
+  function voice(name, cdMs, fn) {
+    if (!ac()) return;
+    const now = performance.now();
+    if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
+    voiceLast[name] = now; fn();
+  }
+
+  // La voz del rival: en 2P la izquierda es humana y va cinco semitonos abajo (otra persona, no otro
+  // personaje); en 1P/Desafío/Ladrillos toma el `tone` del contrincante elegido.
+  const leftTone   = () => twoPlayers ? -5 : (OPPONENTS[oppIdx].tone || 0);
+  const leftJitter = () => twoPlayers ? 0.08 : (OPPONENTS[oppIdx].jitter || 0.08);
+
+  const sfx = {
+    // ── PRINCIPAL ──
+    // La devolución. `step` es el peldaño de la escalera (rallyHits-1 en modo normal; 0 en ladrillos,
+    // donde no hay peloteo que contar). `spd` es |bvx|/vxMax: una pelota lenta suena más floja.
+    hit(p, isRight, spd, step) {
+      voice('hit', 45, () => {
+        const semi = isRight ? 0 : leftTone();
+        const jit  = isRight ? 0.08 : leftJitter();
+        const f = SFX_BASE * Math.pow(2, (semi + RALLY_SCALE[clampN(step | 0, 0, 11)]) / 12);
+        const s = clampN(spd || 0, 0, 1);
+        if (p.onFire) {                                 // mismo golpe, otra consecuencia: el vidrio arde
+          note(f, f * 0.98, 0, 0.11, 'sawtooth', 0.086 * (0.55 + 0.45 * s), jit);
+          noiseHit(0.09, 0.045, 1400, 0.9, 'bandpass');
+        } else {
+          note(f, f * 0.98, 0, 0.085, 'triangle', 0.075 * (0.55 + 0.45 * s), jit);
+          noiseHit(0.022, 0.012 + 0.02 * s, 2600, 2.4, 'bandpass');
+        }
+      });
+    },
+    // El punto: la escalera se derrumba (o se resuelve) DESDE el peldaño al que había llegado.
+    // `doused` = la cancha estaba en llamas y este punto la apaga (vapor, colgado, no voz aparte).
+    point(scorer, rally, doused) {
+      if (!ac()) return;
+      const top = SFX_BASE * Math.pow(2, RALLY_SCALE[clampN((rally | 0) - 1, 0, 11)] / 12);
+      if (scorer === 1) {                               // marcaste vos: resuelve hacia arriba
+        note(top,        top,        0,    0.13, 'triangle', 0.080, 0);
+        note(top * 1.26, top * 1.26, 0.08, 0.13, 'triangle', 0.075, 0);
+        note(top * 1.5,  top * 1.5,  0.16, 0.20, 'triangle', 0.070, 0);
+      } else {                                          // te marcaron: cae, más lenta y más apagada
+        note(top,        top,        0,    0.18, 'sine', 0.070, 0);
+        note(top * 0.8,  top * 0.8,  0.10, 0.18, 'sine', 0.065, 0);
+        note(top * 0.63, top * 0.63, 0.22, 0.26, 'sine', 0.060, 0);
+      }
+      if (doused) noiseSweep(0.26, 0.03, 1400, 260, 0.8);   // vapor: los bordes y la red se apagan
+    },
+    // Prenderse fuego (racha). Dos versiones porque importa quién: la tuya sube (buena noticia), la
+    // del rival es más grave y más lenta (amenaza).
+    fireUp(isRight) {
+      if (!ac()) return;
+      if (isRight) { noiseSweep(0.34, 0.055, 420, 2600, 1.1); note(110, 330, 0, 0.30, 'sawtooth', 0.045); }
+      else         { noiseSweep(0.34, 0.050, 300, 1500, 1.0); note(82,  165, 0, 0.36, 'sawtooth', 0.040); }
+    },
+    // Se te vence el power de fuego (ladrillos): un temporizador que muere solo, sin aviso en pantalla.
+    fireOut() { if (!ac()) return; note(330, 110, 0, 0.30, 'sawtooth', 0.035); noiseSweep(0.22, 0.022, 900, 200, 0.8); },
+    // El escudo absorbe un gol: el único evento que CANCELA otro. Es el sonido más agudo del juego a
+    // propósito — nada más suena así, o sea que no se puede confundir con un gol.
+    shield() { if (!ac()) return; noiseHit(0.12, 0.06, 2200, 1.0, 'bandpass'); note(1174, 294, 0, 0.30, 'triangle', 0.06); },
+    // Fin de partido: el único momento que pide una frase, no un efecto.
+    over(win, record, t0) {
+      if (!ac()) return;
+      const d = t0 || 0;
+      if (win) {
+        note(392, 392, d,        0.16, 'triangle', 0.070, 0);
+        note(523, 523, d + 0.09, 0.16, 'triangle', 0.070, 0);
+        note(659, 659, d + 0.18, 0.16, 'triangle', 0.070, 0);
+        note(784, 784, d + 0.30, 0.35, 'triangle', 0.070, 0);
+      } else {
+        note(392, 392, d,        0.50, 'sine', 0.055, 0);
+        note(330, 330, d + 0.14, 0.50, 'sine', 0.050, 0);
+        note(262, 262, d + 0.30, 0.50, 'sine', 0.045, 0);
+      }
+      if (record) {                                     // récord nuevo: campanitas encima de la frase
+        note(1568, 1568, d + 0.45, 0.12, 'sine', 0.035, 0);
+        note(2093, 2093, d + 0.55, 0.12, 'sine', 0.030, 0);
+        note(2349, 2349, d + 0.65, 0.20, 'sine', 0.030, 0);
+      }
+    },
+    // Peldaño del Desafío: un mecanismo que avanza un diente. `last` = venciste a los cinco.
+    advance(last) {
+      if (!ac()) return;
+      const m = last ? 2 : 1;                           // la vuelta completa, una octava arriba
+      note(660 * m,  990 * m, 0,    0.12, 'square', 0.040, 0);
+      note(990 * m, 1320 * m, 0.13, 0.20, 'square', 0.045, 0);
+      if (last) note(1320 * m, 1980 * m, 0.30, 0.30, 'square', 0.040, 0);
+    },
+
+    // ── SECUNDARIO ──
+    // Techo/piso: tick seco SIN escalera. Las paredes son geometría fija y siempre suenan igual; ese
+    // contraste es justamente lo que hace legible la escalera del peloteo.
+    wall() { voice('wall', 50, () => { noiseHit(0.03, 0.04, 1050, 3.2, 'bandpass'); note(196, 150, 0, 0.055, 'sine', 0.045); }); },
+    // Un borde o la red se prenden fuego: cambio de estado del MUNDO, no un rebote más.
+    ignite(kind) {
+      if (!ac()) return;
+      if (kind === 'net') { noiseSweep(0.45, 0.055, 480, 3000, 0.7); note(110, 330, 0, 0.42, 'sawtooth', 0.040); }
+      else                { noiseSweep(0.38, 0.050, 520, 2600, 0.7); note(90,  260, 0, 0.35, 'sawtooth', 0.035); }
+    },
+    // Saque: los 0.7 s de SERVE_DELAY son un silencio que el juego ya tenía reservado y en el que no
+    // pasa NADA. El cue va al final de esa pausa (t0 0.45/0.55), o sea que anuncia la salida en vez
+    // de pisarse con el sonido del punto que la provocó. Sin jitter: el saque es el metrónomo.
+    serve(v) {
+      voice('serve', 200, () => {
+        const g = v == null ? 1 : v;
+        note(523, 523, 0.45, 0.05, 'square', 0.035 * g, 0);
+        note(784, 784, 0.55, 0.07, 'square', 0.045 * g, 0);
+      });
+    },
+    // Hito de peloteo (6/12/20): va MONTADO sobre el golpe, no en vez de él, y por eso es agudo y
+    // flojo. El cartel "RALLY xN" se había sacado a propósito; una campanita no te pide leer nada.
+    tier() { voice('tier', 800, () => { note(1046, 1046, 0, 0.18, 'sine', 0.045, 0); note(1568, 1568, 0.06, 0.18, 'sine', 0.040, 0); }); },
+    // Romper un ladrillo. La altura sale de la FILA (k.y): bajar una columna toca una escala
+    // descendente, gratis. Cooldown duro: medido, el peor caso son ~56 roturas/s.
+    brick(y, power) {
+      voice('brick', 60, () => {
+        const row = clampN(Math.round((y / (H || 1)) * 11), 0, 11);
+        const f = 300 * Math.pow(2, (11 - row) / 12);
+        noiseHit(0.055, 0.045, 3200, 1.5, 'bandpass');
+        if (power) { note(f, f * 1.6, 0, 0.16, 'square', 0.050); note(f * 1.5, f * 1.5, 0.04, 0.12, 'square', 0.040); }
+        else         note(f, f * 1.6, 0, 0.09, 'triangle', 0.040);
+      });
+    },
+    // Aparece un token: tiene 0.45 s de windup explícito en el código durante los que está quieto.
+    dropSpawn() { voice('dropSpawn', 120, () => note(660, 990, 0, 0.18, 'sine', 0.035)); },
+    // Atrapar un token: cuatro timbres, uno por poder, elegidos para que cada uno DESCRIBA su efecto.
+    drop(type) {
+      voice('drop', 80, () => {
+        if (type === 'fire')       { noiseSweep(0.18, 0.05, 500, 2200, 1.2); note(165, 495, 0, 0.18, 'sawtooth', 0.040); }
+        else if (type === 'speed')   note(330, 1320, 0, 0.16, 'sawtooth', 0.045);                 // glide hacia arriba
+        else if (type === 'ball')  { note(880, 1760, 0, 0.07, 'square', 0.050); note(1320, 1320, 0.06, 0.05, 'square', 0.040); }
+        else                       { note(147, 294, 0, 0.45, 'sine', 0.045); note(588, 588, 0.05, 0.40, 'triangle', 0.025); }  // escudo: swell + campana
+      });
+    },
+    // La pared entera se regenera: 18-21 ladrillos de golpe. Swell de construcción, grave y ascendente.
+    regen() { if (!ac()) return; note(65, 196, 0, 0.55, 'sawtooth', 0.035); noiseSweep(0.50, 0.025, 200, 900, 0.7); },
+    // Contrarreloj, últimos 10 s: el reloj ya se pone rojo, pero está arriba y vos mirás ocho bolas.
+    tick(hot) { voice('tick', 300, () => note(1200, 1200, 0, 0.035, 'square', hot ? 0.05 : 0.035, 0)); },
+    // Se acabó el reloj: bocina de cancha (dos osciladores desafinados 1 Hz = batido), no un final musical.
+    horn() { if (!ac()) return; note(160, 110, 0, 0.70, 'sawtooth', 0.070, 0); note(161, 111, 0, 0.70, 'sawtooth', 0.050, 0); },
+    // Preescucha del rival al cambiar la fila "Rival": elegís contrincante y escuchás su voz.
+    rivalTone() {
+      if (!ac()) return;
+      note(SFX_BASE * Math.pow(2, (OPPONENTS[oppIdx].tone || 0) / 12), 0, 0, 0.12, 'triangle', 0.05, OPPONENTS[oppIdx].jitter || 0);
+    },
+
+    // ── INTERFAZ ── un menú de canvas no tiene :hover ni feedback táctil: el sonido es la única
+    // confirmación de que el toque registró. Todo acá va con jitter 0 EXPLÍCITO: el juego desafina,
+    // la interfaz no, y ese contraste es lo que los separa.
+    ui(kind, dir) {
+      voice('ui', 40, () => {
+        if (kind === 'move')          note(1046, 1046, 0, 0.028, 'square', 0.028, 0);
+        else if (kind === 'cycle')    note(dir > 0 ? 1174 : 880, 0, 0, 0.030, 'square', 0.030, 0);
+        else if (kind === 'start')  { note(392, 392, 0, 0.10, 'square', 0.045, 0); note(523, 523, 0.07, 0.10, 'square', 0.045, 0); note(784, 784, 0.14, 0.12, 'square', 0.045, 0); }
+        else if (kind === 'back')   { note(523, 523, 0, 0.08, 'square', 0.035, 0); note(349, 349, 0.06, 0.10, 'square', 0.035, 0); }
+        else if (kind === 'pause')    note(440, 220, 0, 0.14, 'sine', 0.050, 0);
+        else if (kind === 'resume')   note(220, 440, 0, 0.14, 'sine', 0.050, 0);
+        else if (kind === 'confirm')  note(330, 330, 0, 0.09, 'triangle', 0.040, 0);
+      });
+    },
+  };
+
+  // Desbloqueo en el PRIMER gesto, a nivel window y en fase de captura. Este juego vive en un iframe
+  // del Arcade (EMBEDDED) y el gesto que abrió el tile ocurrió en el DOCUMENTO PADRE, que no cuenta
+  // acá. Lo que salva: arranca en state='menu' y no hay forma de entrar a un partido sin un
+  // pointerdown o un keydown en ESTE documento.
+  window.addEventListener('pointerdown', audioResume, true);
+  window.addEventListener('keydown', audioResume, true);
+
+  // Pestaña al fondo. Todo el sistema es one-shot, así que no hay ningún drone que se escape, pero
+  // el AudioContext sí sigue vivo: los juegos corren en iframes del MISMO renderer del Arcade y un
+  // contexto corriendo en un iframe de fondo es memoria y CPU que ese renderer ya tiene contadas.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (AC) AC.suspend().catch(() => {}); }
+    else audioResume();
+  });
+
+  // Botón de mute. Nunca se oculta por clase de body: se tiene que poder mutear desde el menú.
+  const btnMute = document.getElementById('btnMute');
+  if (btnMute) {
+    try { muted = localStorage.getItem('pong.muted') === '1'; } catch (e) {}
+    btnMute.classList.toggle('muted', muted);
+    btnMute.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      muted = !muted;
+      // cancelScheduledValues no es adorno: con rampas pendientes sobre el master, poner .value a
+      // mano no hace nada.
+      if (masterGain && AC) { masterGain.gain.cancelScheduledValues(AC.currentTime); masterGain.gain.value = muted ? 0 : 1; }
+      btnMute.classList.toggle('muted', muted);
+      try { localStorage.setItem('pong.muted', muted ? '1' : '0'); } catch (e2) {}
+      audioResume();                                   // el toque de "desmutear" también sirve de gesto
+    });
+  }
+
   // ── LOOP ── timestep fijo + interpolación (independiente del refresh, sin saltos)
   const FIXED_DT = 1 / 120;                            // física a 120 Hz constante
   let lastT = performance.now();
@@ -1936,6 +2254,10 @@
     if (ctxLost) { lastT = now; requestAnimationFrame(loop); return; }
     const dt = Math.min(0.1, (now - lastT) / 1000);    // hasta 0.1s de catch-up tras un hipo
     lastT = now;
+    // OBLIGATORIO y acá arriba. Sin este reseteo `sndThisFrame` sólo sube: `ac()` corta en 10 y el
+    // juego se queda mudo PARA SIEMPRE a los diez sonidos, sin tirar un solo error. Medido con el
+    // arnés antes del arreglo: el contador terminó en 13 y los golpes posteriores no sonaron.
+    sndThisFrame = 0;
     dtSmoothed = dtSmoothed * 0.9 + dt * 0.1;
 
     FIRE = `rgb(255,${rndi(128, 255)},0)`;

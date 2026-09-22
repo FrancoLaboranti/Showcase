@@ -39,7 +39,7 @@
     display: flex; gap: 8px;
   }
   #corner button { align-self: center; margin: 0; }                              /* normaliza el align-self/margin del shell */
-  #btnPause, #btnMenu {
+  #btnPause, #btnMenu, #btnMute {
     width: 30px; height: 30px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.16);
     background: rgba(255,255,255,0.04);
@@ -48,10 +48,14 @@
     cursor: pointer; touch-action: none; padding: 0;
     transition: background 0.1s, transform 0.08s;
   }
-  #btnPause svg, #btnMenu svg { display: block; width: 15px; height: 15px; pointer-events: none; }
-  #btnPause:active, #btnMenu:active { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.6); color: #fff; transform: scale(0.9); }
+  #btnPause svg, #btnMenu svg, #btnMute svg { display: block; width: 15px; height: 15px; pointer-events: none; }
+  #btnPause:active, #btnMenu:active, #btnMute:active { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.6); color: #fff; transform: scale(0.9); }
   #btnPause.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.6); color: #fff; }
-  /* pausa + menu sólo en juego (no en el menú) */
+  #btnMute .ic-off { display: none; }
+  #btnMute.muted .ic-on { display: none; }
+  #btnMute.muted .ic-off { display: block; }
+  /* pausa + menu sólo en juego (no en el menú). El mute NO va acá a propósito: el jugador lo busca
+     ANTES de arrancar, que es justo cuando body no tiene .playing. */
   body:not(.playing) #btnPause, body:not(.playing) #btnMenu { display: none; }
   #fpsOverlay {
     position: absolute;
@@ -68,6 +72,9 @@
   <div id="hint">en juego: tocá la mitad izq/der de la pantalla para doblar · la cámara te sigue</div>
   <!-- Orden como Pong: ⏸ pausa · ⌫ menu · ⛶ pantalla · ⓘ info · ✕ salir -->
   <div id="corner">
+    <button id="btnMute" aria-label="sonido" title="Sonido">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
+    </button>
     <button id="btnPause" aria-label="pausa" title="Pausa">
       <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
     </button>
@@ -429,8 +436,8 @@
       this.lastX = null; this.lastY = null;
     }
 
-    turnLeft()  { this.direction = (this.direction - 1 + 4) % 4; }
-    turnRight() { this.direction = (this.direction + 1) % 4; }
+    turnLeft()  { this.direction = (this.direction - 1 + 4) % 4; if (this.id === 0) sfx.turn(); }
+    turnRight() { this.direction = (this.direction + 1) % 4;     if (this.id === 0) sfx.turn(); }
 
     process(dt) {
       const d = this.directions;
@@ -482,7 +489,11 @@
         const moveDist = Math.hypot(d[dir][0], d[dir][1]) * dt * SPEED_MULT;
         const reach = moveDist + 2;
         for (let s = 2; s <= reach; s += 1) {
-          if (occ(this.x + ux * s, this.y + uy * s)) { this.alive = false; return; }
+          if (occ(this.x + ux * s, this.y + uy * s)) {                            // el ÚNICO punto donde alive pasa a false
+            this.alive = false;
+            if (this.id === 0) sfx.derezYou(); else sfx.derezAI(this.id);
+            return;
+          }
         }
         this.x += d[dir][0] * dt * SPEED_MULT;
         this.y += d[dir][1] * dt * SPEED_MULT;
@@ -568,6 +579,153 @@
   };
   let players = [];
 
+  // ════════════════ AUDIO ════════════════
+  let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
+  try { muted = localStorage.getItem('tronv2Muted') === '1'; } catch (e) {}
+  const voiceLast = {};
+  const MAX_VOICES = 5;
+  // La altura es la identidad del programa, igual que el color. TU sos el primero.
+  const NOTE_OF = [220, 277.18, 329.63, 392];
+
+  let engA = null, engB = null, engFilt = null, engGain = null;
+  let engLastG = -1, engLastF = -1, engLastP = -1, engAcc = 0;
+
+  function audioResume() {
+    if (!AC) {
+      try {
+        AC = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = AC.createGain();
+        masterGain.gain.value = muted ? 0 : 1;
+        masterGain.connect(AC.destination);
+        buildEngine();
+      } catch (e) { AC = null; return; }
+    }
+    if (AC.state === 'suspended') AC.resume().catch(() => {});
+  }
+  function acOk() { return !!(AC && masterGain && AC.state === 'running'); }
+  function ac() { return acOk() && sndThisFrame < MAX_VOICES; }
+
+  function note(f0, f1, t0, dur, type, vol) {
+    const a = AC; if (!a) return;
+    const o = a.createOscillator(), g = a.createGain(), t = a.currentTime + t0;
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(Math.max(20, f0), t);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(masterGain);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  // El UNICO ruido de todo el juego. Si aparece, algo se desintegro.
+  function noiseHit(t0, dur, vol, freq, q) {
+    const a = AC; if (!a) return;
+    const n = Math.floor(a.sampleRate * dur);
+    const buf = a.createBuffer(1, Math.max(1, n), a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = a.createBufferSource(); src.buffer = buf;
+    const bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = q;
+    const t = a.currentTime + t0;
+    const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(bp); bp.connect(g); g.connect(masterGain);
+    src.start(t); src.stop(t + dur + 0.02);
+  }
+  function voice(name, cdMs, fn) {
+    if (!ac()) return;
+    const now = performance.now();
+    if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
+    voiceLast[name] = now; sndThisFrame++;
+    try { fn(); } catch (e) {}
+  }
+
+  // ── El motor (continuo) ──
+  // Un solo grafo por sesion: se modula, no se recrea. Dos sierras desafinadas 6 cents por un
+  // lowpass resonante. La altura es la del PROGRAMA del jugador, transpuesta dos octavas abajo.
+  function buildEngine() {
+    engFilt = AC.createBiquadFilter(); engFilt.type = 'lowpass';
+    engFilt.frequency.value = 380; engFilt.Q.value = 5;
+    engGain = AC.createGain(); engGain.gain.value = 0;
+    engFilt.connect(engGain); engGain.connect(masterGain);
+    engA = AC.createOscillator(); engA.type = 'sawtooth'; engA.frequency.value = NOTE_OF[0] / 4;
+    engB = AC.createOscillator(); engB.type = 'sawtooth'; engB.frequency.value = NOTE_OF[0] / 4; engB.detune.value = 6;
+    engA.connect(engFilt); engB.connect(engFilt);
+    engA.start(); engB.start();
+  }
+  function engSet(g, f, p, t) {
+    try {
+      if (Math.abs(g - engLastG) > 0.0005) { engGain.gain.setTargetAtTime(g, t, 0.07); engLastG = g; }
+      if (Math.abs(f - engLastF) > 8)      { engFilt.frequency.setTargetAtTime(f, t, 0.05); engLastF = f; }
+      if (Math.abs(p - engLastP) > 0.4)    { engA.frequency.setTargetAtTime(p, t, 0.05);
+                                             engB.frequency.setTargetAtTime(p, t, 0.05); engLastP = p; }
+    } catch (e) {}
+  }
+  // El escalon de altura por direccion es lo que hace que un giro se OIGA sin necesidad de un
+  // blip aparte: el motor salta de nota, que es exactamente lo que cambio.
+  const DIR_STEP = [1, 1.122, 1.26, 1.335];       // 0 / +2 / +4 / +5 semitonos
+  function engineUpdate(dt) {
+    if (!acOk() || !engGain) return;
+    engAcc += dt;
+    if (engAcc < 0.05) return;                    // 20 Hz: reescribir 3 AudioParam por frame no aporta
+    engAcc = 0;
+    const t = AC.currentTime;
+    const p0 = players.find(p => p.id === 0);
+    if (gh.menu || gh.paused || !p0 || !p0.alive || p0.stop) { engSet(0, 380, NOTE_OF[0] / 4, t); return; }
+    // Mismo escaneo hacia adelante que ya usa el juego: cuanto queda libre antes de chocar.
+    // El vector de direccion es una propiedad del jugador (`this.directions`), no un global.
+    const d = p0.directions[p0.direction], ux = Math.sign(d[0]), uy = Math.sign(d[1]);
+    let free = 140;
+    for (let s = 4; s <= 140; s += 4) if (occ(p0.x + ux * s, p0.y + uy * s)) { free = s; break; }
+    const tens = 1 - free / 140;                  // 0 = campo abierto, 1 = estela pegada al frente
+    engSet(0.022 + 0.018 * tens, 380 + 1500 * tens,
+           (NOTE_OF[0] / 4) * DIR_STEP[p0.direction] * (1 + 0.12 * tens), t);
+  }
+  // Bajar a 0, nunca parar: un oscilador parado no se puede volver a arrancar y cortar en seco clickea.
+  function engineOff() {
+    if (!acOk() || !engGain) return;
+    try { engGain.gain.setTargetAtTime(0, AC.currentTime, 0.12); engLastG = 0; } catch (e) {}
+  }
+
+  const sfx = {
+    // El giro NO lleva voz propia: el motor ya salto de nota. Lo unico que se agrega es el click
+    // del rele, muy corto y muy al fondo, para que el gesto tenga un borde.
+    turn() { voice('turn', 70, () => note(1320, 1320, 0, 0.018, 'square', 0.022)); },
+    // De-rez del jugador: el motor se va y queda la desintegracion. El unico ruido del juego.
+    derezYou() {
+      voice('derez', 250, () => {
+        engineOff();
+        note(NOTE_OF[0], 55, 0, 0.55, 'sawtooth', 0.075);
+        noiseHit(0.02, 0.38, 0.055, 1800, 0.8);
+        noiseHit(0.10, 0.30, 0.035, 600, 0.6);
+      });
+    },
+    // De-rez de una IA: misma familia, comprimida y FIRMADA con la altura de ese programa, asi se
+    // sabe cual cayo sin mirar el minimapa.
+    derezAI(id) {
+      const f = NOTE_OF[id] || 220;
+      voice('derezAI', 90, () => {
+        note(f, f * 0.5, 0, 0.10, 'square', 0.035);
+        note(f * 0.5, f * 0.25, 0.09, 0.12, 'square', 0.028);
+        noiseHit(0.02, 0.10, 0.022, 1400, 1.2);
+      });
+    },
+    // Arranque: el boot de tres notas y el motor entrando despues.
+    boot() { voice('boot', 400, () => [165, 247, 330].forEach((f, i) => note(f, 0, i * 0.07, 0.09, 'square', 0.06))); },
+    roundWon()  { voice('round', 400, () => [220, 330, 440].forEach((f, i) => note(f, 0, 0.25 + i * 0.09, 0.22, 'triangle', 0.065))); },
+    roundLost() { voice('round', 400, () => { note(196, 0, 0.30, 0.26, 'sawtooth', 0.06); note(147, 0, 0.42, 0.26, 'sawtooth', 0.06); }); },
+    setWon()  { voice('set', 800, () => { [220, 330, 440, 660].forEach((f, i) => note(f, 0, 0.30 + i * 0.10, i === 3 ? 0.7 : 0.22, 'triangle', 0.075)); note(110, 0, 0.30, 1.1, 'sine', 0.05); }); },
+    setLost() { voice('set', 800, () => { note(220, 110, 0.30, 0.9, 'sawtooth', 0.07); note(165, 35, 0.45, 1.0, 'sine', 0.05); }); },
+    pause(on) { voice('pause', 120, () => note(on ? 110 : 165, 0, 0, 0.08, 'square', 0.05)); },
+    toMenu()  { voice('toMenu', 200, () => { note(330, 0, 0, 0.10, 'square', 0.045); note(165, 0, 0.09, 0.10, 'square', 0.045); }); },
+    // El menu: el VALOR suena a su altura (se oye que subio), el RENGLON es sordo y fijo. Dos
+    // clases distintas de gesto no pueden sonar igual.
+    menuValue(i) { voice('mval', 45, () => note([392, 440, 494][i % 3], 0, 0, 0.05, 'square', 0.05)); },
+    menuRow()    { voice('mrow', 45, () => note(294, 0, 0, 0.035, 'triangle', 0.04)); },
+  };
+
+  window.addEventListener('pointerdown', audioResume, true);
+  window.addEventListener('keydown', audioResume, true);
+
   function aliveCount() { let n = 0; for (const p of players) if (p.alive) n++; return n; }
   function setOver() { return gh.youWins >= gh.targetWins || gh.cpuWins >= gh.targetWins; }
 
@@ -583,6 +741,7 @@
     gh.paused = false;
     gh.roundScored = false;
     updateCamera();
+    sfx.boot();
   }
   // Arranca un SET nuevo (resetea marcador) — desde JUGAR o "revancha".
   function startGame() {
@@ -606,9 +765,15 @@
       const aiAlive = players.filter(p => p.alive && p.id !== 0);                  // si quedó UNA IA viva, la nombramos
       gh.lastWinnerName = aiAlive.length === 1 ? aiAlive[0].name : null;
     }
+    engineOff();
+    // Una ronda es un parcial; el set es el desenlace. Si terminó el set suena SÓLO el del set:
+    // apilar los dos convierte el final en un choque de jingles y no se entiende ninguno.
+    if (setOver())   (youW ? sfx.setWon()   : sfx.setLost());
+    else             (youW ? sfx.roundWon() : sfx.roundLost());
   }
   function advance() { setOver() ? startGame() : nextRound(); }                    // tap/Enter en fin de ronda
   function backToMenu() {
+    engineOff(); sfx.toMenu();
     clearField();
     players = [];
     gh.menu = true;
@@ -619,6 +784,8 @@
   function togglePause() {
     if (gh.menu || gameOver()) return;
     gh.paused = !gh.paused;
+    sfx.pause(gh.paused);
+    if (gh.paused) engineOff();                                                    // en pausa no hay cycle andando
     document.getElementById('btnPause').classList.toggle('on', gh.paused);
   }
 
@@ -643,6 +810,7 @@
   function menuChangeValue(delta) {
     if (gh.currentOption === 0) gh.currentPlayers = (gh.currentPlayers + delta + 3) % 3;
     else gh.bestOfIdx = (gh.bestOfIdx + delta + BEST_OF.length) % BEST_OF.length;
+    sfx.menuValue(gh.currentOption === 0 ? gh.currentPlayers : gh.bestOfIdx);
   }
   function tapMenu(lx, ly) {
     const L = menuLayout(), dir = lx < W * 0.5 ? -1 : 1;
@@ -652,8 +820,8 @@
   }
   function processMenu() {
     if (!gh.keypressed) {
-      if (keys.ArrowUp)    { gh.currentOption = (gh.currentOption - 1 + 2) % 2; gh.keypressed = true; }
-      if (keys.ArrowDown)  { gh.currentOption = (gh.currentOption + 1) % 2;     gh.keypressed = true; }
+      if (keys.ArrowUp)    { gh.currentOption = (gh.currentOption - 1 + 2) % 2; gh.keypressed = true; sfx.menuRow(); }
+      if (keys.ArrowDown)  { gh.currentOption = (gh.currentOption + 1) % 2;     gh.keypressed = true; sfx.menuRow(); }
       if (keys.ArrowLeft)  { menuChangeValue(-1); gh.keypressed = true; }
       if (keys.ArrowRight) { menuChangeValue(+1); gh.keypressed = true; }
       if (keys.Enter) startGame();
@@ -830,6 +998,25 @@
   tappable(document.getElementById('btnPause'), togglePause);
   tappable(document.getElementById('btnMenu'),  () => { if (!gh.menu) backToMenu(); });
 
+  const btnMute = document.getElementById('btnMute');
+  if (btnMute) {
+    btnMute.classList.toggle('muted', muted);
+    btnMute.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      muted = !muted;
+      if (masterGain && AC) { masterGain.gain.cancelScheduledValues(AC.currentTime); masterGain.gain.value = muted ? 0 : 1; }
+      btnMute.classList.toggle('muted', muted);
+      try { localStorage.setItem('tronv2Muted', muted ? '1' : '0'); } catch (e) {}
+      audioResume();
+    });
+  }
+  // El motor es un nodo continuo: con la pestaña oculta el rAF se frena, engineUpdate deja de
+  // correr y el zumbido queda sonando.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { engineOff(); if (AC && AC.state === 'running') AC.suspend().catch(() => {}); }
+    else audioResume();
+  });
+
   // ════════════════ LOOP ════════════════
   // dt medido contra el MISMO reloj (el now que entra) y clampeado — evita el crash de mobile por
   // desfase de épocas entre performance.now() y el timestamp de rAF.
@@ -842,6 +1029,8 @@
     lastT = now;
     if (!(dt >= 0) || dt > 0.05) dt = 0.01;
     T += dt;
+    sndThisFrame = 0;                                                             // OBLIGATORIO: sin esto queda mudo tras MAX_VOICES
+    engineUpdate(dt);
 
     document.body.classList.toggle('playing', !gh.menu);                          // muestra pausa/menu sólo en juego
 

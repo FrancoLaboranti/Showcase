@@ -87,7 +87,24 @@
     z-index: 9;
   }
 
-
+  /* Botón de mute — mismo peso visual que ⛶/ⓘ (30 px, tenue, pegado al borde inferior del bar) y no
+     los 48 px de #ui: el sonido es una preferencia, no uno de los tres controles del reloj. La cuenta
+     de ancho: 30(✕)+160(#ui)+30(🔊)+30(⛶)+30(ⓘ)+4 gaps de 8+32 de padding = 344 px, así que sigue
+     entrando en 360 px (Android típico). Va acá y NO en arcade-shell.css, que lo comparten los 23. */
+  #btnMute {
+    width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; align-self: flex-end; margin-bottom: 6px;
+    border: 1px solid rgba(255,255,255,0.16);
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.45);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0;
+    transition: background 0.1s, transform 0.08s;
+  }
+  #btnMute svg { display: block; width: 14px; height: 14px; pointer-events: none; }
+  #btnMute:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
+  #btnMute .ic-off { display: none; }
+  #btnMute.muted .ic-on { display: none; }
+  #btnMute.muted .ic-off { display: block; }
 
 </style>
 </head>
@@ -107,6 +124,7 @@
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.7 4.5L18 8l-4.3 1.5L12 14l-1.7-4.5L6 8l4.3-1.5z"/><circle cx="18.5" cy="16.5" r="1.6"/><circle cx="6" cy="16" r="1.2"/></svg>
       </button>
     </div>
+    <button id="btnMute" aria-label="sonido" title="Sonido"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg></button>
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
@@ -148,14 +166,17 @@
       pinhole: s(0.078),
     };
   }
+  // `pitch` es la AFINACIÓN del reloj en Hz, y no es adorno: la usan el ping del tic, el ping del
+  // botón de color y (dividida por 4) la campanada de la hora. Cálido = grave, frío = agudo, así
+  // cambiar de color cambia literalmente cómo suena el aparato. Ver la sección AUDIO más abajo.
   const PALETTES = [
-    { name: 'Verde',   base: [0, 255, 0]     },
-    { name: 'Cyan',    base: [0, 220, 255]   },
-    { name: 'Ámbar',   base: [255, 176, 0]   },
-    { name: 'Rojo',    base: [255, 64, 52]   },
-    { name: 'Magenta', base: [255, 64, 200]  },
-    { name: 'Azul',    base: [90, 130, 255]  },
-    { name: 'Blanco',  base: [235, 235, 235] },
+    { name: 'Verde',   base: [0, 255, 0],     pitch: 1800 },
+    { name: 'Cyan',    base: [0, 220, 255],   pitch: 2200 },
+    { name: 'Ámbar',   base: [255, 176, 0],   pitch: 1400 },
+    { name: 'Rojo',    base: [255, 64, 52],   pitch: 1180 },
+    { name: 'Magenta', base: [255, 64, 200],  pitch: 2450 },
+    { name: 'Azul',    base: [90, 130, 255],  pitch: 1560 },
+    { name: 'Blanco',  base: [235, 235, 235], pitch: 2650 },
   ];
   let themeIndex = 0;
   let T = makeTheme(PALETTES[0].base);
@@ -254,12 +275,190 @@
     clearGlow();
   }
 
+  // ════════════════════════════════════════════════════════════════════
+  //  AUDIO — cuarzo y vidrio. Sintetizado, cero archivos, cero dependencias.
+  //
+  //  Este reloj no es de madera ni de latón: es fósforo sobre vidrio negro, un instrumento de
+  //  laboratorio que da la hora. Así que la familia tímbrica es transitorio seco y altísimo
+  //  (bandpass de 2,7 a 5 kHz, de 4 a 14 ms, cero cuerpo) sobre silencio absoluto. Nada de drone,
+  //  nada de ambiente, nada de música. Lo único tonal son campanitas de vidrio inarmónicas y su
+  //  altura la dicta el COLOR (PALETTES[].pitch).
+  //
+  //  Y el toggle del segundero deja de ser cosmético: tic-tac es un cuarzo (1 golpe por segundo,
+  //  alternando tic y tac de verdad) y suave es un mecánico (zumbido de 8 golpes por segundo, el
+  //  alternado de un movimiento de 28.800 A/h). Es exactamente la diferencia física que el botón
+  //  representa en pantalla.
+  //
+  //  Jerarquía de mezcla (el repo mezcla bajo, para el parlante de un teléfono):
+  //    · principal  campanada de la hora   0.050 / 0.020 / 0.012 (los tres parciales)
+  //    · principal  clic de minuto         0.040   ← el golpe más fuerte que se oye seguido
+  //    · principal  tic/tac                0.030 ruido + 0.012 ping
+  //    · interfaz   modo 0.028, color 0.025, auto 0.022
+  //    · ambiente   zumbido del barrido    0.008
+  //  El tic queda por DEBAJO del piso de "principal" del patrón del repo (0.05) a propósito: es la
+  //  voz principal, sí, pero suena 3600 veces por hora y para siempre. A 0.05 sería una tortura.
+  // ════════════════════════════════════════════════════════════════════
+  let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
+  const voiceLast = {};                       // cooldown por voz
+  // Techo de voces por frame. El peor frame POSIBLE acá es el segundo 0 de cada hora: tic
+  // (ruido + ping = 2) + clic de minuto (1) + campanada (3 parciales) = 6, y puede caerle encima
+  // una voz de interfaz si justo tocás un botón. Con el 4 del patrón la campanada saldría mutilada
+  // una vez por hora, que es justo el caso imposible de reproducir a mano. Acá no hay bucles de
+  // física: el máximo es determinista, así que 10 es techo de seguridad, no de mezcla.
+  const SND_PER_FRAME = 10;
+  let tickPitch = 1800;                       // Hz; lo fija applyTheme() desde la paleta
+
+  // UN buffer de ruido blanco para toda la sesión. Cada golpe toca una rebanada distinta (offset
+  // aleatorio), así ningún tic es idéntico al anterior y no se aloca nada por disparo: en modo suave
+  // son 8 golpes por segundo, o sea 28.800 AudioBuffer por hora si se generara uno por vez.
+  let noiseBuf = null;
+
+  function audioResume() {
+    if (!AC) {
+      try {
+        AC = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = AC.createGain();
+        masterGain.gain.value = muted ? 0 : 1;
+        masterGain.connect(AC.destination);
+        const n = Math.floor(AC.sampleRate * 0.25);
+        noiseBuf = AC.createBuffer(1, n, AC.sampleRate);
+        const d = noiseBuf.getChannelData(0);
+        for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+      } catch (e) { return; }                 // sin audio el reloj SIGUE andando
+    }
+    if (AC.state === 'suspended') AC.resume().catch(() => {});
+  }
+
+  // La única compuerta.
+  function ac() { return AC && AC.state === 'running' && sndThisFrame < SND_PER_FRAME; }
+
+  // Golpe de ruido filtrado: en un reloj el transitorio ES el tic, no hay cuerpo que sostener.
+  // Ataque instantáneo y decaída exponencial. `t0` es un offset en segundos sobre AC.currentTime,
+  // porque el scheduler del modo suave programa golpes a futuro.
+  function hit(freq, q, dur, vol, t0) {
+    const a = AC; if (!a || !noiseBuf) return;
+    sndThisFrame++;
+    const t = a.currentTime + (t0 || 0);
+    const src = a.createBufferSource(); src.buffer = noiseBuf;
+    const bp = a.createBiquadFilter(); bp.type = 'bandpass';
+    bp.frequency.setValueAtTime(freq, t);     // setValueAtTime y no .value: así queda en el log del QA
+    bp.Q.setValueAtTime(q, t);
+    const g = a.createGain();
+    g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);   // NUNCA a 0: la spec lo prohíbe
+    src.connect(bp); bp.connect(g); g.connect(masterGain);
+    src.start(t, Math.random() * (0.24 - dur), dur + 0.01);
+    src.stop(t + dur + 0.02);
+  }
+
+  // Voz tonal. `atk` en segundos: 0 = nota seca (los pings de interfaz), > 0 = campana — una campana
+  // no clickea, necesita unos milisegundos de ataque o el golpe se come al parcial.
+  function note(f0, f1, t0, dur, type, vol, atk) {
+    const a = AC; if (!a) return;
+    sndThisFrame++;
+    const t = a.currentTime + (t0 || 0);
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(Math.max(20, f0), t);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    if (atk) { g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(Math.max(0.0001, vol), t + atk); }
+    else     { g.gain.setValueAtTime(Math.max(0.0001, vol), t); }
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(masterGain);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  const sfx = {
+    // Tic de cuarzo. La alternancia par/impar es real: en los segundos impares el filtro baja a
+    // 2700 Hz, el golpe dura 1 ms más y el ping afina un 6 % abajo. Sin eso se oye "tic-tic".
+    tic(par, t0) {
+      hit(par ? 3400 : 2700, 2.5, par ? 0.008 : 0.009, 0.030, t0);
+      note(tickPitch * (par ? 1 : 0.94), 0, t0, 0.030, 'sine', 0.012, 0);
+    },
+    // Barrido mecánico: un golpe cada 125 ms, sin ping tonal y en el rango de ambiente. No es un
+    // evento, es una textura; si se lo oye como evento el modo suave deja de ser suave.
+    whir(t0) { hit(5000, 4, 0.004, 0.008, t0); },
+    // Salto de la aguja de minutos: más grave, más largo y más fuerte que el tic. Es lo que te deja
+    // contar minutos sin mirar la pantalla. Sin parcial tonal: lo tonal queda reservado para la hora.
+    minuto() { hit(900, 1.6, 0.014, 0.040, 0); },
+    // Campanada de la hora: campana de VIDRIO, no de latón — tres parciales inarmónicos en
+    // 1 : 2,76 : 5,40 (la serie de una placa circular) sobre la cuarta baja de la altura de la
+    // paleta. UNA sola, nunca doce: doce golpes son ocho segundos de sonido que nadie pidió.
+    hora() {
+      const f = tickPitch / 4;
+      note(f,        0, 0, 1.40, 'sine', 0.050, 0.003);
+      note(f * 2.76, 0, 0, 0.60, 'sine', 0.020, 0.003);
+      note(f * 5.40, 0, 0, 0.30, 'sine', 0.012, 0.003);
+    },
+    // Tirar de la corona: el detente seco más dos notas que dicen para DÓNDE fue el cambio
+    // (a suave sube, a tic-tac baja). El botón y el toque al reloj comparten esta voz.
+    modo(dir) {
+      hit(1600, 3, 0.012, 0.028, 0);
+      note(dir ? 900 : 1350, 0, 0,     0.045, 'triangle', 0.022, 0);
+      note(dir ? 1350 : 900, 0, 0.045, 0.045, 'triangle', 0.022, 0);
+    },
+    // Ping de color: suena la altura NUEVA de la paleta. Acá la nota no es adorno sino información:
+    // anuncia con qué afinación va a tictaquear el reloj a partir de ahora.
+    color() { note(tickPitch, 0, 0, 0.070, 'sine', 0.025, 0); },
+    // Auto-color: sube al prender, baja al apagar. Arranca un proceso que sigue solo, conviene oírlo.
+    auto(on) {
+      note(on ? 1100 : 1650, 0, 0,     0.055, 'triangle', 0.022, 0);
+      note(on ? 1650 : 1100, 0, 0.055, 0.055, 'triangle', 0.022, 0);
+    },
+  };
+
+  function voice(name, cdMs, fn) {
+    if (!ac()) return;
+    const now = performance.now();
+    if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
+    voiceLast[name] = now; fn();
+  }
+
+  // ── EL RELOJ COMO INSTRUMENTO ──
+  // Se llama una vez por frame desde draw(), con los MISMOS cuatro campos de tiempo que se van a
+  // dibujar: así el tic sale en el mismo frame que el salto de la aguja (desfase ≤ 16,7 ms).
+  let lastSec = -1, lastMin = -1, lastHour = -1, lastFrameMs = 0;
+  let nextBeat = 0;                           // próximo golpe de barrido, en tiempo de AC
+
+  function clockAudio(h, m, s, us) {
+    const nowMs = performance.now();
+    const gap = nowMs - lastFrameMs;
+    lastFrameMs = nowMs;
+    // Resincronía SIN sonar. El primer frame, y la vuelta de una pestaña que estuvo horas al fondo,
+    // ven saltar la hora entera de golpe: sin esta guarda eso dispara una campanada falsa más un
+    // clic de minuto que nadie vio.
+    if (gap > 1500) { lastSec = s; lastMin = m; lastHour = h; nextBeat = 0; return; }
+    // Todavía sin gesto de usuario (o techo de frame alcanzado): igual hay que seguir el tiempo,
+    // o al desbloquear el audio sale toda la ráfaga acumulada de una.
+    if (!ac()) { lastSec = s; lastMin = m; lastHour = h; return; }
+
+    if (segundero === 0) {
+      if (s !== lastSec) sfx.tic(s % 2 === 0);
+    } else {
+      // Scheduler con lookahead de 200 ms sobre AC.currentTime, NO un golpe por frame: a 60 fps el
+      // jitter de ±16,7 ms sobre un período de 125 ms se oye como un zumbido cojo. El techo de 4
+      // iteraciones evita que un frame largo encole medio segundo de golpes de una sentada.
+      const t = AC.currentTime;
+      if (nextBeat < t) nextBeat = t + 0.005;           // arranque, o resincronía tras un atraso
+      let n = 0;
+      while (nextBeat < t + 0.2 && n < 4) { sfx.whir(nextBeat - t); nextBeat += 0.125; n++; }
+    }
+    // Minuto y hora suenan en LOS DOS modos: son la estructura del reloj, no del segundero.
+    if (m !== lastMin && lastMin >= 0) sfx.minuto();
+    if (h !== lastHour && lastHour >= 0) sfx.hora();
+    lastSec = s; lastMin = m; lastHour = h;
+  }
+
   function draw() {
+    sndThisFrame = 0;                          // OBLIGATORIO y acá, no en el rAF del HUD de FPS:
+                                               // sin esto ac() se cierra para siempre a las 10 voces
     const now = new Date();
     const ca_h  = now.getHours();
     const ca_m  = now.getMinutes();
     const ca_s  = now.getSeconds();
     const ca_ms = now.getMilliseconds() * 1000;   // µs equivalentes (Date sólo da ms)
+
+    clockAudio(ca_h, ca_m, ca_s, ca_ms);          // antes de dibujar: mismo frame que el salto visual
 
     const fecha = `${DIAS[now.getDay()]}, ${dos(now.getDate())} ${MESES[now.getMonth()]} ${now.getFullYear()}`;
     const hora  = `${dos(ca_h)}:${dos(ca_m)}:${dos(ca_s)}`;
@@ -350,7 +549,11 @@
     btnSec.innerHTML = SEC_ICONS[segundero];
     btnSec.classList.toggle('on', segundero === 1);
   }
-  function toggleSegundero() { segundero = segundero === 0 ? 1 : 0; refreshSecBtn(); save(); }
+  // El sonido va ACÁ dentro y no en cada handler: el botón y el toque al reloj son el mismo evento y
+  // tienen que tener una sola voz. El cooldown de 120 ms es por el canvas, que cubre toda el área
+  // sobre la barra: un dedo insistente dispara ~10 toggles por segundo y sin cooldown es una
+  // metralleta de detentes.
+  function toggleSegundero() { segundero = segundero === 0 ? 1 : 0; refreshSecBtn(); save(); voice('mode', 120, () => sfx.modo(segundero)); }
 
   // pointerdown (no click): responde aunque haya otro toque activo, igual que los botones de BallsWeb.
   btnSec.addEventListener('pointerdown', e => { e.preventDefault(); toggleSegundero(); });
@@ -368,9 +571,13 @@
     root.setProperty('--accent', p.base.join(','));
     root.setProperty('--accent-dark', p.base.map(c => Math.round(c * 0.706)).join(','));
     btnColor.title = 'Color: ' + p.name;
+    tickPitch = p.pitch;                                                          // la paleta afina el reloj
   }
   function cycleColor() { themeIndex = (themeIndex + 1) % PALETTES.length; applyTheme(); save(); }
-  btnColor.addEventListener('pointerdown', e => { e.preventDefault(); cycleColor(); });
+  // El ping va en el HANDLER, no dentro de cycleColor(), porque cycleColor() también lo llama el
+  // timer del auto-color cada 2 s: sonarlo ahí sería un metrónomo de chirridos para siempre. Y va
+  // DESPUÉS de cycleColor() para que tickPitch ya sea el de la paleta nueva.
+  btnColor.addEventListener('pointerdown', e => { e.preventDefault(); cycleColor(); voice('color', 60, sfx.color); });
 
   // ── AUTO-COLOR (cicla solo cada 2 s) ──
   const btnAuto = document.getElementById('btnAuto');
@@ -385,12 +592,16 @@
     save();
   }
   function toggleAuto() { setAuto(!autoTimer, true); }
-  btnAuto.addEventListener('pointerdown', e => { e.preventDefault(); toggleAuto(); });
+  // setAuto(on, true) llama a cycleColor() para el feedback visual instantáneo; el ping de color NO
+  // suena ahí (está en el handler de btnColor), alcanza con la voz del toggle.
+  btnAuto.addEventListener('pointerdown', e => { e.preventDefault(); toggleAuto(); voice('auto', 120, () => sfx.auto(!!autoTimer)); });
 
   // ── PERSISTENCIA (color + modo del segundero + auto) ──
+  // El mute viaja en el MISMO JSON que ya existía, no en una clave nueva: una sola entrada de
+  // localStorage para todo el estado del reloj.
   const STORE_KEY = 'clockweb';
   function save() {
-    try { localStorage.setItem(STORE_KEY, JSON.stringify({ themeIndex, segundero, auto: !!autoTimer })); } catch {}
+    try { localStorage.setItem(STORE_KEY, JSON.stringify({ themeIndex, segundero, auto: !!autoTimer, muted })); } catch {}
   }
   function load() {
     try {
@@ -398,6 +609,7 @@
       if (Number.isInteger(s.themeIndex) && s.themeIndex >= 0 && s.themeIndex < PALETTES.length) themeIndex = s.themeIndex;
       if (s.segundero === 0 || s.segundero === 1) segundero = s.segundero;
       autoOn = !!s.auto;
+      if (typeof s.muted === 'boolean') muted = s.muted;
     } catch {}
   }
 
@@ -407,6 +619,37 @@
   if (autoOn) setAuto(true);                                                      // re-arranca el ciclado si estaba activo
   resize();
   draw();
+
+  // ── CABLEADO DEL AUDIO ──
+  // Desbloqueo en el PRIMER gesto, a nivel window y en fase de captura: así también cuentan los
+  // botones ✕/⛶/ⓘ de la shell. Consecuencia medida y aceptada: el primer toque NO suena, porque
+  // resume() es asíncrono y ac() todavía ve 'suspended'; el reloj arranca en el tic siguiente.
+  window.addEventListener('pointerdown', audioResume, true);
+  // No hay drones que apagar, pero sí hasta 200 ms de golpes de barrido ya programados y tres
+  // contadores que resincronizar. lastFrameMs = 0 fuerza la rama de resincronía muda del próximo
+  // frame; sin eso, volver después de una hora se come una campanada falsa.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (AC) AC.suspend().catch(() => {}); }
+    else { audioResume(); lastFrameMs = 0; nextBeat = 0; }
+  });
+
+  const btnMute = document.getElementById('btnMute');
+  if (btnMute) {
+    btnMute.classList.toggle('muted', muted);
+    btnMute.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      muted = !muted;
+      // cancelScheduledValues no es adorno: si quedara una rampa pendiente sobre el master, poner
+      // .value a mano no haría nada.
+      if (masterGain && AC) { masterGain.gain.cancelScheduledValues(AC.currentTime); masterGain.gain.value = muted ? 0 : 1; }
+      btnMute.classList.toggle('muted', muted);
+      save();
+      audioResume();                                                              // el toque también sirve de gesto
+      // Al desmutear no hay confirmación posible hasta el próximo tic: hasta un segundo de espera
+      // preguntándose si anduvo. Un tic inmediato lo contesta. Al mutear, obviamente, silencio.
+      if (!muted) voice('mute', 120, () => sfx.tic(true));
+    });
+  }
 
   const hint = document.getElementById('hint');
   setTimeout(() => hint.style.opacity = '0', 5000);

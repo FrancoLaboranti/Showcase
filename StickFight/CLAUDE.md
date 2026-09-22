@@ -523,3 +523,15 @@ aunque los timers corran**. El loop está preparado para bombearse a mano:
 - Los tiempos de los keytracks (`poses[].at`) son ABSOLUTOS dentro del move y el sampler arranca
   desde `atkPose0` (la pose real al iniciar el golpe) — una pose parcial sin una clave "sostiene" el
   último valor definido.
+
+
+## AUDIO — correccion (2026-09-22)
+
+**Morir sonaba exactamente igual que ganar.** `setBanner()` terminaba llamando `sfx.banner()`
+incondicionalmente — el par ASCENDENTE de celebracion — y `onKO` usa `setBanner` para anunciar la
+muerte del jugador (`'TE BAJARON…'`).
+
+`setBanner` ahora acepta un quinto parametro `snd` con la voz del cartel. Por defecto sigue siendo
+`sfx.banner`, que es lo que un cartel quiere decir casi siempre; la muerte pasa `sfx.ko`. Medido:
+el cartel normal da `square` 373 → 529 Hz (sube), el de muerte da `sawtooth` 378 + `square` 206 a
+volumen 0.1 (cae).

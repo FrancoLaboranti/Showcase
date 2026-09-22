@@ -17,3 +17,34 @@ Place/win animations use `easeOutBack` (overshoot pop on placement) and `easeOut
 `Alt+Enter` toggles fullscreen (recreates `windowSurface` with `pygame.FULLSCREEN`); `F` toggles FPS overlay. The Alt+Enter rebind pattern is repeated verbatim in other games — match it if you add similar shortcuts.
 
 See [../CLAUDE.md](../CLAUDE.md) for the shared sprite/main-loop conventions.
+
+
+## AUDIO (2026-09-22)
+
+**Vidrio sobre laca.** El tablero es una losa laqueada con sombra proyectada y las marcas son
+vidrio encendido con halo. Cada marca es una piedra que se apoya sobre una superficie dura: un
+transitorio de ruido pasa-altos + una resonancia afinada corta.
+
+**La altura no la fija la celda: la fija cuantas marcas hay ya en el tablero.** La ronda entera
+trepa por una pentatonica menor de nueve grados, asi que el noveno movimiento suena apretado aunque
+mecanicamente sea identico al primero. El tablero se vuelve un instrumento que se llena.
+
+- **X = `triangle`, O = `sine` una quinta justa arriba.** Asi las dos marcas conviven sin disonar
+  por mas que se alternen. Medido: 219 Hz (X, grado 1) / 389 (O) / 292 (X) / 493 (O).
+- **Las dos victorias suenan distinto**: la de la X en `triangle` desde 261 Hz, la de la O en
+  `sine` desde 392. El timbre lo pone el que gano.
+- **El empate es lo contrario de resolver**: 220 + 247 Hz, una segunda mayor que se bate y no va a
+  ningun lado.
+- **La CPU no toca ese instrumento.** Antes de mover cierra dos contactos secos y sin altura, y eso
+  es lo unico mecanico del juego. A proposito NO es el tictac de un pendulo: Loop ya es un reloj de
+  bolsillo y los dos no se tienen que pisar.
+- Techo de **8** y no 4: `sndThisFrame` cuenta osciladores CREADOS, y la fanfarria de victoria crea
+  cinco de un saque. Un techo de 4 truncaria el unico momento musical del juego.
+
+> Patron comun a todo el repo: sintesis WebAudio sin archivos, `AudioContext` creado con
+> `try/catch` en el primer gesto, techo de voces por frame **con su reseteo al tope del `loop()`**,
+> cooldown por voz, boton de mute con persistencia en `localStorage`, y `visibilitychange` para que
+> nada continuo siga sonando con la pestana al fondo. Si el audio falla, el juego sigue andando.
+> Verificado con un arnes headless que envuelve el `AudioContext` y anota cada nodo y cada rampa.
+> **El arnes no escucha**: comprueba que suene lo que se diseno, cuando se diseno y con que
+> parametros. La evaluacion auditiva queda pendiente.

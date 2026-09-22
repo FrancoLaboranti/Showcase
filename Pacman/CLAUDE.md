@@ -41,3 +41,14 @@ These were layered on top of the classic game without touching `lvlSpec(L)` (the
 - **Spanish UI strings, English identifiers** (`¡LISTO!`, `PUNTOS`, `RECORD`, `NIVEL`).
 - **Resolution independence:** all geometry is in tile units; `resize()` recomputes tile size `ts` + maze origin `ox`/`oy` and re-bakes the maze/pellets. No hardcoded pixel layout.
 - **Arcade shell wiring** follows Tron V1 — a thin bottom `#bar` (`--bar-height: 66px`) in centered order `✕ salir · ⟳ · 🔊 · ⛶ · ⓘ`, `data-orient="portrait"`, FPS overlay toggled by `ⓘ`. **There are no on-screen movement buttons** (Tron's `◄ ►` turn pair is gone): movement is keyboard (arrows/WASD) on desktop and **swipe on the canvas** on mobile. The bar holds only utility buttons; the **sound toggle** (`#btnSound`) and **reset** (`#btnReset`) are what this game adds over the base Tron set (`✕ ⛶ ⓘ`).
+
+
+## AUDIO — correccion (2026-09-22)
+
+**La sirena es el unico nodo continuo del juego** — dos osciladores arrancados una vez y nunca
+detenidos — y no habia ningun manejo de pestana oculta en las 1482 lineas. Con la pestana al fondo
+el rAF se frena pero el grafo de audio no, asi que la sirena seguia sonando indefinidamente. En el
+Arcade eso significa la sirena de Pac-Man encima del juego que abriste despues.
+
+El listener se cablea una sola vez (`Pacman_visWired`), desde donde se construye la sirena: es el
+unico punto por el que se pasa si y solo si hay algo continuo que apagar.

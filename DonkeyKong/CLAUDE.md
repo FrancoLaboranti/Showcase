@@ -54,3 +54,15 @@ Nine gameplay systems extend the single-board core; all are tuned to preserve th
 Listed in [../Arcade/index.html](../Arcade/index.html) `GAMES` as `'DonkeyKong/DonkeyKongWeb/'`, `portrait`, accent `#e83b2a`, thumbnail `Arcade/thumbnails/DonkeyKong.png`.
 
 See [../CLAUDE.md](../CLAUDE.md) for the shared web-port conventions.
+
+
+## AUDIO — correccion (2026-09-22)
+
+`AC.resume()` se llamaba **sin `.catch()`**, y este archivo registra un handler de
+`unhandledrejection` que ante un rechazo pinta un panel rojo FIJO en el centro de la pantalla. Como
+el div no lleva `pointer-events: none`, se comia el tap del centro — **que en este juego ES el
+salto**. O sea: un rechazo del audio te dejaba sin saltar.
+
+Pendiente (ver la auditoria): no hay `masterGain` ni techo de voces por frame — cada oscilador se
+conecta directo a `destination`, asi que no hay ningun punto donde poner un mute, un ducking o un
+limitador. Es el unico juego del repo con audio y **sin forma de apagarlo**.

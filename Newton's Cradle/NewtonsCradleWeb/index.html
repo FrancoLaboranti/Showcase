@@ -1473,7 +1473,8 @@
     } catch (e) {}
   }
   function playClick(intensity) {
-    if (!actx) return;
+    // No alcanza con que el contexto EXISTA: uno cerrado o interrumpido tira al tocar el grafo.
+    if (!actx || actx.state !== 'running') return;
     const t = actx.currentTime;
     // tic MUY suave: blip tonal grave, redondeado con un lowpass (sin agudos hirientes ni ruido de
     // ataque), volumen bajísimo. Mínimo audible para que siempre se escuche el tic.
@@ -1505,7 +1506,12 @@
     while (acc >= FIXED_DT) { step(FIXED_DT); acc -= FIXED_DT; }
     // sonido del choque más fuerte de este frame (con cooldown)
     if (frameImpactV > SND_VTHR && now - lastClickT > SND_COOLDOWN) {
-      lastClickT = now; playClick(Math.min(1, frameImpactV / 6));
+      lastClickT = now;
+      // El try/catch NO es por prolijidad: `playClick` se llama desde dentro de `frame()` y el
+      // `requestAnimationFrame(frame)` esta mas abajo. Una excepcion del audio — un contexto
+      // interrumpido en mobile tira `InvalidStateError` al escribir cualquier parametro — no
+      // dejaria el pendulo mudo: lo dejaria QUIETO, sin volver a pedir un cuadro nunca mas.
+      try { playClick(Math.min(1, frameImpactV / 6)); } catch (e) {}
     }
     // ciclo día↔noche (independiente del péndulo): mesetas largas + transiciones suaves con smoothstep
     sceneClock += elapsed;

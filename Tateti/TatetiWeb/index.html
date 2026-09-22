@@ -65,6 +65,11 @@
   #ui #btnMode.o  { background: rgba(90,170,240,0.22); border-color: rgba(90,170,240,0.55); color: #5aaaf0; }
   #ui #btnMode.pvp{ background: rgba(255,255,255,0.10); border-color: rgba(255,255,255,0.3); }
   #ui #btnMode svg { width: 24px; height: 24px; }
+  /* Sonido: ondas cuando suena, cruz cuando esta muteado. El tamano y el color se los da la regla
+     de #btnFs/#btnInfo de arcade-shell.css, por eso aca van solo las tres reglas del icono. */
+  #btnMute .ic-off { display: none; }
+  #btnMute.muted .ic-on  { display: none; }
+  #btnMute.muted .ic-off { display: block; }
 
   /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css (incluido en <head>). */
 </style>
@@ -85,6 +90,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
       </button>
     </div>
+    <button id="btnMute" aria-label="sonido" title="Sonido">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
+    </button>
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
@@ -178,6 +186,9 @@
 
   function play(idx, mark) {
     if (cells[idx] !== 0 || winner !== 0) return false;
+    // ANTES de escribir: el grado de la escala es cuantas marcas habia, no cuantas hay.
+    let puestas = 0; for (let i = 0; i < 9; i++) if (cells[i] !== 0) puestas++;
+    sfx.mark(mark, puestas);
     cells[idx] = mark;
     placeAnim[idx] = PLACE_ANIM_T;
     const r = checkWinner(cells);
@@ -186,9 +197,9 @@
       winLine = r.line;
       winAnim = WIN_ANIM_T;
       postWinT = 0;
-      if (r.w === 1) { scoreX++; scoreBump.x = SCORE_BUMP_T; }
-      else if (r.w === 2) { scoreO++; scoreBump.o = SCORE_BUMP_T; }
-      else { scoreD++; scoreBump.d = SCORE_BUMP_T; }
+      if (r.w === 1) { scoreX++; scoreBump.x = SCORE_BUMP_T; sfx.win(1); }
+      else if (r.w === 2) { scoreO++; scoreBump.o = SCORE_BUMP_T; sfx.win(2); }
+      else { scoreD++; scoreBump.d = SCORE_BUMP_T; sfx.draw(); }
     } else {
       turn = (turn === 1 ? 2 : 1);
     }
@@ -250,15 +261,18 @@
     winner = 0; winLine = null; winAnim = 0; postWinT = 0; cpuThinkCD = 0;
     turn = startingTurn;
     startingTurn = startingTurn === 1 ? 2 : 1;     // alterna en próxima ronda
+    sfx.wipe();
   }
   function fullReset() {
     scoreX = 0; scoreO = 0; scoreD = 0;
     scoreBump = { x: 0, o: 0, d: 0 };
     startingTurn = 1;
     newRound();                                    // newRound ya flipea startingTurn a 2 para la próxima
+    sfx.pips();                                    // el wipe lo toca newRound; esto dice que ADEMAS se borro el marcador
   }
   function setMode(m) {
     mode = m;
+    sfx.mode(m);
     fullReset();
     paintModeBtn();
   }
@@ -267,6 +281,134 @@
     showInfo = false;
     btnInfo.classList.remove('on');
   }
+
+  // ════════════════ AUDIO ════════════════
+  // Sintesis, cero archivos: el juego sigue andando offline y sigue andando si el audio falla.
+  let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
+  try { muted = localStorage.getItem('tatetiMuted') === '1'; } catch (e) {}
+  const voiceLast = {};
+  // El techo es 8 y no 4 como en los juegos con fisica. `sndThisFrame` cuenta osciladores CREADOS
+  // en el frame, no sonando: la fanfarria de victoria crea 5 de un saque (3 del barrido + 2 del
+  // acorde de llegada) mas los 2 de la marca que gano. Tateti no tiene colisiones ni particulas,
+  // asi que ese es su pico absoluto; un techo de 4 truncaria el unico momento musical del juego.
+  const SND_PER_FRAME = 8;
+
+  function audioResume() {
+    if (!AC) {
+      try {
+        AC = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = AC.createGain();
+        masterGain.gain.value = muted ? 0 : 1;
+        masterGain.connect(AC.destination);
+      } catch (e) { AC = null; return; }
+    }
+    if (AC.state === 'suspended') AC.resume().catch(() => {});
+  }
+  function acOk() { return !!(AC && masterGain && AC.state === 'running'); }
+  function ac() { return acOk() && sndThisFrame < SND_PER_FRAME; }
+
+  function note(f0, f1, t0, dur, type, vol, jitter) {
+    const a = AC; if (!a) return;
+    sndThisFrame++;
+    const o = a.createOscillator(), g = a.createGain();
+    const j = jitter === 0 ? 1 : 1 + (Math.random() - 0.5) * (jitter === undefined ? 0.02 : jitter);
+    const t = a.currentTime + t0;
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(Math.max(20, f0 * j), t);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * j), t + dur);
+    g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(masterGain);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  // `t0` no esta en la version de otros juegos y aca hace falta: sin el no se puede programar el
+  // segundo contacto de la CPU a 0.18 s ni el polvo del empate, y encadenarlos con setTimeout
+  // seria peor (el reloj de JS no es el reloj del audio).
+  function noiseHit(dur, vol, freq, q, type, t0) {
+    const a = AC; if (!a) return;
+    sndThisFrame++;
+    const n = Math.floor(a.sampleRate * dur);
+    const buf = a.createBuffer(1, Math.max(1, n), a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = a.createBufferSource(); src.buffer = buf;
+    const bp = a.createBiquadFilter(); bp.type = type || 'bandpass';
+    bp.frequency.value = freq || 900; bp.Q.value = q || 1.1;
+    const t = a.currentTime + (t0 || 0);
+    const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(bp); bp.connect(g); g.connect(masterGain);
+    src.start(t); src.stop(t + dur + 0.02);
+  }
+  function voice(name, cdMs, fn) {
+    if (!ac()) return;
+    const now = performance.now();
+    if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
+    voiceLast[name] = now;
+    try { fn(); } catch (e) {}                     // ningun sfx puede llevarse puesto un handler
+  }
+
+  // Nueve grados de pentatonica menor de La: uno por casillero. La ronda entera trepa.
+  const PENTA9 = [220, 261.63, 293.66, 329.63, 392, 440, 523.25, 587.33, 659.25];
+
+  const sfx = {
+    // PRINCIPAL. La piedra apoyandose: transitorio de ruido pasa-altos (el vidrio tocando la laca)
+    // + la resonancia afinada. `n` = cuantas marcas habia ANTES de esta, o sea el grado de la
+    // escala. `m` = 1 (X) o 2 (O): la O suena una quinta justa arriba y con timbre redondo, asi
+    // las dos marcas conviven sin disonar por mas que se alternen.
+    mark(m, n) {
+      const f = PENTA9[Math.max(0, Math.min(8, n))] * (m === 2 ? 1.5 : 1);
+      voice('mark', 40, () => {
+        noiseHit(0.012, 0.035, 2600, 2.2, 'highpass');
+        note(f, f * 0.995, 0, m === 2 ? 0.16 : 0.13, m === 2 ? 'sine' : 'triangle', 0.045);
+      });
+    },
+    // Tocar una celda ocupada. Sordo y SIN altura, para que no se confunda con una jugada.
+    reject() { voice('reject', 120, () => noiseHit(0.05, 0.030, 220, 1.4, 'lowpass')); },
+    // La CPU pensando: dos contactos secos, lo unico mecanico del juego. Es ademas el aviso de que
+    // el turno no es tuyo, que en tactil no se lee de ninguna otra forma.
+    think() { voice('think', 400, () => { noiseHit(0.012, 0.028, 2200, 3.0, 'bandpass', 0);
+                                          noiseHit(0.012, 0.024, 2200, 3.0, 'bandpass', 0.18); }); },
+    // Se completo una linea: barrido que sube + acorde de llegada, todo programado de una con t0.
+    // El timbre lo pone el que gano, asi que la victoria de la X y la de la O no suenan igual.
+    win(w) {
+      const ty = w === 2 ? 'sine' : 'triangle', b = w === 2 ? 392 : 261.63;
+      voice('win', 600, () => {
+        note(b, b * 3, 0, 0.26, ty, 0.050, 0);
+        note(b * 2,   0, 0.24, 0.42, ty, 0.055, 0);
+        note(b * 3,   0, 0.28, 0.46, ty, 0.045, 0);
+        note(b * 4,   0, 0.32, 0.50, ty, 0.030, 0);
+      });
+    },
+    // Empate: lo contrario de resolver. Dos senoidales a distancia de segunda mayor, que se baten
+    // entre si y no van a ningun lado. Nadie gano y el sonido no cierra.
+    draw() { voice('draw', 600, () => { note(220, 0, 0, 0.5, 'sine', 0.045, 0); note(247, 0, 0, 0.5, 'sine', 0.045, 0);
+                                        noiseHit(0.20, 0.018, 500, 0.7, 'lowpass', 0.09); }); },
+    // Tablero limpio: barrido descendente, el polvo que se va.
+    wipe() { voice('wipe', 200, () => { noiseHit(0.16, 0.05, 1400, 0.8, 'bandpass');
+                                        note(520, 180, 0, 0.14, 'triangle', 0.030); }); },
+    // Marcador a cero: el wipe ya sono aparte (fullReset llama a newRound); esto son los tres pips
+    // bajando que dicen que ademas se borro lo acumulado.
+    pips() { voice('pips', 300, () => [523.25, 392, 261.63].forEach((f, i) => note(f, 0, 0.12 + i * 0.07, 0.06, 'sine', 0.035, 0))); },
+    // Que el INTERVALO nombre el modo: dos notas juntas = dos jugadores; una sola = jugas contra
+    // la maquina, y la altura dice con que marca. No hace falta leer el boton.
+    mode(m) {
+      voice('mode', 150, () => {
+        if (m === 'pvp') { note(330, 0, 0, 0.09, 'sine', 0.035, 0); note(440, 0, 0, 0.09, 'sine', 0.035, 0); }
+        else             note(m === 'cpuO' ? 330 : 495, 0, 0, 0.10, 'sine', 0.038, 0);
+      });
+    },
+    info(open) {
+      voice('info', 120, () => {
+        if (open) { note(440, 0, 0, 0.05, 'sine', 0.030, 0); note(587, 0, 0.055, 0.05, 'sine', 0.030, 0); }
+        else      { note(587, 0, 0, 0.04, 'sine', 0.026, 0); note(440, 0, 0.045, 0.04, 'sine', 0.026, 0); }
+      });
+    },
+  };
+
+  // Desbloqueo en el primer gesto (iOS/Chrome), a nivel window y en captura.
+  window.addEventListener('pointerdown', audioResume, true);
+  window.addEventListener('keydown', audioResume, true);
 
   // ── INPUT ──
   function onCanvasTap(e) {
@@ -282,7 +424,10 @@
     const cpu = cpuMark();
     if (cpu && turn === cpu) return;
     const idx = cellAt(mx, my);
-    if (idx >= 0 && cells[idx] === 0) play(idx, turn);
+    // Celda OCUPADA = accion rechazada y suena. Errarle al tablero (idx < 0) no: eso no es una
+    // accion rechazada, es no haber hecho nada, y el fondo no es un objeto.
+    if (idx >= 0 && cells[idx] !== 0) { sfx.reject(); return; }
+    if (idx >= 0) play(idx, turn);
   }
   canvas.addEventListener('pointerdown', e => {
     if (showInfo) { closeInfo(); return; }         // tap con modal abierto = cerrar, sin caer sobre el tablero
@@ -333,7 +478,25 @@
   tappable(btnMode,   () => { const i = (MODE_CYCLE.indexOf(mode) + 1) % MODE_CYCLE.length; setMode(MODE_CYCLE[i]); });
   tappable(btnReset,  () => { closeInfo(); newRound(); });
   tappable(btnScores, () => { closeInfo(); fullReset(); });
-  tappable(btnInfo,   () => { showInfo = !showInfo; btnInfo.classList.toggle('on', showInfo); });
+  tappable(btnInfo,   () => { showInfo = !showInfo; btnInfo.classList.toggle('on', showInfo); sfx.info(showInfo); });
+  const btnMute = document.getElementById('btnMute');
+  if (btnMute) {
+    btnMute.classList.toggle('muted', muted);
+    btnMute.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      muted = !muted;
+      if (masterGain && AC) { masterGain.gain.cancelScheduledValues(AC.currentTime); masterGain.gain.value = muted ? 0 : 1; }
+      btnMute.classList.toggle('muted', muted);
+      try { localStorage.setItem('tatetiMuted', muted ? '1' : '0'); } catch (e) {}
+      audioResume();                               // el toque de "desmutear" tambien sirve de gesto
+    });
+  }
+  // No hay nodos continuos en este juego, asi que al fondo no queda nada sonando; se suspende
+  // igual para no dejar un contexto vivo por cada juego del Arcade que se haya abierto.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (AC && AC.state === 'running') AC.suspend().catch(() => {}); }
+    else audioResume();
+  });
   // btnExit + btnFs los maneja arcade-shell.js.
 
   // ── RESIZE ──
@@ -745,6 +908,7 @@
     if (typeof now !== 'number') now = performance.now();
     const dt = Math.min(0.05, (now - lastT) / 1000);
     lastT = now;
+    sndThisFrame = 0;                              // OBLIGATORIO: sin esto el juego queda mudo tras SND_PER_FRAME
 
     // animaciones
     for (let i = 0; i < 9; i++) if (placeAnim[i] > 0) placeAnim[i] = Math.max(0, placeAnim[i] - dt);
@@ -757,7 +921,7 @@
     // CPU — pausada mientras el modal está abierto, así no juega "atrás" del cartel
     const cpu = cpuMark();
     if (!showInfo && winner === 0 && cpu && turn === cpu) {
-      if (cpuThinkCD <= 0) cpuThinkCD = CPU_THINK_T;
+      if (cpuThinkCD <= 0) { cpuThinkCD = CPU_THINK_T; sfx.think(); }
       cpuThinkCD = Math.max(0, cpuThinkCD - dt);
       if (cpuThinkCD === 0) {
         const m = bestMove(cells.slice(), cpu);

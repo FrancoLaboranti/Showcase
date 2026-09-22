@@ -19,3 +19,16 @@ Mouse-driven fireworks particle simulator. Each `Firework` rises and explodes af
 Window is 800×800. The 13-entry `colors` table holds `(rmin,rmax,gmin,gmax,bmin,bmax)` ranges used by `randColorInRange`. Sprites are z-sorted descending each frame so the cursor (`z=-2`) draws above explosions (`z=-1`) above fireworks (`z=0`).
 
 See [FireworksV2/](../FireworksV2/) for the wider-window revision with a working pause overlay, and [../CLAUDE.md](../CLAUDE.md) for shared conventions.
+
+
+## AUDIO — correcciones (2026-09-22)
+
+1. `audioResume()` creaba el `AudioContext` **sin `try/catch`**. Si el constructor tiraba, la
+   excepcion se llevaba puesto el handler que la llamo y el juego quedaba **inmanejable**: no
+   lanzaba cohetes y ningun boton respondia.
+2. **No habia `visibilitychange`.** `background.mp3` es un `BufferSource` con `loop = true` — el
+   unico nodo continuo del juego — y seguia sonando con la pestana oculta o el telefono en otra
+   app, justo cuando el jugador ya no tiene el boton de mute a mano.
+
+Los cuatro samples (lanzamiento, chispas, explosion, fondo) se conservan: son grabaciones reales y
+suenan mejor que cualquier oscilador.

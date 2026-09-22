@@ -50,6 +50,13 @@
   }
   #bar #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.94); }
   #bar #ui #btnNew { font-size: 19px; padding: 0; width: 38px; }
+  /* Los botones de #ui están hechos para texto (↻, ES): un SVG sin medidas
+     se estira, y arcade-shell.css sólo dimensiona los de ✕/⛶/ⓘ. */
+  #bar #ui #btnMute { padding: 0; width: 38px; }
+  #bar #ui #btnMute svg { display: block; width: 18px; height: 18px; pointer-events: none; }
+  #btnMute .ic-off { display: none; }
+  #btnMute.muted .ic-on { display: none; }
+  #btnMute.muted .ic-off { display: block; }
 
   /* Teclado virtual abajo. Las teclas se generan desde JS según el idioma. */
   #keyboard {
@@ -166,6 +173,7 @@
     <div id="ui">
       <button id="btnNew"  aria-label="nueva palabra" title="Nueva palabra">↻</button>
       <button id="btnLang" aria-label="idioma" title="Cambiar idioma">ES</button>
+      <button id="btnMute" aria-label="sonido" title="Sonido"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg></button>
     </div>
     <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
@@ -251,6 +259,199 @@
     return out;
   }
   const WORDS = { es: [], en: [] };
+
+  // ════════════════════════════════════════════════════════════════════
+  //  AUDIO — síntesis WebAudio, cero archivos, cero dependencias.
+  //
+  //  La identidad sale del decorado: cuatro maderos, una soga y un muñeco
+  //  de trazo sobre un cuarto oscuro. De ahí salen tres materiales y ni un
+  //  solo sintetizador con melodía:
+  //    · GRAFITO  — el acierto. Ruido corto y brillante, SIN altura: el
+  //      lápiz llenando renglones. Un trazo por casilla destapada, así el
+  //      oído cuenta cuántas reveló la letra.
+  //    · MADERA   — el error. Mazo sobre viga: ruido bandpass grave más un
+  //      cuerpo de triangle. Los seis golpes BAJAN de altura y engordan, o
+  //      sea que sin mirar "FALLOS n/6" sabés en qué fallo estás.
+  //    · SOGA     — aparece dos veces en toda la partida: cruje cuando
+  //      queda una vida y toma el peso en la derrota.
+  //  Lo único afinado es la victoria, y es una marimba (barras de madera)
+  //  para que hasta el festejo esté hecho del material de la horca.
+  //  Nada es continuo: el juego es por turnos y su estado natural es el
+  //  silencio. No hay drones, ni música, ni ambiente.
+  // ════════════════════════════════════════════════════════════════════
+  let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
+  const voiceLast = {};                    // cooldown por voz
+  // El botón de mute vive en la barra, y la barra queda TAPADA por #menu
+  // (z-index 5 contra 3): desde la primera pantalla no se puede desmutear.
+  // Por eso la persistencia no es opcional — es lo único que respeta el
+  // mute de la sesión anterior mientras el menú está arriba.
+  try { muted = localStorage.getItem('hangmanMuted') === '1'; } catch (e) {}
+
+  // Techo de voces por frame. 14 y no 4 (StickFight) ni 5 (Loop) porque acá
+  // el peor frame es conocido y NO es una metralleta: es el acierto que gana
+  // la partida — 4 trazos de tiza (el máximo real medido en el corpus: la O
+  // de ZOOLOGICO) + la marimba, que son 4 notas dobladas una octava abajo
+  // más el aleteo del confeti = 13 voces. Con 4 la victoria quedaría muda.
+  const SND_PER_FRAME = 14;
+
+  function audioResume() {
+    if (!AC) {
+      try {
+        AC = new (window.AudioContext || window.webkitAudioContext)();
+        masterGain = AC.createGain();
+        masterGain.gain.value = muted ? 0 : 1;
+        masterGain.connect(AC.destination);
+      } catch (e) { return; }            // sin audio el juego SIGUE andando
+    }
+    if (AC.state === 'suspended') AC.resume().catch(() => {});
+  }
+
+  // La única compuerta.
+  function ac() { return AC && AC.state === 'running' && sndThisFrame < SND_PER_FRAME; }
+
+  // Un oscilador desechable por disparo. Web Audio los GC-ea solo tras stop().
+  function note(f0, f1, t0, dur, type, vol, jitter) {
+    const a = AC; if (!a) return;
+    sndThisFrame++;
+    const o = a.createOscillator(), g = a.createGain();
+    const j = jitter === 0 ? 1 : 1 + (Math.random() - 0.5) * (jitter === undefined ? 0.12 : jitter);
+    const t = a.currentTime + t0;
+    o.type = type || 'square';
+    o.frequency.setValueAtTime(Math.max(20, f0 * j), t);
+    // exponentialRamp NUNCA a 0 ni desde 0 (lo dice la spec): de ahí los Math.max.
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * j), t + dur);
+    g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(masterGain);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+
+  // Ruido blanco filtrado: el grafito, el mazo, la trampa, el papel.
+  // Dos diferencias con la versión de Loop/StickFight, las dos a propósito:
+  //   · `t0` al final, porque acá casi todo es una secuencia programada de
+  //     una sola llamada (los trazos escalonados, el portón y el peso).
+  //   · la frecuencia del filtro se fija con setValueAtTime y no con `.value`,
+  //     para que quede registrada: es el parámetro que lleva el diseño
+  //     (el brillo creciente de la tiza, la escalera grave del mazo) y así
+  //     se puede verificar desde afuera en vez de creerle al código.
+  function noiseHit(dur, vol, freq, q, type, t0) {
+    const a = AC; if (!a) return;
+    sndThisFrame++;
+    const t = a.currentTime + (t0 || 0);
+    const n = Math.floor(a.sampleRate * dur);
+    const buf = a.createBuffer(1, Math.max(1, n), a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = a.createBufferSource(); src.buffer = buf;
+    const bp = a.createBiquadFilter(); bp.type = type || 'bandpass';
+    bp.frequency.setValueAtTime(Math.max(20, freq || 900), t);
+    bp.Q.value = q || 1.1;
+    const g = a.createGain();
+    g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(bp); bp.connect(g); g.connect(masterGain);
+    src.start(t); src.stop(t + dur + 0.02);
+  }
+
+  function voice(name, cdMs, fn) {
+    if (!ac()) return;
+    const now = performance.now();
+    if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
+    voiceLast[name] = now; fn();
+  }
+
+  // ---------- El vocabulario ----------
+  // Jerarquía de mezcla: principal (mazo y trampa) 0.07-0.12 · secundario
+  // (tiza, marimba, tablero) 0.045-0.055 · interfaz y detalle (tick, soga,
+  // papel, la octava de madera) 0.020-0.035 · ambiente: no hay.
+  // `jitter` va en 0 en casi todo: cada golpe ocurre UNA vez por ronda y su
+  // altura no es adorno, es el número de fallo. Desafinarlo sería borrar el dato.
+  const sfx = {
+    // Se arma el tablero: un apoyo seco de madera y el barrido de tiza que
+    // dibuja los renglones. Cooldown alto: ↻ se puede tapear a repetición.
+    newWord() {
+      voice('newWord', 150, () => {
+        noiseHit(0.05, 0.050, 420, 3.5);
+        noiseHit(0.10, 0.025, 2200, 0.7, 'highpass', 0.03);
+      });
+    },
+    // Un trazo de grafito POR CASILLA revelada, escalonados dentro de una
+    // sola llamada (nada de setInterval) y cada uno 12% más brillante que el
+    // anterior. El máximo real del corpus es 4 (ZOOLOGICO, SALAMANDRA...).
+    reveal(n) {
+      voice('reveal', 50, () => {
+        const k = Math.max(1, Math.min(4, n));
+        for (let i = 0; i < k; i++) {
+          noiseHit(0.035, 0.045, 2600 * (1 + 0.12 * i), 0.8, 'bandpass', i * 0.045);
+        }
+      });
+    },
+    // Mazo sobre viga seca, un escalón más grave y más gordo por cada fallo.
+    // En el quinto se le suma el crujido de la soga: dos triangles detuneados
+    // 2 Hz para que batan. Es tensión, no un pitido de alarma.
+    miss(fails) {
+      voice('miss', 70, () => {
+        const f = Math.max(1, Math.min(5, fails));
+        // La pendiente de volumen está elegida para que el quinto mazo (0.116)
+        // quede POR DEBAJO del portón de la derrota (0.120): el golpe más
+        // fuerte de la partida tiene que ser el último, no el anteúltimo.
+        noiseHit(0.055 + 0.010 * f, 0.066 + 0.010 * f, 520 - 60 * f, 3);
+        const f0 = 210 - 22 * f;
+        note(f0, f0 * 0.72, 0, 0.12 + 0.02 * f, 'triangle', 0.050, 0);
+        if (f >= 5) {
+          note(300, 240, 0.08, 0.45, 'triangle', 0.020, 0);
+          note(302, 242, 0.08, 0.45, 'triangle', 0.020, 0);
+        }
+      });
+    },
+    // Sexto fallo: la trampa se abre y la soga toma el peso. REEMPLAZA al
+    // mazo (no se apilan) y después no hay nada: el silencio es el final.
+    // Sin jingle de derrota — sería una payasada arriba de un ahorcamiento.
+    drop() {
+      voice('drop', 300, () => {
+        noiseHit(0.09, 0.120, 260, 2);                    // el portón
+        note(190, 58, 0.06, 0.34, 'sine', 0.110, 0);      // el peso cayendo
+        noiseHit(0.18, 0.050, 140, 0.7, 'lowpass', 0.06); // el tirón del piso
+      });
+    },
+    // Victoria: marimba, o sea barras de MADERA, no un arpegio electrónico.
+    // Cada nota doblada una octava abajo en triangle para darle cuerpo.
+    // Arranca en t0 0.10 para caer detrás del último trazo de tiza, que es
+    // el que ganó la partida. El confeti (70 partículas) es UN gesto visual
+    // y le toca UN gesto sonoro: una capa de papel, jamás una voz por partícula.
+    win() {
+      voice('win', 300, () => {
+        const m = [523, 659, 784, 1047];
+        for (let i = 0; i < m.length; i++) {
+          const t0 = 0.10 + i * 0.085;
+          note(m[i], 0, t0, 0.22, 'sine', 0.055, 0);
+          note(m[i] / 2, 0, t0, 0.22, 'triangle', 0.020, 0);
+        }
+        noiseHit(0.30, 0.020, 3500, 0.7, 'highpass', 0.12);
+      });
+    },
+    // Tick de madera chiquito para las transiciones de pantalla (idioma en
+    // el menú, ESC de vuelta al menú). Es el sonido más bajo del set porque
+    // el menú tapa la barra y ahí el mute no se puede tocar.
+    uiTick() {
+      voice('tick', 60, () => {
+        noiseHit(0.03, 0.035, 900, 2.5);
+        note(720, 620, 0, 0.04, 'triangle', 0.025, 0.08);
+      });
+    },
+  };
+
+  // Desbloqueo en el primer gesto (iOS/Chrome). En este juego el primer
+  // gesto es siempre el menú, así que el contexto ya está en 'running'
+  // antes del primer intento: no se pierde ningún sonido de partida.
+  window.addEventListener('pointerdown', audioResume, true);
+  window.addEventListener('keydown', audioResume, true);
+  // No hay nodos continuos, pero el juego vive en un iframe del Arcade y la
+  // caída de la derrota programa cola hasta 0.40 s: suspender es barato.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (AC) AC.suspend().catch(() => {}); }
+    else audioResume();
+  });
 
   // ---------- Canvas + resize ----------
   const canvas = document.getElementById('c');
@@ -684,6 +885,10 @@
     const now = performance.now();
     const dt = Math.min(0.05, (now - lastT) / 1000);
     lastT = now;
+    // Reset del techo de voces. Va acá y NO en el rAF del overlay de FPS (que
+    // tiene su propio lastT al final del archivo): sin este reset el juego
+    // queda mudo después de SND_PER_FRAME sonidos, sin tirar un solo error.
+    sndThisFrame = 0;
 
     // shake al fallar
     if (state.fails > state.lastFails) state.shakeT = state.shakeTotal;
@@ -730,6 +935,9 @@
     document.getElementById('keyboard').classList.remove('hidden');
     document.getElementById('menu').classList.add('hidden');
     resize();
+    // Un solo punto cubre los CINCO caminos que empiezan ronda: JUGAR, ↻, el
+    // botón de idioma de la barra, el tap-para-seguir y Enter/Espacio.
+    sfx.newWord();
   }
 
   function guess(letter) {
@@ -741,19 +949,24 @@
 
     if (state.word.includes(letter)) {
       state.correct.add(letter);
+      let n = 0;                       // cuántas casillas destapó ESTA letra
       for (let i = 0; i < state.word.length; i++) {
-        if (state.word[i] === letter) state.revealed[i] = true;
+        if (state.word[i] === letter) { state.revealed[i] = true; n++; }
       }
+      sfx.reveal(n);                   // un trazo de grafito por casilla
       if (state.revealed.every(Boolean)) {
         state.screen = 'won';
         state.wins++;
         state.flashT = 1.0;
         state.endStateAt = performance.now();
         spawnConfetti();
+        sfx.win();
       }
     } else {
       state.wrong.add(letter);
       state.fails++;
+      // El sexto fallo NO apila mazo + caída: es un solo evento, y es la caída.
+      if (state.fails >= MAX_FAILS) sfx.drop(); else sfx.miss(state.fails);
       if (state.fails >= MAX_FAILS) {
         state.screen = 'lost';
         state.losses++;
@@ -814,6 +1027,7 @@
         e.preventDefault();
         state.lang = state.lang === 'es' ? 'en' : 'es';
         applyLangToMenu();
+        sfx.uiTick();       // mismo evento que el tap en ESPAÑOL/ENGLISH
       }
       return;
     }
@@ -847,6 +1061,7 @@
     document.getElementById('keyboard').classList.add('hidden');
     applyLangToMenu();
     resize();
+    sfx.uiTick();          // transición de pantalla: reusa el tick, no inventa voz
   }
 
   document.querySelectorAll('#menu .lang-btn').forEach(b => {
@@ -854,6 +1069,7 @@
       e.preventDefault();
       state.lang = b.dataset.lang;
       applyLangToMenu();
+      sfx.uiTick();
     });
   });
   document.getElementById('btnPlay').addEventListener('pointerdown', e => {
@@ -868,8 +1084,26 @@
     e.preventDefault();
     state.lang = state.lang === 'es' ? 'en' : 'es';
     applyLangToMenu();
-    startRound();
+    startRound();          // sin uiTick: startRound ya suena, serían dos golpes
   });
+
+  // Mute. El botón no se alcanza desde el menú (#menu lo tapa), así que lo que
+  // guarda el estado entre sesiones es el localStorage, no el botón.
+  const btnMute = document.getElementById('btnMute');
+  if (btnMute) {
+    btnMute.classList.toggle('muted', muted);
+    btnMute.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      muted = !muted;
+      if (masterGain && AC) {
+        masterGain.gain.cancelScheduledValues(AC.currentTime);
+        masterGain.gain.value = muted ? 0 : 1;
+      }
+      btnMute.classList.toggle('muted', muted);
+      try { localStorage.setItem('hangmanMuted', muted ? '1' : '0'); } catch (e) {}
+      audioResume();       // el tap de desmutear también sirve de gesto
+    });
+  }
 
   // Tap-para-continuar cuando terminó la ronda. Se engancha al canvas y al
   // teclado (cuyas teclas quedan disabled en won/lost — el pointerdown burbujea

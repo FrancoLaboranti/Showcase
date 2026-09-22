@@ -2,55 +2,156 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Read the folder's own CLAUDE.md first
+
+**Every game folder has one, and it is the source of truth for that game.** This file only holds
+what is true across the repo. The per-folder files are long on purpose — [Loop/CLAUDE.md](Loop/CLAUDE.md)
+is ~2500 lines — and they carry the measurements, the bugs already made and the reasons behind
+decisions that look arbitrary from outside. Reading one before editing its game is not optional.
+
 ## Repository layout
 
-A collection of standalone Pygame projects — small games, simulations, and visual toys. Each project lives in its own top-level folder containing a single `.py` file with the same name as the folder (e.g. [Snake/Snake.py](Snake/Snake.py)). No shared modules, no package, no build system. Folders are independent and self-contained.
+A collection of standalone games, simulations and visual toys, one per top-level folder. No shared
+modules, no package, no build system. Folders are independent and self-contained.
 
-Most projects also have a **web port** alongside the Python file, in a `<Folder>/<Folder>Web/` subfolder (e.g. [Pong/PongWeb/index.html](Pong/PongWeb/index.html)). See [Web ports](#web-ports) below — they are a separate, self-contained reimplementation, not generated from the `.py`.
+Each folder holds up to three things:
 
-## Running a project
+- `<Folder>/<Folder>.py` — the original Pygame prototype. **19 of 23 folders have one.**
+- `<Folder>/<Folder>Web/index.html` — the browser port. **All 23 have one.**
+- `<Folder>/CLAUDE.md` — that game's notes.
 
-Every project is launched the same way — there is no entry point script or harness:
+**The browser port is now the main artifact.** Four games were born on the web and have no Python
+at all: [Loop](Loop/LoopWeb/index.html), [StickFight](StickFight/StickFightWeb/index.html),
+[DonkeyKong](DonkeyKong/DonkeyKongWeb/index.html) and [Pacman](Pacman/PacmanWeb/index.html). Where
+both exist they are **independent reimplementations, not transpiled** — edit the two separately.
+
+Two folders are not games:
+
+- [Arcade/](Arcade/CLAUDE.md) — the installable PWA launcher that hosts every port. It has its own
+  CLAUDE.md; read it before touching it.
+- The root [index.html](index.html) is a 733-byte **redirect to `Arcade/`**. It is not leftover: it
+  is the entry point GitHub Pages serves, so `…/Showcase/` has somewhere to land.
+
+## Running
 
 ```powershell
-python <Folder>\<Folder>.py
+python <Folder>\<Folder>.py           # the Python original
+python -m http.server 8000            # the web ports; they fetch assets, so not file://
 ```
 
-The folder named `Newton's Cradle` contains an apostrophe — quote the path when running it.
+The folder `Newton's Cradle` contains an apostrophe — quote the path.
 
 ## Dependencies
 
-The only external dependency is `pygame`. Several files also use `pygame.freetype` (a submodule of pygame itself, not a separate package). [SimonSays/SimonSays.py](SimonSays/SimonSays.py) additionally uses `pygame.mixer`. There is no `requirements.txt`; install with `pip install pygame`.
+`pygame` for the Python side (plus `pygame.freetype`, a submodule, and `pygame.mixer` in
+[SimonSays](SimonSays/SimonSays.py)). [Balls/Balls.py](Balls/Balls.py) also needs **`pymunk`**: it
+was migrated to a real physics engine and the legacy hand-rolled version lives in `Balls/handrolled/`.
+There is no `requirements.txt`.
 
-## Shared architecture across projects
+On the web side there is **one** vendored library: `matter.min.js` (rigid-body physics), loaded by
+Balls, MiniBalls, CrazyTanks and TankWARS. Everything else is dependency-free hand-rolled JS.
 
-Most files follow the same hand-rolled pattern — there is no shared base module, so the boilerplate is duplicated in each file. When editing one project, expect to see this structure:
+> `nipplejs.min.js` still sits in three folders but **no port loads it any more**. Every mention in
+> the code is a comment explaining why it was replaced: in `dynamic`/`semi` mode it lost the
+> `pointerup` and the stick stayed stuck. The hand-rolled `createJoystick` with `setPointerCapture`
+> is the pattern to copy (CrazyTanks, TankWARS, Loop, StickFight; Snake has its own inline version).
 
-- **`Sprite` base class** with no-op `process()` and `draw()` methods. Every game-object class subclasses `Sprite` and is appended to module-level lists (typically `sprites`, plus type-specific lists like `tanks`, `bombs`, `fireworks`, `explosions`, `trackpoints`).
-- **Main loop** (`while True:`) computes a clamped `deltaT` from `time.time()`, polls `pygame.key.get_pressed()` and `pygame.mouse.get_pos/pressed()`, fills the surface, then calls `sprite.process()` followed by `sprite.draw()` on every sprite in order. Movement is delta-time-scaled, not frame-locked.
-- **Resolution helpers** `xper(p)`, `yper(p)`, `sper(p)` return percentages of `screenX`, `screenY`, or their average. All positions, radii, and speeds are expressed as fractions of screen size so the games scale across resolutions. When adding new geometry, use these helpers rather than raw pixels.
-- **Color helpers** `randColorInRange(...)`, `modifyColor(color, offset)`, `modifyColorPerc(color, factor)` are duplicated across files with identical signatures.
-- **Geometry helpers** `getAngle`, `getDist`, and an angle-wrapping variant `getAngle2` / `getAngleForAngVel` (continuous angular velocity across the ±π discontinuity) are also duplicated.
-- **Quit** is `ESC` everywhere; the main loop also handles `pygame.QUIT`.
+## Shared architecture — Python side
 
-When a project diverges from this skeleton, note it in that folder's CLAUDE.md rather than in this top-level file.
+There is no base module, so the boilerplate is duplicated in each file:
 
-## Web ports
+- **`Sprite` base class** with no-op `process()` and `draw()`. Every game object subclasses it and
+  is appended to module-level lists (`sprites`, plus type-specific ones like `tanks`, `bombs`).
+- **Main loop** (`while True:`) computes a clamped `deltaT` from `time.time()`, polls
+  `pygame.key.get_pressed()` and the mouse, fills the surface, then calls `process()` and `draw()`
+  on every sprite in order. Movement is delta-time-scaled.
+- **Resolution helpers** `xper(p)`, `yper(p)`, `sper(p)` return percentages of `screenX`, `screenY`
+  or their average. Use them instead of raw pixels.
+- **Color helpers** `randColorInRange`, `modifyColor`, `modifyColorPerc` — duplicated with
+  identical signatures.
+- **Geometry helpers** `getAngle`, `getDist`, and the angle-wrapping `getAngle2` /
+  `getAngleForAngVel` for continuous angular velocity across the ±π discontinuity.
+- **Quit** is `ESC` everywhere, plus `pygame.QUIT`.
 
-Many folders carry a `<Folder>Web/` subfolder with a browser version of the game — a single self-contained `index.html` (HTML + CSS + JS, Canvas 2D). No build step, no framework: open the file in a browser. [Balls/BallsWeb/index.html](Balls/BallsWeb/index.html) is the **reference port** that established the format. Most ports are dependency-free hand-rolled JS, but a couple vendor libraries locally: Balls and [CrazyTanks/CrazyTanksWeb/index.html](CrazyTanks/CrazyTanksWeb/index.html) use `matter.min.js` (rigid-body physics), and CrazyTanks also uses `nipplejs.min.js` (touch joysticks). These are faithful reimplementations of the Pygame originals, **not** transpiled from the `.py` — edit the two independently.
+## Shared architecture — web ports
 
-Shared format across all ports (mirror it when adding or editing one):
+A single self-contained `index.html` (HTML + CSS + JS, Canvas 2D). No build step.
+[Balls/BallsWeb](Balls/BallsWeb/index.html) established the format.
 
-- **Mobile-first layout.** The canvas (`#c`) fills the area *above* a fixed bottom `#bar` of circular buttons (settings / actions, SVG or short-text icons), with a `#btnInfo` toggle in the bottom-right corner that draws an info overlay, and a `#hint` line up top that fades after 5 s. The CSS block (`--bar-height`, safe-area insets, `:active`/`.on` button states) is near-identical between ports — copy it.
-- **Resolution independence.** `resize()` sizes the canvas to `W × (innerHeight − barHeight)` scaled by `devicePixelRatio` (capped at 2), and all geometry is expressed as fractions of `W`, `H`, or `min(W,H)` — the web analog of the Python `xper`/`yper`/`sper` helpers. Don't hardcode the original 1280×720.
-- **Loop.** `requestAnimationFrame` with `dt = min(cap, (now − lastT)/1000)` in seconds, replacing the Pygame `while True:` + `deltaT`. Movement is dt-scaled.
-- **Adaptive input.** Pointer events cover mouse + touch from one path; keyboard is layered on for desktop. Multi-touch is tracked in a `pointers` Map. A `tappable(el, fn)` helper fires on `pointerdown` (not `click`) so bar buttons still respond while another finger is held on the canvas.
+- **Mobile-first layout.** The canvas (`#c`) fills the area *above* a fixed bottom `#bar` of
+  circular buttons, with a `#btnInfo` toggle and a `#hint` line that fades after 5 s. The CSS block
+  (`--bar-height`, safe-area insets, `:active`/`.on` states) is near-identical between ports — copy it.
+- **Resolution independence.** `resize()` sizes the canvas to the viewport scaled by
+  `devicePixelRatio` (capped), and all geometry is a fraction of `W`, `H` or `min(W,H)` — the web
+  analog of `xper`/`yper`/`sper`. Never hardcode 1280×720.
+- **Loop.** `requestAnimationFrame` with `dt = min(cap, (now − lastT)/1000)` in seconds.
+- **Adaptive input.** Pointer events cover mouse and touch from one path; keyboard is layered on for
+  desktop. Multi-touch goes in a `pointers` Map. `tappable(el, fn)` fires on `pointerdown`, not
+  `click`, so bar buttons still respond while another finger holds the canvas.
+- **Context loss is mandatory.** Every game lives in an iframe of the *same* renderer, and iOS caps
+  canvas memory **per tab**, so the browser throws away the context of whatever is in the
+  background. Without the `contextlost` / `contextrestored` pair plus a re-bake, that is a permanent
+  black screen. Implemented in Loop, Pong and StickFight; **the rest still owe it.**
 - **Spanish UI, English identifiers** — same convention as the newer Python files.
+
+## Assets
+
+- **Screenshots and photographs go in WebP, never PNG.** PNG is lossless, which is the wrong trade
+  for a photo: the arcade thumbnails were 8.86 MB as PNG and 0.73 MB as WebP *at the same
+  resolution*, and Snake's lake background was a 13 MB PNG where 0.4 MB of WebP is
+  indistinguishable. Quality ~82 measures 34–40 dB PSNR.
+- **Ship an image at the size it is used.** Snake downloaded 4000×3000 and immediately downscaled it
+  to 2048.
+- **Never put `Date.now()` in the `src` of an asset.** A cache buster is a tool for iterating, and
+  leaving one in means the browser can never cache the file. Snake re-downloaded 13 MB *every game*
+  for months because of one. The single legitimate use in this repo is the Arcade busting the
+  iframe's HTML document, which must never be stale.
+
+## Audio
+
+**Every one of the 22 web ports has sound, and all of it is synthesised in the browser.** Only two
+games ship audio files: Balls/MiniBalls (real marble recordings) and Fireworks/FireworksV2 (launch,
+sparks, explosion, background). Newton's Cradle has six 3 KB clips of real wooden-ball impacts cut
+from a recording that was already in the repo. Everything else is Web Audio and weighs nothing.
+
+There is **no shared audio module** — the folders stay independent. What is shared is an idiom,
+and departing from it has cost real bugs:
+
+- `AudioContext` is created inside `try/catch`, on the first gesture. In four games it was not, and
+  because that call is the first statement of a `pointerdown` handler, a throw took the whole
+  handler with it: the game lost **input**, not just sound.
+- A per-frame voice cap, **reset at the top of `loop()`**. Pong incremented the counter and never
+  reset it, so the game went permanently mute after ten sounds, with no error.
+- Anything that can fire from a physics loop gets a cooldown; anything continuous (engines, drones,
+  sirens) is one graph per session and is switched off on `visibilitychange`, because
+  `requestAnimationFrame` stops in a background tab and the audio graph does not.
+- Audio called from inside the frame goes in `try/catch` when the `requestAnimationFrame` re-arm is
+  below it — otherwise one audio exception freezes the game forever rather than muting it.
+
+Each game's own CLAUDE.md has its sonic identity and its vocabulary. They are deliberately
+different: a clock, a tank, a marble and a playing card do not share a timbre.
 
 ## Conventions worth knowing before editing
 
-- **Globals over parameters.** Sprites read `deltaT`, `keys`, `mouseX/mouseY`, `mouseLeft/mouseRight`, `screenX/screenY`, `windowSurface`, etc. directly from module scope. Adding a parameter to a sprite method usually means threading it through many call sites — match the existing global-access pattern instead.
-- **Inline data tables.** Levels, tracks, color palettes, and start positions are large nested tuples literally embedded in `__init__` or `process` (see [CrazyTanks/CrazyTanks.py](CrazyTanks/CrazyTanks.py) — `maps`, `startpos`, `colors`, `controls`, `finishlines`). Edits to map geometry happen in those literals, not in external data files.
-- **Mixed Spanish/English identifiers.** Older files ([Clock/Clock.py](Clock/Clock.py), [Pong/Pong.py](Pong/Pong.py), [Newton's Cradle/Newton's Cradle.py](Newton's%20Cradle/Newton's%20Cradle.py), [SimonSays/SimonSays.py](SimonSays/SimonSays.py)) use Spanish names (`radio`, `centro_x`, `fuente`, `crear_texto`, `pelota`, `apretado`). Newer files use English. Don't rename across that boundary without reason.
-- **Embedded binary blobs.** [SimonSays/SimonSays.py](SimonSays/SimonSays.py) is ~660 KB because raw PCM audio buffers are pasted as bytes literals into `pygame.mixer.Sound(buffer=...)` calls. Do not attempt to read that file in full — use `Grep` or read with explicit `offset`/`limit` to find code sections.
-- **No tests, no lint config, no CI.** This is a personal sandbox of independent prototypes — don't add tooling unless explicitly asked.
+- **Globals over parameters.** Sprites read `deltaT`, `keys`, `mouseX/mouseY`, `screenX/screenY`,
+  `windowSurface` directly from module scope. Adding a parameter usually means threading it through
+  many call sites — match the existing pattern instead.
+- **Inline data tables.** Levels, tracks, palettes and start positions are large nested tuples
+  embedded in `__init__` or `process` (see [CrazyTanks](CrazyTanks/CrazyTanks.py) — `maps`,
+  `startpos`, `colors`, `controls`, `finishlines`). Map edits happen in those literals.
+- **Mixed Spanish/English identifiers.** Older files ([Clock](Clock/Clock.py), [Pong](Pong/Pong.py),
+  [Newton's Cradle](Newton's%20Cradle/Newton's%20Cradle.py), [SimonSays](SimonSays/SimonSays.py))
+  use Spanish names (`radio`, `centro_x`, `fuente`, `pelota`). Newer files use English. Don't rename
+  across that boundary without reason.
+- **Embedded binary blobs.** [SimonSays.py](SimonSays/SimonSays.py) is ~660 KB because raw PCM audio
+  is pasted as bytes literals into `pygame.mixer.Sound(buffer=...)`. Don't read it in full — use
+  `Grep` or an explicit `offset`/`limit`.
+- **No lint config, no CI.** The one exception to "no tooling" is Loop, which has a headless QA
+  harness of 68 scenarios driven by Chrome + Python (see [Loop/CLAUDE.md](Loop/CLAUDE.md)). Don't add
+  tooling elsewhere unless asked.
+
+## The mirror
+
+This repo is mirrored by hand into a second GitHub repo, `repos/Showcase`, which is what GitHub
+Pages publishes. **Both have to be pushed**, and a sync has to propagate *deletions*, not only
+copies — `cp` alone leaves orphans behind. Verify with `diff -rq <src> <dst> -x .git`.

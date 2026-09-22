@@ -157,6 +157,9 @@
     z-index: 10;
   }
   #btnPause svg { display: block; width: 13px; height: 13px; pointer-events: none; }
+  #btnMute .ic-off { display: none; }
+  #btnMute.muted .ic-on  { display: none; }
+  #btnMute.muted .ic-off { display: block; }
   #btnPause:active { transform: scale(0.9); }
   #btnPause.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
   /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
@@ -209,6 +212,7 @@
 
   <!-- Botones de esquina (orden Pong, de afuera hacia adentro): salir · info · PANTALLA · ATRÁS · pausa.
        Posicionados individualmente (no agrupados) para igualar tamaño y espaciado al cluster de Pong. -->
+  <button class="btn" id="btnMute" aria-label="sonido" title="Sonido"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg></button>
   <button class="btn" id="btnFs" aria-label="pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
   <button class="btn" id="btnBack" data-k="ESCAPE" aria-label="atrás"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg></button>
 
@@ -815,6 +819,177 @@ const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
 function clearPhysics() { Composite.clear(world, false); }   // saca todos los cuerpos (al rearmar/salir de carrera)
 
 // ════════════════ TANK ════════════════
+// ════════════════ AUDIO ════════════════
+let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
+try { muted = localStorage.getItem('crazytanksMuted') === '1'; } catch (e) {}
+const voiceLast = {};
+const SND_PER_FRAME = 6;
+
+// Las tres capas continuas. UN grafo por sesion.
+let engOsc = null, engOsc2 = null, engFilt = null, engGain = null;                 // motor diesel
+let trkSrc = null, trkFilt = null, trkGain = null, trkBuf = null;                  // oruga
+let nitFilt = null, nitGain = null;                                               // nitro (tercer tap del MISMO ruido)
+let engLastG = -1, engLastP = -1, trkLastG = -1, trkLastF = -1, nitLastG = -1, engAcc = 0;
+
+function audioResume() {
+  if (!AC) {
+    try {
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      masterGain = AC.createGain(); masterGain.gain.value = muted ? 0 : 1;
+      masterGain.connect(AC.destination);
+      buildContinuous();
+    } catch (e) { AC = null; return; }
+  }
+  if (AC.state === 'suspended') AC.resume().catch(() => {});
+}
+function acOk() { return !!(AC && masterGain && AC.state === 'running'); }
+function ac() { return acOk() && sndThisFrame < SND_PER_FRAME; }
+
+function note(f0, f1, t0, dur, type, vol, jitter) {
+  const a = AC; if (!a) return;
+  const j = jitter === 0 ? 1 : 1 + (Math.random() - 0.5) * (jitter === undefined ? 0.08 : jitter);
+  const o = a.createOscillator(), g = a.createGain(), t = a.currentTime + t0;
+  o.type = type || 'square';
+  o.frequency.setValueAtTime(Math.max(20, f0 * j), t);
+  if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * j), t + dur);
+  g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(masterGain);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noiseHit(dur, vol, freq, q, type, t0) {
+  const a = AC; if (!a) return;
+  const n = Math.floor(a.sampleRate * dur);
+  const buf = a.createBuffer(1, Math.max(1, n), a.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+  const src = a.createBufferSource(); src.buffer = buf;
+  const bp = a.createBiquadFilter(); bp.type = type || 'bandpass';
+  bp.frequency.value = freq; bp.Q.value = q || 1;
+  const t = a.currentTime + (t0 || 0);
+  const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(bp); bp.connect(g); g.connect(masterGain);
+  src.start(t); src.stop(t + dur + 0.02);
+}
+function voice(name, cdMs, fn) {
+  if (!ac()) return;
+  const now = performance.now();
+  if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
+  voiceLast[name] = now; sndThisFrame++;
+  try { fn(); } catch (e) {}
+}
+
+// Un segundo de ruido en loop: la base de la oruga y del nitro. Se genera UNA vez — regenerarlo por
+// frame es medio megabyte de Float32 por segundo tirado a la basura.
+function buildContinuous() {
+  const sr = AC.sampleRate;
+  trkBuf = AC.createBuffer(1, sr, sr);
+  const d = trkBuf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+
+  engFilt = AC.createBiquadFilter(); engFilt.type = 'lowpass';
+  engFilt.frequency.value = 260; engFilt.Q.value = 6;
+  engGain = AC.createGain(); engGain.gain.value = 0;
+  engFilt.connect(engGain); engGain.connect(masterGain);
+  // Dos sierras a distancia de octava justa: el pulso del diesel sale del batido entre las dos.
+  engOsc = AC.createOscillator(); engOsc.type = 'sawtooth'; engOsc.frequency.value = 34;
+  engOsc2 = AC.createOscillator(); engOsc2.type = 'sawtooth'; engOsc2.frequency.value = 34.6;
+  engOsc.connect(engFilt); engOsc2.connect(engFilt);
+  engOsc.start(); engOsc2.start();
+
+  trkSrc = AC.createBufferSource(); trkSrc.buffer = trkBuf; trkSrc.loop = true;
+  trkFilt = AC.createBiquadFilter(); trkFilt.type = 'bandpass';
+  trkFilt.frequency.value = 900; trkFilt.Q.value = 1.1;
+  trkGain = AC.createGain(); trkGain.gain.value = 0;
+  trkSrc.connect(trkFilt); trkFilt.connect(trkGain); trkGain.connect(masterGain);
+  // El nitro es un TERCER tap del mismo ruido, no una fuente nueva: un BufferSource es de un solo
+  // uso, pero sus SALIDAS se pueden ramificar todas las veces que haga falta.
+  nitFilt = AC.createBiquadFilter(); nitFilt.type = 'highpass';
+  nitFilt.frequency.value = 2200; nitFilt.Q.value = 0.8;
+  nitGain = AC.createGain(); nitGain.gain.value = 0;
+  trkSrc.connect(nitFilt); nitFilt.connect(nitGain); nitGain.connect(masterGain);
+  trkSrc.start();
+}
+
+function setT(param, v, last, eps, tau) {
+  if (Math.abs(v - last) <= eps) return last;
+  try { param.setTargetAtTime(v, AC.currentTime, tau); } catch (e) {}
+  return v;
+}
+function continuousOff() {
+  if (!acOk() || !engGain) return;
+  engLastG = setT(engGain.gain, 0, engLastG, 0.0005, 0.10);
+  trkLastG = setT(trkGain.gain, 0, trkLastG, 0.0005, 0.10);
+  nitLastG = setT(nitGain.gain, 0, nitLastG, 0.0005, 0.06);
+}
+// Se reescribe a 20 Hz: escribir seis AudioParam por frame no aporta nada audible.
+function continuousUpdate(dt) {
+  if (!acOk() || !engGain) return;
+  engAcc += dt; if (engAcc < 0.05) return; engAcc = 0;
+  const t = tanks && tanks.find(x => x.id === 0);
+  if (!t || t.pause || t.finished || !t.start) { continuousOff(); return; }
+  const sp = Math.min(1, Math.abs(t.vel || 0) / (TANK_SPEED * 2.2));
+  // El agarre del bioma YA decide como se maneja el tanque: aca decide DE QUE es el piso.
+  // Nieve (grip bajo) = sordo y apagado; desierto/asfalto (grip alto) = duro y granulado.
+  const grip = (THEME_HANDLING[themeOf(t.track)] || [0.2])[0];
+  const gN = Math.max(0, Math.min(1, (grip - 0.01) / 0.39));
+  engLastG = setT(engGain.gain, 0.016 + 0.030 * sp, engLastG, 0.0005, 0.08);
+  engLastP = setT(engOsc.frequency, 34 + 46 * sp, engLastP, 0.4, 0.09);
+  if (engOsc2 && Math.abs(engLastP - 34) >= 0) { try { engOsc2.frequency.setTargetAtTime((34 + 46 * sp) * 1.018, AC.currentTime, 0.09); } catch (e) {} }
+  trkLastG = setT(trkGain.gain, sp * (0.010 + 0.022 * gN), trkLastG, 0.0005, 0.07);
+  trkLastF = setT(trkFilt.frequency, 520 + 1400 * gN, trkLastF, 8, 0.12);
+  nitLastG = setT(nitGain.gain, t.boosting ? 0.030 : 0, nitLastG, 0.0005, 0.05);
+}
+
+const sfx = {
+  // Una TOS de mortero, no un laser: esto tira bombas por un cano corto. El aire primero, el cuerpo
+  // despues. La version de la IA es la misma voz al 35%: esta lejos y no es tuya.
+  fire(mio) { voice(mio ? 'fire' : 'fireAI', mio ? 90 : 60, () => {
+    const v = mio ? 1 : 0.35;
+    noiseHit(0.07, 0.10 * v, 240, 0.9, 'lowpass');
+    note(220, 95, 0, 0.14, 'square', 0.075 * v);
+  }); },
+  // La chapa primero (aguda y corta), el hueco del casco despues.
+  impact(mio) { voice('impact', 70, () => {
+    const v = mio ? 1 : 0.55;
+    noiseHit(0.09, 0.09 * v, 520, 1.4);
+    note(170, 62, 0, 0.26, 'square', 0.07 * v);
+  }); },
+  nitroPick() { voice('nitroPick', 120, () => { note(880, 1320, 0, 0.10, 'sine', 0.06, 0); note(1320, 1760, 0.07, 0.10, 'sine', 0.035, 0); }); },
+  // Campanada seca de boxes. Una sola: la vuelta es informacion, no una celebracion.
+  lap() { voice('lap', 300, () => note(660, 660, 0, 0.11, 'square', 0.055, 0)); },
+  lastLap() { voice('lap', 300, () => { note(660, 660, 0, 0.11, 'square', 0.055, 0); note(990, 990, 0.12, 0.13, 'square', 0.055, 0); }); },
+  finish() { voice('finish', 800, () => [523.25, 659.25, 784].forEach((f, i) => note(f, f, i * 0.05, 0.4, 'triangle', 0.07, 0))); },
+  // Al reves: contramano es lo unico que desciende en todo el juego.
+  wrongWay() { voice('wrong', 900, () => note(300, 220, 0, 0.18, 'sawtooth', 0.04, 0)); },
+  // 3-2-1 iguales y el GO una quinta arriba y mas largo: la diferencia esta en la ULTIMA, que es
+  // la unica que hay que leer.
+  count(n) { voice('count', 200, () => (n === 4 ? note(660, 660, 0, 0.35, 'square', 0.075, 0)
+                                                : note(440, 440, 0, 0.18, 'square', 0.055, 0))); },
+  pause(on) { voice('pause', 150, () => note(on ? 520 : 300, on ? 300 : 520, 0, 0.13, 'sine', 0.05)); },
+  ui() { voice('ui', 45, () => note(720, 720, 0, 0.04, 'square', 0.035, 0)); },
+};
+
+window.addEventListener('pointerdown', audioResume, true);
+window.addEventListener('keydown', audioResume, true);
+// El boton de pausa vive en OTRO bloque <script>, que no ve estas variables: se expone un puente,
+// igual que el `__uiTogglePause` que ya existe.
+window.__uiSfxPause = () => { const t = tanks && tanks.find(x => x.id === 0); sfx.pause(!(t && t.pause)); if (t && !t.pause) continuousOff(); };
+(function () {
+  const bm = document.getElementById('btnMute');
+  if (!bm) return;
+  bm.classList.toggle('muted', muted);
+  bm.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    muted = !muted;
+    if (masterGain && AC) { masterGain.gain.cancelScheduledValues(AC.currentTime); masterGain.gain.value = muted ? 0 : 1; }
+    bm.classList.toggle('muted', muted);
+    try { localStorage.setItem('crazytanksMuted', muted ? '1' : '0'); } catch (e) {}
+    audioResume();
+  });
+})();
+
 class Tank {
   constructor(i, track, racelength, difficulty) {
     this.id = i;
@@ -896,6 +1071,7 @@ class Tank {
       const wantFire = keys[this.shoot] || (this.id === 0 && btnState.fire);
       if (wantFire && this.shoot_cooling === 0) {
         addSprite(new Bomb(this.color, this.radius, this.x, this.y, this.ang, this.vel));
+        sfx.fire(this.id === 0);
         this.shoot_cooling = 2 * MUT.hotCd;
       }
     } else {
@@ -978,6 +1154,7 @@ class Tank {
           else throttle = (Math.abs(diff) < Math.PI / 8 ? 1 : 0.55) * this.ai_acel * (this.finished ? 0.6 : 1);
           if (this.ai_shoot === 0 && this.shoot_cooling === 0 && !this.finished) {
             addSprite(new Bomb(this.color, this.radius, this.x, this.y, this.ang, this.vel));
+        sfx.fire(this.id === 0);
             this.shoot_cooling = 2 * MUT.hotCd;
           }
         }
@@ -1081,17 +1258,21 @@ class Tank {
     if (this.lap_progress === 0) {
       if (this.lap_checkpoint === 2 && !this.finished) {
         this.laps += 1;
+        // Solo el jugador: 7 tanques cruzando la meta serian 7 campanadas sin sentido.
+        if (this.id === 0 && this.laps < this.racelength) {
+          (this.laps === this.racelength - 1 ? sfx.lastLap() : sfx.lap());
+        }
         if (this.laps === this.racelength - 1 && this.lap_start_rank < 0) this.lap_start_rank = this.rank;   // #9 entrando a la ÚLTIMA vuelta: foto del puesto (para el bounty de remontada)
       }
       this.lap_checkpoint = 0;
     }
 
     if (closest_point !== null && closest_point.id !== 0) {
-      if (this.lap_progress < this.pre_lap_progress) this.wrongway = true;
+      if (this.lap_progress < this.pre_lap_progress) { if (!this.wrongway && this.id === 0) sfx.wrongWay(); this.wrongway = true; }
       if (this.lap_progress > this.pre_lap_progress) this.wrongway = false;
     }
 
-    if (this.laps === this.racelength && !this.finished) { this.finished = true; this.ai = true; this.finishPos = ++raceFinishCount; }
+    if (this.laps === this.racelength && !this.finished) { this.finished = true; this.ai = true; this.finishPos = ++raceFinishCount; if (this.id === 0) sfx.finish(); }
   }
 
   draw() {
@@ -1208,6 +1389,7 @@ class Bomb {
         // const direct = closeness > GRAZE_CUT;
         // tank.spin_timer = SPIN_TIME * MUT.hotSpin * (direct ? 1 : 0.6 + 0.4 * closeness);
         // const cut = direct ? 0.15 : 0.35 - 0.20 * closeness;
+        sfx.impact(tank.id === 0);                                       // el que la recibe decide el volumen: si sos vos, pleno
         tank.spin_timer = SPIN_TIME * MUT.hotSpin;                      // trompo COMPLETO (comportamiento original; Hot Ammo lo alarga ×1.5)
         tank.spin_dir = (ri(0,1) === 0 ? -1 : 1); tank.spin_saved = 0;
         tank.hitsTaken++; const _owner = tanks.find(t => t.color === this.color); if (_owner) _owner.hitsLanded++;   // #7 contadores de medallas (víctima recibió / dueño acertó)
@@ -2315,6 +2497,8 @@ class AuxiliaryHandler {
       else if (c > 2 && c < 2.7) { txt = '2!';  seg = 2; }
       else if (c > 3 && c < 3.7) { txt = '1!';  seg = 3; }
       else if (c > 4 && c < 5)   { txt = 'GO!!'; seg = 4; }
+      // Por FLANCO: `seg` se recalcula cada frame y sin esto la cuenta seria un zumbido continuo.
+      if (seg && seg !== window.__lastSeg) { window.__lastSeg = seg; sfx.count(seg); }
       if (txt) {
         const into = c - seg, scale = 1 + 0.35 * Math.max(0, 1 - into/0.28), isGo = txt === 'GO!!';
         ctx.save();
@@ -4048,13 +4232,20 @@ function frame(now) {
 // Arcade, etc.) NO debe matar el rAF — si no, el loop muere y la pantalla queda congelada/negra con los
 // botones DOM vivos. El catch loguea una vez por mensaje y SIEMPRE re-agenda el próximo frame.
 function loop(now) {
+  sndThisFrame = 0;                                                               // OBLIGATORIO: sin esto queda mudo tras SND_PER_FRAME
+  try { continuousUpdate(deltaT || 0.016); } catch (e) {}
   try { frame(now); }
   catch (e) { if (window.__loopErr !== '' + e) { console.error('CrazyTanks frame error:', e); window.__loopErr = '' + e; } }
   requestAnimationFrame(loop);
 }
 
 // Al volver a esta pestaña/iframe (re-ingreso desde el Arcade): re-medir y forzar re-horneado del fondo.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) { resize(); bgReady = false; } });
+// Las tres capas continuas siguen sonando con la pestana oculta: el rAF se frena pero el grafo de
+// audio no. En el Arcade eso significa el motor de CrazyTanks encima del juego que abriste despues.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { continuousOff(); if (AC && AC.state === 'running') AC.suspend().catch(() => {}); }
+  else { audioResume(); resize(); bgReady = false; }
+});
 window.addEventListener('pageshow', () => { resize(); bgReady = false; });
 
 // ── INIT ──
@@ -4098,7 +4289,7 @@ window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true 
         if (racing !== shown) { btn.style.display = racing ? 'flex' : 'none'; shown = racing; }
         btn.classList.toggle('on', !!paused);
       };
-      btn.addEventListener('pointerdown', e => { e.preventDefault(); if (window.__uiTogglePause) window.__uiTogglePause(); });
+      btn.addEventListener('pointerdown', e => { e.preventDefault(); if (window.__uiSfxPause) window.__uiSfxPause(); if (window.__uiTogglePause) window.__uiTogglePause(); });
     })();
   </script>
   <script>

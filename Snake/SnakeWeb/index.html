@@ -368,6 +368,157 @@
   let enemies = [];                                                               // serpientes enemigas (IA: buscan comida, esquivan minas, evitan chocar)
   let chunks = [];                                                                // "pedazos" desprendidos al recibir un golpe (vuelan y se desvanecen o se vuelven estrella)
   let spritesToRemove = [];
+  // ════════════════ AUDIO ════════════════
+  // Todo pasa por un lowpass de master: estas abajo del agua. Ver el encabezado del parche.
+  let AC = null, masterGain = null, masterLP = null, muted = false, sndThisFrame = 0;
+  try { muted = localStorage.getItem('snakeMuted') === '1'; } catch (e) {}
+  const voiceLast = {};
+  const SND_PER_FRAME = 6;
+  const LP_OPEN = 2600;                                                          // agua normal
+  let lpTarget = LP_OPEN;
+
+  function audioResume() {
+    if (!AC) {
+      try {
+        AC = new (window.AudioContext || window.webkitAudioContext)();
+        masterLP = AC.createBiquadFilter(); masterLP.type = 'lowpass';
+        masterLP.frequency.value = LP_OPEN; masterLP.Q.value = 0.7;
+        masterGain = AC.createGain(); masterGain.gain.value = muted ? 0 : 1;
+        masterLP.connect(masterGain); masterGain.connect(AC.destination);
+      } catch (e) { AC = null; return; }
+    }
+    if (AC.state === 'suspended') AC.resume().catch(() => {});
+  }
+  function acOk() { return !!(AC && masterLP && AC.state === 'running'); }
+  function ac() { return acOk() && sndThisFrame < SND_PER_FRAME; }
+  // El agua como instrumento: se mueve el corte del master, no se agrega una voz.
+  function lpSet(hz, tau) {
+    if (!acOk()) return;
+    lpTarget = hz;
+    try { masterLP.frequency.setTargetAtTime(hz, AC.currentTime, tau || 0.25); } catch (e) {}
+  }
+
+  // Ataque de 4-8 ms en TODAS las voces: sin el, la ganancia conmuta y eso es un click — justo lo
+  // que el agua no hace.
+  function wNote(f0, f1, t0, dur, type, vol, atk) {
+    const a = AC; if (!a) return;
+    const o = a.createOscillator(), g = a.createGain(), t = a.currentTime + t0;
+    const A = atk === undefined ? 0.006 : atk;
+    o.type = type || 'sine';
+    o.frequency.setValueAtTime(Math.max(20, f0), t);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(Math.max(0.0002, vol), t + A);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g); g.connect(masterLP);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  // Desplazamiento de agua. Casi siempre lowpass: el ruido de banda ancha suena a estatica, no a
+  // liquido.
+  function wNoise(t0, dur, vol, freq, q, type) {
+    const a = AC; if (!a) return;
+    const n = Math.floor(a.sampleRate * dur);
+    const buf = a.createBuffer(1, Math.max(1, n), a.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = a.createBufferSource(); src.buffer = buf;
+    const bp = a.createBiquadFilter(); bp.type = type || 'lowpass';
+    bp.frequency.value = freq; bp.Q.value = q || 0.7;
+    const t = a.currentTime + t0;
+    const g = a.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(Math.max(0.0002, vol), t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(bp); bp.connect(g); g.connect(masterLP);
+    src.start(t); src.stop(t + dur + 0.02);
+  }
+  function voice(name, cdMs, fn) {
+    if (!ac()) return;
+    const now = performance.now();
+    if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
+    voiceLast[name] = now; sndThisFrame++;
+    try { fn(); } catch (e) {}
+  }
+
+  const sfx = {
+    // ── BIOLUMINISCENTE ──
+    // Comer una estrella: una burbuja. Es el sonido mas frecuente del juego, asi que tiene que ser
+    // cortisimo y quedar abajo: 85 ms y 0.045. La altura sube con la rareza de la estrella, asi que
+    // una naranja se oye mejor que una amarilla sin necesidad de mirarla.
+    eat(points) {
+      const k = Math.max(0, Math.min(1, (points - 100) / 300));
+      voice('eat', 45, () => { wNote(380 + 180 * k, 900 + 400 * k, 0, 0.085, 'sine', 0.045, 0.004);
+                               wNote((900 + 400 * k) * 1.5, 0, 0.05, 0.06, 'sine', 0.016, 0.004); });
+    },
+    // Medusa: campana de vidrio humedo, quinta justa. Y el agua se CIERRA: estas adentro del escudo.
+    jelly() { voice('jelly', 300, () => { wNote(660, 0, 0, 0.5, 'sine', 0.05, 0.008); wNote(990, 0, 0, 0.42, 'sine', 0.028, 0.008); lpSet(1500, 0.18); }); },
+    // Se acabo el escudo: el agua se vuelve a abrir. El seno descendente solo lo subraya.
+    jellyOut() { voice('jellyOut', 300, () => { wNote(900, 520, 0, 0.18, 'sine', 0.035, 0.006); lpSet(LP_OPEN, 0.3); }); },
+    // Caballito: glissando de arranque, es velocidad pura.
+    seahorse() { voice('seahorse', 300, () => { wNote(300, 1200, 0, 0.22, 'triangle', 0.06, 0.006); wNoise(0, 0.35, 0.03, 600, 0.7); }); },
+    levelUp() { voice('levelUp', 400, () => [523.25, 784, 1046.5].forEach((f, i) => wNote(f, 0, i * 0.07, 0.30, 'sine', 0.055, 0.005))); },
+    // La carta elegida se tine por rareza: mas arriba = mas rara. La quinta solo aparece de tier 3.
+    card(tier) { voice('card', 200, () => { const f = 440 * Math.pow(2, (tier || 0) / 12);
+                                            wNote(f, 0, 0, 0.25, 'sine', 0.05, 0.005);
+                                            if ((tier || 0) >= 3) wNote(f * 1.5, 0, 0.04, 0.22, 'sine', 0.03, 0.005); }); },
+    reroll() { voice('reroll', 200, () => { for (let i = 0; i < 4; i++) wNoise(i * 0.04, 0.03, 0.025, 2400, 3, 'bandpass'); }); },
+
+    // ── HIDRAULICA ──
+    // La embestida en dos tiempos, programada de una: primero el agua que se junta al retraerse
+    // (LUNGE_WIND), despues el latigazo. Sin la primera mitad la embestida no se anticipa.
+    lunge() { voice('lunge', 200, () => { wNoise(0, LUNGE_WIND, 0.030, 900, 0.8);
+                                          wNoise(LUNGE_WIND, 0.22, 0.055, 500, 0.7);
+                                          wNote(150, 70, LUNGE_WIND, 0.20, 'sine', 0.035, 0.008); }); },
+    // Mordida carnosa: el volumen y el grave escalan con el dano real.
+    bite(dmg) { const k = Math.max(0.3, Math.min(1, dmg / 30));
+                voice('bite', 60, () => { wNote(160, 70, 0, 0.14, 'sine', 0.05 * k, 0.005); wNoise(0, 0.12, 0.035 * k, 400, 0.8); }); },
+    killEnemy() { voice('killE', 150, () => { wNote(220, 55, 0, 0.35, 'sine', 0.07, 0.006); wNote(330, 82, 0, 0.30, 'sine', 0.03, 0.006); wNoise(0, 0.30, 0.04, 350, 0.6); }); },
+    // Recibir dano: mas grave y mas sordo que morder. El que la come sos vos.
+    hurt(dmg) { const k = Math.max(0.35, Math.min(1, dmg / 30));
+                voice('hurt', 180, () => { wNote(130, 58, 0, 0.22, 'sine', 0.065 * k, 0.005); wNoise(0, 0.18, 0.045 * k, 260, 0.6); }); },
+    // La mina tiene timbre PROPIO, no el de la mordida: metal ahogado. Es lo unico metalico del
+    // arrecife y por eso se reconoce sin verlo.
+    mine() { voice('mine', 250, () => { wNoise(0, 0.25, 0.05, 1200, 5, 'bandpass'); wNote(90, 45, 0, 0.30, 'sine', 0.055, 0.005); }); },
+    // El borde del lago: no es un golpe, es presion. Siseo continuo mientras estas afuera.
+    border() { voice('border', 500, () => { wNoise(0, 0.35, 0.03, 2200, 0.7, 'highpass'); wNote(70, 0, 0, 0.35, 'sine', 0.02, 0.02); }); },
+    // Veneno: dos osciladores casi juntos que baten entre si. Un latido enfermo.
+    venom() { voice('venom', 900, () => { wNote(110, 95, 0, 0.30, 'sine', 0.04, 0.02); wNote(113, 98, 0, 0.30, 'sine', 0.03, 0.02); }); },
+    turboOut() { voice('turboOut', 900, () => { wNoise(0, 0.10, 0.035, 250, 0.6); wNote(140, 80, 0, 0.12, 'sine', 0.03, 0.006); }); },
+    turboFull() { voice('turboFull', 900, () => wNote(700, 1000, 0, 0.10, 'sine', 0.025, 0.005)); },
+
+    // ── JEFES ──
+    // El aparecido mas grande despues de la muerte. Cada tipo tiene su altura: se sabe cual llego.
+    boss(tipo) {
+      const f = tipo === 'puffer' ? 60 : tipo === 'stone' ? 48 : 40;
+      voice('boss', 1500, () => { wNote(f * 3, f, 0, 1.3, 'sine', 0.10, 0.05);
+                                  wNote(f * 4.5, f * 1.5, 0.08, 1.1, 'sine', 0.045, 0.05);
+                                  wNoise(0, 0.9, 0.05, 300, 0.5);
+                                  lpSet(1800, 0.4); setTimeout(() => lpSet(LP_OPEN, 0.8), 1400); });
+    },
+    // Pegarle a un jefe: DOS timbres. Si la armadura absorbio, un golpe seco y mate (no entro);
+    // si entro, un campanazo. Es la unica forma de saber si la ventana vulnerable estaba abierta.
+    bossHit(entro) {
+      voice('bossHit', 70, () => {
+        if (entro) { wNote(880, 0, 0, 0.35, 'sine', 0.06, 0.004); wNote(1320, 0, 0, 0.30, 'sine', 0.03, 0.004); }
+        else       { wNoise(0, 0.09, 0.045, 700, 2.0); wNote(120, 90, 0, 0.10, 'sine', 0.03, 0.006); }
+      });
+    },
+    bossDie() { voice('bossDie', 1500, () => { wNote(200, 35, 0, 1.4, 'sine', 0.10, 0.03); wNoise(0, 0.8, 0.06, 300, 0.5);
+                                               [523.25, 784, 1046.5, 1568].forEach((f, i) => wNote(f, 0, 0.5 + i * 0.09, 0.5, 'sine', 0.035, 0.005)); }); },
+    // Hundirse. El agua se cierra a 300 Hz y no se vuelve a abrir hasta el reinicio.
+    die() { voice('die', 2000, () => { wNote(300, 40, 0, 1.6, 'sine', 0.09, 0.02); wNoise(0, 1.2, 0.05, 400, 0.5); lpSet(300, 0.5); }); },
+    // Zambullida: el agua se abre de golpe. Es el unico barrido ascendente del juego.
+    start() { voice('start', 500, () => { wNoise(0, 0.6, 0.05, 1500, 0.6); wNote(120, 260, 0, 0.5, 'sine', 0.04, 0.02); lpSet(LP_OPEN, 0.35); }); },
+    ui() { voice('ui', 40, () => wNoise(0, 0.02, 0.025, 2000, 4, 'bandpass')); },
+  };
+
+  window.addEventListener('pointerdown', audioResume, true);
+  window.addEventListener('keydown', audioResume, true);
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { if (AC && AC.state === 'running') AC.suspend().catch(() => {}); }
+    else audioResume();
+  });
+
   let manager = null;
   let WORLD_R = 0;                                                                // radio del lago (mundo circular), se fija en resize
   let camX = 0, camY = 0;                                                         // cámara (= posición de la cabeza); el mundo se dibuja trasladado
@@ -873,7 +1024,7 @@
       // pero te quema (DPS) todo el tiempo que estés afuera — riesgo/recompensa. Al volver adentro, la regen
       // recupera. (Las serpientes NO mueren por chocarse entre sí — combate por ataque/vida.)
       const edge = WORLD_R - curR;
-      if (hx*hx + hy*hy > edge*edge) manager.borderHurt();                       // el vacío: SIN clamp, sólo DPS mientras estés afuera
+      if (hx*hx + hy*hy > edge*edge) { manager.borderHurt(); sfx.border(); }     // el vacío: SIN clamp, sólo DPS mientras estés afuera
       // radio de agarre GENEROSO para comestibles: acorde al tamaño visual (estrella ~curR*1.55, medusa
       // ~curR*1.75) y SIN esperar a que termine de aparecer (si spawnea pegada, se come igual).
       const eatThr = curR*3.2, eatThr2 = eatThr*eatThr;
@@ -882,6 +1033,7 @@
         const dx = f.x-hx, dy = f.y-hy;
         if (dx*dx + dy*dy < eatThr2) {
           f.grabbed = true;
+          sfx.eat(f.points);
           const amt = f.points / 20;                                             // fuel de crecimiento (5/10/15/20 según rareza)
           manager.score += f.points;                                             // puntos según el tipo (100/200/300/400)
           manager.fed += amt;                                                    // ENGORDE: el girth escala con la comida ACUMULADA (no con el largo)
@@ -896,6 +1048,7 @@
         const dx = h.x-hx, dy = h.y-hy;
         if (dx*dx + dy*dy < thr2) {
           spritesToRemove.push(h);                                              // la mina se consume (el manager respawnea otra lejos)
+          sfx.mine();
           manager.onHazardHit(h.x, h.y);
         }
       }
@@ -1271,7 +1424,7 @@
       enemies.push(this);
     }
     grow(n) { const last = this.pieces[this.pieces.length-1]; for (let i = 0; i < n && this.pieces.length < ENEMY_MAX_LEN; i++) this.pieces.push({ x: last.x, y: last.y, ang: last.ang, wt: 0 }); }
-    startLunge(tx, ty) { const h = this.pieces[0], dx = tx-h.x, dy = ty-h.y, d = Math.hypot(dx, dy) || 1; this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; this.lungeDisp = 0; }
+    startLunge(tx, ty) { sfx.lunge(); const h = this.pieces[0], dx = tx-h.x, dy = ty-h.y, d = Math.hypot(dx, dy) || 1; this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; this.lungeDisp = 0; }
     // ── CABEZAS EXTRA: modelo unificado (cuellos que muerden solos). Un parámetro por cabeza define dónde se
     //    ancla al cuerpo (baseIdx), su largo (neckCount), su dirección de reposo (restOff/side) y cuánta
     //    LIBERTAD tiene para apuntar (freedom). De ahí salen los 3 looks: 'cluster', 'hydra' y 'body'. ──
@@ -1789,6 +1942,7 @@
       } else { this.x = this.tx; this.y = this.ty; if (h) this.ang = Math.atan2(h.y - this.y, h.x - this.x); this.aphase = 'luring'; this.aphaseT = ANGLER_LURE_T; this.tpCD = ANGLER_TP_CD; } // reposition = teletransporte → reinicia el CD
     }
     takeHit(dmg, fromAng) {                                                       // el dash conecta. La ARMADURA por tipo define la ventana vulnerable (boss NO escala por sizeMod)
+      // El sonido se decide DESPUES de saber cuanto entro de verdad (ver el final de la funcion).
       if (this.dead) return;
       let real, countered = false;
       if (this.type === 'puffer')     real = dmg * (this.inflate > 0.5 ? (1 - PUFFER_ARMOR_INFLATED) : 1);   // pegale DESINFLADO
@@ -1798,6 +1952,10 @@
         real = dmg * ((open || this.aphase === 'stagger') ? 1 : (1 - ANGLER_ARMOR_CLOSED));
         if (open) { real *= ANGLER_COUNTER_MULT; countered = true; this.aphase = 'stagger'; this.aphaseT = ANGLER_STAGGER_T; this.bitten = true; this.lvx = 0; this.lvy = 0; } // CRIT + aturdido + cancela su mordida (el jugador se procesa ANTES que el jefe → el bloque de mordida ya no corre)
       }
+      // DOS timbres: si la armadura absorbio mas de la mitad, golpe seco y mate — no entro, la
+      // ventana vulnerable estaba cerrada. Si entro, campanazo. Es la unica forma de saber si el
+      // momento era el correcto sin memorizar la fase de cada jefe.
+      sfx.bossHit(real >= dmg * 0.5);
       this.hp -= real; this.hurt = HAZARD_FLASH_TIME;
       manager.score += Math.round(real * HIT_SCORE);
       if (manager.lifesteal > 0) manager.healQueue += real * manager.lifesteal;
@@ -1809,6 +1967,7 @@
     die() {                                                                       // MUERTE COPADA: flash + onda de choque + implosión→estallido (nube grande) + lluvia de estrellas + glow lento
       if (this.dead) return;
       this.dead = true;
+      sfx.bossDie();
       manager.score += BOSS_KILL_SCORE; manager.addXP(XP_KILL*4);
       const R = this.bodyR();
       manager.luFlash = 1; manager.flashGlow = `hsla(${this.hue},95%,62%,0.7)`;
@@ -1977,6 +2136,7 @@
     }
     addXP(n) { this.xp += n; if (this.xp >= this.xpNeed && !this.choosing) this.startLevelUp(); }
     startLevelUp() {
+      sfx.levelUp();
       this.xp -= this.xpNeed; this.level++;
       this.xpNeed = Math.round(XP_BASE * Math.pow(XP_GROWTH, this.level - 1) + XP_LINEAR * (this.level - 1)); // curva híbrida: siempre hay próximo nivel a la vista
       if (this.level % GAIN_REROLL_EVERY === 0) this.rerolls++;                   // +1 rebarajada cada N niveles
@@ -1985,6 +2145,7 @@
     }
     applyUpgrade(entry) {                                                         // entry = {u, rar}: pasa RF y tier al apply
       const { u, rar } = entry;
+      sfx.card(rar.tier);
       u.apply(this, rar.RF, rar.tier);
       if (u.evo) u.evo(this, rar.tier);                                          // EVOLUCIÓN por rareza alta: la carta gana un COMPORTAMIENTO (no sólo número). Usa el canal rar.tier
       if (u.passive) this.takenPassives.add(u.id);
@@ -1995,6 +2156,7 @@
       this.luFlash = 1; this.flashGlow = rar.glow;
     }
     hitEnemy(e, dmg, fromAng) {                                                   // el JUGADOR le pega a una enemiga (único camino → otorga XP y SCORE)
+      sfx.bite(dmg);
       if (!e || e.dead) return;
       e.hp -= dmg; e.hurt = HAZARD_FLASH_TIME; if (e.pieces[0]) e.pieces[0].wt = WAVE_TOTAL;
       e.shedChunk(fromAng, Math.max(1, Math.min(CHUNK_MAX, Math.round(dmg/CHUNK_DMG_PER))));
@@ -2003,6 +2165,7 @@
       if (e.hp <= 0) { this.score += KILL_SCORE + Math.round(e.maxHp); this.kills++; e.die(); this.addXP(XP_KILL + Math.round(e.maxHp*0.2)); } // MATAR da bonus de score y XP (grandes valen más)
     }
     hurtPlayer(dmg, fromAng, attacker) {                                          // una enemiga (o mina) le pega al jugador
+      sfx.hurt(dmg);
       if (this.immunity > 0 || this.gameOver) return;                            // escudo bloquea (PARRY DESACTIVADO: ya no hay i-frames de contra)
       dmg *= (1 - this.armor);                                                    // "Coraza"
       this.hp -= dmg; this.hitFlash = HAZARD_FLASH_TIME;
@@ -2024,6 +2187,7 @@
     }
     die() {
       if (this.gameOver) return;                                                  // una sola vez
+      sfx.die();
       this.gameOver = true; this.dying = true; this.deathT = 0;
       if (this.score > this.best) { this.best = this.score; try { localStorage.setItem('snakeBest', this.best); } catch (e) {} } // guarda el récord
       // La víbora se DESHACE en partículas que se dispersan lento como en el agua y se desvanecen (en vez de
@@ -2060,6 +2224,7 @@
       }
     }
     onJellyEat(j) {
+      sfx.jelly();
       spritesToRemove.push(j);
       this.immunity = JELLY_IMMUNITY;                                             // escudo: atravesás tu cuerpo un rato
       this.score += 250;                                                          // bonus mayor que una estrella (100); NO da segmentos (sólo escudo + score)
@@ -2067,6 +2232,7 @@
       this.burst(j.x, j.y, 335, 22);                                              // burst rosado
     }
     onSeahorseEat(s) {                                                            // caballito: BOOST de velocidad (3×) por unos segundos, sin indicador
+      sfx.seahorse();
       spritesToRemove.push(s);
       this.speedBoost = SPEED_BOOST_TIME;
       this.score += s.points;
@@ -2077,7 +2243,12 @@
       const wants = sprint;
       if (wants && this.turbo > 0) { this.turbo = Math.max(0, this.turbo - TURBO_DRAIN*this.turboDrainMul*deltaT); this.boosting = true; }
       else if (wants) { this.boosting = false; }                                 // sin carga: no acelera (soltar para recargar)
-      else { this.turbo = Math.min(1, this.turbo + TURBO_RECHARGE*this.turboRechargeMul*deltaT); this.boosting = false; }
+      else {
+        const antes = this.turbo;
+        this.turbo = Math.min(1, this.turbo + TURBO_RECHARGE*this.turboRechargeMul*deltaT);
+        if (antes < 1 && this.turbo >= 1) sfx.turboFull();                        // FLANCO de recarga completa
+        this.boosting = false;
+      }
       // el PROPIO orbe es el indicador: se llena/vacía como un vaso (de abajo hacia arriba) con la carga.
       const b = document.getElementById('btnSprint');
       if (b) {
@@ -2094,10 +2265,15 @@
     process() {
       if (this.choosing) return;                                                 // eligiendo mejora: congela TODO (no drena escudo/boost ni spawnea)
       if (this.hitFlash > 0) this.hitFlash = Math.max(this.hitFlash - deltaT, 0);
-      if (this.immunity > 0) this.immunity = Math.max(this.immunity - deltaT, 0);
+      if (this.immunity > 0) {
+        const antes = this.immunity;
+        this.immunity = Math.max(this.immunity - deltaT, 0);
+        if (antes > 0 && this.immunity === 0) sfx.jellyOut();                     // FLANCO: el escudo se acaba, el agua se vuelve a abrir
+      }
       if (this.parryActive > 0) this.parryActive = Math.max(this.parryActive - deltaT, 0); // i-frames del PARRY
       if (this.venom > 0) {                                                        // VENENO del pez piedra: DoT como el borde (respeta Coraza, ignora el escudo; se congela acá en pausa/elección)
         this.venom = Math.max(0, this.venom - deltaT);
+        sfx.venom();                                                              // cooldown 900 ms: es un latido, no un tono continuo
         this.hp -= STONE_VENOM_DPS * (1 - this.armor) * deltaT;
         this.hitFlash = Math.max(this.hitFlash, HAZARD_FLASH_TIME*0.5);            // tinte de dolor sostenido mientras dura el veneno
         if (this.hp <= 0) { this.hp = 0; this.die(); }
@@ -2187,6 +2363,7 @@
       if (this.level >= this.nextBossLevel && !bosses.length) {
         const type = BOSS_ROTATION[this.bossesSpawned % BOSS_ROTATION.length];
         bosses.push(new Boss(type, BOSS_HP_BASE + BOSS_HP_GROW*this.bossesSpawned));
+        sfx.boss(type);
         this.bossesSpawned++; this.nextBossLevel += BOSS_LEVEL_STEP;
       }
 
@@ -2268,6 +2445,7 @@
       }
     }
     reset() {
+      sfx.start();
       snake = []; food = []; hazards = []; treasures = []; seahorses = []; enemies = []; chunks = []; spritesToRemove = []; bosses = [];
       this.nextBossLevel = BOSS_FIRST_LEVEL; this.bossesSpawned = 0;
       this.venom = 0; this.shockwave = null; this.deathGlow = null;
@@ -2834,7 +3012,7 @@
 
   // ── BOTONES ──
   // tap en pointerdown (responde aunque otro dedo esté dirigiendo en el canvas), igual que BallsWeb.
-  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); fn(); }); } // stopPropagation: tocar un botón de la barra NO cuenta como dedo de sprint (evita boost fantasma)
+  function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); sfx.ui(); fn(); }); } // stopPropagation: tocar un botón de la barra NO cuenta como dedo de sprint (evita boost fantasma)
   // press-and-hold: mantener apretado el botón ⚡ acelera; soltar/salir lo corta. SÓLO listeners en el propio
   // elemento (igual que el holdBtn de TankWARS): nada a nivel document, así no se pisa con la palanca.
   let sprintBtnHeld = false;
@@ -2964,6 +3142,7 @@
   function rerollUpgrades() {                                                      // re-tira las cartas Y sus rarezas (no aplica, no cierra)
     if (manager.rerolls <= 0) return;
     manager.rerolls--;
+    sfx.reroll();
     showUpgradeOverlay(rollUpgrades());
   }
   function showUpgradeOverlay(list) {
@@ -2999,6 +3178,7 @@
   // ════════════════ LOOP ════════════════
   function loop(now) {
     if (typeof now !== 'number') now = performance.now();
+    sndThisFrame = 0;                                                            // OBLIGATORIO: sin esto queda mudo tras SND_PER_FRAME
     deltaT = Math.min(0.05, (now - lastT) / 1000);                               // dt real, clamp 50ms (igual que Snake.py)
     lastT = now;
     dtSmoothed = dtSmoothed*0.9 + deltaT*0.1;
