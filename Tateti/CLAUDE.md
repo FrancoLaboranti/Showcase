@@ -21,30 +21,29 @@ See [../CLAUDE.md](../CLAUDE.md) for the shared sprite/main-loop conventions.
 
 ## AUDIO (2026-09-22)
 
-**Vidrio sobre laca.** El tablero es una losa laqueada con sombra proyectada y las marcas son
-vidrio encendido con halo. Cada marca es una piedra que se apoya sobre una superficie dura: un
-transitorio de ruido pasa-altos + una resonancia afinada corta.
+**Glass on lacquer.** The board is a lacquered slab with a drop shadow and the marks are lit glass
+with a halo. Each mark is a stone set down on a hard surface: a highpassed noise transient + a short
+tuned resonance.
 
-**La altura no la fija la celda: la fija cuantas marcas hay ya en el tablero.** La ronda entera
-trepa por una pentatonica menor de nueve grados, asi que el noveno movimiento suena apretado aunque
-mecanicamente sea identico al primero. El tablero se vuelve un instrumento que se llena.
+**The pitch is not set by the cell: it is set by how many marks are already on the board.** The whole
+round climbs a nine-degree minor pentatonic, so the ninth move sounds tight even though mechanically
+it is identical to the first. The board becomes an instrument that fills up.
 
-- **X = `triangle`, O = `sine` una quinta justa arriba.** Asi las dos marcas conviven sin disonar
-  por mas que se alternen. Medido: 219 Hz (X, grado 1) / 389 (O) / 292 (X) / 493 (O).
-- **Las dos victorias suenan distinto**: la de la X en `triangle` desde 261 Hz, la de la O en
-  `sine` desde 392. El timbre lo pone el que gano.
-- **El empate es lo contrario de resolver**: 220 + 247 Hz, una segunda mayor que se bate y no va a
-  ningun lado.
-- **La CPU no toca ese instrumento.** Antes de mover cierra dos contactos secos y sin altura, y eso
-  es lo unico mecanico del juego. A proposito NO es el tictac de un pendulo: Loop ya es un reloj de
-  bolsillo y los dos no se tienen que pisar.
-- Techo de **8** y no 4: `sndThisFrame` cuenta osciladores CREADOS, y la fanfarria de victoria crea
-  cinco de un saque. Un techo de 4 truncaria el unico momento musical del juego.
+- **X = `triangle`, O = `sine` a perfect fifth above.** That way the two marks coexist without
+  clashing however much they alternate. Measured: 219 Hz (X, degree 1) / 389 (O) / 292 (X) / 493 (O).
+- **The two wins sound different**: X's in `triangle` from 261 Hz, O's in `sine` from 392. The winner
+  sets the timbre.
+- **A draw is the opposite of resolving**: 220 + 247 Hz, a major second that beats and goes nowhere.
+- **The CPU does not play that instrument.** Before moving it closes two dry, pitchless contacts, and
+  that is the only mechanical thing in the game. Deliberately NOT a pendulum's tick: Loop is already
+  a pocket watch and the two must not tread on each other.
+- Ceiling of **8** and not 4: `sndThisFrame` counts oscillators CREATED, and the victory fanfare
+  creates five in one go. A ceiling of 4 would truncate the game's only musical moment.
 
-> Patron comun a todo el repo: sintesis WebAudio sin archivos, `AudioContext` creado con
-> `try/catch` en el primer gesto, techo de voces por frame **con su reseteo al tope del `loop()`**,
-> cooldown por voz, boton de mute con persistencia en `localStorage`, y `visibilitychange` para que
-> nada continuo siga sonando con la pestana al fondo. Si el audio falla, el juego sigue andando.
-> Verificado con un arnes headless que envuelve el `AudioContext` y anota cada nodo y cada rampa.
-> **El arnes no escucha**: comprueba que suene lo que se diseno, cuando se diseno y con que
-> parametros. La evaluacion auditiva queda pendiente.
+> Pattern shared across the repo: WebAudio synthesis with no files, an `AudioContext` created
+> inside `try/catch` on the first gesture, a per-frame voice ceiling **with its reset at the top of
+> `loop()`**, a per-voice cooldown, a mute button persisted in `localStorage`, and
+> `visibilitychange` so nothing continuous keeps playing with the tab in the background. If audio
+> fails, the game keeps running. Verified with a headless harness that wraps the `AudioContext` and
+> logs every node and every ramp. **The harness does not listen**: it checks that what was designed
+> plays, when it was designed to, with which parameters. Judging it by ear is still pending.

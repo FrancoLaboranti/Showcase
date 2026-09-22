@@ -11,30 +11,30 @@ Diverges from the repo skeleton: no `Sprite` base class, no `xper`/`yper` helper
 See [../CLAUDE.md](../CLAUDE.md) for the shared conventions this file does not follow.
 
 
-## AUDIO — correccion y material nuevo (2026-09-22)
+## AUDIO — fix and new material (2026-09-22)
 
-**El congelado.** `playClick()` se llamaba desde dentro de `frame()` y el `requestAnimationFrame`
-esta mas abajo. Una excepcion del audio — un contexto interrumpido en movil tira `InvalidStateError`
-al escribir cualquier parametro — no dejaba el pendulo mudo: lo dejaba **QUIETO**, sin volver a
-pedir un cuadro nunca mas. Ahora la llamada va en `try/catch` y `playClick` exige
-`actx.state === 'running'`, no solo que el contexto exista.
+**The freeze.** `playClick()` was called from inside `frame()` and the `requestAnimationFrame` is
+further down. An audio exception — an interrupted context on mobile throws `InvalidStateError` when
+writing any parameter — did not leave the cradle mute: it left it **STILL**, never asking for another
+frame again. The call now sits in `try/catch` and `playClick` requires `actx.state === 'running'`, not
+merely that the context exists.
 
-**El WAV huerfano.** `sounds/woodenballs.wav` son 19,6 MB que no cargaba nadie: 69 s de grabacion
-real de bolas de madera chocando, estereo de 24 bits a 48 kHz, con **39 impactos aislados**. Es
-material de sobra para el unico juego del repo cuyo sonido ES el choque de dos esferas de madera.
-Se extrajeron los seis golpes limpios (entrada silenciosa, sin recorte, cola entera) a
-`wood1..6.mp3`, **17,6 KB en total**:
+**The orphan WAV.** `sounds/woodenballs.wav` is 19.6 MB that nothing loaded: 69 s of a real recording
+of wooden balls colliding, 24-bit stereo at 48 kHz, with **39 isolated impacts**. That is more than
+enough material for the one game in the repo whose sound IS two wooden spheres colliding. The six
+clean hits (silent lead-in, no clipping, whole tail) were extracted to `wood1..6.mp3`, **17.6 KB in
+total**:
 
-| | centroide del ataque | cola a -40 dB |
+| | attack centroid | tail to -40 dB |
 |---|---|---|
-| wood5 | 646 Hz (grave, apagado) | 59 ms |
+| wood5 | 646 Hz (low, muted) | 59 ms |
 | wood1 | 1682 Hz | 72 ms |
 | wood2 | 1635 Hz | 177 ms |
 | wood6 | 2528 Hz | 55 ms |
 | wood3 | 3249 Hz | 61 ms |
-| wood4 | 3357 Hz (brillante, seco) | 43 ms |
+| wood4 | 3357 Hz (bright, dry) | 43 ms |
 
-No son seis copias del mismo golpe: el juego puede elegir segun la velocidad del choque. **Todavia
-no estan cableados** — el `playClick` sintetizado sigue siendo el que suena.
+They are not six copies of the same hit: the game can pick by collision speed. **They are not wired up
+yet** — the synthesised `playClick` is still what plays.
 
-El WAV de 19,6 MB sigue en el repo: es material fuente y borrarlo es decision de Franco.
+The 19.6 MB WAV is still in the repo: it is source material and deleting it is Franco's call.

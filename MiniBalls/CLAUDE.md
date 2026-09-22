@@ -9,14 +9,14 @@ Same controls as Balls: **LMB** drag, **wheel** add/remove, **SPACE** debug, **R
 See [../Balls/CLAUDE.md](../Balls/CLAUDE.md) for the wall-bounce note and [../CLAUDE.md](../CLAUDE.md) for shared conventions.
 
 
-## AUDIO — correccion (2026-09-22)
+## AUDIO — fix (2026-09-22)
 
-`audioResume()` creaba el `AudioContext` **sin `try/catch`**, y es la PRIMERA sentencia del handler
-de `pointerdown` del canvas. Si el constructor tira (una WebView sin audio, Safari con demasiados
-contextos), la excepcion se lleva puesto el resto del handler y nunca corren
-`canvas.setPointerCapture()` ni la creacion del estado del puntero: **el juego no quedaba mudo,
-quedaba SIN INPUT**. Tambien faltaba el `.catch()` del `resume()`.
+`audioResume()` created the `AudioContext` **without `try/catch`**, and it is the FIRST statement in
+the canvas `pointerdown` handler. If the constructor throws (a WebView with no audio, Safari with
+too many contexts), the exception takes out the rest of the handler and neither
+`canvas.setPointerCapture()` nor the pointer-state setup ever runs: **the game was not left mute, it
+was left WITH NO INPUT**. The `.catch()` on `resume()` was missing too.
 
-Pendiente (ver la auditoria): toda la capa de impactos esta estrangulada — un solo bucket con
-cooldown de 120 ms, o sea un techo duro de 8.3 clicks/s pase lo que pase, y el que suena es el
-primer par que pasa el cooldown, no el mas fuerte.
+Pending (see the audit): the whole impact layer is throttled — a single bucket with a 120 ms
+cooldown, i.e. a hard ceiling of 8.3 clicks/s no matter what, and the one that plays is the first
+pair past the cooldown, not the loudest.

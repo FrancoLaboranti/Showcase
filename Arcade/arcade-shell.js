@@ -1,29 +1,29 @@
 // ════════════════════════════════════════════════════════════════════
 //  Arcade shell — exit / fullscreen / info wiring + orientation lock +
-//  postMessage bridge a la shell padre (cuando el juego corre embebido en el
-//  iframe del Arcade). Compartido entre todos los juegos.
+//  postMessage bridge to the parent shell (when the game runs embedded in the
+//  Arcade's iframe). Shared by every game.
 //
-//  Incluir en cada juego con:
+//  Include it in each game with:
 //    <script src="../../Arcade/arcade-shell.js" data-orient="landscape"></script>
 //
-//  data-orient: 'landscape' | 'portrait' | 'any'. Determina si el juego pide
-//  un lock de orientación al entrar en fullscreen. 'any' = sin lock.
+//  data-orient: 'landscape' | 'portrait' | 'any'. It determines whether the game requests
+//  an orientation lock on entering fullscreen. 'any' = no lock.
 //
-//  Requisitos en el HTML del juego:
-//   · <button id="btnExit"> — botón ✕ (en el bar)
-//   · <button id="btnFs">   — botón ⛶ (en el bar; lleva <g class="ic-enter">/<g class="ic-exit">)
-//   · <button id="btnInfo"> — botón ⓘ (en el bar) [opcional]
+//  Requirements in the game's HTML:
+//   · <button id="btnExit"> — the ✕ button (in the bar)
+//   · <button id="btnFs">   — the ⛶ button (in the bar; it carries <g class="ic-enter">/<g class="ic-exit">)
+//   · <button id="btnInfo"> — the ⓘ button (in the bar) [optional]
 //
 //  Comportamiento:
-//   · Embebido en el iframe del Arcade → la shell padre maneja fullscreen y
-//     orientación; este script sólo togglea/refleja vía postMessage. Oculta
-//     el botón ⛶ (no tiene sentido togglearlo dentro del iframe).
-//   · PWA instalada suelta → intenta Fullscreen + lock de orientación al cargar.
-//   · Pestaña del browser → el primer toque del usuario dispara Fullscreen + lock.
-//   · iOS Safari (no soporta lock) → falla silencioso, queda el comportamiento default.
+//   · Embedded in the Arcade's iframe → the parent shell handles fullscreen and
+//     orientation; this script only toggles/reflects via postMessage. It hides
+//     the ⛶ button (toggling it inside the iframe makes no sense).
+//   · Installed PWA, standalone → it tries Fullscreen + an orientation lock on load.
+//   · Browser tab → the user's first touch triggers Fullscreen + the lock.
+//   · iOS Safari (no lock support) → it fails silently, the default behaviour remains.
 // ════════════════════════════════════════════════════════════════════
 (function () {
-  // Capturado al evaluar el <script>: data-orient="landscape" etc.
+  // Captured when the <script> is evaluated: data-orient="landscape" etc.
   const _script = document.currentScript;
   const ORIENT  = (_script && _script.dataset && _script.dataset.orient) || 'any';
   const EMBEDDED = (window.self !== window.top);
@@ -55,9 +55,9 @@
   function tappable(el, fn) { el && el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
   tappable(document.getElementById('btnFs'), () => {
     if (EMBEDDED) {
-      // Same-origin con la shell del Arcade → llamamos requestFullscreen() DIRECTO sobre el
-      // documento padre para preservar el user-activation del tap (postMessage lo perdía y
-      // Chrome rechazaba el request en silencio). Fallback a postMessage si fuera cross-origin.
+      // Same-origin with the Arcade's shell → we call requestFullscreen() DIRECTLY on the
+      // parent document to preserve the tap's user activation (postMessage lost it and
+      // Chrome rejected the request silently). Falls back to postMessage if it were cross-origin.
       try {
         const topDoc = window.top.document;
         if (topDoc.fullscreenElement || topDoc.webkitFullscreenElement) {
@@ -82,14 +82,14 @@
   let fsOnce = false;
   function tryAutoFs(e) {
     if (fsOnce) return;
-    if (e && e.pointerType === 'mouse') return;   // en desktop no forzamos
+    if (e && e.pointerType === 'mouse') return;   // on desktop we do not force it
     if (isFs()) { fsOnce = true; return; }
     enterFs();
   }
   if (!EMBEDDED) document.addEventListener('pointerdown', tryAutoFs, true);
   document.addEventListener('fullscreenchange', () => { if (isFs()) fsOnce = true; });
 
-  // ── Exit directo (sin confirmación) ──
+  // ── Direct exit (no confirmation) ──
   const btnExit = document.getElementById('btnExit');
   if (btnExit) btnExit.addEventListener('click', () => {
     if (EMBEDDED) { try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {} return; }

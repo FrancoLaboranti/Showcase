@@ -1216,15 +1216,15 @@ class Game(Sprite):
                 label = 'Starting position  ·  END = back to the present'
             else:
                 total_plies = len(self.history) - 1
-                label = 'Viendo movida ' + str(idx) + ' de ' + str(total_plies) + '  ·  ←→ navigate  ·  END = to the present'
+                label = 'Viewing move ' + str(idx) + ' of ' + str(total_plies) + '  ·  ←→ navigate  ·  END = to the present'
             createText(int(sper(0.020)), label, 'center',
                        (230, 220, 130), screenX/2, yper(0.04))
         elif view_status == 'checkmate':
-            winner = 'Negras' if view_turn == 'w' else 'Blancas'
-            createText(int(sper(0.030)), 'JAQUE MATE — Ganan ' + winner,
+            winner = 'Black' if view_turn == 'w' else 'White'
+            createText(int(sper(0.030)), 'CHECKMATE — ' + winner + ' wins',
                        'center', (255, 90, 90), screenX/2, yper(0.04))
         elif view_status == 'stalemate':
-            createText(int(sper(0.030)), 'AHOGADO — Tablas',
+            createText(int(sper(0.030)), 'STALEMATE — Draw',
                        'center', (230, 220, 100), screenX/2, yper(0.04))
         elif view_status == 'repetition':
             createText(int(sper(0.030)), 'DRAW BY REPETITION',
@@ -1233,13 +1233,13 @@ class Game(Sprite):
             createText(int(sper(0.030)), 'DRAW BY INSUFFICIENT MATERIAL',
                        'center', (230, 220, 100), screenX/2, yper(0.04))
         else:
-            turn_txt = 'Turno: Blancas' if view_turn == 'w' else 'Turno: Negras'
+            turn_txt = 'To move: White' if view_turn == 'w' else 'To move: Black'
             if self.ai_thinking:
-                engine_hint = ' (' + (self.ai_engine_name or 'IA') + ')' if self.ai_engine_name else ''
-                turn_txt += '   ·   Pensando' + engine_hint + '...'
+                engine_hint = ' (' + (self.ai_engine_name or 'AI') + ')' if self.ai_engine_name else ''
+                turn_txt += '   ·   Thinking' + engine_hint + '...'
                 turn_color = (200, 200, 255)
             elif view_status == 'check':
-                turn_txt += '   ·   JAQUE'
+                turn_txt += '   ·   CHECK'
                 turn_color = (255, 130, 130)
             else:
                 turn_color = (235, 235, 235)
@@ -1247,17 +1247,17 @@ class Game(Sprite):
                        turn_color, screenX/2, yper(0.04))
 
         if not viewing and not self.ai_thinking and self.ai_last_depth > 0 and not self.game_over:
-            name = self.ai_engine_name or 'IA'
+            name = self.ai_engine_name or 'AI'
             createText(int(sper(0.013)),
-                       'Last move by ' + name + ': profundidad ' + str(self.ai_last_depth),
+                       'Last move by ' + name + ': depth ' + str(self.ai_last_depth),
                        'center', (140, 160, 180), screenX/2, yper(0.073))
 
         if self.ai_both:
-            mode_txt = 'Modo: IA vs IA'
+            mode_txt = 'Mode: AI vs AI'
         elif self.ai_color is None:
-            mode_txt = 'Modo: 2 Jugadores'
+            mode_txt = 'Mode: 2 Players'
         else:
-            who = 'Blancas' if self.human_color == 'w' else 'Negras'
+            who = 'White' if self.human_color == 'w' else 'Black'
             mode_txt = 'Mode: vs AI  ·  you play ' + who
         createText(int(sper(0.014)), mode_txt, 'topright',
                    (180, 180, 180), screenX - xper(0.02), yper(0.02))

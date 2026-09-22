@@ -10,10 +10,10 @@ Revision of [../Fireworks/Fireworks.py](../Fireworks/Fireworks.py). Two function
 All other behavior — controls (`LMB`/`MMB`/`RMB`/`SPACE`/`Q`/`W`/`F`/`P`/`ESC`), color palette, recursion structure — matches V1. See [../Fireworks/CLAUDE.md](../Fireworks/CLAUDE.md) for control details and [../CLAUDE.md](../CLAUDE.md) for the shared sprite/main-loop pattern.
 
 
-## AUDIO — correcciones (2026-09-22)
+## AUDIO — fixes (2026-09-22)
 
-Identicas a las de `Fireworks/` — el bloque de audio de los dos juegos es el mismo salvo
-comentarios, y **si se toca uno hay que tocar el otro**:
+Identical to `Fireworks/` — the two games' audio blocks are the same but for the comments, and
+**touching one means touching the other**:
 
-1. `audioResume()` sin `try/catch`: el juego quedaba inmanejable si el contexto no se podia crear.
-2. Sin `visibilitychange`: el ambiente en loop seguia sonando con la app al fondo.
+1. `audioResume()` with no `try/catch`: the game became unplayable if the context could not be created.
+2. No `visibilitychange`: the looping ambience kept playing with the app in the background.

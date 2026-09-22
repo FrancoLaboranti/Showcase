@@ -112,20 +112,20 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  PAC-MAN — juego con la UI de TRON V1 (barra inferior fina con botones de
-  //  utilidad + arcade-shell; el canvas ocupa el área SOBRE la barra) y estética
-  //  propia: laberinto de contornos neón azules horneados con glow, fuente arcade
-  //  Press Start 2P, fantasmas clásicos con IA scatter/chase/frightened y sonidos
-  //  sintetizados (WebAudio). El movimiento es por teclado (flechas/WASD) en desktop
-  //  y por SWIPE sobre el canvas en mobile — no hay botones de dirección en la barra.
+  //  PAC-MAN — a game with TRON V1's UI (a thin bottom bar with utility buttons
+  //  + arcade-shell; the canvas takes the area ABOVE the bar) and a look of its
+  //  own: a maze of blue neon outlines baked with glow, the Press Start 2P arcade
+  //  font, classic ghosts with scatter/chase/frightened AI and synthesised
+  //  (WebAudio) sounds. Movement is by keyboard (arrows/WASD) on desktop
+  //  and by SWIPE on the canvas on mobile — there are no direction buttons in the bar.
   //
-  //  Movimiento por ARISTAS DE GRILLA: cada actor viaja del centro de un tile al
-  //  centro del vecino (t: 0→1); las decisiones (doblar / IA) ocurren EXACTO en
-  //  los centros → nunca hay bugs de "me pasé del cruce". El túnel usa tiles
-  //  virtuales c = -1 / 28 que al llegar se envuelven al otro lado.
+  //  Movement by GRID EDGES: each actor travels from the centre of a tile to the
+  //  centre of its neighbour (t: 0→1); decisions (turning / AI) happen EXACTLY at
+  //  the centres → there are never any "I overshot the junction" bugs. The tunnel uses
+  //  virtual tiles c = -1 / 28 which wrap to the other side on arrival.
   // ════════════════════════════════════════════════════════════════════
-  // RNG SEMBRABLE (#9): en modo Diario se reemplaza por un PRNG determinista (semilla = fecha) para que
-  // el "run del día" sea reproducible; en el resto es Math.random. Todo lo aleatorio del juego usa ri().
+  // SEEDABLE RNG (#9): in Daily mode it is replaced by a deterministic PRNG (seed = the date) so that
+  // the "run of the day" is reproducible; everywhere else it is Math.random. Everything random in the game uses ri().
   let rng = Math.random;
   const ri  = (a, b) => a + Math.floor(rng() * (b - a + 1));                      // randint inclusivo
   function mulberry32(seed) {
@@ -138,17 +138,17 @@
 
   // ── TUNING ──
   const BASE        = 9.0;                                                       // velocidad 100% (tiles/seg)
-  const TUNNEL_ROW  = 14;                                                        // fila del túnel (y de la casa)
-  // colores de SKIN (#6): mutables — applySkin() los reasigna y el resto del código los lee tal cual.
-  let WALL_COL  = '#2434f0';                                                     // azul del laberinto
+  const TUNNEL_ROW  = 14;                                                        // tunnel row (and the house's)
+  // SKIN colours (#6): mutable — applySkin() reassigns them and the rest of the code reads them as they are.
+  let WALL_COL  = '#2434f0';                                                     // maze blue
   let WALL_GLOW = '#3b4cff';
-  let DOT_COL   = '#ffc7a8';                                                     // puntitos (durazno clásico)
+  let DOT_COL   = '#ffc7a8';                                                     // dots (the classic peach)
   let PAC_COL   = '#ffe300';
   const GHOST_PTS   = [200, 400, 800, 1600];
   const FRUIT_PTS   = [100, 300, 500, 700, 1000, 3000, 5000];
   const FRUIT_NAMES = ['cereza', 'frutilla', 'naranja', 'manzana', 'melon', 'campana', 'llave'];
 
-  // ── SKINS cosméticos (#6): PURO color, cero efecto mecánico. Se desbloquean por récord histórico. ──
+  // ── Cosmetic SKINS (#6): PURE colour, zero mechanical effect. Unlocked by all-time high score. ──
   const SKINS = [
     { name: 'Clasico', pac: '#ffe300', wall: '#2434f0', wallGlow: '#3b4cff', dot: '#ffc7a8', unlock: 0 },
     { name: 'Neon',    pac: '#ffe300', wall: '#12d6a0', wallGlow: '#1effc4', dot: '#bdfff0', unlock: 15000 },
@@ -163,7 +163,7 @@
   const MODE_NAMES = ['Clasico', 'Dificil', 'Maraton', 'Diario'];
   const MODE_TAG   = ['C', 'D', 'M', '*'];
 
-  // ── MAPA clásico 28×31. '#' pared · '.' punto · 'o' energizante · '-' puerta · ' ' pasillo/vacío ──
+  // ── The classic 28×31 MAP. '#' wall · '.' dot · 'o' energiser · '-' door · ' ' corridor/empty ──
   const MAP = [
     '############################',
     '#............##............#',
@@ -199,8 +199,8 @@
   ];
   const COLS = 28, ROWS = 31;
 
-  // Segundo laberinto (#1): banda central (filas 9-19) idéntica a MAP; cuadrantes en patrón de pilares
-  // (look de "panal", distinto al de cámaras del clásico). Validado: 0 pellets inalcanzables.
+  // Second maze (#1): the central band (rows 9-19) identical to MAP; quadrants in a pillar pattern
+  // (a "honeycomb" look, different from the classic's chambers). Validated: 0 unreachable pellets.
   const MAZE2 = [
     '############################',
     '#..........................#',
@@ -235,14 +235,14 @@
     '############################',
   ];
 
-  // ── LABERINTOS ROTATIVOS (#1) ── todos comparten la banda central (filas 9-19: casa + túnel + espinas
-  // verticales en col 6/21) porque la geometría de la casa/túnel/spawns está hardcodeada; sólo cambian
-  // los cuadrantes de arriba y abajo. mazeForLevel() rota cada 4 niveles. `maze` es el activo.
+  // ── ROTATING MAZES (#1) ── they all share the central band (rows 9-19: house + tunnel + vertical
+  // spines in col 6/21) because the house/tunnel/spawn geometry is hardcoded; only the top and bottom
+  // quadrants change. mazeForLevel() rotates every 4 levels. `maze` is the active one.
   const MAZES = [MAP, MAZE2];
   let maze = MAP;
   function mazeForLevel(L) { return MAZES[Math.floor((L - 1) / 4) % MAZES.length]; }
 
-  // ¿Se puede caminar a (c,r)? Tiles virtuales -1/28 en la fila del túnel = sí (wrap al llegar).
+  // Can you walk to (c,r)? Virtual tiles -1/28 in the tunnel row = yes (they wrap on arrival).
   function open(c, r) {
     if (r === TUNNEL_ROW && (c === -1 || c === COLS)) return true;
     if (c < 0 || c >= COLS || r < 0 || r >= ROWS) return false;
@@ -250,11 +250,11 @@
     return ch !== '#' && ch !== '-';
   }
 
-  // ════════════════ PERSISTENCIA (récords #5 · logros #7 · skin #6) ════════════════
+  // ════════════════ PERSISTENCE (high scores #5 · achievements #7 · skin #6) ════════════════
   function lsGet(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch (e) { return d; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
 
-  // Tabla top-5 (#5): [{n:iniciales, s:score, m:tag de modo}]. Migra el viejo pacmanHigh si existe.
+  // Top-5 table (#5): [{n:initials, s:score, m:mode tag}]. It migrates the old pacmanHigh if it exists.
   let scores = (function () {
     let arr = [];
     try { arr = JSON.parse(lsGet('pacmanScores', '[]')) || []; } catch (e) { arr = []; }
@@ -270,7 +270,7 @@
     lsSet('pacmanScores', JSON.stringify(scores));
   }
 
-  // Logros (#7): set de ids desbloqueados + toasts.
+  // Achievements (#7): a set of unlocked ids + toasts.
   const ACH = {
     firstGhost: 'Ate a ghost', allFour: 'All four in one go', fruit: 'Fruta jugosa',
     level5: 'Nivel 5', level10: 'Nivel 10', score10k: '10.000 puntos', score50k: '50.000 puntos',
@@ -281,84 +281,84 @@
   function toast(txt) { toasts.push({ txt, t: 0 }); }
   function unlockAch(id) { if (achUnlocked.has(id)) return; achUnlocked.add(id); lsSet('pacmanAch', JSON.stringify([...achUnlocked])); toast('LOGRO - ' + (ACH[id] || id)); }
 
-  // Skins (#6): desbloqueados por récord histórico.
+  // Skins (#6): unlocked by all-time high score.
   function skinUnlocked(i) { return topScore() >= SKINS[i].unlock; }
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
-  const barEl = document.getElementById('bar');                                  // barra inferior (Tron V1): el canvas vive ARRIBA de ella
+  const barEl = document.getElementById('bar');                                  // bottom bar (Tron V1): the canvas lives ABOVE it
 
   let W = 0, H = 0, dpr = 1, scl = 1;
-  let ts = 16, ox = 0, oy = 0;                                                   // tile size + esquina del laberinto (px)
-  let mazeCv = null, mazeFlashCv = null;                                         // laberinto horneado (azul / blanco para el flash)
-  let pelletCv = null, pctx = null;                                              // puntitos horneados (se borran al comer)
-  let vignette = null;                                                           // gradiente radial cacheado (atmósfera)
+  let ts = 16, ox = 0, oy = 0;                                                   // tile size + the maze's corner (px)
+  let mazeCv = null, mazeFlashCv = null;                                         // baked maze (blue / white for the flash)
+  let pelletCv = null, pctx = null;                                              // baked dots (they are erased on being eaten)
+  let vignette = null;                                                           // cached radial gradient (atmosphere)
 
   // ════════════════ ESTADO ════════════════
   const gh = {
     state: 'menu',            // menu | ready | play | dying | flash | gameover | initials
-    stateT: 0,                // tiempo dentro del estado actual
-    firstReady: true,         // el primer READY de la partida dura más (jingle)
+    stateT: 0,                // time within the current state
+    firstReady: true,         // the first READY of the game lasts longer (jingle)
     score: 0, lives: 3, level: 1,
     high: topScore(),
     dotsLeft: 0, dotsEaten: 0,
-    frightT: 0, combo: 0,     // energizante activo + multiplicador de fantasmas
-    modeIdx: 0, modeT: 0,     // línea de tiempo scatter/chase
-    pauseT: 0,                // freeze cortito al comer un fantasma
-    fruit: null,              // actor de fruta móvil (#2): {from,to,t,dirv,kind,life}
+    frightT: 0, combo: 0,     // energiser active + ghost multiplier
+    modeIdx: 0, modeT: 0,     // scatter/chase timeline
+    pauseT: 0,                // a short freeze on eating a ghost
+    fruit: null,              // moving fruit actor (#2): {from,to,t,dirv,kind,life}
     extraGiven: false,
     // ── nuevos sistemas ──
-    mode: 0,                  // 0 Clásico · 1 Difícil · 2 Maratón · 3 Diario (#4/#9)
-    skin: 0,                  // índice de SKINS (#6)
-    menuSel: 0,               // fila enfocada en el menú: 0 modo · 1 skin · 2 jugar
+    mode: 0,                  // 0 Classic · 1 Hard · 2 Marathon · 3 Daily (#4/#9)
+    skin: 0,                  // index into SKINS (#6)
+    menuSel: 0,               // focused row in the menu: 0 mode · 1 skin · 2 play
     bonusRound: false, bonusT: 0, bonusFruits: [],   // ronda bonus (#3)
-    deathsThisLevel: 0, perfectStreak: 0,            // bonos de maestría (#8)
-    levelTime: 0,                                    // bonus por limpieza rápida (#10)
-    initials: ['A', 'A', 'A'], initialSlot: 0, pendingScore: 0,  // entrada de iniciales (#5)
+    deathsThisLevel: 0, perfectStreak: 0,            // mastery bonuses (#8)
+    levelTime: 0,                                    // bonus for a fast clear (#10)
+    initials: ['A', 'A', 'A'], initialSlot: 0, pendingScore: 0,  // initials entry (#5)
   };
   let pac = null, ghosts = [];
   let dots = new Uint8Array(COLS * ROWS);                                        // 0 nada · 1 punto · 2 energizante
-  let popups = [];                                                               // textos flotantes de puntaje
+  let popups = [];                                                               // floating score texts
 
-  // ── Specs por nivel (velocidades como fracción de BASE, fright en seg, releases de la casa) ──
+  // ── Per-level specs (speeds as a fraction of BASE, fright in seconds, house releases) ──
   function lvlSpec(L) {
     return {
-      // Pac un poco más rápido que los fantasmas en los primeros niveles → margen para escapar.
+      // Pac a little faster than the ghosts in the early levels → room to escape.
       pac:    L === 1 ? 0.80 : L < 5 ? 0.90 : L < 9 ? 0.95 : 1.00,
       pacFr:  L === 1 ? 0.90 : L < 5 ? 0.95 : 1.00,
-      // fantasmas: arranque MÁS LENTO (0.70) y rampa gradual; antes era 0.75/0.85/0.95 (muy duro).
+      // ghosts: a SLOWER start (0.70) and a gradual ramp; it used to be 0.75/0.85/0.95 (far too hard).
       ghost:  L === 1 ? 0.70 : L < 5 ? 0.78 : L < 9 ? 0.86 : 0.92,
       ghostFr:L === 1 ? 0.48 : L < 5 ? 0.52 : 0.56,
       tunnel: L === 1 ? 0.40 : L < 5 ? 0.45 : 0.50,
-      // fright MÁS LARGO: N1 = 8s (antes 6) y baja de a poco; piso 2s en niveles altos.
+      // LONGER fright: L1 = 8s (was 6) and it comes down gradually; a floor of 2s at high levels.
       fright: Math.max(2, 9 - L),
-      // release GRADUAL de la casa: Blinky ya afuera, Pinky ~2.7s, Inky ~8s, Clyde ~15s en N1
-      // (antes salían todos en ~7s). Decae con el nivel hasta ser casi inmediato.
+      // GRADUAL release from the house: Blinky already out, Pinky ~2.7s, Inky ~8s, Clyde ~15s at L1
+      // (they all used to come out in ~7s). It decays with the level until it is almost immediate.
       release:[0, Math.max(0, 3 - L * 0.3), Math.max(2, 9 - L), Math.max(4, 16 - L * 1.4)],
-      // scatter un toque más largo y chase un toque más corto al inicio → más respiros.
+      // scatter a touch longer and chase a touch shorter at the start → more breathing room.
       modes:  L < 2 ? [8, 18, 8, 18, 6, 18, 6, 1e9] : L < 5 ? [7, 20, 7, 20, 5, 20, 5, 1e9] : [5, 20, 5, 20, 5, 1e9],
     };
   }
   function fruitKind(L) { return L <= 2 ? L - 1 : Math.min(6, Math.floor((L - 3) / 2) + 2); }
 
-  // spec(): lvlSpec del nivel actual AJUSTADO por modo (#4). Clásico/Diario/Maratón = base intacta
-  // (Maratón sólo arranca en nivel alto). Difícil sube un toque a los fantasmas y acorta el fright.
+  // spec(): the current level's lvlSpec ADJUSTED by mode (#4). Classic/Daily/Marathon = base untouched
+  // (Marathon just starts at a high level). Hard raises the ghosts a touch and shortens the fright.
   function spec() {
     const s = lvlSpec(gh.level);
-    if (gh.mode === 1) {                          // Difícil
+    if (gh.mode === 1) {                          // Hard
       s.ghost   = Math.min(1.05, s.ghost + 0.06);
       s.ghostFr = Math.min(0.75, s.ghostFr + 0.05);
       s.fright  = Math.max(1, s.fright * 0.7);
     }
     return s;
   }
-  function isBonus(L) { return L > 0 && L % 5 === 0; }   // ronda bonus cada 5 niveles (#3)
+  function isBonus(L) { return L > 0 && L % 5 === 0; }   // a bonus round every 5 levels (#3)
 
-  // ════════════════ AUDIO (sintetizado, sin assets) ════════════════
+  // ════════════════ AUDIO (synthesised, no assets) ════════════════
   let actx = null, master = null;
   let sirenOsc = null, sirenLfo = null, sirenLfoG = null, sirenGain = null, sirenMode = 'off';
   let muted = localStorage.getItem('pacmanMuted') === '1';
-  let Pacman_visWired = false;                      // el listener de pestana oculta se cablea una sola vez
+  let Pacman_visWired = false;                      // the hidden-tab listener is wired exactly once
   function ensureAudio() {
     try {
       if (!actx) {
@@ -394,7 +394,7 @@
   function sndDeath()     { tone(640, 90, 0.9, 'sawtooth', 0.12, 0.4); tone(220, 60, 0.22, 'square', 0.10, 1.35); tone(180, 50, 0.22, 'square', 0.10, 1.55); }
   function sndLife()      { for (let i = 0; i < 5; i++) tone(620 + i * 180, 620 + i * 180, 0.09, 'square', 0.08, i * 0.07); }
   function sndStart()     { [392, 523, 659, 784, 659, 784].forEach((f, i) => tone(f, f, 0.12, 'triangle', 0.10, i * 0.13)); }
-  // Sirena de fondo: un triángulo con LFO en la frecuencia; cambia de carácter según el momento.
+  // Background siren: a triangle with an LFO on the frequency; its character changes with the moment.
   function setSiren(mode) {
     sirenMode = mode;
     if (!actx) return;
@@ -404,10 +404,10 @@
         return;
       }
       if (!sirenOsc) {
-        // La sirena es el UNICO nodo continuo del juego: dos osciladores arrancados una vez y
-        // nunca detenidos. Con la pestana al fondo el rAF se frena pero el grafo de audio no, asi
-        // que seguia sonando indefinidamente — y en el Arcade eso significa la sirena de Pacman
-        // encima del juego que abriste despues.
+        // The siren is the game's ONLY continuous node: two oscillators started once and
+        // never stopped. With the tab in the background the rAF stalls but the audio graph does not, so
+        // it kept playing indefinitely — and in the Arcade that means Pac-Man's siren
+        // on top of whatever game you opened next.
         if (!Pacman_visWired) {
           Pacman_visWired = true;
           document.addEventListener('visibilitychange', () => {
@@ -436,11 +436,11 @@
     if (want !== sirenMode) setSiren(want);
   }
 
-  // ════════════════ LABERINTO horneado (contornos con glow) ════════════════
-  // Pared a efectos VISUALES: fuera del mapa cuenta como ABIERTO → el borde exterior también
-  // dibuja su línea. Por cada arista expuesta de cada celda-pared se traza una línea inset `d`
-  // hacia adentro; las puntas se extienden según el vecino (recto / esquina convexa / cóncava)
-  // para que el contorno cierre perfecto. Las zonas macizas no dibujan nada adentro.
+  // ════════════════ BAKED MAZE (outlines with glow) ════════════════
+  // A wall for VISUAL purposes: outside the map counts as OPEN → the outer border also
+  // draws its line. For every exposed edge of every wall cell a line is traced inset `d`
+  // inwards; the ends are extended according to the neighbour (straight / convex corner / concave)
+  // so the outline closes perfectly. Solid areas draw nothing inside.
   function bakeMaze(strokeCol, glowCol, glowBlur) {
     const cv = document.createElement('canvas');
     cv.width = COLS * ts; cv.height = ROWS * ts;
@@ -475,7 +475,7 @@
       }
     }
     m.stroke();
-    // puerta de la casa (rosa, sin glow)
+    // house door (pink, no glow)
     m.shadowBlur = 0;
     m.strokeStyle = '#ffb8de';
     m.lineWidth = Math.max(2, ts * 0.16);
@@ -487,14 +487,14 @@
     pelletCv.width = COLS * ts; pelletCv.height = ROWS * ts;
     pctx = pelletCv.getContext('2d');
     pctx.fillStyle = DOT_COL;
-    const rad = Math.max(1.4, ts * 0.13);                                         // puntos redondos (más suaves que los cuadrados)
+    const rad = Math.max(1.4, ts * 0.13);                                         // round dots (softer than square ones)
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
       if (dots[r * COLS + c] === 1) { pctx.beginPath(); pctx.arc(c * ts + ts / 2, r * ts + ts / 2, rad, 0, TAU); pctx.fill(); }
     }
   }
   function eatPelletAt(c, r) { pctx.clearRect(c * ts, r * ts, ts, ts); }
-  // hornea las dos capas del laberinto activo (azul con glow + blanco para el flash). Se rehornea en
-  // cada resize y cada vez que cambia el maze (rotación #1) o el skin (#6).
+  // bakes the active maze's two layers (blue with glow + white for the flash). It is rebaked on
+  // every resize and every time the maze changes (rotation #1) or the skin does (#6).
   function bakeMazeLayers() {
     mazeCv = bakeMaze(WALL_COL, WALL_GLOW, ts * 0.5);
     mazeFlashCv = bakeMaze('#eef2ff', '#ffffff', 0);
@@ -502,35 +502,35 @@
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const barH = barEl.offsetHeight;                                             // alto real de la barra (incluye safe-area)
+    const barH = barEl.offsetHeight;                                             // the bar's real height (includes the safe area)
     W = Math.max(1, Math.floor(window.innerWidth));
-    H = Math.max(1, Math.floor(window.innerHeight - barH));                      // canvas SOBRE la barra (Tron V1)
+    H = Math.max(1, Math.floor(window.innerHeight - barH));                      // canvas ABOVE the bar (Tron V1)
     canvas.width  = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     scl = Math.min(W / 480, H / 840);
-    // laberinto centrado, con 2 filas de HUD arriba y 2 abajo
+    // maze centred, with 2 HUD rows above and 2 below
     ts = Math.max(8, Math.floor(Math.min(W / COLS, H / (ROWS + 4))));
     ox = Math.floor((W - COLS * ts) / 2);
     oy = Math.floor((H - (ROWS + 4) * ts) / 2 + 2 * ts);
     bakeMazeLayers();
     bakePellets();
-    // viñeta: centro transparente → bordes apenas más oscuros y azulados (profundidad)
+    // vignette: transparent centre → edges barely darker and bluer (depth)
     vignette = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.32, W / 2, H / 2, Math.max(W, H) * 0.72);
     vignette.addColorStop(0, 'rgba(0,0,10,0)');
     vignette.addColorStop(1, 'rgba(0,0,12,0.5)');
   }
   window.addEventListener('resize', resize);
 
-  // ════════════════ ACTORES (movimiento por aristas) ════════════════
-  // posA: posición en tiles. Estados con guion (house/leaving/entering) usan sx/sy directos.
+  // ════════════════ ACTORS (movement along edges) ════════════════
+  // posA: position in tiles. Hyphenated states (house/leaving/entering) use sx/sy directly.
   function posA(a) {
     if (a.sx !== undefined && a.state !== 'grid' && a.state !== 'eyes') return { x: a.sx, y: a.sy };
     return { x: a.from.c + (a.to.c - a.from.c) * a.t + 0.5, y: a.from.r + (a.to.r - a.from.r) * a.t + 0.5 };
   }
-  const DIRS = [{ x: 0, y: -1 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 0 }];   // desempate clásico: ↑ ← ↓ →
+  const DIRS = [{ x: 0, y: -1 }, { x: -1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 0 }];   // classic tie-break: ↑ ← ↓ →
 
   function resetActors() {
     const rel = spec().release;
@@ -539,7 +539,7 @@
       dirv: { x: -1, y: 0 }, desired: { x: -1, y: 0 },
       ang: Math.PI, dist: 0,
     };
-    // En ronda bonus (#3) no hay fantasmas — es un respiro de puntaje.
+    // In a bonus round (#3) there are no ghosts — it is a breather for scoring.
     ghosts = gh.bonusRound ? [] : [
       { id: 0, color: '#ff2222', corner: { c: 25, r: -2 }, state: 'grid',
         from: { c: 14, r: 11 }, to: { c: 13, r: 11 }, t: 0.5, dirv: { x: -1, y: 0 }, frightened: false },
@@ -553,7 +553,7 @@
     gh.frightT = 0; gh.combo = 0; gh.modeIdx = 0; gh.modeT = 0; gh.pauseT = 0;
     popups = [];
   }
-  // Elige N celdas-punto al azar fuera de la casa para soltar frutas en la ronda bonus (#3).
+  // Picks N dot cells at random outside the house to drop fruit in the bonus round (#3).
   function pickFruitSpots(n) {
     const cells = [];
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
@@ -601,7 +601,7 @@
   }
   function updPac(dt) {
     const d = pac.desired;
-    if (d && pac.dirv && d.x === -pac.dirv.x && d.y === -pac.dirv.y && pac.t < 1) {  // reversa instantánea
+    if (d && pac.dirv && d.x === -pac.dirv.x && d.y === -pac.dirv.y && pac.t < 1) {  // instant reverse
       const f = pac.from; pac.from = pac.to; pac.to = f; pac.t = 1 - pac.t;
       pac.dirv = d; pac.ang = Math.atan2(d.y, d.x);
     }
@@ -688,7 +688,7 @@
       if (g.releaseT <= 0) g.state = 'leaving';
       return;
     }
-    if (g.state === 'leaving') {                                                 // centrarse y subir por la puerta
+    if (g.state === 'leaving') {                                                 // centre up and go up through the door
       const sp = 3.2 * dt;
       if (Math.abs(g.sx - 14) > 0.02) g.sx += Math.sign(14 - g.sx) * Math.min(sp, Math.abs(14 - g.sx));
       else {
@@ -700,13 +700,13 @@
       }
       return;
     }
-    if (g.state === 'entering') {                                                // ojos: bajar a la casa y salir de nuevo
+    if (g.state === 'entering') {                                                // eyes: go down to the house and come out again
       const sp = 5 * dt;
       if (Math.abs(g.sx - 14) > 0.02) g.sx += Math.sign(14 - g.sx) * Math.min(sp, Math.abs(14 - g.sx));
       else { g.sx = 14; g.sy += sp; if (g.sy >= 14.5) { g.sy = 14.5; g.state = 'leaving'; } }
       return;
     }
-    // grid / eyes: avanzar por aristas, decidiendo en cada centro
+    // grid / eyes: advance along edges, deciding at each centre
     let dist = ghostSpeed(g) * dt;
     while (dist > 1e-9) {
       const step = Math.min(dist, 1 - g.t);
@@ -715,7 +715,7 @@
         let c = g.to.c, r = g.to.r;
         if (c < 0) c += COLS; else if (c >= COLS) c -= COLS;
         g.from = { c, r }; g.t = 1;
-        if (g.state === 'eyes' && r === 11 && (c === 13 || c === 14)) {          // llegó a la puerta
+        if (g.state === 'eyes' && r === 11 && (c === 13 || c === 14)) {          // reached the door
           g.state = 'entering'; g.sx = c + 0.5; g.sy = 11.5; g.frightened = false;
           return;
         }
@@ -732,15 +732,15 @@
     if (gh.score >= 50000) unlockAch('score50k');
     if (gh.score > gh.high) gh.high = gh.score;
   }
-  function saveHigh() { lsSet('pacmanHigh', String(gh.high)); }    // legacy; la tabla real es `scores`
+  function saveHigh() { lsSet('pacmanHigh', String(gh.high)); }    // legacy; the real table is `scores`
   function popup(x, y, txt, color) { popups.push({ x, y, txt, t: 0, color }); }
 
-  // Nivel limpiado (todos los puntos comidos): bonos de maestría (#8) y limpieza rápida (#10), luego flash.
+  // Level cleared (all dots eaten): mastery bonuses (#8) and fast clear (#10), then the flash.
   function clearLevel() {
     if (!gh.bonusRound) {
-      const fast = Math.max(0, Math.round((55 - gh.levelTime) * 40));            // #10: cuanto más rápido, más bono
+      const fast = Math.max(0, Math.round((55 - gh.levelTime) * 40));            // #10: the faster, the bigger the bonus
       if (fast > 0) { addScore(fast); popup(14, 20.5, 'RAPIDO +' + fast, '#9effa0'); }
-      if (gh.deathsThisLevel === 0) {                                            // #8: nivel sin muertes → racha
+      if (gh.deathsThisLevel === 0) {                                            // #8: a level with no deaths → a streak
         gh.perfectStreak++;
         const pb = 1000 * gh.perfectStreak;
         addScore(pb); popup(14, 18.5, 'PERFECTO +' + pb, '#ffe300'); unlockAch('perfect');
@@ -749,11 +749,11 @@
     gh.state = 'flash'; gh.stateT = 0; setSiren('off');
   }
 
-  // ── FRUTA MÓVIL (#2): entra por un extremo del túnel y deambula por el laberinto un rato. ──
+  // ── MOVING FRUIT (#2): it comes in at one end of the tunnel and wanders the maze for a while. ──
   function spawnFruit() {
     if (gh.bonusRound) return;
     const fromLeft = ri(0, 1) === 0;
-    const c = fromLeft ? -1 : COLS;                                              // tile virtual del túnel
+    const c = fromLeft ? -1 : COLS;                                              // virtual tunnel tile
     gh.fruit = {
       from: { c, r: TUNNEL_ROW }, to: { c: fromLeft ? 0 : COLS - 1, r: TUNNEL_ROW }, t: 0,
       dirv: { x: fromLeft ? 1 : -1, y: 0 }, kind: fruitKind(gh.level), life: 13,
@@ -804,7 +804,7 @@
   }
 
   function startDeath() {
-    gh.deathsThisLevel++;                                                        // rompe la racha de nivel perfecto (#8)
+    gh.deathsThisLevel++;                                                        // breaks the perfect-level streak (#8)
     gh.state = 'dying'; gh.stateT = 0;
     setSiren('off'); sndDeath(); saveHigh();
   }
@@ -823,9 +823,9 @@
         unlockAch('firstGhost');
         g.frightened = false;
         if (g.state === 'grid') g.state = 'eyes';
-        else { g.state = 'entering'; }                                           // lo comieron saliendo: vuelve a bajar
+        else { g.state = 'entering'; }                                           // eaten on the way out: it goes back down
         gh.pauseT = 0.45;
-        if (gh.combo >= 4) {                                                     // #8: comió los 4 con un solo energizante
+        if (gh.combo >= 4) {                                                     // #8: ate all 4 with a single energiser
           addScore(2000); popup(13.5, 16, 'x4 +2000', '#ffe300'); unlockAch('allFour');
         }
       } else {
@@ -835,11 +835,11 @@
     }
   }
 
-  // ════════════════ FLUJO DE PARTIDA ════════════════
+  // ════════════════ GAME FLOW ════════════════
   function startGame() {
     applySkin(gh.skin);
     rng = gh.mode === 3 ? mulberry32(todaySeed()) : Math.random;                 // #9: Diario = run reproducible
-    gh.score = 0; gh.lives = 3; gh.level = gh.mode === 2 ? 6 : 1;                 // #4: Maratón arranca alto (nivel 6, ya con MAZE2 + fantasmas rápidos)
+    gh.score = 0; gh.lives = 3; gh.level = gh.mode === 2 ? 6 : 1;                 // #4: Marathon starts high (level 6, already with MAZE2 + fast ghosts)
     gh.extraGiven = false; gh.perfectStreak = 0;
     gh.high = topScore();
     gh.firstReady = true;
@@ -852,7 +852,7 @@
     gh.state = 'menu'; gh.stateT = 0;
     setSiren('off'); saveHigh();
   }
-  // Fin de partida (#5): si el score entra al top-5 → pantalla de iniciales; si no, game over directo.
+  // End of game (#5): if the score makes the top 5 → the initials screen; otherwise straight to game over.
   function endGame() {
     setSiren('off'); saveHigh();
     gh.pendingScore = gh.score;
@@ -871,10 +871,10 @@
   }
 
   function updPlay(dt) {
-    if (gh.pauseT > 0) { gh.pauseT -= dt; return; }                              // freeze al comer fantasma
-    gh.levelTime += dt;                                                          // #10: cronómetro del nivel
+    if (gh.pauseT > 0) { gh.pauseT -= dt; return; }                              // freeze on eating a ghost
+    gh.levelTime += dt;                                                          // #10: the level's stopwatch
     if (gh.bonusRound) { updBonus(dt); return; }
-    // línea de tiempo scatter/chase (pausada durante el fright)
+    // scatter/chase timeline (paused during the fright)
     if (gh.frightT > 0) {
       gh.frightT -= dt;
       if (gh.frightT <= 0) { gh.frightT = 0; for (const g of ghosts) g.frightened = false; }
@@ -889,8 +889,8 @@
     updPac(dt);
     const pp = posA(pac);
     eatAt(Math.floor(pp.x), Math.floor(pp.y));
-    if (gh.state !== 'play') return;                                             // comió el último punto → flash
-    if (gh.fruit) {                                                              // #2: fruta móvil
+    if (gh.state !== 'play') return;                                             // ate the last dot → flash
+    if (gh.fruit) {                                                              // #2: moving fruit
       updFruit(dt);
       if (gh.fruit) {
         const fp = fruitPos();
@@ -906,7 +906,7 @@
     checkCollisions();
     updateSiren();
   }
-  // Ronda bonus (#3): sin fantasmas, timer corriendo, frutas repartidas para juntar a las apuradas.
+  // Bonus round (#3): no ghosts, the timer running, fruit spread around to be collected in a hurry.
   function updBonus(dt) {
     gh.bonusT -= dt;
     updPac(dt);
@@ -964,13 +964,13 @@
     ctx.fillText(content, x, y);
     ctx.shadowBlur = 0;
   }
-  function rrect(x, y, w, h, r) {                                                // path de rect redondeado
+  function rrect(x, y, w, h, r) {                                                // rounded rect path
     r = Math.min(r, h / 2, w / 2);
     ctx.beginPath();
     ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
-  // toasts de logros (#7): banda superior que aparece/desaparece con fade.
+  // achievement toasts (#7): a top band that appears/disappears with a fade.
   function drawToasts() {
     let y = H * 0.10;
     for (const t of toasts) {
@@ -1019,7 +1019,7 @@
     }
     drawWrapped(p, x => drawPacBody(x, py(p.y), r, pac.ang, mouth));
   }
-  // cerca de los bordes del túnel dibuja la copia envuelta del otro lado
+  // near the tunnel edges it draws the wrapped copy from the other side
   function drawWrapped(p, fn) {
     fn(px(p.x));
     if (p.x < 1.5) fn(px(p.x + COLS));
@@ -1027,7 +1027,7 @@
   }
 
   function drawGhostBody(x, y, r, color, dir, mode, T) {
-    // cuerpo: domo + faldón zigzag animado
+    // body: a dome + an animated zigzag skirt
     const yTop = y - r * 0.1;
     const yBase = y + r * 0.95;
     const body = mode === 'fright' ? '#2121de' : mode === 'flash' ? '#f3f3ff' : color;
@@ -1073,7 +1073,7 @@
       ctx.fillStyle = '#2030e0';
       ctx.beginPath(); ctx.arc(x - ex + dx, eyeY + dy, r * 0.16, 0, TAU); ctx.fill();
       ctx.beginPath(); ctx.arc(x + ex + dx, eyeY + dy, r * 0.16, 0, TAU); ctx.fill();
-      ctx.fillStyle = 'rgba(255,255,255,0.9)';                                   // reflejo en las pupilas
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';                                   // reflection in the pupils
       ctx.beginPath(); ctx.arc(x - ex + dx - r * 0.05, eyeY + dy - r * 0.05, r * 0.05, 0, TAU); ctx.fill();
       ctx.beginPath(); ctx.arc(x + ex + dx - r * 0.05, eyeY + dy - r * 0.05, r * 0.05, 0, TAU); ctx.fill();
     }
@@ -1181,7 +1181,7 @@
     ctx.drawImage(flashing ? mazeFlashCv : mazeCv, ox, oy);
     if (gh.state !== 'flash') {
       ctx.drawImage(pelletCv, ox, oy);
-      // energizantes: pulso suave (escala + glow respirando) en vez de parpadeo duro
+      // energisers: a soft pulse (scale + breathing glow) instead of a hard blink
       const pulse = 0.5 + 0.5 * Math.sin(T * 6.5);
       const erad = ts * (0.30 + 0.12 * pulse);
       ctx.save();
@@ -1195,7 +1195,7 @@
       }
       ctx.restore();
     }
-    // frutas: bonus (estáticas, varias) o la fruta móvil normal (#2)
+    // fruit: bonus (static, several) or the normal moving fruit (#2)
     if (gh.bonusRound) {
       for (const bf of gh.bonusFruits) if (!bf.eaten) drawFruitIcon(px(bf.x), py(bf.y), ts * 0.6, bf.kind);
     } else if (gh.fruit) {
@@ -1210,10 +1210,10 @@
       text(px(p.x), py(p.y) - p.t * ts * 0.8, Math.max(8, ts * 0.5), p.txt, p.color, 6);
       ctx.globalAlpha = 1;
     }
-    if (vignette) { ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H); }         // atmósfera (antes del HUD → HUD nítido)
+    if (vignette) { ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H); }         // atmosphere (before the HUD → a crisp HUD)
     drawHud();
     if (gh.state === 'ready') text(px(14), py(17.5), Math.max(10, ts * 0.8), gh.bonusRound ? 'BONUS!' : 'LISTO!', PAC_COL, 12);
-    if (gh.bonusRound && (gh.state === 'play' || gh.state === 'ready')) {        // #3: banner + cronómetro
+    if (gh.bonusRound && (gh.state === 'play' || gh.state === 'ready')) {        // #3: banner + stopwatch
       text(px(14), py(8.5), Math.max(9, ts * 0.6), 'RONDA BONUS', '#ffe300', 10);
       text(px(14), py(22), Math.max(10, ts * 0.8), Math.max(0, Math.ceil(gh.bonusT)) + 's', '#9effa0', 8);
     }
@@ -1233,7 +1233,7 @@
     }
     text(W / 2, H * 0.80, Math.max(8, 11 * scl), 'tap or press Enter to play', '#ccc');
   }
-  // Entrada de iniciales (#5): 3 slots con ▲/▼ tocables + botón OK. También teclado A-Z/Enter.
+  // Initials entry (#5): 3 slots with tappable ▲/▼ + an OK button. Also A-Z/Enter on the keyboard.
   let initUI = null;
   function drawInitials() {
     ctx.fillStyle = 'rgba(0,0,0,0.82)'; ctx.fillRect(0, 0, W, H);
@@ -1263,7 +1263,7 @@
     initUI = { slots, ok: { x: okx, y: oky, w: okw, h: okh } };
   }
 
-  // ── MENÚ estilo TronV2: título glow + animación de persecución + botón JUGAR ──
+  // ── TronV2-style MENU: a glowing title + a chase animation + a PLAY button ──
   let playBox = null;
   function drawTitle(T) {
     const fp = Math.min(W / 8.5, H * 0.07);
@@ -1283,7 +1283,7 @@
     ctx.restore();
   }
   function drawChase(T) {
-    // pac persiguiendo / perseguido en loop, comiendo una hilera de puntos
+    // pac chasing / being chased in a loop, eating a row of dots
     const y = H * 0.26, r = Math.max(9, ts * 0.7);
     const span = W + r * 14;
     const xPac = ((T * W * 0.18) % span) - r * 7;
@@ -1298,7 +1298,7 @@
       drawGhostBody(xPac - r * (3 + i * 2.4), y, r * 0.95, cols[i], { x: 1, y: 0 }, 'norm', T);
     ctx.restore();
   }
-  // posiciones Y (fracción de H) de las filas tocables del menú
+  // Y positions (a fraction of H) of the menu's tappable rows
   const MENU_Y = { mode: 0.40, skin: 0.48, play: 0.59 };
   function nearY(ly, frac) { return Math.abs(ly - H * frac) < H * 0.042; }
   function drawMenuRow(label, value, fy, sel) {
@@ -1327,7 +1327,7 @@
   function drawMenu(T) {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
-    const step = Math.max(34, Math.round(Math.min(W, H) / 12));                  // campo de puntitos tenue
+    const step = Math.max(34, Math.round(Math.min(W, H) / 12));                  // a faint field of dots
     ctx.fillStyle = 'rgba(255,199,168,0.10)';
     for (let x = step / 2; x < W; x += step) for (let y = step / 2; y < H; y += step)
       ctx.fillRect(x - 1, y - 1, 2, 2);
@@ -1338,7 +1338,7 @@
     drawMenuRow('MODO', MODE_NAMES[gh.mode], MENU_Y.mode, gh.menuSel === 0);
     drawMenuRow('SKIN', sk.name + (skinUnlocked(gh.skin) ? '' : ' 🔒'), MENU_Y.skin, gh.menuSel === 1);
     drawPlayBtn(MENU_Y.play, gh.menuSel === 2, T);
-    // mini-tabla de récords (#5)
+    // mini high-score table (#5)
     text(W / 2, H * 0.69, Math.max(8, 11 * scl), 'RECORDS', '#ffb8de', 6);
     if (scores.length) {
       for (let i = 0; i < Math.min(3, scores.length); i++) {
@@ -1351,7 +1351,7 @@
     }
     text(W / 2, H * 0.90, Math.max(8, 9 * scl), 'flechas/WASD o swipe · tocá una fila', 'rgba(150,160,175,0.7)');
   }
-  // ── helpers de input del menú ──
+  // ── menu input helpers ──
   function menuChangeSkin(dir) {
     let i = gh.skin;
     for (let k = 0; k < SKINS.length; k++) { i = (i + dir + SKINS.length) % SKINS.length; if (skinUnlocked(i)) break; }
@@ -1386,7 +1386,7 @@
   };
   window.addEventListener('keydown', e => {
     ensureAudio();
-    if (gh.state === 'menu') {                                                   // navegación del menú (#4/#6)
+    if (gh.state === 'menu') {                                                   // menu navigation (#4/#6)
       if (e.code === 'ArrowUp' || e.code === 'KeyW') gh.menuSel = (gh.menuSel + 2) % 3;
       else if (e.code === 'ArrowDown' || e.code === 'KeyS') gh.menuSel = (gh.menuSel + 1) % 3;
       else if (e.code === 'ArrowLeft' || e.code === 'KeyA') menuChange(-1);
@@ -1395,7 +1395,7 @@
       if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Space','Enter'].includes(e.code)) e.preventDefault();
       return;
     }
-    if (gh.state === 'initials') {                                               // entrada de iniciales (#5)
+    if (gh.state === 'initials') {                                               // initials entry (#5)
       if (/^Key[A-Z]$/.test(e.code)) { gh.initials[gh.initialSlot] = e.code.slice(3); if (gh.initialSlot < 2) gh.initialSlot++; }
       else if (e.code === 'Backspace') { gh.initials[gh.initialSlot] = 'A'; if (gh.initialSlot > 0) gh.initialSlot--; }
       else if (e.code === 'ArrowLeft') gh.initialSlot = (gh.initialSlot + 2) % 3;
@@ -1414,8 +1414,8 @@
     if (e.code === 'Space') e.preventDefault();
   });
 
-  // swipe: cualquier arrastre en la pantalla marca la dirección; el ancla se resetea al disparar,
-  // así podés encadenar swipes sin levantar el dedo (estilo joystick).
+  // swipe: any drag on the screen sets the direction; the anchor resets on firing,
+  // so you can chain swipes without lifting your finger (joystick style).
   let swipe = null;
   canvas.addEventListener('pointerdown', e => {
     ensureAudio();
@@ -1457,7 +1457,7 @@
   setTimeout(hideHint, 6000);
 
   // ════════════════ LOOP ════════════════
-  // dt medido contra el MISMO reloj (el now que entra) y clampeado — igual que TronV2.
+  // dt measured against the SAME clock (the now that comes in) and clamped — the same as TronV2.
   let lastT = null;
   let T = 0;
   function loop(now) {
@@ -1477,9 +1477,9 @@
   // ── INIT ──
   gh.skin = +lsGet('pacmanSkin', 0) || 0;                                        // #6: skin guardado (clampeado a desbloqueado)
   if (gh.skin < 0 || gh.skin >= SKINS.length || !skinUnlocked(gh.skin)) gh.skin = 0;
-  applySkin(gh.skin);                                                            // antes de resize() para hornear con el color correcto
+  applySkin(gh.skin);                                                            // before resize() so it bakes with the right colour
   resize();
-  resetLevel();                                                                  // deja actores listos para el menú/ready
+  resetLevel();                                                                  // leaves the actors ready for the menu/ready state
   loop();
   window.addEventListener('beforeunload', saveHigh);
   </script>
@@ -1526,9 +1526,9 @@ Clearing the maze moves you to the next one.
 </div>
 
 <script>
-// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
-// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
-// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+// The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
+// game already had keeps switching it on and off with the same tap: no listener is removed and
+// no existing behaviour is changed. If the game had no meter, nothing happens.
 (function () {
   function armar() {
     var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
@@ -1536,31 +1536,31 @@ Clearing the maze moves you to the next one.
     if (!btn || !panel) return;
     var fps = document.getElementById('fpsOverlay');
     if (fps && fps.parentNode !== panel) panel.appendChild(fps);
-    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
-    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
-    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    // The bar is MEASURED, not assumed. Several games do not declare `--bar-height` and others
+    // change it with the orientation: with a fixed value the panel ended up covering the buttons
+    // (Hangman) or running off the top in landscape (Tron). Measured live it works in all twenty.
     var bar = document.getElementById('bar');
-    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
-    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
-    // salio de aca", que es lo que hace el de Loop.
-    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
-    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
-    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
-    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
-    // lo mueven segun la orientacion.
+    // The panel is anchored TO THE BUTTON THAT OPENS IT, not to the centre of the screen. Centred
+    // it floated in the middle of the game with no relation to anything; hanging off the button it
+    // reads as "this came from here", which is what Loop's does.
+    //   · the same margin as the button (right if the button is on the right, left otherwise);
+    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //     in games with a bottom bar the panel still ends up over the bar.
+    // It is measured live and not done in CSS because each game puts the button somewhere
+    // different, and several move it with the orientation.
     function ubicar() {
       var vw = window.innerWidth, vh = window.innerHeight, m = 10;
       var rb = btn.getBoundingClientRect();
-      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
-      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
-      // encima de la parte alta de la barra.
+      // If the button lives INSIDE the bar, the vertical reference is the whole bar and not the
+      // button: the buttons align to the foot of the bar, so anchoring to the button left the panel
+      // over the top part of the bar.
       var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
       panel.style.transform = 'none';
       var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
       if ((rb.left + rb.width / 2) > vw / 2) {
-        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
-        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
-        // colgado de un boton a media pantalla arrancaba en x = -199.
+        // Flush with the button's right margin, BUT without running off to the left: if the panel is
+        // wider than the gap, it slides to the edge. Without this cap, a 700 px panel hanging off a
+        // button at mid-screen started at x = -199.
         var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
         panel.style.left = 'auto'; panel.style.right = der + 'px';
       } else {
@@ -1571,14 +1571,14 @@ Clearing the maze moves you to the next one.
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
-      } else {                                          // boton abajo -> panel por encima
+      } else {                                          // button at the bottom -> panel above it
         panel.style.top = 'auto';
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
-      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
-      // conmutador, asi que si queda tapado el panel no se puede cerrar.
+      // The tight case (Hangman in landscape: the keyboard and the bar eat 319 of 380 px). The panel
+      // stretches to the opposite edge, but WITHOUT covering the button that opened it: the ⓘ is the
+      // only toggle, so if it gets covered the panel cannot be closed.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
         if ((rb.top + rb.height / 2) < vh / 2) {
           panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
@@ -1597,17 +1597,17 @@ Clearing the maze moves you to the next one.
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
-      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
+      if (abrir) ubicar();                          // measure with the panel ALREADY visible: hidden, offsetWidth is 0
     });
-    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    // Keyboard: the button is a <button>, so Enter/Space fire `click` and not `pointerdown`.
     btn.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      if (e.detail !== 0) return;                 // detail 0 = it came from the keyboard, not the mouse
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
       if (abrir) ubicar();
     });
-    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    // Close with Escape: the panel covers the game and must be dismissable without hunting for the button.
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && panel.classList.contains('show')) {
         panel.classList.remove('show'); btn.classList.remove('on');

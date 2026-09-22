@@ -38,7 +38,7 @@
     right: calc(8px + env(safe-area-inset-right));
     display: flex; gap: 8px;
   }
-  #corner button { align-self: center; margin: 0; }                              /* normaliza el align-self/margin del shell */
+  #corner button { align-self: center; margin: 0; }                              /* normalises the shell's align-self/margin */
   #btnPause, #btnMenu, #btnMute {
     width: 30px; height: 30px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.16);
@@ -111,53 +111,53 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  TRON V2 — port web de TronV2.py con MUNDO GRANDE + cámara que sigue al jugador
-  //  (como Snake/CrazyTanks), borde y obstáculos blancos, y minimapa. Visuales de la
-  //  v1: paleta neón, bloom barato, cabeza que se desvanece al color base, fuente Orbitron.
+  //  TRON V2 — web port of TronV2.py with a BIG WORLD + a camera that follows the player
+  //  (like Snake/CrazyTanks), white border and obstacles, and a minimap. Visuals from
+  //  v1: neon palette, cheap bloom, a head that fades to the base colour, Orbitron font.
   //
-  //  Colisiones por GRILLA DE OCUPACIÓN del tamaño del MUNDO (no de la pantalla): grid=1 en
-  //  estelas, borde y obstáculos. Fuera del mundo también cuenta como pared. La estela viaja
-  //  a un canvas offscreen del mundo y la cámara blitea sólo la porción visible.
+  //  Collisions by an OCCUPANCY GRID the size of the WORLD (not the screen): grid=1 on
+  //  trails, border and obstacles. Outside the world counts as a wall too. The trail is drawn
+  //  to an offscreen world canvas and the camera blits only the visible portion.
   // ════════════════════════════════════════════════════════════════════
   const ri  = (a, b) => a + Math.floor(Math.random() * (b - a + 1));              // randint inclusivo
   const rnd = (a, b) => a + Math.random() * (b - a);
   const TAU = Math.PI * 2;
 
   // ── TUNING ──
-  const SPEED_MULT  = 1.6;                                                         // velocidad de las cycles
-  const HEAD_FADE   = 0.6;                                                         // seg que tarda la cabeza en bajar al color base
-  const HEAD_GLOW   = 16;                                                          // shadowBlur del núcleo de la cabeza
-  const HEAD_DOT    = 2.0;                                                         // radio del núcleo blanco de la cabeza
-  const TRAIL_BLOOM = 6;                                                           // desenfoque del halo neón (0 = sin glow)
+  const SPEED_MULT  = 1.6;                                                         // speed of the cycles
+  const HEAD_FADE   = 0.6;                                                         // seconds the head takes to fade to the base colour
+  const HEAD_GLOW   = 16;                                                          // shadowBlur of the head's core
+  const HEAD_DOT    = 2.0;                                                         // radius of the head's white core
+  const TRAIL_BLOOM = 6;                                                           // blur of the neon halo (0 = no glow)
   const BG          = '#03060d';                                                   // fondo casi negro
   const FONT        = "'Orbitron', 'Segoe UI', system-ui, sans-serif";
 
-  // ── MUNDO ── más grande que la pantalla; la cámara sigue al jugador y se clampa al mundo.
+  // ── WORLD ── bigger than the screen; the camera follows the player and clamps to the world.
   const WORLD_W = 2400, WORLD_H = 1600;
-  const CELL    = 64;                                                              // paso de la grilla visual de arena
-  const GRID_ALPHA = 0.05;                                                         // opacidad de las rayas blancas del mapa
-  const BORDER  = 12;                                                              // grosor del borde blanco (px de mundo)
-  const AI_SCAN = 340;                                                             // tope de anticipación de la IA (px) — no escanear todo el mundo
-  // Minimapa: las estelas se dibujan NATIVAMENTE a esta resolución (no se dilata el trail grande), así el
-  // escalado al minimapa es limpio y fiel. Proporcional al mundo.
+  const CELL    = 64;                                                              // step of the arena's visual grid
+  const GRID_ALPHA = 0.05;                                                         // opacity of the map's white lines
+  const BORDER  = 12;                                                              // thickness of the white border (world px)
+  const AI_SCAN = 340;                                                             // cap on the AI's lookahead (px) — do not scan the whole world
+  // Minimap: the trails are drawn NATIVELY at this resolution (the big trail is not downscaled), so the
+  // scaling to the minimap is clean and faithful. Proportional to the world.
   const MINI_W = 360, MINI_H = Math.round(MINI_W * WORLD_H / WORLD_W);
   const MINI_S = MINI_W / WORLD_W;                                                  // factor mundo → minimapa
 
-  // ── IA (estilo V2: elige la dirección con más espacio libre) ──
+  // ── AI (V2 style: it picks the direction with the most free space) ──
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
 
   let W = 0, H = 0, dpr = 1, scl = 1;                                              // viewport (ventana)
-  let camX = 0, camY = 0;                                                          // esquina sup-izq de la cámara (coords de mundo)
-  let grid = new Uint8Array(WORLD_W * WORLD_H);                                    // ocupación del MUNDO
-  let trailCv = null, tctx = null;                                                // estela neón (mundo, transparente)
-  let bgCv = null, bctx = null;                                                    // fondo estático horneado (grilla + borde + obstáculos)
-  let glowCv = null, gctx = null;                                                  // buffer de glow a media resolución (viewport)
-  let miniCv = null, mctx = null;                                                  // estelas a resolución de minimapa (escalado limpio)
-  let obstacles = [];                                                              // sólo para referencia/depuración
+  let camX = 0, camY = 0;                                                          // top-left corner of the camera (world coords)
+  let grid = new Uint8Array(WORLD_W * WORLD_H);                                    // occupancy of the WORLD
+  let trailCv = null, tctx = null;                                                // neon trail (world, transparent)
+  let bgCv = null, bctx = null;                                                    // baked static background (grid + border + obstacles)
+  let glowCv = null, gctx = null;                                                  // half-resolution glow buffer (viewport)
+  let miniCv = null, mctx = null;                                                  // trails at minimap resolution (clean scaling)
+  let obstacles = [];                                                              // for reference/debugging only
 
-  // ── OCUPACIÓN (mundo acotado: fuera del mundo = pared) ──
+  // ── OCCUPANCY (a bounded world: outside the world = wall) ──
   function occ(fx, fy) {
     const xi = Math.floor(fx), yi = Math.floor(fy);
     if (xi < 0 || xi >= WORLD_W || yi < 0 || yi >= WORLD_H) return 1;
@@ -172,7 +172,7 @@
       }
     }
   }
-  function markRect(x, y, w, h) {                                                  // ocupa un rect en la grilla
+  function markRect(x, y, w, h) {                                                  // occupies a rect in the grid
     const x0 = Math.max(0, Math.floor(x)), y0 = Math.max(0, Math.floor(y));
     const x1 = Math.min(WORLD_W, Math.ceil(x + w)), y1 = Math.min(WORLD_H, Math.ceil(y + h));
     for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) grid[yy * WORLD_W + xx] = 1;
@@ -187,7 +187,7 @@
     }
   }
 
-  // Pinta un tramo de estela continuo (línea de (x0,y0) a (x1,y1)) en grilla + canvas offscreen.
+  // Paints a continuous stretch of trail (a line from (x0,y0) to (x1,y1)) on the grid + the offscreen canvas.
   function paintTrail(x0, y0, x1, y1, color, connect) {
     if (connect) {
       const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)));
@@ -206,11 +206,11 @@
     }
   }
 
-  // ── COLORES neón (visuales de v1) ──
+  // ── NEON COLOURS (v1 visuals) ──
   const PLAYER_COLORS = [ [0,240,255], [255,120,0], [120,255,30], [255,40,200] ];
-  const PLAYER_NAMES  = [ 'TÚ', 'RINZLER', 'SARK', 'CLU' ];                        // id 0 = humano; el resto, IAs con nombre
-  const CPU_COLOR     = [ 235, 80, 90 ];                                           // color del "campo" (CPU) en el marcador
-  const BEST_OF       = [ 1, 3, 5, 7 ];                                            // 1 = partida única; resto = torneo TÚ vs CPU
+  const PLAYER_NAMES  = [ 'TÚ', 'RINZLER', 'SARK', 'CLU' ];                        // id 0 = human; the rest, named AIs
+  const CPU_COLOR     = [ 235, 80, 90 ];                                           // colour of the "field" (CPU) on the scoreboard
+  const BEST_OF       = [ 1, 3, 5, 7 ];                                            // 1 = a single game; anything else = a YOU vs CPU tournament
   const rgb  = c => `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
   const rgba = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
   const lerpC = (a, b, t) => [ a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t ];
@@ -225,7 +225,7 @@
     c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
     c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
   }
-  // texto centrado con glow opcional + caja redondeada opcional (para JUGAR).
+  // centred text with optional glow + an optional rounded box (for PLAY).
   function createText(size, content, color, fx, fy, glow = 0, boxColor = null) {
     const fp = Math.round(size * scl);
     ctx.font = `600 ${fp}px ${FONT}`;
@@ -243,15 +243,15 @@
     ctx.shadowBlur = 0;
   }
 
-  // ════════════════ MUNDO: cámara, fondo horneado, obstáculos ════════════════
+  // ════════════════ WORLD: camera, baked background, obstacles ════════════════
   function updateCamera() {
-    // SIEMPRE el player 0 (el humano), vivo o muerto. Al morir, su x/y quedan congeladas → la cámara no
-    // se mueve a otro lado cuando perdés.
+    // ALWAYS player 0 (the human), alive or dead. On dying, their x/y freeze → the camera does not
+    // wander off somewhere else when you lose.
     const p = players.find(q => q.id === 0) || players[0];
     const px = p ? p.x : WORLD_W / 2, py = p ? p.y : WORLD_H / 2;
     camX = Math.floor(Math.max(0, Math.min(px - W / 2, WORLD_W - W)));
     camY = Math.floor(Math.max(0, Math.min(py - H / 2, WORLD_H - H)));
-    if (WORLD_W < W) camX = Math.floor((WORLD_W - W) / 2);                          // mundo más chico que viewport (raro): centrar
+    if (WORLD_W < W) camX = Math.floor((WORLD_W - W) / 2);                          // world smaller than the viewport (rare): centre it
     if (WORLD_H < H) camY = Math.floor((WORLD_H - H) / 2);
   }
 
@@ -260,11 +260,11 @@
     return [ cx + (id - (n - 1) / 2) * spread, y ];
   }
 
-  // Genera obstáculos aleatorios (rect / disco / barra) evitando los spawns y el borde.
+  // Generates random obstacles (rect / disc / bar) avoiding the spawns and the border.
   function genObstacles(spawns) {
     const list = [];
     const margin = WORLD_W * 0.05;
-    const clearR = Math.min(WORLD_W, WORLD_H) * 0.16;                              // zona libre alrededor de cada spawn
+    const clearR = Math.min(WORLD_W, WORLD_H) * 0.16;                              // clear zone around each spawn
     const target = ri(10, 16);
     let attempts = 0;
     while (list.length < target && attempts < 400) {
@@ -283,13 +283,13 @@
         const w = horiz ? long : thin, h = horiz ? thin : long;
         o = { kind: 0, x: rnd(margin, WORLD_W - margin - w), y: rnd(margin, WORLD_H - margin - h), w, h };
       }
-      // bounding circle del obstáculo
+      // the obstacle's bounding circle
       const ox = o.kind === 1 ? o.cx : o.x + o.w / 2;
       const oy = o.kind === 1 ? o.cy : o.y + o.h / 2;
       const orad = o.kind === 1 ? o.r : Math.hypot(o.w, o.h) / 2;
       let ok = true;
       for (const s of spawns) if (Math.hypot(ox - s[0], oy - s[1]) < clearR + orad) { ok = false; break; }
-      for (const q of list) {                                                       // no encimar demasiado
+      for (const q of list) {                                                       // do not overlap too much
         const qx = q.kind === 1 ? q.cx : q.x + q.w / 2, qy = q.kind === 1 ? q.cy : q.y + q.h / 2;
         const qr = q.kind === 1 ? q.r : Math.hypot(q.w, q.h) / 2;
         if (Math.hypot(ox - qx, oy - qy) < orad + qr + WORLD_W * 0.02) { ok = false; break; }
@@ -299,8 +299,8 @@
     return list;
   }
 
-  // ── DECORACIÓN "tech" (blanca) compartida por obstáculos y borde: relleno tenue + hatch diagonal +
-  // doble contorno + esquinas tipo brackets. Todo se hornea una vez en bgCv. ──
+  // ── "tech" DECORATION (white) shared by obstacles and border: a faint fill + a diagonal hatch +
+  // a double outline + bracket-style corners. It is all baked once into bgCv. ──
   function detailRect(c, x, y, w, h) {
     c.save();
     c.fillStyle = 'rgba(255,255,255,0.07)'; c.fillRect(x, y, w, h);
@@ -311,7 +311,7 @@
     c.restore();
     c.strokeStyle = 'rgba(255,255,255,0.85)'; c.lineWidth = 2; c.strokeRect(x + 1, y + 1, w - 2, h - 2);
     c.strokeStyle = 'rgba(255,255,255,0.30)'; c.lineWidth = 1; c.strokeRect(x + 5, y + 5, w - 10, h - 10);
-    c.strokeStyle = '#fff'; c.lineWidth = 2.5;                                     // brackets en las esquinas
+    c.strokeStyle = '#fff'; c.lineWidth = 2.5;                                     // brackets in the corners
     const cl = Math.min(16, w * 0.3, h * 0.3);
     c.beginPath();
     c.moveTo(x, y + cl); c.lineTo(x, y); c.lineTo(x + cl, y);
@@ -323,7 +323,7 @@
   function detailDisc(c, cx, cy, r) {
     c.save();
     c.fillStyle = 'rgba(255,255,255,0.07)'; c.beginPath(); c.arc(cx, cy, r, 0, TAU); c.fill();
-    c.clip();                                                                      // hatch diagonal dentro del disco
+    c.clip();                                                                      // diagonal hatch inside the disc
     c.strokeStyle = 'rgba(255,255,255,0.10)'; c.lineWidth = 1; c.beginPath();
     for (let i = -2 * r; i < 2 * r; i += 14) { c.moveTo(cx - r + i, cy - r); c.lineTo(cx - r + i + 2 * r, cy + r); }
     c.stroke();
@@ -332,14 +332,14 @@
     c.strokeStyle = 'rgba(255,255,255,0.30)'; c.lineWidth = 1; c.beginPath(); c.arc(cx, cy, r - 5, 0, TAU); c.stroke();
     c.strokeStyle = 'rgba(255,255,255,0.45)'; c.beginPath(); c.arc(cx, cy, r * 0.32, 0, TAU); c.stroke();
     c.fillStyle = '#fff'; c.beginPath(); c.arc(cx, cy, 2, 0, TAU); c.fill();
-    c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath();                        // 8 ticks radiales en el borde
+    c.strokeStyle = '#fff'; c.lineWidth = 2; c.beginPath();                        // 8 radial ticks on the edge
     for (let a = 0; a < TAU; a += TAU / 8) {
       c.moveTo(cx + Math.cos(a) * (r - 1), cy + Math.sin(a) * (r - 1));
       c.lineTo(cx + Math.cos(a) * (r - 8), cy + Math.sin(a) * (r - 8));
     }
     c.stroke();
   }
-  // Borde del mundo con el MISMO motivo: banda tenue + doble frame + ticks + brackets grandes en esquinas.
+  // World border with the SAME motif: a faint band + a double frame + ticks + large brackets in the corners.
   function detailBorder(c) {
     const B = BORDER;
     c.fillStyle = 'rgba(255,255,255,0.06)';
@@ -359,8 +359,8 @@
     c.stroke();
   }
 
-  // Hornea el fondo del mundo (grilla blanca tenue + borde + obstáculos detallados) en bgCv, y marca
-  // borde + obstáculos en la grilla de colisión.
+  // Bakes the world's background (a faint white grid + border + detailed obstacles) into bgCv, and marks
+  // border + obstacles in the collision grid.
   function buildWorld() {
     const n = gh.currentPlayers + 2;
     const spawns = []; for (let i = 0; i < n; i++) spawns.push(startposFor(i, n));
@@ -369,20 +369,20 @@
     bctx.setTransform(1, 0, 0, 1, 0, 0);
     bctx.fillStyle = BG; bctx.fillRect(0, 0, WORLD_W, WORLD_H);
 
-    // grilla de arena (rayas blancas tenues)
+    // arena grid (faint white lines)
     bctx.strokeStyle = `rgba(255,255,255,${GRID_ALPHA})`; bctx.lineWidth = 1;
     bctx.beginPath();
     for (let x = CELL; x < WORLD_W; x += CELL) { bctx.moveTo(x + 0.5, 0); bctx.lineTo(x + 0.5, WORLD_H); }
     for (let y = CELL; y < WORLD_H; y += CELL) { bctx.moveTo(0, y + 0.5); bctx.lineTo(WORLD_W, y + 0.5); }
     bctx.stroke();
 
-    // obstáculos detallados (formas blancas tipo tech) + marca de colisión
+    // detailed obstacles (white tech-style shapes) + collision mark
     for (const o of obstacles) {
       if (o.kind === 1) { detailDisc(bctx, o.cx, o.cy, o.r); markDisc(o.cx, o.cy, o.r); }
       else              { detailRect(bctx, o.x, o.y, o.w, o.h); markRect(o.x, o.y, o.w, o.h); }
     }
 
-    // borde del mundo con el MISMO motivo detallado + marca de colisión
+    // world border with the SAME detailed motif + collision mark
     detailBorder(bctx);
     markRect(0, 0, WORLD_W, BORDER); markRect(0, WORLD_H - BORDER, WORLD_W, BORDER);
     markRect(0, 0, BORDER, WORLD_H); markRect(WORLD_W - BORDER, 0, BORDER, WORLD_H);
@@ -392,14 +392,14 @@
     grid.fill(0);
     tctx.setTransform(1, 0, 0, 1, 0, 0);
     tctx.clearRect(0, 0, WORLD_W, WORLD_H);                                         // estela transparente
-    mctx.clearRect(0, 0, MINI_W, MINI_H);                                          // estela del minimapa
+    mctx.clearRect(0, 0, MINI_W, MINI_H);                                          // minimap trail
     ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
   }
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     W = Math.max(1, Math.floor(window.innerWidth));
-    H = Math.max(1, Math.floor(window.innerHeight));                              // canvas a pantalla completa (sin barra)
+    H = Math.max(1, Math.floor(window.innerHeight));                              // full-screen canvas (no bar)
     canvas.width  = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width  = W + 'px';
@@ -408,17 +408,17 @@
     ctx.imageSmoothingEnabled = false;
     scl = Math.min(W / 1280, H / 720);
 
-    // offscreens del MUNDO (1:1, sin dpr — la cámara los blitea escalando a viewport)
+    // WORLD offscreens (1:1, no dpr — the camera blits them scaled to the viewport)
     if (!trailCv) { trailCv = document.createElement('canvas'); trailCv.width = WORLD_W; trailCv.height = WORLD_H; tctx = trailCv.getContext('2d'); }
     if (!bgCv)    { bgCv = document.createElement('canvas'); bgCv.width = WORLD_W; bgCv.height = WORLD_H; bctx = bgCv.getContext('2d'); }
     if (!miniCv)  { miniCv = document.createElement('canvas'); miniCv.width = MINI_W; miniCv.height = MINI_H; mctx = miniCv.getContext('2d'); }
-    // buffer de glow a media resolución del VIEWPORT
+    // half-resolution glow buffer of the VIEWPORT
     glowCv = glowCv || document.createElement('canvas');
     glowCv.width  = Math.max(1, Math.floor(W * dpr / 2));
     glowCv.height = Math.max(1, Math.floor(H * dpr / 2));
     gctx = glowCv.getContext('2d');
-    // NO reiniciamos al redimensionar: el mundo (grilla/estela/fondo) es de tamaño fijo y sobrevive un
-    // resize. Antes acá se llamaba backToMenu() y por eso el botón de fullscreen te sacaba al menú.
+    // We do NOT restart on resize: the world (grid/trail/background) is a fixed size and survives a
+    // resize. This used to call backToMenu() and that is why the fullscreen button kicked you back to the menu.
   }
   window.addEventListener('resize', resize);
 
@@ -497,16 +497,16 @@
         }
       }
 
-      // muerte: COLISIÓN BARRIDA. La cycle avanza varios px por frame (más a FPS bajos), así que no
-      // alcanza con chequear un solo punto 2px adelante — saltaría por encima de una estela fina. Muestreo
-      // todo el tramo que recorrerá este frame, de 2px adelante hasta donde llegará la cabeza (+ margen).
+      // death: SWEPT COLLISION. The cycle advances several px per frame (more at low FPS), so
+      // checking a single point 2px ahead is not enough — it would jump over a thin trail. I sample
+      // the whole stretch it will cover this frame, from 2px ahead to where the head will end up (+ margin).
       const dir = this.direction;
       if (!this.stop) {
         const ux = Math.sign(d[dir][0]), uy = Math.sign(d[dir][1]);
         const moveDist = Math.hypot(d[dir][0], d[dir][1]) * dt * SPEED_MULT;
         const reach = moveDist + 2;
         for (let s = 2; s <= reach; s += 1) {
-          if (occ(this.x + ux * s, this.y + uy * s)) {                            // el ÚNICO punto donde alive pasa a false
+          if (occ(this.x + ux * s, this.y + uy * s)) {                            // the ONLY place where alive becomes false
             this.alive = false;
             if (this.id === 0) sfx.derezYou(); else sfx.derezAI(this.id);
             return;
@@ -525,7 +525,7 @@
       this.lastX = this.x; this.lastY = this.y;
     }
 
-    // cola brillante (en coords de MUNDO; el caller aplica el offset de cámara). Segmentos conectados.
+    // bright tail (in WORLD coords; the caller applies the camera offset). Connected segments.
     drawHead(dt) {
       for (const h of this.head) h.age += dt;
       this.head = this.head.filter(h => h.age <= HEAD_FADE);
@@ -554,15 +554,15 @@
   function drawMinimap() {
     const mmW = Math.max(120, Math.min(W * 0.27, 240));
     const mmH = mmW * WORLD_H / WORLD_W;
-    const mmX = W - mmW - 12, mmY = 48;                                           // derecha, DEBAJO del cluster de botones
+    const mmX = W - mmW - 12, mmY = 48;                                           // right, BELOW the button cluster
     const sx = mmW / WORLD_W, sy = mmH / WORLD_H;
     ctx.save();
     ctx.imageSmoothingEnabled = true;
-    ctx.globalAlpha = 0.45;                                                        // mapa (mundo) más transparente
-    ctx.drawImage(bgCv, 0, 0, WORLD_W, WORLD_H, mmX, mmY, mmW, mmH);                // mundo (grilla+borde+obstáculos)
-    ctx.globalAlpha = 1;                                                           // estelas: buffer nativo del minimapa → escalado limpio
+    ctx.globalAlpha = 0.45;                                                        // map (world) more transparent
+    ctx.drawImage(bgCv, 0, 0, WORLD_W, WORLD_H, mmX, mmY, mmW, mmH);                // world (grid+border+obstacles)
+    ctx.globalAlpha = 1;                                                           // trails: the minimap's native buffer → clean scaling
     ctx.drawImage(miniCv, 0, 0, MINI_W, MINI_H, mmX, mmY, mmW, mmH);
-    // jugadores: punto chico (halo blanco + núcleo) — chico para no tapar la línea de estela de abajo.
+    // players: a small dot (white halo + core) — small so it does not cover the trail line underneath.
     for (const p of players) {
       if (!p.alive) continue;
       const mx = mmX + p.x * sx, my = mmY + p.y * sy;
@@ -572,27 +572,27 @@
       ctx.fillStyle = p.color;
       ctx.beginPath(); ctx.arc(mx, my, rCore, 0, TAU); ctx.fill();
     }
-    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1;                   // rectángulo de la cámara
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1;                   // the camera's rectangle
     ctx.strokeRect(mmX + camX * sx, mmY + camY * sy, Math.min(W, WORLD_W) * sx, Math.min(H, WORLD_H) * sy);
     ctx.restore();
     ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.5;
     ctx.strokeRect(mmX, mmY, mmW, mmH);
   }
 
-  // ════════════════ GAME HANDLER (menú + estado) ════════════════
+  // ════════════════ GAME HANDLER (menu + state) ════════════════
   const gh = {
     menu: true,
     currentOption: 0,           // fila seleccionada: 0 = cantidad, 1 = best-of
     currentPlayers: 0,          // +2 → 2..4
-    currentMode: 0,             // 0 = single, 1 = multi (siempre 0: sólo vs IA)
-    bestOfIdx: 1,               // índice en BEST_OF (default 3)
+    currentMode: 0,             // 0 = single, 1 = multi (always 0: AI only)
+    bestOfIdx: 1,               // index into BEST_OF (default 3)
     keypressed: false,
     paused: false,
-    // ── TORNEO (TÚ vs CPU): el humano gana la ronda si sobrevive último, la pierde si muere ──
+    // ── TOURNAMENT (YOU vs CPU): the human wins the round by surviving last, loses it by dying ──
     youWins: 0, cpuWins: 0, targetWins: 1,
-    roundScored: false,         // se puntúa UNA sola vez por ronda (gameOver se re-evalúa por frame)
-    lastWinner: 'you',          // 'you' | 'cpu' — ganador de la última ronda
-    lastWinnerName: null,       // nombre de la IA si fue una sola sobreviviente
+    roundScored: false,         // it scores ONCE per round (gameOver is re-evaluated each frame)
+    lastWinner: 'you',          // 'you' | 'cpu' — winner of the last round
+    lastWinnerName: null,       // the AI's name if there was a single survivor
   };
   let players = [];
 
@@ -601,7 +601,7 @@
   try { muted = localStorage.getItem('tronv2Muted') === '1'; } catch (e) {}
   const voiceLast = {};
   const MAX_VOICES = 5;
-  // La altura es la identidad del programa, igual que el color. TU sos el primero.
+  // Pitch is the program's identity, just as colour is. YOU are the first.
   const NOTE_OF = [220, 277.18, 329.63, 392];
 
   let engA = null, engB = null, engFilt = null, engGain = null;
@@ -633,7 +633,7 @@
     o.connect(g); g.connect(masterGain);
     o.start(t); o.stop(t + dur + 0.02);
   }
-  // El UNICO ruido de todo el juego. Si aparece, algo se desintegro.
+  // The ONLY noise in the whole game. If it shows up, something disintegrated.
   function noiseHit(t0, dur, vol, freq, q) {
     const a = AC; if (!a) return;
     const n = Math.floor(a.sampleRate * dur);
@@ -656,9 +656,9 @@
     try { fn(); } catch (e) {}
   }
 
-  // ── El motor (continuo) ──
-  // Un solo grafo por sesion: se modula, no se recrea. Dos sierras desafinadas 6 cents por un
-  // lowpass resonante. La altura es la del PROGRAMA del jugador, transpuesta dos octavas abajo.
+  // ── The engine (continuous) ──
+  // One graph per session: it is modulated, not recreated. Two sawtooths detuned by 6 cents through a
+  // resonant lowpass. The pitch is the player's PROGRAM pitch, transposed two octaves down.
   function buildEngine() {
     engFilt = AC.createBiquadFilter(); engFilt.type = 'lowpass';
     engFilt.frequency.value = 380; engFilt.Q.value = 5;
@@ -677,37 +677,37 @@
                                              engB.frequency.setTargetAtTime(p, t, 0.05); engLastP = p; }
     } catch (e) {}
   }
-  // El escalon de altura por direccion es lo que hace que un giro se OIGA sin necesidad de un
-  // blip aparte: el motor salta de nota, que es exactamente lo que cambio.
+  // The pitch step per direction is what makes a turn AUDIBLE with no need for a separate
+  // blip: the engine jumps to another note, which is exactly what changed.
   const DIR_STEP = [1, 1.122, 1.26, 1.335];       // 0 / +2 / +4 / +5 semitonos
   function engineUpdate(dt) {
     if (!acOk() || !engGain) return;
     engAcc += dt;
-    if (engAcc < 0.05) return;                    // 20 Hz: reescribir 3 AudioParam por frame no aporta
+    if (engAcc < 0.05) return;                    // 20 Hz: rewriting 3 AudioParams per frame adds nothing
     engAcc = 0;
     const t = AC.currentTime;
     const p0 = players.find(p => p.id === 0);
     if (gh.menu || gh.paused || !p0 || !p0.alive || p0.stop) { engSet(0, 380, NOTE_OF[0] / 4, t); return; }
-    // Mismo escaneo hacia adelante que ya usa el juego: cuanto queda libre antes de chocar.
-    // El vector de direccion es una propiedad del jugador (`this.directions`), no un global.
+    // The same forward scan the game already uses: how much room is left before a crash.
+    // The direction vector is a property of the player (`this.directions`), not a global.
     const d = p0.directions[p0.direction], ux = Math.sign(d[0]), uy = Math.sign(d[1]);
     let free = 140;
     for (let s = 4; s <= 140; s += 4) if (occ(p0.x + ux * s, p0.y + uy * s)) { free = s; break; }
-    const tens = 1 - free / 140;                  // 0 = campo abierto, 1 = estela pegada al frente
+    const tens = 1 - free / 140;                  // 0 = open field, 1 = a trail right in front
     engSet(0.022 + 0.018 * tens, 380 + 1500 * tens,
            (NOTE_OF[0] / 4) * DIR_STEP[p0.direction] * (1 + 0.12 * tens), t);
   }
-  // Bajar a 0, nunca parar: un oscilador parado no se puede volver a arrancar y cortar en seco clickea.
+  // Drop to 0, never stop: a stopped oscillator cannot be restarted and cutting it dead clicks.
   function engineOff() {
     if (!acOk() || !engGain) return;
     try { engGain.gain.setTargetAtTime(0, AC.currentTime, 0.12); engLastG = 0; } catch (e) {}
   }
 
   const sfx = {
-    // El giro NO lleva voz propia: el motor ya salto de nota. Lo unico que se agrega es el click
-    // del rele, muy corto y muy al fondo, para que el gesto tenga un borde.
+    // The turn has NO voice of its own: the engine already jumped note. All that is added is the relay
+    // click, very short and well at the back, so the gesture has an edge.
     turn() { voice('turn', 70, () => note(1320, 1320, 0, 0.018, 'square', 0.022)); },
-    // De-rez del jugador: el motor se va y queda la desintegracion. El unico ruido del juego.
+    // The player's de-rez: the engine leaves and the disintegration is left. The game's only noise.
     derezYou() {
       voice('derez', 250, () => {
         engineOff();
@@ -716,8 +716,8 @@
         noiseHit(0.10, 0.30, 0.035, 600, 0.6);
       });
     },
-    // De-rez de una IA: misma familia, comprimida y FIRMADA con la altura de ese programa, asi se
-    // sabe cual cayo sin mirar el minimapa.
+    // An AI's de-rez: the same family, compressed and SIGNED with that program's pitch, so you
+    // know which one fell without looking at the minimap.
     derezAI(id) {
       const f = NOTE_OF[id] || 220;
       voice('derezAI', 90, () => {
@@ -726,7 +726,7 @@
         noiseHit(0.02, 0.10, 0.022, 1400, 1.2);
       });
     },
-    // Arranque: el boot de tres notas y el motor entrando despues.
+    // Startup: the three-note boot and the engine coming in after it.
     boot() { voice('boot', 400, () => [165, 247, 330].forEach((f, i) => note(f, 0, i * 0.07, 0.09, 'square', 0.06))); },
     roundWon()  { voice('round', 400, () => [220, 330, 440].forEach((f, i) => note(f, 0, 0.25 + i * 0.09, 0.22, 'triangle', 0.065))); },
     roundLost() { voice('round', 400, () => { note(196, 0, 0.30, 0.26, 'sawtooth', 0.06); note(147, 0, 0.42, 0.26, 'sawtooth', 0.06); }); },
@@ -734,8 +734,8 @@
     setLost() { voice('set', 800, () => { note(220, 110, 0.30, 0.9, 'sawtooth', 0.07); note(165, 35, 0.45, 1.0, 'sine', 0.05); }); },
     pause(on) { voice('pause', 120, () => note(on ? 110 : 165, 0, 0, 0.08, 'square', 0.05)); },
     toMenu()  { voice('toMenu', 200, () => { note(330, 0, 0, 0.10, 'square', 0.045); note(165, 0, 0.09, 0.10, 'square', 0.045); }); },
-    // El menu: el VALOR suena a su altura (se oye que subio), el RENGLON es sordo y fijo. Dos
-    // clases distintas de gesto no pueden sonar igual.
+    // The menu: the VALUE sounds at its own pitch (you hear it go up), the ROW is dull and fixed. Two
+    // different classes of gesture cannot sound the same.
     menuValue(i) { voice('mval', 45, () => note([392, 440, 494][i % 3], 0, 0, 0.05, 'square', 0.05)); },
     menuRow()    { voice('mrow', 45, () => note(294, 0, 0, 0.035, 'triangle', 0.04)); },
   };
@@ -746,7 +746,7 @@
   function aliveCount() { let n = 0; for (const p of players) if (p.alive) n++; return n; }
   function setOver() { return gh.youWins >= gh.targetWins || gh.cpuWins >= gh.targetWins; }
 
-  // Arranca UNA ronda (mundo + jugadores nuevos), sin tocar el marcador.
+  // Starts ONE round (a new world + new players), without touching the scoreboard.
   function startRound() {
     clearField();
     buildWorld();
@@ -760,7 +760,7 @@
     updateCamera();
     sfx.boot();
   }
-  // Arranca un SET nuevo (resetea marcador) — desde JUGAR o "revancha".
+  // Starts a new SET (resets the scoreboard) — from PLAY or "rematch".
   function startGame() {
     const bo = BEST_OF[gh.bestOfIdx];
     gh.targetWins = Math.ceil(bo / 2);
@@ -769,7 +769,7 @@
   }
   function nextRound() { startRound(); }                                           // siguiente ronda (conserva marcador)
   function restart() { startGame(); }
-  // Asigna el punto de la ronda UNA vez (TÚ si el humano sobrevivió; CPU si murió).
+  // Awards the round's point ONCE (YOU if the human survived; CPU if they died).
   function scoreRound() {
     if (gh.roundScored) return;
     gh.roundScored = true;
@@ -779,16 +779,16 @@
     if (youW) { gh.youWins++; gh.lastWinnerName = null; }
     else {
       gh.cpuWins++;
-      const aiAlive = players.filter(p => p.alive && p.id !== 0);                  // si quedó UNA IA viva, la nombramos
+      const aiAlive = players.filter(p => p.alive && p.id !== 0);                  // if ONE AI was left alive, we name it
       gh.lastWinnerName = aiAlive.length === 1 ? aiAlive[0].name : null;
     }
     engineOff();
-    // Una ronda es un parcial; el set es el desenlace. Si terminó el set suena SÓLO el del set:
-    // apilar los dos convierte el final en un choque de jingles y no se entiende ninguno.
+    // A round is a partial; the set is the outcome. If the set ended, ONLY the set's plays:
+    // stacking the two turns the ending into a collision of jingles and neither reads.
     if (setOver())   (youW ? sfx.setWon()   : sfx.setLost());
     else             (youW ? sfx.roundWon() : sfx.roundLost());
   }
-  function advance() { setOver() ? startGame() : nextRound(); }                    // tap/Enter en fin de ronda
+  function advance() { setOver() ? startGame() : nextRound(); }                    // tap/Enter at the end of a round
   function backToMenu() {
     engineOff(); sfx.toMenu();
     clearField();
@@ -802,18 +802,18 @@
     if (gh.menu || gameOver()) return;
     gh.paused = !gh.paused;
     sfx.pause(gh.paused);
-    if (gh.paused) engineOff();                                                    // en pausa no hay cycle andando
+    if (gh.paused) engineOff();                                                    // while paused there is no cycle running
     document.getElementById('btnPause').classList.toggle('on', gh.paused);
   }
 
   const CONTROLS = [ ['ArrowLeft','ArrowDown'], ['KeyQ','KeyW'], ['KeyO','KeyP'], ['KeyV','KeyB'] ];
   function bindControls() { for (const p of players) { p.left = CONTROLS[p.id][0]; p.right = CONTROLS[p.id][1]; } }
 
-  // ── MENÚ estilo v1 (filas tocables + ‹ › + glow + título neón que cicla + botón JUGAR) ──
-  // Sólo se juega contra la IA → una sola opción (cantidad de colores) + JUGAR.
+  // ── v1-style MENU (tappable rows + ‹ › + glow + a cycling neon title + a PLAY button) ──
+  // It is AI-only → a single option (number of colours) + PLAY.
   let hoverY = -1;
-  // Layout COMPACTO centrado: tamaños y separaciones en px proporcionales a min(W,H) — NO a la altura
-  // total. Así no se desparrama en pantallas altas (mobile) y entra bien en cualquier orientación.
+  // COMPACT centred layout: sizes and spacings in px proportional to min(W,H) — NOT to the total
+  // height. That way it does not sprawl on tall screens (mobile) and fits properly in any orientation.
   function menuLayout() {
     const S = Math.min(W, H), cy = H * 0.46;
     return {
@@ -855,7 +855,7 @@
     for (let y = 0; y <= H; y += step) { ctx.moveTo(0, y + 0.5); ctx.lineTo(W, y + 0.5); }
     ctx.stroke();
   }
-  // Título MULTICOLOR (la onda propia de V2): cada letra de TRON en un color de jugador, con bloom.
+  // MULTICOLOUR title (V2's own touch): each letter of TRON in a player's colour, with bloom.
   function drawTitle(yPx, fp) {
     fp = Math.round(fp);
     const py = yPx, breathe = 0.5 + 0.5 * Math.sin(T * 1.6);
@@ -876,7 +876,7 @@
     ctx.restore();
   }
 
-  // Light-cycles fantasma deambulando de fondo (ambiente Tron), dejando estela neón. Sólo en el menú.
+  // Ghost light cycles wandering in the background (Tron ambience), leaving a neon trail. Menu only.
   let menuCycles = null;
   function drawMenuCycles(dt) {
     if (!menuCycles) {
@@ -898,7 +898,7 @@
       ctx.beginPath(); let started = false;
       for (let k = 0; k < c.trail.length; k++) {
         const p = c.trail[k];
-        if (k > 0 && Math.hypot(p.x - c.trail[k - 1].x, p.y - c.trail[k - 1].y) > far) { ctx.stroke(); ctx.beginPath(); started = false; }   // corta en el wrap
+        if (k > 0 && Math.hypot(p.x - c.trail[k - 1].x, p.y - c.trail[k - 1].y) > far) { ctx.stroke(); ctx.beginPath(); started = false; }   // it cuts at the wrap
         if (!started) { ctx.moveTo(p.x, p.y); started = true; } else ctx.lineTo(p.x, p.y);
       }
       ctx.stroke(); ctx.shadowBlur = 0;
@@ -933,9 +933,9 @@
   }
   function drawMenu(dt) {
     drawMenuBg();
-    drawMenuCycles(dt);                                                            // ambiente: cycles fantasma de fondo
-    const L = menuLayout(), col = PLAYER_COLORS[0];                                // acento fijo cyan (V1 cicla; V2 no → se diferencian)
-    drawTitle(L.titleY, L.titlePx);                                               // título multicolor
+    drawMenuCycles(dt);                                                            // ambience: ghost cycles in the background
+    const L = menuLayout(), col = PLAYER_COLORS[0];                                // fixed cyan accent (V1 cycles; V2 does not → they are distinguishable)
+    drawTitle(L.titleY, L.titlePx);                                               // multicolour title
     const dw = Math.min(W * 0.55, 420);
     ctx.save();
     ctx.strokeStyle = rgba(col, 0.5); ctx.shadowColor = rgb(col); ctx.shadowBlur = 10; ctx.lineWidth = 2;
@@ -946,7 +946,7 @@
     drawPlay(L.playY, col, L.playPx);
   }
 
-  // Marcador TÚ vs CPU: pips a izq (vos) y der (CPU), centrados. Sólo si hay torneo (targetWins > 1).
+  // YOU vs CPU scoreboard: pips on the left (you) and the right (CPU), centred. Only if there is a tournament (targetWins > 1).
   function drawScoreboard(yFrac, scale) {
     const cx = W * 0.5, y = H * yFrac, n = gh.targetWins;
     const pipR = 6 * scale, step = 18 * scale, mid = 28 * scale, fp = Math.round(20 * scale);
@@ -970,10 +970,10 @@
   function drawWinner() {
     const youCol = PLAYER_COLORS[0], youW = gh.lastWinner === 'you';
     if (gh.targetWins > 1) drawScoreboard(0.28, 1.05);
-    if (setOver()) {                                                               // fin del set
+    if (setOver()) {                                                               // end of the set
       createText(90, youW ? 'YOU WIN!' : 'CPU GANA', youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 22, 'rgba(0,0,0,0.55)');
       createText(36, 'tap or press Enter for a rematch', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
-    } else {                                                                       // ronda dentro del set
+    } else {                                                                       // a round within the set
       const msg = youW ? 'Round to you!' : ('Round to ' + (gh.lastWinnerName || 'CPU'));
       createText(72, msg, youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 18, 'rgba(0,0,0,0.55)');
       createText(36, 'tap or press Enter: next round', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
@@ -982,8 +982,8 @@
 
   // ════════════════ INPUT ════════════════
   const keys = {};
-  // En single player el humano es el player 0: si muere y sólo quedan IAs, la ronda termina (no se sigue
-  // esperando a que las IAs se choquen entre sí). En multi todos son humanos → vale el "queda 1".
+  // In single player the human is player 0: if they die and only AIs are left, the round ends (we do not
+  // go on waiting for the AIs to crash into each other). In multi everyone is human → "one left" applies.
   function humanDead() { if (gh.currentMode === 1) return false; const p0 = players.find(p => p.id === 0); return p0 && !p0.alive; }
   function gameOver() { return !gh.menu && (aliveCount() <= 1 || humanDead()); }
 
@@ -1002,12 +1002,12 @@
     const lx = e.clientX - r.left, ly = e.clientY - r.top;
     if (gh.menu) tapMenu(lx, ly);
     else if (gameOver()) advance();
-    else if (gh.paused) return;                                                    // en pausa, ignorar el giro por toque
+    else if (gh.paused) return;                                                    // while paused, ignore the turn-by-touch
     else { const p0 = players.find(p => p.id === 0 && p.alive); if (p0) (lx < W * 0.5 ? p0.turnLeft() : p0.turnRight()); }
   });
   canvas.addEventListener('mousemove', e => {
     const r = canvas.getBoundingClientRect();
-    hoverY = e.clientY - r.top;                                                    // sólo para iluminar JUGAR al pasar el mouse
+    hoverY = e.clientY - r.top;                                                    // only to light up PLAY on hover
   });
   canvas.addEventListener('mouseleave', () => { hoverY = -1; });
 
@@ -1027,16 +1027,16 @@
       audioResume();
     });
   }
-  // El motor es un nodo continuo: con la pestaña oculta el rAF se frena, engineUpdate deja de
-  // correr y el zumbido queda sonando.
+  // The engine is a continuous node: with the tab hidden the rAF stalls, engineUpdate stops
+  // running and the hum is left sounding.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { engineOff(); if (AC && AC.state === 'running') AC.suspend().catch(() => {}); }
     else audioResume();
   });
 
   // ════════════════ LOOP ════════════════
-  // dt medido contra el MISMO reloj (el now que entra) y clampeado — evita el crash de mobile por
-  // desfase de épocas entre performance.now() y el timestamp de rAF.
+  // dt measured against the SAME clock (the now that comes in) and clamped — it avoids the mobile crash from
+  // an epoch mismatch between performance.now() and the rAF timestamp.
   let lastT = null;
   let T = 0;
   function loop(now) {
@@ -1046,10 +1046,10 @@
     lastT = now;
     if (!(dt >= 0) || dt > 0.05) dt = 0.01;
     T += dt;
-    sndThisFrame = 0;                                                             // OBLIGATORIO: sin esto queda mudo tras MAX_VOICES
+    sndThisFrame = 0;                                                             // MANDATORY: without this it goes mute after MAX_VOICES
     engineUpdate(dt);
 
-    document.body.classList.toggle('playing', !gh.menu);                          // muestra pausa/menu sólo en juego
+    document.body.classList.toggle('playing', !gh.menu);                          // show pause/menu only in game
 
     if (gh.menu) {
       processMenu();
@@ -1058,11 +1058,11 @@
       if (!gh.paused) { for (const p of players) { if (!p.alive) continue; p.process(dt); if (p.alive) p.draw(); } }
       updateCamera();
 
-      // fondo del mundo visible
+      // visible world background
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(bgCv, camX, camY, Math.min(W, WORLD_W), Math.min(H, WORLD_H), 0, 0, Math.min(W, WORLD_W), Math.min(H, WORLD_H));
 
-      // halo neón de la estela (sólo la porción visible, a media resolución → barato)
+      // neon halo of the trail (only the visible portion, at half resolution → cheap)
       if (TRAIL_BLOOM > 0) {
         const gw = glowCv.width, gh2 = glowCv.height;
         gctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -1074,10 +1074,10 @@
         ctx.drawImage(glowCv, 0, 0, gw, gh2, 0, 0, W, H);
         ctx.imageSmoothingEnabled = false;
       }
-      // estela nítida
+      // crisp trail
       ctx.drawImage(trailCv, camX, camY, Math.min(W, WORLD_W), Math.min(H, WORLD_H), 0, 0, Math.min(W, WORLD_W), Math.min(H, WORLD_H));
 
-      // cabezas brillantes (en coords de mundo → offset de cámara). dt=0 si está pausado: no envejecen.
+      // bright heads (in world coords → camera offset). dt=0 if paused: they do not age.
       ctx.save(); ctx.translate(-camX, -camY);
       for (const p of players) p.drawHead(gh.paused ? 0 : dt);
       ctx.restore();
@@ -1086,10 +1086,10 @@
 
       if (gameOver()) {
         for (const p of players) p.stop = true;
-        scoreRound();                                                              // asigna el punto UNA vez
+        scoreRound();                                                              // awards the point ONCE
         drawWinner();
       } else {
-        if (gh.targetWins > 1) drawScoreboard(0.06, 0.8);                          // marcador chico arriba durante la ronda
+        if (gh.targetWins > 1) drawScoreboard(0.06, 0.8);                          // small scoreboard at the top during the round
         if (gh.paused) {
           createText(80, 'PAUSA', 'rgb(235,235,235)', 0.5, 0.45, 20, 'rgba(0,0,0,0.5)');
           createText(34, 'tap ⏸ to continue', 'rgb(200,200,200)', 0.5, 0.56, 0, 'rgba(0,0,0,0.5)');
@@ -1149,9 +1149,9 @@ open up, you are about to clip something. The minimap shows where everyone is.
 </div>
 
 <script>
-// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
-// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
-// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+// The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
+// game already had keeps switching it on and off with the same tap: no listener is removed and
+// no existing behaviour is changed. If the game had no meter, nothing happens.
 (function () {
   function armar() {
     var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
@@ -1159,31 +1159,31 @@ open up, you are about to clip something. The minimap shows where everyone is.
     if (!btn || !panel) return;
     var fps = document.getElementById('fpsOverlay');
     if (fps && fps.parentNode !== panel) panel.appendChild(fps);
-    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
-    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
-    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    // The bar is MEASURED, not assumed. Several games do not declare `--bar-height` and others
+    // change it with the orientation: with a fixed value the panel ended up covering the buttons
+    // (Hangman) or running off the top in landscape (Tron). Measured live it works in all twenty.
     var bar = document.getElementById('bar');
-    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
-    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
-    // salio de aca", que es lo que hace el de Loop.
-    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
-    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
-    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
-    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
-    // lo mueven segun la orientacion.
+    // The panel is anchored TO THE BUTTON THAT OPENS IT, not to the centre of the screen. Centred
+    // it floated in the middle of the game with no relation to anything; hanging off the button it
+    // reads as "this came from here", which is what Loop's does.
+    //   · the same margin as the button (right if the button is on the right, left otherwise);
+    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //     in games with a bottom bar the panel still ends up over the bar.
+    // It is measured live and not done in CSS because each game puts the button somewhere
+    // different, and several move it with the orientation.
     function ubicar() {
       var vw = window.innerWidth, vh = window.innerHeight, m = 10;
       var rb = btn.getBoundingClientRect();
-      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
-      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
-      // encima de la parte alta de la barra.
+      // If the button lives INSIDE the bar, the vertical reference is the whole bar and not the
+      // button: the buttons align to the foot of the bar, so anchoring to the button left the panel
+      // over the top part of the bar.
       var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
       panel.style.transform = 'none';
       var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
       if ((rb.left + rb.width / 2) > vw / 2) {
-        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
-        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
-        // colgado de un boton a media pantalla arrancaba en x = -199.
+        // Flush with the button's right margin, BUT without running off to the left: if the panel is
+        // wider than the gap, it slides to the edge. Without this cap, a 700 px panel hanging off a
+        // button at mid-screen started at x = -199.
         var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
         panel.style.left = 'auto'; panel.style.right = der + 'px';
       } else {
@@ -1194,14 +1194,14 @@ open up, you are about to clip something. The minimap shows where everyone is.
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
-      } else {                                          // boton abajo -> panel por encima
+      } else {                                          // button at the bottom -> panel above it
         panel.style.top = 'auto';
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
-      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
-      // conmutador, asi que si queda tapado el panel no se puede cerrar.
+      // The tight case (Hangman in landscape: the keyboard and the bar eat 319 of 380 px). The panel
+      // stretches to the opposite edge, but WITHOUT covering the button that opened it: the ⓘ is the
+      // only toggle, so if it gets covered the panel cannot be closed.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
         if ((rb.top + rb.height / 2) < vh / 2) {
           panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
@@ -1220,17 +1220,17 @@ open up, you are about to clip something. The minimap shows where everyone is.
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
-      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
+      if (abrir) ubicar();                          // measure with the panel ALREADY visible: hidden, offsetWidth is 0
     });
-    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    // Keyboard: the button is a <button>, so Enter/Space fire `click` and not `pointerdown`.
     btn.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      if (e.detail !== 0) return;                 // detail 0 = it came from the keyboard, not the mouse
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
       if (abrir) ubicar();
     });
-    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    // Close with Escape: the panel covers the game and must be dismissable without hunting for the button.
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && panel.classList.contains('show')) {
         panel.classList.remove('show'); btn.classList.remove('on');

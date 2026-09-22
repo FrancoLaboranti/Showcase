@@ -334,7 +334,7 @@
   //  CHESS ENGINE
   // ════════════════════════════════════════════════════════════════════
 
-  // grid es column-major: grid[c][r]. c=file (0=a,7=h), r=rank desde arriba (0=rank 8, 7=rank 1).
+  // grid is column-major: grid[c][r]. c=file (0=a,7=h), r=rank from the top (0=rank 8, 7=rank 1).
   // Piece = { color:'w'|'b', kind:'K|Q|R|B|N|P', hasMoved:bool }
 
   function newPiece(color, kind) { return { color, kind, hasMoved: false }; }
@@ -480,7 +480,7 @@
     if (!p) return [];
     const pseudo = genPseudoMoves(grid, c, r, ep);
 
-    // Castling — agregamos pseudo-moves del rey solo si todavía no se movió
+    // Castling — we add the king's pseudo-moves only if it has not moved yet
     if (p.kind === 'K' && !p.hasMoved) {
       const rank = p.color === 'w' ? 7 : 0;
       if (c === 4 && r === rank) {
@@ -531,7 +531,7 @@
     return out;
   }
 
-  // FEN completo (incluye contadores fake 0 1). Usado por la integración Stockfish UCI.
+  // Full FEN (includes the fake counters 0 1). Used by the Stockfish UCI integration.
   function buildFen(grid, turn, ep) {
     const rows = [];
     for (let r = 0; r < 8; r++) {
@@ -560,8 +560,8 @@
     return pieces + ' ' + turn + ' ' + (castle || '-') + ' ' + epS + ' 0 1';
   }
 
-  // UCI move ("e2e4" o "e7e8q") → tupla (fc,fr,tc,tr,extra) compatible con makeMove.
-  // Busca el match en gen_legal_moves para recuperar las flags (castle/en_passant/promotion).
+  // UCI move ("e2e4" or "e7e8q") → a tuple (fc,fr,tc,tr,extra) compatible with makeMove.
+  // It looks for the match in gen_legal_moves to recover the flags (castle/en_passant/promotion).
   function parseUciMove(uci, grid, ep) {
     if (!uci || uci.length < 4) return null;
     const fc = uci.charCodeAt(0) - 97;
@@ -575,7 +575,7 @@
     return null;
   }
 
-  // Clave para repetición triple — board + turno + enroque + en-passant
+  // Key for threefold repetition — board + turn + castling + en passant
   function positionKey(grid, turn, ep) {
     let s = '';
     for (let r = 0; r < 8; r++) {
@@ -623,8 +623,8 @@
 
   // ════════════════════════════════════════════════════════════════════
   //  AI — negamax + alpha-beta + iterative deepening
-  //  (Para enchufar Stockfish.js: descomentar el bloque del worker en _aiWorker.
-  //  Necesita stockfish.js cargado como Web Worker; ~1MB de WASM.)
+  //  (To plug in Stockfish.js: uncomment the worker block in _aiWorker.
+  //  It needs stockfish.js loaded as a Web Worker; ~1MB of WASM.)
   // ════════════════════════════════════════════════════════════════════
 
   function evaluate(grid) {
@@ -731,34 +731,34 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  CHESS — port web de Chess.py.
-  //  Motor interno (sin Stockfish — el .exe no corre en browser).
+  //  CHESS — web port of Chess.py.
+  //  Internal engine (no Stockfish — the .exe does not run in a browser).
   //
-  //  ARQUITECTURA AI WORKER: el motor + búsqueda viven en el bloque
-  //  <script id="ai-engine" type="text/plain"> de arriba. Acá lo
-  //  cargamos en el main thread con (0,eval) y armamos una segunda
-  //  copia como Blob URL para el Web Worker. La búsqueda corre en
-  //  el worker, el main thread queda libre para renderizar y manejar
-  //  input mientras la IA piensa.
+  //  AI WORKER ARCHITECTURE: the engine + search live in the
+  //  <script id="ai-engine" type="text/plain"> block above. Here we
+  //  load it on the main thread with (0,eval) and build a second
+  //  copy as a Blob URL for the Web Worker. The search runs in
+  //  the worker, the main thread stays free to render and handle
+  //  input while the AI thinks.
   // ════════════════════════════════════════════════════════════════════
   const PIECE_CHARS = { K:'♚', Q:'♛', R:'♜', B:'♝', N:'♞', P:'♟' };
-  const AI_TIME_BUDGET_MS = 3000;     // tope blando por jugada de la IA
-  const AI_TACTICAL_MULT  = 2;        // multiplicador cuando la posición es táctica (jaque, captura ganadora, promoción, pieza colgada)
-  const AI_MAX_DEPTH      = 10;       // techo de iterative deepening (solo motor interno)
-  const MOVE_ANIM_MS      = 180;      // duración slide-animation
-  const SOUND_VOLUME      = 0.18;     // master gain de los SFX (0 = mudo, 1 = full)
-  const CLOCK_INITIAL_MS  = 15 * 60 * 1000;   // 15 minutos por jugador
-  // Stockfish.js asm.js single-file — primero intentamos el archivo local
-  // (mismo origen, anda en iOS Safari y otros browsers estrictos con Workers
-  // cross-origin). Si no está, caemos al CDN. Si tampoco carga el CDN, motor interno.
+  const AI_TIME_BUDGET_MS = 3000;     // soft cap per AI move
+  const AI_TACTICAL_MULT  = 2;        // multiplier when the position is tactical (check, winning capture, promotion, hanging piece)
+  const AI_MAX_DEPTH      = 10;       // ceiling for iterative deepening (internal engine only)
+  const MOVE_ANIM_MS      = 180;      // slide-animation duration
+  const SOUND_VOLUME      = 0.18;     // master gain of the SFX (0 = mute, 1 = full)
+  const CLOCK_INITIAL_MS  = 15 * 60 * 1000;   // 15 minutes per player
+  // Stockfish.js asm.js single-file — first we try the local file
+  // (same origin, it works on iOS Safari and other browsers strict about cross-origin
+  // Workers). If it is not there, we fall back to the CDN. If the CDN does not load either, the internal engine.
   const STOCKFISH_URLS = [
     'stockfish.js',
     'https://cdnjs.cloudflare.com/ajax/libs/stockfish.js/10.0.2/stockfish.js',
   ];
 
   const __engineSrc = document.getElementById('ai-engine').textContent;
-  // Inyectamos como <script> real: ejecuta en scope global y las funciones quedan
-  // accesibles para el main thread. Más confiable que (0,eval) entre browsers.
+  // We inject it as a real <script>: it executes in global scope and the functions stay
+  // accessible to the main thread. More reliable than (0,eval) across browsers.
   const __engineScript = document.createElement('script');
   __engineScript.textContent = __engineSrc;
   document.head.appendChild(__engineScript);
@@ -778,8 +778,8 @@
 
   // ════════════════════════════════════════════════════════════════════
   //  STOCKFISH.JS LOADER (CDN, asm.js single-file)
-  //  Si carga OK queda como motor principal — mucho más fuerte que el
-  //  interno. Si falla (offline, CSP, network) usamos el interno.
+  //  If it loads OK it stays as the main engine — much stronger than the
+  //  internal one. If it fails (offline, CSP, network) we use the internal one.
   // ════════════════════════════════════════════════════════════════════
   let stockfishWorker = null;
   let stockfishReady = false;
@@ -842,7 +842,7 @@
     };
     stockfishWorker = sf;
     sf.postMessage('uci');
-    // Si no llega "uciok"/"readyok" en 5s, asumimos que esta URL falló
+    // If "uciok"/"readyok" does not arrive within 5s, we assume this URL failed
     setTimeout(() => {
       if (!settled) {
         try { sf.terminate(); } catch {}
@@ -869,12 +869,12 @@
   function askStockfish(fen, timeMs, skillLevel) {
     return new Promise((resolve) => {
       if (!stockfishReady || !stockfishWorker) { resolve(null); return; }
-      if (stockfishPending) {            // defensivo — no debería pasar
+      if (stockfishPending) {            // defensive — it should not happen
         stockfishPending.resolve(null);
       }
       stockfishPending = { resolve, depth: 0, seldepth: 0 };
-      // Setear Skill Level (0–20) por jugada — la opción es global pero cambia
-      // entre llamadas, así que en IA vs IA puede ser distinto por turno.
+      // Set the Skill Level (0–20) per move — the option is global but it changes
+      // between calls, so in AI vs AI it can differ per turn.
       if (typeof skillLevel === 'number') {
         stockfishWorker.postMessage('setoption name Skill Level value ' + skillLevel);
       }
@@ -886,7 +886,7 @@
   initStockfish();
 
   // ════════════════════════════════════════════════════════════════════
-  //  SOUND (Web Audio API — sintetizado, sin assets)
+  //  SOUND (Web Audio API — synthesised, no assets)
   // ════════════════════════════════════════════════════════════════════
   let actx = null;
   let masterGain = null;
@@ -945,7 +945,7 @@
     if (!actx || !sounds[name] || !masterGain) return;
     const src = actx.createBufferSource();
     src.buffer = sounds[name];
-    src.connect(masterGain);   // pasa por el master gain global (= SOUND_VOLUME)
+    src.connect(masterGain);   // it goes through the global master gain (= SOUND_VOLUME)
     src.start();
   }
 
@@ -958,9 +958,9 @@
     aiColor: null,          // 'w' | 'b' | null
     humanColor: null,
     aiBoth: false,
-    aiSkillW: 4,            // id de AI_LEVELS (0..4) para las blancas (si juegan IA)
-    aiSkillB: 4,            // id de AI_LEVELS (0..4) para las negras (si juegan IA)
-    paused: false,          // pausa global — tickClock + triggerAI + handlePress se gatillan en false
+    aiSkillW: 4,            // AI_LEVELS id (0..4) for White (if it is an AI)
+    aiSkillB: 4,            // AI_LEVELS id (0..4) for Black (if it is an AI)
+    paused: false,          // global pause — tickClock + triggerAI + handlePress are gated on false
     flip: false,
     grid: initialGrid(),
     turn: 'w',
@@ -980,16 +980,16 @@
     aiLastDepth: 0,
     aiLastSeldepth: 0,
     aiEngineName: '',
-    aiTactical: false,      // ¿la posición que está pensando es táctica? (se setea en triggerAI)
+    aiTactical: false,      // is the position it is thinking about tactical? (it is set in triggerAI)
     aiWorking: false,       // re-entrancy guard for the async AI worker
-    aiWorker: null,         // referencia al Worker activo (para terminarlo en reset/menu)
+    aiWorker: null,         // reference to the active Worker (to terminate it on reset/menu)
     pendingAI: null,
     animation: null,
     gen: 0,
     // Relojes
     clockW: CLOCK_INITIAL_MS,
     clockB: CLOCK_INITIAL_MS,
-    clockLastTick: 0,       // performance.now() del último tick; 0 = aún no arrancó
+    clockLastTick: 0,       // performance.now() of the last tick; 0 = not started yet
   };
 
   function recordPosition() {
@@ -1000,17 +1000,17 @@
   }
 
   // ── Reloj ──
-  // Decrementa el reloj del jugador a mover. Si llega a 0, declara timeout.
-  // Al hacer un movimiento (turno cambia), automáticamente arranca el otro
-  // reloj porque siempre tickea el del game.turn actual — eso es lo que hace
-  // un reloj de ajedrez real cuando apretás el botón.
+  // Decrements the clock of the player to move. If it reaches 0, it declares a timeout.
+  // On making a move (the turn changes), it automatically starts the other
+  // clock because it always ticks the current game.turn's — which is what
+  // a real chess clock does when you press the button.
   function tickClock() {
     const now = performance.now();
     if (game.state === 'play' && !game.gameOver
         && !isViewingHistory() && game.clockLastTick > 0) {
-      // El reloj corre en general SALVO en pausa — EXCEPTO si es turno de la IA
-      // y está pensando: ahí le seguimos cobrando su tiempo aunque la pausa esté
-      // activa (sino se exploitea pausando justo cuando la IA arranca a pensar).
+      // The clock runs in general EXCEPT when paused — EXCEPT if it is the AI's turn
+      // and it is thinking: there we keep charging it its time even with the pause
+      // on (otherwise you could exploit it by pausing just as the AI starts thinking).
       const aiBilling = game.paused && currentPlayerIsAI() && game.aiThinking;
       if (!game.paused || aiBilling) {
         const dt = now - game.clockLastTick;
@@ -1056,7 +1056,7 @@
 
   function resetBoard() {
     game.gen++;
-    // Si la IA estaba pensando, matar el worker antes de armar el tablero nuevo
+    // If the AI was thinking, kill the worker before setting up the new board
     if (game.aiWorker) { game.aiWorker.terminate(); game.aiWorker = null; }
     game.grid = initialGrid();
     game.turn = 'w';
@@ -1080,14 +1080,14 @@
     game.animation = null;
     game.clockW = CLOCK_INITIAL_MS;
     game.clockB = CLOCK_INITIAL_MS;
-    game.clockLastTick = 0;            // arranca cuando startGame lo seteé
+    game.clockLastTick = 0;            // it starts when startGame sets it
     recordPosition();
     pushHistory();
   }
 
-  // Niveles de dificultad — Skill Level es la opción UCI estándar de Stockfish.
-  // Para el motor interno usamos depthCap como techo de iterative deepening.
-  // ELO es aproximado (lo que muestra la UI).
+  // Difficulty levels — Skill Level is Stockfish's standard UCI option.
+  // For the internal engine we use depthCap as the iterative-deepening ceiling.
+  // The ELO is approximate (what the UI shows).
   const AI_LEVELS = [
     { id: 0, label: 'Principiante', elo: '~800',  skill: 0,  depthCap: 2, time: 400  },
     { id: 1, label: 'Casual',       elo: '~1200', skill: 5,  depthCap: 4, time: 700  },
@@ -1097,8 +1097,8 @@
   ];
   const DEFAULT_LEVEL = 4;
 
-  // startGame(mode, skillW, skillB) — los skill son ids de AI_LEVELS.
-  // Para pvp ambos son null. Para vs IA solo el lado IA se setea.
+  // startGame(mode, skillW, skillB) — the skills are AI_LEVELS ids.
+  // For pvp both are null. For vs AI only the AI side is set.
   function startGame(mode, skillW, skillB) {
     game.mode = mode;
     game.aiBoth = (mode === 'aiva');
@@ -1110,7 +1110,7 @@
     game.aiSkillB = (skillB != null) ? skillB : DEFAULT_LEVEL;
     resetBoard();
     game.state = 'play';
-    game.clockLastTick = performance.now();   // ahora arranca el reloj de white (turn inicial)
+    game.clockLastTick = performance.now();   // now White's clock starts (the initial turn)
     document.getElementById('menu').style.display = 'none';
     document.getElementById('diffMenu').classList.remove('show');
     document.getElementById('bar').style.display  = 'flex';
@@ -1118,7 +1118,7 @@
     game.paused = false;
     ensureAudio();
     syncUI();
-    resize();  // visibilidad cambió → recalculamos el canvas
+    resize();  // visibility changed → we recompute the canvas
   }
 
   function backToMenu() {
@@ -1132,8 +1132,8 @@
     resize();
   }
 
-  // Toggles body classes que el CSS usa para mostrar/ocultar #btnBack y #btnPause.
-  //  - canback: hay algo a lo que volver (menú de dificultad o partida en curso)
+  // Toggles body classes that the CSS uses to show/hide #btnBack and #btnPause.
+  //  - canback: there is something to go back to (the difficulty menu or a game in progress)
   //  - playing: estamos en partida (state === 'play')
   function syncUI() {
     const b = document.body.classList;
@@ -1214,15 +1214,15 @@
   }
 
   // ════════════════════════════════════════════════════════════════════
-  //  Heurística táctica — decide si darle más tiempo a la IA.
-  //  Una posición se considera "táctica" si:
-  //   - el lado a mover está en jaque (forzado a responder)
-  //   - hay promoción disponible
-  //   - hay una captura ganadora (pieza menos valiosa toma una más valiosa)
-  //   - hay una captura sobre una pieza enemiga no defendida (pieza colgada)
-  //  Las funciones del engine (inCheck, allLegalMoves, squareAttacked,
-  //  PIECE_VALUES) viven en scope global porque el bloque ai-engine se
-  //  inyecta como <script>.
+  //  Tactical heuristic — it decides whether to give the AI more time.
+  //  A position counts as "tactical" if:
+  //   - the side to move is in check (forced to respond)
+  //   - there is a promotion available
+  //   - there is a winning capture (a less valuable piece takes a more valuable one)
+  //   - there is a capture on an undefended enemy piece (a hanging piece)
+  //  The engine's functions (inCheck, allLegalMoves, squareAttacked,
+  //  PIECE_VALUES) live in global scope because the ai-engine block is
+  //  injected as a <script>.
   // ════════════════════════════════════════════════════════════════════
   function isTacticalPosition(grid, color, ep) {
     if (inCheck(grid, color)) return true;
@@ -1243,13 +1243,13 @@
   }
 
   // ════════════════════════════════════════════════════════════════════
-  //  AI worker — corre la búsqueda en un Web Worker (off-main-thread)
-  //  para que la UI siga respondiendo (botones de historial, menú,
-  //  reset, render del tablero) mientras la IA piensa.
+  //  AI worker — it runs the search in a Web Worker (off the main thread)
+  //  so the UI keeps responding (history buttons, menu,
+  //  reset, board render) while the AI thinks.
   //
-  //  Para enchufar Stockfish.js: reemplazar el WORKER_URL de arriba
-  //  por un worker que cargue stockfish.js. El protocolo de mensajes
-  //  acá es {grid, color, ep, ...} → {move, depth}; con Stockfish
+  //  To plug in Stockfish.js: replace the WORKER_URL above
+  //  with a worker that loads stockfish.js. The message protocol
+  //  here is {grid, color, ep, ...} → {move, depth}; with Stockfish
   //  conviene cambiar a FEN + parsear `bestmove` UCI.
   // ════════════════════════════════════════════════════════════════════
   async function triggerAI() {
@@ -1260,12 +1260,12 @@
     const colorSnap = game.turn;
     const genSnap = game.gen;
 
-    // Dificultad por color: en IA vs IA cada lado puede tener un nivel distinto.
+    // Difficulty per colour: in AI vs AI each side can have a different level.
     const levelId = (colorSnap === 'w' ? game.aiSkillW : game.aiSkillB);
     const level   = AI_LEVELS[(levelId != null ? levelId : DEFAULT_LEVEL)];
 
-    // ¿Posición táctica? → le damos el doble de tiempo para pensar (solo en máximo).
-    // En niveles más bajos no doblamos: queremos que se sientan inferiores.
+    // A tactical position? → we give it twice the thinking time (at the top level only).
+    // At lower levels we do not double it: we want them to feel inferior.
     const tactical = isTacticalPosition(game.grid, colorSnap, epSnap);
     const baseTime = level.time;
     const budgetMs = (tactical && level.id === DEFAULT_LEVEL) ? baseTime * AI_TACTICAL_MULT : baseTime;
@@ -1276,10 +1276,10 @@
       game.aiWorking = false;
       if (genSnap !== game.gen || !currentPlayerIsAI() || game.gameOver || !move) return;
       game.aiEngineName = engineName;
-      // Si hay animación EN CURSO o el juego está PAUSADO, encolamos el
-      // resultado — el main loop lo aplica cuando se reanude. El reloj de la IA
-      // ya consumió su tiempo durante el cómputo (tickClock sigue corriendo
-      // mientras aiThinking=true, aunque la pausa esté activa).
+      // If an animation is IN PROGRESS or the game is PAUSED, we queue the
+      // result — the main loop applies it when play resumes. The AI's clock
+      // already consumed its time during the computation (tickClock keeps running
+      // while aiThinking=true, even with the pause on).
       if (game.animation || game.paused) {
         game.pendingAI = { move, depth, seldepth, engineName };
       } else {
@@ -1290,7 +1290,7 @@
       }
     };
 
-    // ── Path 1: Stockfish vía UCI (mucho más fuerte) ──
+    // ── Path 1: Stockfish via UCI (much stronger) ──
     if (stockfishReady && stockfishWorker) {
       try {
         const fen = buildFen(game.grid, colorSnap, epSnap);
@@ -1300,13 +1300,13 @@
           applyResult(move, sfResult.depth || 0, sfResult.seldepth || 0, 'Stockfish');
           return;
         }
-        // Stockfish devolvió null o falló — caemos al interno
+        // Stockfish returned null or failed — we fall back to the internal engine
       } catch (err) {
         console.warn('Stockfish failed, falling back to the internal engine', err);
       }
     }
 
-    // ── Path 2: Motor interno (negamax + α-β en un Worker propio) ──
+    // ── Path 2: Internal engine (negamax + α-β in a Worker of its own) ──
     let worker;
     try {
       worker = new Worker(WORKER_URL);
@@ -1365,17 +1365,17 @@
 
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    // visualViewport es más confiable en mobile Safari (compensa la toolbar
-    // dinámica y el safe-area). Caemos a innerHeight si no existe.
+    // visualViewport is more reliable on mobile Safari (it compensates for the dynamic
+    // toolbar and the safe area). We fall back to innerHeight if it does not exist.
     const viewportH = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-    // El bar ahora es una píldora flotante en el medio-abajo. Usamos getBoundingClientRect
-    // para saber dónde EMPIEZA — la cuenta vieja de offsetHeight subestimaba el espacio
-    // reservado (no contaba el margen inferior + safe-area).
+    // The bar is now a floating pill at the bottom centre. We use getBoundingClientRect
+    // to know where it STARTS — the old offsetHeight arithmetic underestimated the reserved
+    // space (it did not count the bottom margin + safe area).
     const bar = document.getElementById('bar');
     let reservedBottom = 0;
     if (bar && bar.style.display !== 'none' && bar.offsetHeight > 0) {
       const rect = bar.getBoundingClientRect();
-      reservedBottom = Math.max(0, viewportH - rect.top + 6);   // +6px de respiro arriba del bar
+      reservedBottom = Math.max(0, viewportH - rect.top + 6);   // +6px of breathing room above the bar
     }
     W = window.innerWidth;
     H = Math.max(160, viewportH - reservedBottom);
@@ -1387,21 +1387,21 @@
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
 
-    // Layout: status arriba, strip horizontal (relojes + capturas) sobre el tablero,
-    // labels abajo. Sin paneles laterales — todo se agrupa arriba.
-    // En mobile: empujamos todo hacia abajo del notch usando safe-area-inset-top
-    // del browser (más preciso que un valor fijo, cubre desde iPhone X hasta Pro 15+).
+    // Layout: status on top, a horizontal strip (clocks + captures) above the board,
+    // labels below. No side panels — everything is grouped at the top.
+    // On mobile: we push everything below the notch using the browser's
+    // safe-area-inset-top (more precise than a fixed value, it covers everything from iPhone X to Pro 15+).
     const safeTopRaw = getComputedStyle(document.documentElement).getPropertyValue('--safe-top');
     let safeTopPx = parseFloat(safeTopRaw) || 0;
-    // Fallback: si no existe la variable, derivamos de env() vía un elemento.
-    if (!safeTopPx && W < 600) safeTopPx = 44;  // valor típico iPhone
+    // Fallback: if the variable does not exist, we derive it from env() via an element.
+    if (!safeTopPx && W < 600) safeTopPx = 44;  // typical iPhone value
     topInset            = W < 600 ? Math.max(28, safeTopPx + 10) : 0;
-    const statusReserve = 52 + topInset;   // status text (y≈22) + depth info (y≈48) + margen mobile
-    const stripReserve  = 72;    // alto FIJO del strip (2 filas de piezas + reloj)
-    const stripGap      = 18;    // aire entre strip y borde del tablero
+    const statusReserve = 52 + topInset;   // status text (y≈22) + depth info (y≈48) + mobile margin
+    const stripReserve  = 72;    // FIXED height of the strip (2 rows of pieces + the clock)
+    const stripGap      = 18;    // air between the strip and the board's edge
     const topReserve    = statusReserve + stripReserve + stripGap;
-    const bottomReserve = 36;    // labels a-h + aire (la barra ahora es flotante con margen externo, no se come tablero)
-    const sideReserve   = 24;    // margen lateral mínimo
+    const bottomReserve = 36;    // a-h labels + air (the bar is now floating with an outer margin, it does not eat into the board)
+    const sideReserve   = 24;    // minimum side margin
     const availH = Math.max(160, H - topReserve - bottomReserve);
     const availW = Math.max(160, W - sideReserve * 2);
     boardSize = Math.min(availH, availW);
@@ -1426,9 +1426,9 @@
     return [game.flip ? (7 - sc) : sc, game.flip ? (7 - sr) : sr];
   }
 
-  // ── Sprite caching: bakear cada pieza una vez a un canvas offscreen ──
-  // Permite usar source-atop para el specular highlight sin pintar el fondo,
-  // y deja el drawing per-frame en un solo drawImage por pieza.
+  // ── Sprite caching: bake each piece once to an offscreen canvas ──
+  // It allows source-atop for the specular highlight without painting the background,
+  // and leaves the per-frame drawing as a single drawImage per piece.
   const pieceSprites = {};
   let lastSpriteSize = 0;
   let lastSpriteDpr  = 0;
@@ -1439,7 +1439,7 @@
     c.textBaseline = 'middle';
     c.font = `${Math.floor(size * 0.92)}px "Segoe UI Symbol", "Arial Unicode MS", "DejaVu Sans", serif`;
 
-    // 1) Sombra proyectada — pieza en color oscuro con shadow nativo (offset Y > 0)
+    // 1) Drop shadow — the piece in a dark colour with a native shadow (offset Y > 0)
     c.save();
     c.shadowColor = 'rgba(0,0,0,0.55)';
     c.shadowBlur = size * 0.14;
@@ -1448,7 +1448,7 @@
     c.fillText(ch, cx, cy);
     c.restore();
 
-    // 2) Outline 8-direccional para un borde crisp y suave
+    // 2) An 8-direction outline for a crisp, smooth edge
     const outlineColor = color === 'w' ? '#0d0d16' : '#fbfbfe';
     const off = Math.max(1, size * 0.042);
     c.fillStyle = outlineColor;
@@ -1457,7 +1457,7 @@
       c.fillText(ch, cx + dx, cy + dy);
     }
 
-    // 3) Cuerpo principal con gradiente vertical fuerte (top claro → bottom oscuro)
+    // 3) Main body with a strong vertical gradient (light top → dark bottom)
     let grad;
     if (color === 'w') {
       grad = c.createLinearGradient(0, cy - size*0.42, 0, cy + size*0.42);
@@ -1475,9 +1475,9 @@
     c.fillStyle = grad;
     c.fillText(ch, cx, cy);
 
-    // 4) Reflejo arriba-izquierda — clippeado al silhouette con source-atop.
+    // 4) Top-left reflection — clipped to the silhouette with source-atop.
     //    Blancas: highlight claro (luz blanca).
-    //    Negras: "brillo oscuro" — sombra suave en la misma zona, da look glossy noir.
+    //    Black: a "dark shine" — a soft shadow in the same area, giving a glossy noir look.
     c.save();
     c.globalCompositeOperation = 'source-atop';
     const hl = c.createRadialGradient(
@@ -1497,7 +1497,7 @@
     c.fillRect(cx - size*0.6, cy - size*0.6, size*1.2, size*1.2);
     c.restore();
 
-    // 5) Reflejo inferior sutil — un "fake ambient occlusion" interior para dar peso
+    // 5) A subtle lower reflection — a "fake ambient occlusion" inside to give it weight
     c.save();
     c.globalCompositeOperation = 'source-atop';
     const ao = c.createLinearGradient(0, cy, 0, cy + size*0.45);
@@ -1518,7 +1518,7 @@
       if (!(baseSize > 0) || !(dpr > 0)) return null;
       const dim = Math.ceil(baseSize * 1.35);
       const px  = Math.ceil(dim * dpr);
-      if (px <= 0 || px > 4096) return null;            // límite defensivo
+      if (px <= 0 || px > 4096) return null;            // defensive limit
       const off = document.createElement('canvas');
       off.width = off.height = px;
       const c = off.getContext('2d');
@@ -1545,9 +1545,9 @@
     }
   }
 
-  // Cache de sprites pequeños (capturas) — bakeados a su tamaño NATURAL
-  // así no perdemos definición al downscalear desde un sprite grande de tablero.
-  // Indexado por tamaño redondeado para evitar re-bakeos por sub-px.
+  // Cache of small sprites (captures) — baked at their NATURAL size
+  // so we do not lose definition downscaling from a large board sprite.
+  // Indexed by rounded size to avoid re-bakes over sub-pixels.
   const smallSpriteCache = new Map();    // key = `${color}${kind}@${roundedSize}@${dpr}`
   let lastSmallSpriteDpr = 0;
 
@@ -1559,7 +1559,7 @@
     let s = smallSpriteCache.get(key);
     if (s === undefined) {
       s = bakeSpriteAt(kind, color, rounded);
-      smallSpriteCache.set(key, s);     // guardamos incluso null para no re-intentar cada frame
+      smallSpriteCache.set(key, s);     // we store even null so as not to retry every frame
     }
     return s;
   }
@@ -1574,7 +1574,7 @@
       sprite = pieceSprites[color + kind];
     }
     if (!sprite) {
-      // Último fallback: glifo Unicode plano. Garantiza que SE VEA la pieza.
+      // Last fallback: a flat Unicode glyph. It guarantees the piece IS visible.
       ctx.save();
       ctx.font = `${Math.floor(size * 0.92)}px "Segoe UI Symbol", "Arial Unicode MS", sans-serif`;
       ctx.textAlign = 'center';
@@ -1595,7 +1595,7 @@
     };
     const viewing = isViewingHistory();
 
-    // ── Marco de madera con gradiente + sombra proyectada ──
+    // ── Wooden frame with a gradient + a drop shadow ──
     const FRAME = Math.max(8, cellSize * 0.12);
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.55)';
@@ -1617,12 +1617,12 @@
     ctx.fillRect(boardX - FRAME, boardY - FRAME, boardSize + FRAME*2, boardSize + FRAME*2);
     ctx.restore();
 
-    // Borde interno (línea fina más clara para "biselar" el marco)
+    // Inner border (a thin lighter line to "bevel" the frame)
     ctx.strokeStyle = 'rgba(255,235,200,0.18)';
     ctx.lineWidth = 1;
     ctx.strokeRect(boardX - 0.5, boardY - 0.5, boardSize + 1, boardSize + 1);
 
-    // ── Casillas con paleta más cálida ──
+    // ── Squares with a warmer palette ──
     const LIGHT = '#ecd9b3', DARK = '#a87c52';
     for (let sc = 0; sc < 8; sc++) for (let sr = 0; sr < 8; sr++) {
       const c = game.flip ? (7 - sc) : sc, r = game.flip ? (7 - sr) : sr;
@@ -1630,7 +1630,7 @@
       ctx.fillRect(boardX + sc * cellSize, boardY + sr * cellSize, cellSize, cellSize);
     }
 
-    // ── Vignette muy sutil en el centro del tablero para profundidad ──
+    // ── A very subtle vignette at the centre of the board for depth ──
     const vGrad = ctx.createRadialGradient(
       boardX + boardSize/2, boardY + boardSize/2, boardSize * 0.2,
       boardX + boardSize/2, boardY + boardSize/2, boardSize * 0.75);
@@ -1639,7 +1639,7 @@
     ctx.fillStyle = vGrad;
     ctx.fillRect(boardX, boardY, boardSize, boardSize);
 
-    // ── Highlight última jugada — flat amarillo translúcido ──
+    // ── Last-move highlight — flat translucent yellow ──
     if (view.lastMove) {
       ctx.fillStyle = 'rgba(246,236,120,0.40)';
       const [fc, fr, tc, tr] = view.lastMove;
@@ -1649,7 +1649,7 @@
       ctx.fillRect(tx, ty, cellSize, cellSize);
     }
 
-    // ── Rey en jaque — flat rojo translúcido ──
+    // ── King in check — flat translucent red ──
     if (view.status === 'check' || view.status === 'checkmate') {
       const k = findKing(view.grid, view.turn);
       if (k) {
@@ -1659,14 +1659,14 @@
       }
     }
 
-    // ── Selección — flat verde translúcido ──
+    // ── Selection — flat translucent green ──
     if (!viewing && game.selected) {
       const [sx, sy] = cellToScreen(game.selected[0], game.selected[1]);
       ctx.fillStyle = 'rgba(120,210,120,0.45)';
       ctx.fillRect(sx, sy, cellSize, cellSize);
     }
 
-    // Piezas — saltamos la celda destino de la animación (la dibujamos interpolada después)
+    // Pieces — we skip the animation's destination square (we draw it interpolated afterwards)
     const skip = new Set();
     if (!viewing && game.animation) {
       skip.add(game.animation.toC + ',' + game.animation.toR);
@@ -1722,7 +1722,7 @@
       ctx.restore();
     }
 
-    // Pieza arrastrada — un poco más grande, con shadow extra para "levantarla"
+    // Dragged piece — a little bigger, with an extra shadow to "lift" it
     if (!viewing && game.dragging && game.dragFrom) {
       const p = game.grid[game.dragFrom[0]][game.dragFrom[1]];
       if (p) {
@@ -1735,7 +1735,7 @@
       }
     }
 
-    // ── Labels a-h, 1-8 — color cálido (color del marco) ──
+    // ── a-h, 1-8 labels — a warm colour (the frame's colour) ──
     ctx.fillStyle = 'rgba(240,225,195,0.85)';
     ctx.font = `600 ${Math.max(11, Math.floor(cellSize * 0.18))}px "Segoe UI", sans-serif`;
     ctx.textAlign = 'center';
@@ -1748,34 +1748,34 @@
       ctx.fillText(String(8 - rankR), boardX - labelOff, boardY + i * cellSize + cellSize/2);
     }
 
-    // Aislamos cada call: si drawTopBar tira, drawTopStatus tiene que correr
-    // igual (el texto de turno/depth no debe desaparecer porque falló una pieza).
+    // We isolate each call: if drawTopBar throws, drawTopStatus still has to run
+    // (the turn/depth text must not disappear because a piece failed).
     try { drawTopBar(view.captured); } catch (e) { console.error('drawTopBar:', e); }
     try { drawTopStatus(view);       } catch (e) { console.error('drawTopStatus:', e); }
   }
 
-  const CAPTURE_ROWS = 2;        // siempre 2 filas, las cols se calculan dinámicamente
+  const CAPTURE_ROWS = 2;        // always 2 rows, the columns are computed dynamically
 
   function drawTopBar(viewCaptured) {
-    // Barra horizontal arriba del tablero. Las piezas se dibujan en 2 filas
-    // pegadas al reloj — TODAS las capturas, ordenadas por valor decreciente.
+    // A horizontal bar above the board. The pieces are drawn in 2 rows
+    // against the clock — ALL the captures, ordered by decreasing value.
     //   [♛ ♜ ♜ ♝ ♝ ♞][Black clock][White clock][♕ ♖ ♖ ♗ ♗ ♘]
     //   [♞ ♟ ♟ ♟ ♟ ♟ ♟ ♟]                                  [♘ ♟ ♟ ♟ ♟ ♟ ♟ ♟]
     const order = { Q: 5, R: 4, B: 3, N: 2, P: 1, K: 0 };
     const black = (viewCaptured || []).filter(p => p.color === 'b').map(p => p.kind).sort((a, b) => order[b] - order[a]);
     const white = (viewCaptured || []).filter(p => p.color === 'w').map(p => p.kind).sort((a, b) => order[b] - order[a]);
 
-    const minStripTop = 56 + topInset;       // tope: justo debajo de status + depth info (incluye margen mobile)
-    const maxStripH   = 72;                  // techo para 2 filas de capturas + reloj
-    const gapToBoard  = 18;                  // separación entre strip y tablero
+    const minStripTop = 56 + topInset;       // top: just below the status + depth info (includes the mobile margin)
+    const maxStripH   = 72;                  // ceiling for 2 rows of captures + the clock
+    const gapToBoard  = 18;                  // gap between the strip and the board
     const stripBottom = boardY - gapToBoard;
     const available   = stripBottom - minStripTop;
     const stripH      = Math.min(maxStripH, available);
-    if (stripH < 56) return;                 // proporción mínima — no hay aire para 2 filas
+    if (stripH < 56) return;                 // minimum ratio — there is no air for 2 rows
     const stripTop    = stripBottom - stripH;
 
-    // Relojes compactos pegados en el centro — más chicos que el strip,
-    // centrados verticalmente, así no dominan visualmente.
+    // Compact clocks against the centre — smaller than the strip,
+    // vertically centred, so they do not dominate visually.
     const clockW = Math.min(60, Math.max(50, boardSize * 0.13));
     const clockH = Math.min(42, stripH - 12);
     const clockGap = 4;
@@ -1787,30 +1787,30 @@
     drawClock(leftClockCx,  clockTop, clockH, clockW, 'b');
     drawClock(rightClockCx, clockTop, clockH, clockW, 'w');
 
-    // Piezas: 2 filas tienen que entrar en stripH
+    // Pieces: 2 rows have to fit in stripH
     const pieceSize = Math.max(18, Math.min(26, stripH * 0.42));
     const innerPad  = 10;
 
-    // Negras a la izquierda de los relojes: Q pegada al reloj negro → expanden a la izq
+    // Black to the left of the clocks: the Q against the black clock → they expand leftwards
     const blackAnchor = leftClockCx - clockW/2 - innerPad;
     const blackLimit  = boardX + 4;
     renderCapturesOutward(black, 'b', blackAnchor, blackLimit, stripTop + stripH/2, pieceSize, 'left');
 
-    // Blancas a la derecha de los relojes: Q pegada al reloj blanco → expanden a la der
+    // White to the right of the clocks: the Q against the white clock → they expand rightwards
     const whiteAnchor = rightClockCx + clockW/2 + innerPad;
     const whiteLimit  = boardX + boardSize - 4;
     renderCapturesOutward(white, 'w', whiteAnchor, whiteLimit, stripTop + stripH/2, pieceSize, 'right');
   }
 
   function renderCapturesOutward(kinds, color, anchorX, limitX, cy, size, dir) {
-    // Las piezas se acomodan EMPEZANDO en anchorX (lado de la reina) y se
-    // expanden hacia limitX en CAPTURE_ROWS filas. Todas las capturas se dibujan
-    // (las más valiosas ya vienen al frente). Si el span aprieta, achicamos spacing.
+    // The pieces lay out STARTING at anchorX (the queen's side) and
+    // expand towards limitX over CAPTURE_ROWS rows. Every capture is drawn
+    // (the most valuable ones already come first). If the span gets tight, we shrink the spacing.
     if (!kinds.length) return;
     const span = Math.abs(limitX - anchorX);
     if (span < size) return;
     const visible = kinds.length;
-    // Cols = mitad redondeada hacia arriba, así llenamos primero la fila pegada al reloj
+    // Cols = half rounded up, so we fill the row against the clock first
     const cols    = Math.ceil(visible / CAPTURE_ROWS);
     const natural = size * 0.78;
     const spacing = Math.max(size * 0.38, Math.min(natural, span / cols));
@@ -1833,9 +1833,9 @@
     const lowTime = ms < 30 * 1000;
     const x = cx - width/2;
 
-    // ── Cuadrante: el ACTIVO tiene fondo blanco/claro (= "encendido"),
-    //    el INACTIVO tiene fondo oscuro (= "apagado"). El fondo se PASA al
-    //    otro reloj cuando cambia el turno, como un chess clock real.
+    // ── Quadrant: the ACTIVE one has a white/light background (= "on"),
+    //    the INACTIVE one has a dark background (= "off"). The background is HANDED to the
+    //    other clock when the turn changes, like a real chess clock.
     const bgColor     = isActive ? '#f4f4f8' : '#1a1a22';
     const strokeColor = isActive ? '#ffb83a' : '#33333e';
     ctx.fillStyle = bgColor;
@@ -1847,7 +1847,7 @@
     ctx.fill();
     ctx.stroke();
 
-    // ── Texto: contraste con el fondo ──
+    // ── Text: contrast with the background ──
     const textColor = lowTime
       ? '#ff3838'
       : (isActive ? '#181820' : '#7a7a86');
@@ -1898,7 +1898,7 @@
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
       ctx.fillText('DRAW BY INSUFFICIENT MATERIAL', W / 2, 28 + topInset);
     } else if (view.status === 'timeout') {
-      // El jugador que se quedó sin tiempo es el del turno actual (la vista lo congela)
+      // The player who ran out of time is the one whose turn it is (the view freezes them)
       const winner = view.turn === 'w' ? 'Negras' : 'Blancas';
       ctx.fillStyle = '#ff6464';
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
@@ -1911,7 +1911,7 @@
       let txt = view.turn === 'w' ? 'Turno: Blancas' : 'Turno: Negras';
       let color = '#ececf0';
       if (game.aiThinking) {
-        // Animación de puntos "Pensando . . ."
+        // "Thinking . . ." dot animation
         const dots = '.'.repeat(1 + Math.floor((performance.now() / 350) % 3));
         txt += '   ·   Pensando' + dots;
         color = '#c8c8ff';
@@ -1925,18 +1925,18 @@
     }
     ctx.restore();
 
-    // (El chip de modo fue removido — su espacio lo ocupa el cluster .cbtn arriba-derecha.
-    //  La dificultad de la IA se sigue viendo en la línea de depth como "(Medio)".)
+    // (The mode chip was removed — its space is taken by the .cbtn cluster at the top right.
+    //  The AI's difficulty is still visible in the depth line as "(Medium)".)
 
-    // Depth secundario + nombre del motor
-    // depth   = profundidad nominal de iterative deepening
-    // seldepth = profundidad máxima alcanzada con extensiones / quiescence (siempre ≥ depth)
+    // Secondary depth + the engine's name
+    // depth   = nominal iterative-deepening depth
+    // seldepth = maximum depth reached with extensions / quiescence (always ≥ depth)
     const fmtDepth = (d, sd) => sd > 0 && sd > d ? (d + '/' + sd) : String(d);
     if (!viewing && !game.gameOver) {
       ctx.font = `400 ${Math.max(10, Math.min(13, Math.floor(W * 0.012)))}px "Segoe UI", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      // Difi del lado a mover (en aiva cambia con el turno).
+      // Difficulty of the side to move (in aiva it changes with the turn).
       const sideSkillId = (view.turn === 'w' ? game.aiSkillW : game.aiSkillB);
       const sideSkill   = (sideSkillId != null && AI_LEVELS[sideSkillId]) ? AI_LEVELS[sideSkillId].label : null;
       const showSkill   = sideSkill && (game.aiBoth || game.aiColor === view.turn);
@@ -1997,7 +1997,7 @@
     const sq = pixelToSquare(pointerX, pointerY);
     if (!sq) { game.selected = null; game.legal = []; game.dragging = false; return; }
     const [c, r] = sq;
-    // ¿clic sobre un destino legal? — mover (click-click, anima)
+    // a click on a legal destination? — move (click-click, animated)
     if (game.selected) {
       for (const [tc, tr, extra] of game.legal) {
         if (tc === c && tr === r) {
@@ -2007,7 +2007,7 @@
         }
       }
     }
-    // ¿clic sobre pieza propia? — seleccionar + arrancar drag
+    // a click on your own piece? — select + start the drag
     const p = game.grid[c][r];
     if (p && p.color === game.turn) {
       game.selected = [c, r];
@@ -2029,16 +2029,16 @@
     const sq = pixelToSquare(pointerX, pointerY);
     if (!sq) return;
     const [c, r] = sq;
-    if (c === from[0] && r === from[1]) return;   // soltó en mismo lugar → queda en click-click mode
+    if (c === from[0] && r === from[1]) return;   // released in the same place → it stays in click-click mode
     for (const [tc, tr, extra] of game.legal) {
       if (tc === c && tr === r) {
-        makeMove(from[0], from[1], tc, tr, extra, false);   // drag → snap (no anima)
+        makeMove(from[0], from[1], tc, tr, extra, false);   // drag → snap (no animation)
         game.selected = null; game.legal = [];
         return;
       }
     }
-    // Soltó en cualquier otra cosa (incluida otra pieza propia) → cancelar.
-    // El cambio de selección a otra pieza propia sólo ocurre vía click, no vía drag.
+    // Released on anything else (including another of your own pieces) → cancel.
+    // Changing the selection to another of your own pieces only happens via a click, not via a drag.
     game.selected = null; game.legal = [];
   }
 
@@ -2061,11 +2061,11 @@
   function clearSelection() { game.selected = null; game.legal = []; game.dragging = false; game.dragFrom = null; }
 
   // ──────────────────────────────────────────────────────────────────────
-  //  Menú de modo → menú de dificultad → startGame()
+  //  Mode menu → difficulty menu → startGame()
   // ──────────────────────────────────────────────────────────────────────
-  //  pvp: arranca directo (sin IA, sin dificultad).
-  //  w/b: muestra UNA fila → un click empieza el juego.
-  //  aiva: muestra DOS filas (Blancas/Negras) + botón "Empezar".
+  //  pvp: it starts straight away (no AI, no difficulty).
+  //  w/b: it shows ONE row → a click starts the game.
+  //  aiva: it shows TWO rows (White/Black) + a "Start" button.
   let diffPicker = { mode: null, w: DEFAULT_LEVEL, b: DEFAULT_LEVEL };
 
   function openDiffMenu(mode) {
@@ -2092,10 +2092,10 @@
       b.addEventListener('click', () => {
         diffPicker[side] = lvl.id;
         if (diffPicker.mode === 'aiva') {
-          // Toggle visual y esperar al Empezar
+          // A visual toggle, waiting for Start
           renderDiffRow(rowId, side);
         } else {
-          // vs IA: el click ya arranca el juego con esa dificultad
+          // vs AI: the click already starts the game at that difficulty
           const aiSide = (diffPicker.mode === 'w') ? 'b' : 'w';
           startGame(diffPicker.mode,
                     aiSide === 'w' ? lvl.id : DEFAULT_LEVEL,
@@ -2113,8 +2113,8 @@
       else                openDiffMenu(mode);
     });
   });
-  // btnBack del cluster: si estamos en setup de dificultad → vuelve al menú de modo.
-  // Si estamos en partida → vuelve al menú de modo (resetea la partida).
+  // The cluster's btnBack: if we are in the difficulty setup → back to the mode menu.
+  // If we are in a game → back to the mode menu (it resets the game).
   function onBack() {
     const inDiff = document.getElementById('diffMenu').classList.contains('show');
     if (inDiff) {
@@ -2127,18 +2127,18 @@
   }
   document.getElementById('btnBack').addEventListener('pointerdown', e => { e.preventDefault(); onBack(); });
 
-  // btnPause: toggle pause (sólo activo en partida). Pausa también el reloj y la IA.
+  // btnPause: toggles the pause (only active in a game). It also pauses the clock and the AI.
   function togglePause() {
     if (game.state !== 'play') return;
     game.paused = !game.paused;
     document.getElementById('btnPause').classList.toggle('on', game.paused);
-    // La IA NO se cancela al pausar. Sigue pensando en su worker. tickClock le
-    // cobra ese tiempo a su reloj (ver lógica abajo). Cuando termina, el resultado
-    // queda en pendingAI y se aplica al despausar. Esto evita 2 exploits:
-    //   · spamear pausa para evitar que la IA mueva (no se reinicia su cálculo)
-    //   · pausar para regalarle tiempo gratis a la IA (su reloj corre igual)
+    // The AI is NOT cancelled on pausing. It keeps thinking in its worker. tickClock
+    // charges that time to its clock (see the logic below). When it finishes, the result
+    // is held in pendingAI and applied on unpausing. This avoids 2 exploits:
+    //   · spamming pause to keep the AI from moving (its computation does not restart)
+    //   · pausing to give the AI free time (its clock runs anyway)
     if (!game.paused) {
-      game.clockLastTick = performance.now();   // evita drop de tiempo grande al reanudar
+      game.clockLastTick = performance.now();   // avoids a big time drop on resuming
     }
   }
   document.getElementById('btnPause').addEventListener('pointerdown', e => { e.preventDefault(); togglePause(); });
@@ -2152,7 +2152,7 @@
     fpsOverlay.style.display = showFps ? 'block' : 'none';
     document.getElementById('btnInfo').classList.toggle('on', showFps);
   });
-  // Contador de FPS — barato, no draw a menos que esté visible
+  // FPS counter — cheap, it does not draw unless it is visible
   let _fpsFrames = 0, _fpsLastT = performance.now();
   function _fpsTick() {
     _fpsFrames++;
@@ -2169,12 +2169,12 @@
   });
   document.getElementById('btnFirst').addEventListener('click', historyFirst);
   document.getElementById('btnLast').addEventListener('click', historyLast);
-  // (btnReset/btnMenu se eliminaron — Reset queda accesible solo desde el menú
-  // tras volver con btnBack del cluster. La tecla R sigue funcionando para reset.)
+  // (btnReset/btnMenu were removed — Reset is now reachable only from the menu
+  // after going back with the cluster's btnBack. The R key still works for a reset.)
 
-  // Auto-repeat para los botones de avance/retroceso de a 1: dispara una vez
-  // al press, después de 400ms empieza a repetir cada 70ms mientras se mantenga
-  // apretado (mouse o touch). Replica el comportamiento de las flechas de teclado.
+  // Auto-repeat for the step-by-one forward/back buttons: it fires once
+  // on press, then after 400ms starts repeating every 70ms while it is held
+  // down (mouse or touch). It replicates the behaviour of the keyboard arrows.
   function attachAutoRepeat(btn, action) {
     let initialT = 0, intervalT = 0;
     const stop = () => {
@@ -2203,11 +2203,11 @@
   function loop() {
     try {
       tickClock();
-      // Limpia animación cuando expira
+      // Clears the animation when it expires
       if (game.animation && performance.now() - game.animation.startTime >= game.animation.duration) {
         game.animation = null;
       }
-      // Aplica jugada de IA pendiente cuando termina la animación
+      // Applies a pending AI move once the animation finishes
       if (!game.animation && !game.paused && game.pendingAI) {
         const r = game.pendingAI; game.pendingAI = null;
         if (currentPlayerIsAI() && !game.gameOver && r.move) {
@@ -2218,7 +2218,7 @@
           makeMove(fc, fr, tc, tr, extra, true);
         }
       }
-      // Disparar IA cuando le toca
+      // Triggers the AI when it is its turn
       if (game.state === 'play' && !game.paused && currentPlayerIsAI() && !game.aiThinking && !game.aiWorking
           && !game.gameOver && !game.animation && !game.pendingAI) {
         triggerAI();
@@ -2228,7 +2228,7 @@
         drawBoard();
       }
     } catch (err) {
-      // No matar el render loop por una excepción de pintado — el juego sigue.
+      // Do not kill the render loop over a painting exception — the game goes on.
       console.error('render loop error:', err);
     }
     requestAnimationFrame(loop);
@@ -2238,7 +2238,7 @@
   syncUI();
   loop();
 
-  // Ocultar hint después de 5s o al primer toque
+  // Hide the hint after 5s or on the first touch
   const hint = document.getElementById('hint');
   setTimeout(() => hint.style.opacity = '0', 5000);
   canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
@@ -2270,9 +2270,9 @@ Full chess, with castling, en passant and promotion. You pick your opponent and 
 </div>
 
 <script>
-// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
-// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
-// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+// The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
+// game already had keeps switching it on and off with the same tap: no listener is removed and
+// no existing behaviour is changed. If the game had no meter, nothing happens.
 (function () {
   function armar() {
     var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
@@ -2280,31 +2280,31 @@ Full chess, with castling, en passant and promotion. You pick your opponent and 
     if (!btn || !panel) return;
     var fps = document.getElementById('fpsOverlay');
     if (fps && fps.parentNode !== panel) panel.appendChild(fps);
-    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
-    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
-    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    // The bar is MEASURED, not assumed. Several games do not declare `--bar-height` and others
+    // change it with the orientation: with a fixed value the panel ended up covering the buttons
+    // (Hangman) or running off the top in landscape (Tron). Measured live it works in all twenty.
     var bar = document.getElementById('bar');
-    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
-    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
-    // salio de aca", que es lo que hace el de Loop.
-    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
-    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
-    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
-    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
-    // lo mueven segun la orientacion.
+    // The panel is anchored TO THE BUTTON THAT OPENS IT, not to the centre of the screen. Centred
+    // it floated in the middle of the game with no relation to anything; hanging off the button it
+    // reads as "this came from here", which is what Loop's does.
+    //   · the same margin as the button (right if the button is on the right, left otherwise);
+    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //     in games with a bottom bar the panel still ends up over the bar.
+    // It is measured live and not done in CSS because each game puts the button somewhere
+    // different, and several move it with the orientation.
     function ubicar() {
       var vw = window.innerWidth, vh = window.innerHeight, m = 10;
       var rb = btn.getBoundingClientRect();
-      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
-      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
-      // encima de la parte alta de la barra.
+      // If the button lives INSIDE the bar, the vertical reference is the whole bar and not the
+      // button: the buttons align to the foot of the bar, so anchoring to the button left the panel
+      // over the top part of the bar.
       var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
       panel.style.transform = 'none';
       var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
       if ((rb.left + rb.width / 2) > vw / 2) {
-        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
-        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
-        // colgado de un boton a media pantalla arrancaba en x = -199.
+        // Flush with the button's right margin, BUT without running off to the left: if the panel is
+        // wider than the gap, it slides to the edge. Without this cap, a 700 px panel hanging off a
+        // button at mid-screen started at x = -199.
         var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
         panel.style.left = 'auto'; panel.style.right = der + 'px';
       } else {
@@ -2315,14 +2315,14 @@ Full chess, with castling, en passant and promotion. You pick your opponent and 
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
-      } else {                                          // boton abajo -> panel por encima
+      } else {                                          // button at the bottom -> panel above it
         panel.style.top = 'auto';
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
-      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
-      // conmutador, asi que si queda tapado el panel no se puede cerrar.
+      // The tight case (Hangman in landscape: the keyboard and the bar eat 319 of 380 px). The panel
+      // stretches to the opposite edge, but WITHOUT covering the button that opened it: the ⓘ is the
+      // only toggle, so if it gets covered the panel cannot be closed.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
         if ((rb.top + rb.height / 2) < vh / 2) {
           panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
@@ -2341,17 +2341,17 @@ Full chess, with castling, en passant and promotion. You pick your opponent and 
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
-      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
+      if (abrir) ubicar();                          // measure with the panel ALREADY visible: hidden, offsetWidth is 0
     });
-    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    // Keyboard: the button is a <button>, so Enter/Space fire `click` and not `pointerdown`.
     btn.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      if (e.detail !== 0) return;                 // detail 0 = it came from the keyboard, not the mouse
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
       if (abrir) ubicar();
     });
-    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    // Close with Escape: the panel covers the game and must be dismissable without hunting for the button.
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && panel.classList.contains('show')) {
         panel.classList.remove('show'); btn.classList.remove('on');

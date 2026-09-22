@@ -21,14 +21,14 @@ Window is 800×800. The 13-entry `colors` table holds `(rmin,rmax,gmin,gmax,bmin
 See [FireworksV2/](../FireworksV2/) for the wider-window revision with a working pause overlay, and [../CLAUDE.md](../CLAUDE.md) for shared conventions.
 
 
-## AUDIO — correcciones (2026-09-22)
+## AUDIO — fixes (2026-09-22)
 
-1. `audioResume()` creaba el `AudioContext` **sin `try/catch`**. Si el constructor tiraba, la
-   excepcion se llevaba puesto el handler que la llamo y el juego quedaba **inmanejable**: no
-   lanzaba cohetes y ningun boton respondia.
-2. **No habia `visibilitychange`.** `background.mp3` es un `BufferSource` con `loop = true` — el
-   unico nodo continuo del juego — y seguia sonando con la pestana oculta o el telefono en otra
-   app, justo cuando el jugador ya no tiene el boton de mute a mano.
+1. `audioResume()` created the `AudioContext` **without `try/catch`**. If the constructor threw, the
+   exception took out the handler that called it and the game was left **unplayable**: no rockets
+   launched and no button responded.
+2. **There was no `visibilitychange`.** `background.mp3` is a `BufferSource` with `loop = true` — the
+   game's only continuous node — and it kept playing with the tab hidden or the phone in another
+   app, exactly when the player no longer has the mute button at hand.
 
-Los cuatro samples (lanzamiento, chispas, explosion, fondo) se conservan: son grabaciones reales y
-suenan mejor que cualquier oscilador.
+The four samples (launch, sparks, explosion, background) stay: they are real recordings and they
+sound better than any oscillator.

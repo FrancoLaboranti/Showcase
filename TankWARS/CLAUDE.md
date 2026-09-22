@@ -27,44 +27,45 @@ See [../CLAUDE.md](../CLAUDE.md) for the shared sprite/main-loop pattern.
 
 ## AUDIO (2026-09-22)
 
-**Chapa, cordita y electricidad.** Acero grueso y hueco, chasis placados con orugas, cajas de
-madera reforzada. Nada aca suena a videojuego retro: suena a maquinas pesadas rompiendose en un
-galpon.
+**Plate, cordite and electricity.** Thick hollow steel, plated chassis with tracks, reinforced wooden
+crates. Nothing here sounds like a retro video game: it sounds like heavy machines breaking in a
+shed.
 
-**Cinco familias, cada una con una funcion exclusiva y sin solaparse en el registro.** Esa
-separacion es lo que permite entender una pantalla con veinte cosas pasando a la vez sin mirarla:
+**Five families, each with an exclusive function and no overlap in register.** That separation is
+what lets you read a screen with twenty things happening at once without looking at it:
 
-| familia | que es | donde |
+| family | what it is | where |
 |---|---|---|
-| CHAPA | bandpass 180-320 Hz, Q alto, cola corta | todo impacto metalico (la mas frecuente) |
-| CORDITA | ruido lowpass con sub | disparos, misiles, minas, muertes |
-| ELECTRICIDAD | senos limpios 680-1700 Hz | escudo, absorcion. Lo unico que no es materia |
-| MADERA | bandpass 520 Hz, Q bajo | las cajas destructibles, y NADA mas |
-| ORO | el unico registro brillante y limpio | monedas y lootbox |
+| PLATE | bandpass 180-320 Hz, high Q, short tail | every metallic impact (the most frequent) |
+| CORDITE | lowpassed noise with a sub | shots, missiles, mines, deaths |
+| ELECTRICITY | clean sines 680-1700 Hz | shield, absorption. The only thing that is not matter |
+| WOOD | bandpass 520 Hz, low Q | the destructible crates, and NOTHING else |
+| GOLD | the only bright, clean register | coins and lootbox |
 
-**Lo propio y lo ajeno se separan por CUERPO y volumen, no por timbre.** Tu canon lleva un sub de
-88 Hz que el del enemigo no tiene, y el enemigo suena a 0.028 contra tus 0.075. Un canonazo es un
-canonazo venga de donde venga; lo que cambia es quien lo tiene al lado.
+**Yours and theirs are separated by BODY and volume, not by timbre.** Your cannon carries an 88 Hz
+sub the enemy's does not have, and the enemy plays at 0.028 against your 0.075. A cannon shot is a
+cannon shot wherever it comes from; what changes is who has it next to them.
 
-Los registros medidos no se pisan: **mina 68 Hz** (la mas grave del juego, para que no se confunda
-con ningun misil), muerte grande 91, explosion 97, misil propio 140.
+The measured registers do not overlap: **mine 68 Hz** (the lowest in the game, so it cannot be
+confused with any missile), big death 91, explosion 97, own missile 140.
 
-- **El critico es una capa ADITIVA sobre el impacto, no un reemplazo**: primero se oye que pegaste
-  y despues que pegaste bien.
-- **El ping de la lootbox SUBE con lo poco que le queda**: 900 Hz entera, 1580 Hz a punto de
-  romperse. Se oye sin mirar la barra.
-- **El escudo roto es la UNICA disonancia del juego** (1400 + 1483 Hz, un semitono). Por eso se
-  entiende al instante que algo se rompio y que era tuyo.
-- El escudo activo es el unico nodo continuo: dos senos a un hercio de distancia que baten lento.
-  No es un tono, es una presencia.
+- **A critical is an ADDITIVE layer over the impact, not a replacement**: first you hear that you
+  hit, then that you hit well.
+- **The lootbox ping RISES as less of it is left**: 900 Hz intact, 1580 Hz about to break. You hear
+  it without looking at the bar.
+- **The broken shield is the game's ONLY dissonance** (1400 + 1483 Hz, a semitone). That is why it
+  reads instantly as something breaking and as something of yours.
+- The active shield is the only continuous node: two sines a hertz apart beating slowly. It is not a
+  tone, it is a presence.
 
-`window.__sfx` expone el vocabulario para el arnes headless: todo el juego vive dentro de un IIFE y
-si no, no hay forma de verificarlo. Mismo criterio que el objeto `QA` de Loop; no toca estado.
+`window.__sfx` exposes the vocabulary to the headless harness: the whole game lives inside an IIFE
+and without it there is no way to verify it. Same criterion as Loop's `QA` object; it touches no
+state.
 
-> Patron comun a todo el repo: sintesis WebAudio sin archivos, `AudioContext` creado con
-> `try/catch` en el primer gesto, techo de voces por frame **con su reseteo al tope del `loop()`**,
-> cooldown por voz, boton de mute con persistencia en `localStorage`, y `visibilitychange` para que
-> nada continuo siga sonando con la pestana al fondo. Si el audio falla, el juego sigue andando.
-> Verificado con un arnes headless que envuelve el `AudioContext` y anota cada nodo y cada rampa.
-> **El arnes no escucha**: comprueba que suene lo que se diseno, cuando se diseno y con que
-> parametros. La evaluacion auditiva queda pendiente.
+> Pattern shared across the repo: WebAudio synthesis with no files, an `AudioContext` created
+> inside `try/catch` on the first gesture, a per-frame voice ceiling **with its reset at the top of
+> `loop()`**, a per-voice cooldown, a mute button persisted in `localStorage`, and
+> `visibilitychange` so nothing continuous keeps playing with the tab in the background. If audio
+> fails, the game keeps running. Verified with a headless harness that wraps the `AudioContext` and
+> logs every node and every ramp. **The harness does not listen**: it checks that what was designed
+> plays, when it was designed to, with which parameters. Judging it by ear is still pending.

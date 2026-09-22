@@ -294,13 +294,13 @@ class Manager(Sprite):
             createText(14, 'FPS: %s' % (str(round(clock.get_fps()))), 'topright', (255,255,255), xper(0.99), yper(0.01))
 
     def drawMenu(self):
-        createText(int(sper(0.06)), 'TATETI', 'center', (235, 235, 245), xper(0.5), yper(0.22))
+        createText(int(sper(0.06)), 'TIC TAC TOE', 'center', (235, 235, 245), xper(0.5), yper(0.22))
         createText(int(sper(0.018)), 'choose a mode', 'center', (140, 145, 160), xper(0.5), yper(0.33))
 
         labels = [
-            ('2 JUGADORES', (235,235,245)),
-            ('VS CPU  (vos X)', colorForMark(1)),
-            ('VS CPU  (vos O)', colorForMark(2)),
+            ('2 PLAYERS', (235,235,245)),
+            ('VS CPU  (you are X)', colorForMark(1)),
+            ('VS CPU  (you are O)', colorForMark(2)),
         ]
         for i, (label, col) in enumerate(labels):
             y = yper(0.45) + i*yper(0.09)
@@ -321,7 +321,7 @@ class Manager(Sprite):
 
         if self.state == 'play':
             mark = b.turn
-            label = 'TO MOVE:  ' if self.mode == 'pvp' else ('YOUR TURN' if mark != self.cpuMark else 'PENSANDO...')
+            label = 'TO MOVE:  ' if self.mode == 'pvp' else ('YOUR TURN' if mark != self.cpuMark else 'THINKING...')
             createText(int(sper(0.022)), label, 'midright' if self.mode == 'pvp' else 'center', (200, 205, 220),
                        xper(0.5) - (sper(0.02) if self.mode == 'pvp' else 0), topY)
             if self.mode == 'pvp':
@@ -335,11 +335,11 @@ class Manager(Sprite):
                     txt = 'YOU WIN!' if won else 'CPU WINS'
                     col = colorForMark(b.winner)
                 else:
-                    txt = 'GANA X' if b.winner == 1 else 'GANA O'
+                    txt = 'X WINS' if b.winner == 1 else 'O WINS'
                     col = colorForMark(b.winner)
                 createText(int(sper(0.028)), txt, 'center', col, xper(0.5), topY)
             else:
-                createText(int(sper(0.028)), 'EMPATE', 'center', (200, 205, 220), xper(0.5), topY)
+                createText(int(sper(0.028)), 'DRAW', 'center', (200, 205, 220), xper(0.5), topY)
 
         # Marcador
         scoreY = by + size + yper(0.05)
@@ -352,16 +352,16 @@ class Manager(Sprite):
             cpuCol = colorForMark(self.cpuMark)
             youScore = self.scoreX if youMark == 1 else self.scoreO
             cpuScore = self.scoreX if self.cpuMark == 1 else self.scoreO
-            createText(int(sper(0.016)), 'VOS', 'midbottom', youCol, xper(0.5) - xper(0.18), scoreY - yper(0.005))
+            createText(int(sper(0.016)), 'YOU', 'midbottom', youCol, xper(0.5) - xper(0.18), scoreY - yper(0.005))
             createText(int(sper(0.032)), str(youScore), 'midtop', youCol, xper(0.5) - xper(0.18), scoreY)
-            createText(int(sper(0.016)), 'EMPATES', 'midbottom', (160,165,180), xper(0.5), scoreY - yper(0.005))
+            createText(int(sper(0.016)), 'DRAWS', 'midbottom', (160,165,180), xper(0.5), scoreY - yper(0.005))
             createText(int(sper(0.032)), str(self.scoreD), 'midtop', (200,205,220), xper(0.5), scoreY)
             createText(int(sper(0.016)), 'CPU', 'midbottom', cpuCol, xper(0.5) + xper(0.18), scoreY - yper(0.005))
             createText(int(sper(0.032)), str(cpuScore), 'midtop', cpuCol, xper(0.5) + xper(0.18), scoreY)
         else:
             createText(int(sper(0.016)), 'X', 'midbottom', xCol, xper(0.5) - xper(0.18), scoreY - yper(0.005))
             createText(int(sper(0.032)), str(self.scoreX), 'midtop', xCol, xper(0.5) - xper(0.18), scoreY)
-            createText(int(sper(0.016)), 'EMPATES', 'midbottom', (160,165,180), xper(0.5), scoreY - yper(0.005))
+            createText(int(sper(0.016)), 'DRAWS', 'midbottom', (160,165,180), xper(0.5), scoreY - yper(0.005))
             createText(int(sper(0.032)), str(self.scoreD), 'midtop', (200,205,220), xper(0.5), scoreY)
             createText(int(sper(0.016)), 'O', 'midbottom', oCol, xper(0.5) + xper(0.18), scoreY - yper(0.005))
             createText(int(sper(0.032)), str(self.scoreO), 'midtop', oCol, xper(0.5) + xper(0.18), scoreY)
@@ -370,7 +370,7 @@ class Manager(Sprite):
         if self.state == 'over':
             blink = (math.sin(time.time()*3) + 1) * 0.5
             col = tuple(int(120 + 100*blink) for _ in range(3))
-            createText(int(sper(0.018)), 'CLICK PARA OTRA PARTIDA    R PARA RESETEAR MARCADOR    ESC PARA EL MENÚ', 'center', col, xper(0.5), yper(0.95))
+            createText(int(sper(0.018)), 'CLICK FOR ANOTHER ROUND    R TO RESET THE SCORE    ESC FOR THE MENU', 'center', col, xper(0.5), yper(0.95))
         else:
             createText(int(sper(0.014)), 'ESC FOR THE MENU', 'center', (110, 115, 130), xper(0.5), yper(0.95))
 
@@ -492,7 +492,7 @@ pygame.init()
 screenX = 1280
 screenY = 720
 windowSurface = pygame.display.set_mode((screenX, screenY), depth=32, display=0)
-pygame.display.set_caption('Tateti')
+pygame.display.set_caption('Tic Tac Toe')
 
 font = pygame.freetype.SysFont('Century Gothic', 0)
 

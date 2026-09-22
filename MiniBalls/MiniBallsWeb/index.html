@@ -125,10 +125,10 @@
   <script src="matter.min.js"></script>
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  MINIBALLS — port web del sandbox de pygame, con las canicas baked de
-  //  BallsWeb. Variante "trim": bolas chicas TODAS del mismo tamaño, hasta
-  //  300, sin sonido. Multi-touch: cada dedo agarra y tira su propia bola.
-  //  Patrones EXCLUSIVOS de MiniBalls (no están en Balls): rings, checker,
+  //  MINIBALLS — web port of the pygame sandbox, with the baked marbles from
+  //  BallsWeb. The "trim" variant: small balls ALL the same size, up to
+  //  300, no sound. Multi-touch: each finger grabs and throws its own ball.
+  //  Patterns EXCLUSIVE to MiniBalls (not in Balls): rings, checker,
   //  star, wavy.
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
@@ -138,45 +138,45 @@
 
   // ── TUNING KNOBS ──
   const GRAVITY_Y        = 1.4;
-  const BALL_BALL_RESTITUTION = 0.85;  // bola↔bola muy elástica → rebotes vivos entre canicas
-  const BALL_WALL_RESTITUTION = 0.97;  // bola↔pared casi sin pérdida → saltan alto contra piso/paredes
+  const BALL_BALL_RESTITUTION = 0.85;  // ball↔ball very elastic → lively bounces between marbles
+  const BALL_WALL_RESTITUTION = 0.97;  // ball↔wall almost lossless → they bounce high off the floor/walls
   const BALL_FRICTION    = 0.1;
-  const BALL_FRICTION_AIR= 0.002;      // menos rozamiento de aire → conservan energía y siguen saltando
-  const R_FRAC           = 0.014;    // radio = R_FRAC·(W+H)/2 — port de sper(); TODAS las bolas iguales. Subido de 0.01 para que los patrones se lean.
+  const BALL_FRICTION_AIR= 0.002;      // less air friction → they keep their energy and go on bouncing
+  const R_FRAC           = 0.014;    // radius = R_FRAC·(W+H)/2 — a port of sper(); ALL balls the same. Raised from 0.01 so the patterns read.
   const COLLISION_RADIUS_MULT = 1.03;
-  const BALL_ALPHA       = 0.7;      // translucidez del cuerpo (esfera de color + under-glow); el hotspot queda opaco
-  const PATTERN_ALPHA    = 1;        // translucidez del overlay del patrón
-  const MAX_BALLS        = 150;      // tope de bolas
+  const BALL_ALPHA       = 0.7;      // body translucency (coloured sphere + under-glow); the hotspot stays opaque
+  const PATTERN_ALPHA    = 1;        // translucency of the pattern overlay
+  const MAX_BALLS        = 150;      // ball cap
   const INITIAL_BALLS    = 1;
-  const GROWTH_RATE      = 250;      // px/s de la animación de crecer/encoger
+  const GROWTH_RATE      = 250;      // px/s of the grow/shrink animation
 
-  // Spawn/remove en ráfaga: mantener +/− agrega/quita a ritmo CONSTANTE, dimensionado para
-  // llegar al tope (MAX_BALLS) en ~3 s. perTick = MAX_BALLS · interval / 3000.
-  const BURST_INTERVAL_MS = 35;      // cada cuánto corre un tick mientras mantenés apretado
+  // Burst spawn/remove: holding +/− adds/removes at a CONSTANT rate, sized to
+  // reach the cap (MAX_BALLS) in ~3 s. perTick = MAX_BALLS · interval / 3000.
+  const BURST_INTERVAL_MS = 35;      // how often a tick runs while you hold the button
   const BURST_PER_TICK    = MAX_BALLS * BURST_INTERVAL_MS / 7000; // = 3 bolas/tick → 300 en 3 s
 
-  const GRAB_GAIN        = 0.85;   // bumped from 0.5 → la bola sigue al cursor sin lag visible en desktop
-  const GRAB_MAX_SPEED_FRAC = 0.11;  // tope de chase como fracción de (W+H)/2 por step → escala con la resolución (en monitores grandes el mouse recorre más px y la bola tiene que seguirle el ritmo)
-  let   grabMaxSpeed     = 55;       // recalculado en resize(); piso ~55 para no romper el feel mobile
-  const MOUSE_SMOOTH_TC  = 0.04;     // time constant (sec) del low-pass de velocidad del puntero
-  const ANGULAR_DAMPING_TC = 0.8;    // decae el spin extra (frictionAir de matter mezcla lineal+angular)
-  const MAX_SPEED_PXS    = 6000;     // tope de velocidad (px/s). En unidades matter (px/step ≈ ×60) = MAX_SPEED_PXS/60
+  const GRAB_GAIN        = 0.85;   // bumped from 0.5 → the ball follows the cursor with no visible lag on desktop
+  const GRAB_MAX_SPEED_FRAC = 0.11;  // chase cap as a fraction of (W+H)/2 per step → it scales with the resolution (on big monitors the mouse covers more px and the ball has to keep up)
+  let   grabMaxSpeed     = 55;       // recomputed in resize(); floor of ~55 so the mobile feel does not break
+  const MOUSE_SMOOTH_TC  = 0.04;     // time constant (s) of the pointer's velocity low-pass
+  const ANGULAR_DAMPING_TC = 0.8;    // decays the extra spin (matter's frictionAir mixes linear+angular)
+  const MAX_SPEED_PXS    = 6000;     // speed cap (px/s). In matter units (px/step ≈ ×60) = MAX_SPEED_PXS/60
   const MAX_SPEED        = MAX_SPEED_PXS / 60;
 
   const JUMP_VELOCITY    = 22;
   const SHAKE_THRESHOLD  = 22;
   const SHAKE_COOLDOWN_MS= 600;
 
-  // Sonido — samples reales de canica (sounds/), mismo sistema que BallsWeb.
-  const SND_MAX_PER_FRAME = 1;       // tope de sonidos por frame para no saturar cuando caen varias juntas
-  const PITCH_JITTER     = 0.06;     // ± random sobre playbackRate, naturaliza la repetición de samples
+  // Sound — real marble samples (sounds/), the same system as BallsWeb.
+  const SND_MAX_PER_FRAME = 1;       // cap on sounds per frame so it does not saturate when several fall together
+  const PITCH_JITTER     = 0.06;     // ± random on playbackRate, makes the sample repetition sound natural
   // Umbrales en matter velocity units (px/step, ~×60 = px/s).
-  const VTHR_AUDIBLE     = 2.5;      // por debajo no suena nada (vibración numérica)
+  const VTHR_AUDIBLE     = 2.5;      // below this nothing plays (numerical jitter)
   const VTHR_MED         = 6;        // bajo→medio
   const VTHR_HARD        = 13;       // medio→fuerte
-  // Roll loop: cuándo una bola "rueda" en el piso (sólo wallMode 1).
-  const ROLL_MIN_HSPEED  = 4;        // vx horizontal mínima para empezar a sonar
-  const ROLL_FULL_HSPEED = 18;       // vx donde el gain del roll llega al máximo
+  // Roll loop: when a ball is "rolling" on the floor (wallMode 1 only).
+  const ROLL_MIN_HSPEED  = 4;        // minimum horizontal vx to start sounding
+  const ROLL_FULL_HSPEED = 18;       // vx at which the roll gain reaches its maximum
 
   // ── SETUP MATTER ──
   const { Engine, World, Bodies, Body, Composite, Query, Vector } = Matter;
@@ -188,26 +188,26 @@
   const ctx = canvas.getContext('2d');
 
   let W = 0, H = 0, dpr = 1;
-  let ballR = 12;                                                                  // radio común, recalculado en resize()
+  let ballR = 12;                                                                  // the shared radius, recomputed in resize()
   let walls = [];
-  // physicsScale: las constantes de velocidad (gravedad, jump, umbrales de sonido y roll) están en
-  // unidades de matter (px/step). Sin escalar, a más resolución todo se ve "más lento" porque la misma
-  // cantidad de píxeles ocupa menos fracción de pantalla. Recomputamos en resize() = min(W,H)/720.
+  // physicsScale: the speed constants (gravity, jump, sound and roll thresholds) are in
+  // matter units (px/step). Unscaled, at higher resolution everything looks "slower" because the same
+  // number of pixels covers a smaller fraction of the screen. We recompute in resize() = min(W,H)/720.
   let physicsScale = 1;
-  let wallMode = 1;                                                                // 1 = todas las paredes, 2 = sin laterales (techo+piso, wrap horizontal), 3 = sin techo/piso (laterales, wrap vertical), 4 = sin ninguna pared (wrap ambos ejes)
-  const pinnedBodies = new Map();                                                  // body → {x, y} para cada bola fijada (se mantienen clavadas; agarrarlas las desclava)
+  let wallMode = 1;                                                                // 1 = all walls, 2 = no sides (ceiling+floor, horizontal wrap), 3 = no ceiling/floor (sides, vertical wrap), 4 = no walls at all (wrap on both axes)
+  const pinnedBodies = new Map();                                                  // body → {x, y} for each pinned ball (they stay nailed; grabbing them unpins them)
   let showDebug = false;
 
   function buildWalls() {
     for (const w of walls) World.remove(world, w);
     walls = [];
-    const t = 600;                                                                 // grueso fuera de pantalla: una bola empujada al borde queda dentro y se reinyecta
+    const t = 600;                                                                 // thick off-screen: a ball pushed to the edge stays inside and is reinjected
     const opt = { isStatic: true, restitution: BALL_WALL_RESTITUTION, friction: 0.4 };
-    if (wallMode === 1 || wallMode === 2) {                                        // techo + piso en modos 1 y 2
+    if (wallMode === 1 || wallMode === 2) {                                        // ceiling + floor in modes 1 and 2
       walls.push(Bodies.rectangle(W/2, -t/2,    W + 2*t, t, opt));
       walls.push(Bodies.rectangle(W/2, H + t/2, W + 2*t, t, opt));
     }
-    if (wallMode === 1 || wallMode === 3) {                                        // laterales en modos 1 y 3
+    if (wallMode === 1 || wallMode === 3) {                                        // sides in modes 1 and 3
       walls.push(Bodies.rectangle(-t/2, H/2,    t, H + 2*t, opt));
       walls.push(Bodies.rectangle(W + t/2, H/2, t, H + 2*t, opt));
     }
@@ -219,14 +219,14 @@
     const barH = barEl.offsetHeight;
     W = window.innerWidth;
     H = window.innerHeight - barH;
-    ballR = R_FRAC * (W + H) / 2;                                                   // port de sper()
-    grabMaxSpeed = Math.max(55, GRAB_MAX_SPEED_FRAC * (W + H) / 2);                  // chase escalado a la resolución
+    ballR = R_FRAC * (W + H) / 2;                                                   // a port of sper()
+    grabMaxSpeed = Math.max(55, GRAB_MAX_SPEED_FRAC * (W + H) / 2);                  // chase scaled to the resolution
     canvas.width  = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    physicsScale = Math.min(W, H) / 720;                                           // baseline = 720px; a 1440 todo se mueve 2× en matter units (= mismo screen-fraction/seg)
+    physicsScale = Math.min(W, H) / 720;                                           // baseline = 720px; at 1440 everything moves 2× in matter units (= the same screen-fraction/s)
     engine.gravity.y = GRAVITY_Y * physicsScale;
     buildWalls();
   }
@@ -243,9 +243,9 @@
   const tint    = (c, t) => [clamp(c[0]*t), clamp(c[1]*t), clamp(c[2]*t)];
   const rgbStr  = (c, t=1) => `rgb(${clamp(c[0]*t)},${clamp(c[1]*t)},${clamp(c[2]*t)})`;
 
-  // ════════════════ MÁSCARAS DE PATRÓN ════════════════
-  // Todas dibujan blanco en coords locales centradas en (0,0); el caller hace translate/rotate.
-  // ── heredadas de Balls ──
+  // ════════════════ PATTERN MASKS ════════════════
+  // They all draw white in local coords centred on (0,0); the caller does the translate/rotate.
+  // ── inherited from Balls ──
   function stripesSphere(m, r, n, fillRatio) {
     const phiStep = Math.PI/n, halfW = phiStep*0.5*fillRatio;
     for (let yy = -r; yy <= r; yy++) {
@@ -284,8 +284,8 @@
     return pos;
   }
 
-  // ── NUEVAS (exclusivas de MiniBalls) ──
-  // rings: anillos concéntricos (diana). Stroke de circunferencias con gap entre bandas.
+  // ── NEW (exclusive to MiniBalls) ──
+  // rings: concentric rings (a bullseye). Stroked circles with a gap between bands.
   function ringsConcentric(m, r, n) {
     const bandW = r / n;
     m.lineWidth = bandW * 0.6;
@@ -294,8 +294,8 @@
       m.beginPath(); m.arc(0, 0, rr, 0, TAU); m.stroke();
     }
   }
-  // checker: damero ESFÉRICO. Particiona la esfera en celdas lat/lon → la cuadrícula se curva
-  // hacia la silueta (no es un damero plano). Scanline + run-length por fila.
+  // checker: a SPHERICAL checkerboard. It partitions the sphere into lat/lon cells → the grid curves
+  // towards the silhouette (it is not a flat checkerboard). Scanline + run-length per row.
   function checkerSphere(m, r, nLat, nLon) {
     const latStep = Math.PI/nLat, lonStep = Math.PI/nLon;
     for (let yy = -r; yy <= r; yy++) {
@@ -317,7 +317,7 @@
       if (inCell) m.fillRect(runStart, yy, xMax - runStart + 1, 1);
     }
   }
-  // star: estrella de N puntas estampada al frente.
+  // star: an N-pointed star stamped on the front.
   function starShape(m, r, points, innerRatio) {
     const outer = r * 0.92, inner = outer * innerRatio;
     m.beginPath();
@@ -329,8 +329,8 @@
     }
     m.closePath(); m.fill();
   }
-  // wavy: meridianos ondulados — como stripesSphere pero el centro de cada banda hace shimmy
-  // senoidal a lo largo de la latitud, dando bandas onduladas que envuelven la esfera.
+  // wavy: wavy meridians — like stripesSphere but the centre of each band does a sinusoidal
+  // shimmy along the latitude, giving wavy bands that wrap the sphere.
   function wavySphere(m, r, n, amp) {
     const phiStep = Math.PI/n, halfW = phiStep*0.5*0.45;
     for (let yy = -r; yy <= r; yy++) {
@@ -378,7 +378,7 @@
     return localDots ? localDots.map(([x,y,dr]) => [cx + x/SS, cy + y/SS, dr/SS]) : null;
   }
 
-  // ════════════════ BAKE (esfera + patrón + hotspot), 1 vez por bola ════════════════
+  // ════════════════ BAKE (sphere + pattern + hotspot), once per ball ════════════════
   function newOff(S) {
     const o = document.createElement('canvas');
     o.width = o.height = Math.ceil(S*dpr);
@@ -386,7 +386,7 @@
     return { o, c };
   }
   function paintSphere(o, cx, cy, r, color) {
-    const lx = cx + r*0.21, ly = cy - r*0.564;                                     // luz desde arriba-derecha
+    const lx = cx + r*0.21, ly = cy - r*0.564;                                     // light from the top right
     const grad = o.createRadialGradient(lx, ly, r*0.05, cx, cy, r);
     grad.addColorStop(0,   rgbStr(color, 1.65));
     grad.addColorStop(0.5, rgbStr(color, 1.0));
@@ -411,7 +411,7 @@
     if (e.style !== 'plain') {
       const mask = newOff(S);
       const dots = drawMask(mask.c, e, cx, cy, r);
-      if (dots && Math.max(...e.overlay) < 200) {                                  // rim oscuro alrededor de lunares con overlay tenue
+      if (dots && Math.max(...e.overlay) < 200) {                                  // dark rim around dots with a faint overlay
         c.fillStyle = 'rgba(0,0,0,0.27)';
         for (const [px, py, dr] of dots) { c.beginPath(); c.arc(px, py, dr + Math.max(1, dr*0.07), 0, TAU); c.fill(); }
       }
@@ -442,7 +442,7 @@
     const color = hsv255(hue, rnd(0.95, 1.0), rnd(0.95, 1.0));
     const e = { color, targetR: ballR, visR: 1, x, y, angle: 0, state: 'growing' };
 
-    // estilo — incluye los heredados de Balls + los 4 nuevos de MiniBalls
+    // style — includes the ones inherited from Balls + the 4 new MiniBalls ones
     const sr = Math.random();
     if      (sr < 0.10) { e.style='striped_sphere';  e.styleAngle=rnd(0,Math.PI); e.n=ri(3,7); }
     else if (sr < 0.20) { e.style='striped_diamond'; e.styleAngle=rnd(0,Math.PI); e.n=ri(5,8); }
@@ -470,13 +470,13 @@
       restitution: BALL_BALL_RESTITUTION, friction: BALL_FRICTION,
       frictionAir: BALL_FRICTION_AIR, density: 0.001,
     });
-    body.mbPitch = rnd(0.85, 1.15);                                                // pitch propio: las bolas son todas iguales, esto las diferencia al sonar
+    body.mbPitch = rnd(0.85, 1.15);                                                // its own pitch: the balls are all the same size, this is what tells them apart by ear
     e.body = body;
     balls.push(e);
     return e;
   }
 
-  // spawn/remove en lotes (la cantidad la decide el caller-ráfaga)
+  // spawn/remove in batches (the caller-burst decides how many)
   function addBall(n = 1)    { for (let i = 0; i < n; i++) makeBall(rnd(W*0.1, W*0.9), rnd(H*0.12, H*0.45)); }
   function removeBall(n = 1) {
     for (let k = 0; k < n; k++) {
@@ -485,7 +485,7 @@
         const e = balls[i];
         if (e.state === 'live' && !isGrabbedBody(e.body)) {
           if (pinnedBodies.has(e.body)) {
-            Body.setStatic(e.body, false);                                         // volver a dinámico antes de remover, estado consistente
+            Body.setStatic(e.body, false);                                         // back to dynamic before removing, for a consistent state
             pinnedBodies.delete(e.body);
             document.getElementById('btnPin').classList.toggle('on', pinnedBodies.size > 0);
           }
@@ -495,7 +495,7 @@
           done = true;
         }
       }
-      if (!done) break;                                                            // no quedan candidatas
+      if (!done) break;                                                            // no candidates left
     }
   }
   function reset() {
@@ -525,16 +525,16 @@
   }
 
   function wrapBalls() {
-    // teletransporta las bolas en los ejes con wrap activo
+    // teleports the balls on the axes where wrap is active
     if (wallMode === 1) return;
     for (const e of balls) {
       if (e.state !== 'live' || pinnedBodies.has(e.body)) continue;
       const r = e.body.circleRadius, p = e.body.position;
       let nx = p.x, ny = p.y;
-      if (wallMode === 2 || wallMode === 4) {                                      // wrap horizontal cuando no hay laterales
+      if (wallMode === 2 || wallMode === 4) {                                      // horizontal wrap when there are no sides
         if (nx < -r) nx = W + r; else if (nx > W + r) nx = -r;
       }
-      if (wallMode === 3 || wallMode === 4) {                                      // wrap vertical cuando no hay techo/piso
+      if (wallMode === 3 || wallMode === 4) {                                      // vertical wrap when there is no ceiling/floor
         if (ny < -r) ny = H + r; else if (ny > H + r) ny = -r;
       }
       if (nx !== p.x || ny !== p.y) Body.setPosition(e.body, { x: nx, y: ny });
@@ -572,7 +572,7 @@
     }
   }
 
-  // ── INPUT ── multi-touch: cada puntero (dedo/mouse) tiene su propio estado y agarra/tira su bola
+  // ── INPUT ── multi-touch: each pointer (finger/mouse) has its own state and grabs/throws its own ball
   const pointers = new Map();                                                      // pointerId → { x, y, vx, vy, lastMoveT, grab }
 
   function evtPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
@@ -586,7 +586,7 @@
     return false;
   }
   function tryGrabAt(p, exclude) {
-    // permitimos agarrar bolas fijadas (estáticas) para poder seleccionarlas y que el botón pin las suelte
+    // we allow grabbing pinned (static) balls so they can be selected and the pin button can release them
     const hits = Query.point(Composite.allBodies(world), p).filter(b => (!b.isStatic || pinnedBodies.has(b)) && !exclude.has(b));
     if (!hits.length) return null;
     const body = hits[hits.length - 1];
@@ -599,7 +599,7 @@
     const p = evtPos(e);
     const ps = { x: p.x, y: p.y, vx: 0, vy: 0, lastMoveT: performance.now(), grab: null };
     pointers.set(e.pointerId, ps);
-    ps.grab = tryGrabAt(p, grabbedBodySet());                                       // primera bola bajo este dedo (excluyendo las que sostienen otros dedos)
+    ps.grab = tryGrabAt(p, grabbedBodySet());                                       // the first ball under this finger (excluding the ones other fingers are holding)
   });
   canvas.addEventListener('pointermove', e => {
     const ps = pointers.get(e.pointerId);
@@ -613,13 +613,13 @@
     ps.vx += (rawVx - ps.vx) * k;
     ps.vy += (rawVy - ps.vy) * k;
     ps.x = p.x; ps.y = p.y;
-    if (!ps.grab) ps.grab = tryGrabAt(p, grabbedBodySet());                         // agarre al pasar sobre una bola libre
+    if (!ps.grab) ps.grab = tryGrabAt(p, grabbedBodySet());                         // grab on passing over a free ball
   });
   function endPointer(e) {
     const ps = pointers.get(e.pointerId);
     if (!ps) return;
     pointers.delete(e.pointerId);
-    if (ps.grab && !ps.grab.body.isStatic) {                                        // las fijadas (estáticas) no se tiran
+    if (ps.grab && !ps.grab.body.isStatic) {                                        // pinned (static) ones are not thrown
       const k = dtSmoothed;                                                         // vx/vy px/s → unidades matter (px/step)
       Body.setVelocity(ps.grab.body, { x: ps.vx * k, y: ps.vy * k });
       Body.setAngularVelocity(ps.grab.body, (ps.vx / ps.grab.body.circleRadius) * k);
@@ -630,7 +630,7 @@
   canvas.addEventListener('contextmenu', e => { e.preventDefault(); });
 
   // ── BOTONES ──
-  // ráfaga a ritmo constante para +/−: BURST_PER_TICK bolas cada BURST_INTERVAL_MS → tope en ~3 s
+  // a constant-rate burst for +/−: BURST_PER_TICK balls every BURST_INTERVAL_MS → the cap in ~3 s
   function holdBurst(el, fn) {
     let iv = null, pid = null;
     const stop = () => {
@@ -649,7 +649,7 @@
       e.preventDefault(); audioResume();
       pid = e.pointerId;
       try { el.releasePointerCapture(e.pointerId); } catch {}
-      fn(BURST_PER_TICK);                                                          // primer lote en el toque
+      fn(BURST_PER_TICK);                                                          // the first batch on the tap
       iv = setInterval(() => fn(BURST_PER_TICK), BURST_INTERVAL_MS);
       document.addEventListener('pointermove', onMove);
       document.addEventListener('pointerup', stop);
@@ -664,7 +664,7 @@
   tappable(document.getElementById('btnReset'), reset);
   tappable(document.getElementById('btnJump'), jumpAll);
 
-  // Modo de pared: 1 → 2 → 3 → 4 → 1, con SVG por modo. Reconstruye las paredes en cada tap.
+  // Wall mode: 1 → 2 → 3 → 4 → 1, with an SVG per mode. It rebuilds the walls on each tap.
   const WALL_ICONS = {
     // 1 = caja completa
     1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg>',
@@ -672,7 +672,7 @@
     2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M4 7h16M4 17h16"/></svg>',
     // 3 = laterales (verticales)
     3: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M7 4v16M17 4v16"/></svg>',
-    // 4 = sin paredes (4 flechas diagonales abriéndose)
+    // 4 = no walls (4 diagonal arrows opening outwards)
     4: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10 4 4M4 9V4h5M14 10l6-6M15 4h5v5M10 14l-6 6M4 15v5h5M14 14l6 6M20 15v5h-5"/></svg>',
   };
   const btnWall = document.getElementById('btnWall');
@@ -681,11 +681,11 @@
     wallMode = (wallMode % 4) + 1;
     btnWall.innerHTML = WALL_ICONS[wallMode];
     buildWalls();
-    if (wallMode !== 1 && wallMode !== 2) stopAllRolls();                          // sin piso (modos 3/4), no hay rolls que seguir
+    if (wallMode !== 1 && wallMode !== 2) stopAllRolls();                          // no floor (modes 3/4), there are no rolls to follow
   });
 
-  // Pin: fija/desfija las bolas agarradas. Fijar = body STATIC (otras rebotan sin moverla). Suelta el
-  // grab al fijar. Desfijar restaura dinámica y MANTIENE el grab para arrastrarla. Tap sin nada = no-op.
+  // Pin: pins/unpins the grabbed balls. Pinning = a STATIC body (others bounce off without moving it). It releases
+  // the grab on pinning. Unpinning restores dynamics and KEEPS the grab so you can drag it. Tap with nothing = no-op.
   const btnPin = document.getElementById('btnPin');
   function togglePin() {
     for (const ps of pointers.values()) {
@@ -693,7 +693,7 @@
       const body = ps.grab.body;
       if (pinnedBodies.has(body)) {
         Body.setStatic(body, false);
-        Body.setVelocity(body, { x: 0, y: 0 });                                    // matter no resetea positionPrev en setStatic(false); forzamos cero para que no patee
+        Body.setVelocity(body, { x: 0, y: 0 });                                    // matter does not reset positionPrev on setStatic(false); we force zero so it does not kick
         Body.setAngularVelocity(body, 0);
         pinnedBodies.delete(body);
       } else {
@@ -706,8 +706,8 @@
   }
   tappable(btnPin, togglePin);
 
-  // Keyboard (desktop y mobile-con-teclado): Q pinea/despinea (paralelo al botón chinche), Espacio
-  // salta a todas. preventDefault en Space evita el scroll de la página.
+  // Keyboard (desktop and mobile-with-keyboard): Q pins/unpins (parallel to the pin button), Space
+  // makes them all jump. preventDefault on Space avoids scrolling the page.
   addEventListener('keydown', e => {
     if (e.repeat) return;
     if (e.key === 'q' || e.key === 'Q') togglePin();
@@ -717,7 +717,7 @@
   const btnInfo = document.getElementById('btnInfo');
   tappable(btnInfo, () => { showDebug = !showDebug; btnInfo.classList.toggle('on', showDebug); });
 
-  // ── ACELERÓMETRO (sacudir = saltar; requiere HTTPS / WebView) ──
+  // ── ACCELEROMETER (shake = jump; requires HTTPS / a WebView) ──
   let motionReady = false, lastShake = 0;
   function enableMotion() {
     if (motionReady) return; motionReady = true;
@@ -733,11 +733,11 @@
   }
 
   // ════════════════ SONIDO ════════════════
-  // Sistema de samples reales (todas canicas), files en sounds/. Cada "bucket" tiene N variantes
-  // numeradas; al tocar se pickea random del pool. Buffers cargan async al primer audioResume().
+  // Real sample system (all marbles), files in sounds/. Each "bucket" has N numbered
+  // variants; on playing, one is picked at random from the pool. Buffers load async on the first audioResume().
   let actx = null;
   const SOUND_DIR = 'sounds/';
-  const SOUND_BUCKETS = {                                                          // bucket → cuántas variantes esperar (sin sufijo + sufijo 2..N)
+  const SOUND_BUCKETS = {                                                          // bucket → how many variants to expect (no suffix + suffix 2..N)
     MarbleClick:       1,
     MarbleLowClick:    6,
     MarblesInHand:     5,
@@ -748,7 +748,7 @@
   };
   const soundBuffers = {};                                                         // bucket → AudioBuffer[]
   let samplesLoading = false;
-  const BUCKET_COOLDOWN = {                                                        // ms mínimos entre disparos del mismo bucket
+  const BUCKET_COOLDOWN = {                                                        // minimum ms between triggers of the same bucket
     MarbleClick:       80,
     MarbleLowClick:    120,
     MarblesInHand:     100,
@@ -774,15 +774,15 @@
           soundBuffers[bucket][i] = await actx.decodeAudioData(arr);
         } catch (_) { /* variante faltante: pool más chico */ }
       }
-      soundBuffers[bucket] = soundBuffers[bucket].filter(Boolean);                 // compactar huecos así random pickea uniforme
+      soundBuffers[bucket] = soundBuffers[bucket].filter(Boolean);                 // compact the gaps so random picks uniformly
     }
   }
 
   function audioResume() {
-    // try/catch OBLIGATORIO: esta funcion es la PRIMERA sentencia del handler de pointerdown del
-    // canvas. Si el constructor tira, la excepcion se lleva puesto el resto del handler y nunca
-    // corren `setPointerCapture` ni la creacion del estado del puntero: el juego no queda mudo,
-    // queda SIN INPUT. Y `resume()` devuelve una promesa que hay que atrapar.
+    // try/catch MANDATORY: this function is the FIRST statement in the canvas's pointerdown
+    // handler. If the constructor throws, the exception takes out the rest of the handler and neither
+    // `setPointerCapture` nor the pointer-state setup ever runs: the game is not left mute,
+    // it is left WITH NO INPUT. And `resume()` returns a promise that has to be caught.
     if (!actx) {
       try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
       catch (e) { actx = null; return; }
@@ -791,7 +791,7 @@
     try { loadSamples(); } catch (e) {}
   }
 
-  function pitchForBall(b) { return b.mbPitch || 1; }                              // pitch propio de cada bola (set en makeBall)
+  function pitchForBall(b) { return b.mbPitch || 1; }                              // each ball's own pitch (set in makeBall)
 
   function playBuffer(buf, gain, pitch) {
     const g = actx.createGain(); g.gain.value = gain; g.connect(actx.destination);
@@ -823,12 +823,12 @@
 
       const grabbed = isGrabbedBody(bodyA) || isGrabbedBody(bodyB);
       const wallHit = bodyA.isStatic || bodyB.isStatic;
-      let pitchBody;                                                               // para el pitch usamos la bola (la más chica gana; acá son iguales)
+      let pitchBody;                                                               // for the pitch we use the ball (the smaller one wins; here they are all the same)
       if (wallHit) pitchBody = bodyA.isStatic ? bodyB : bodyA;
       else pitchBody = (bodyA.circleRadius <= bodyB.circleRadius) ? bodyA : bodyB;
       const pitch = pitchForBall(pitchBody);
 
-      // Los InHand viven en updateBagSounds(); acá van clicks fuerte/medio/suave.
+      // The InHand ones live in updateBagSounds(); hard/medium/soft clicks go here.
       const vthrAud = VTHR_AUDIBLE * physicsScale;
       const vthrMed = VTHR_MED * physicsScale;
       const vthrHard = VTHR_HARD * physicsScale;
@@ -836,12 +836,12 @@
       if (vrel >= vthrMed) {
         tryPlay('MarbleLowClick', intensity, pitch);
       } else {
-        tryPlay('MarbleLowClick', intensity * 0.7, pitch);                         // baja velocidad: mismo sample más suave
+        tryPlay('MarbleLowClick', intensity * 0.7, pitch);                         // low speed: the same sample, softer
       }
     }
   });
 
-  // ── ROLL LOOP ── LongRoll en loop por bola que "rueda" en el piso (sólo wallMode 1).
+  // ── ROLL LOOP ── LongRoll looping per ball that is "rolling" on the floor (wallMode 1 only).
   const ROLL_NEAR_FLOOR_FRAC = 0.4, ROLL_ATTACK_TC = 0.08, ROLL_RELEASE_TC = 0.18;
   function stopRollNode(e) {
     if (!e || !e.rollNode) return;
@@ -884,7 +884,7 @@
     }
   }
 
-  // ── BAG SOUNDS ── InHand sólo cuando la bola agarrada toca ≥ BAG_MIN_CONTACTS bolas a la vez.
+  // ── BAG SOUNDS ── InHand only when the grabbed ball touches ≥ BAG_MIN_CONTACTS balls at once.
   const BAG_MIN_CONTACTS = 4;
   function updateBagSounds() {
     if (!actx) return;
@@ -915,7 +915,7 @@
     dtSmoothed = dtSmoothed*0.9 + dt*0.1;
     sndThisFrame = 0;
 
-    // perseguir cada bola agarrada hacia el dedo que la sostiene (una por puntero; las fijadas no se mueven)
+    // chase each grabbed ball towards the finger holding it (one per pointer; pinned ones do not move)
     for (const ps of pointers.values()) {
       if (!ps.grab) continue;
       const b = ps.grab.body;
@@ -933,7 +933,7 @@
     updateRollSounds(dt);
     updateBagSounds();
 
-    // damping angular extra + clamp de velocidad lineal a MAX_SPEED
+    // extra angular damping + a clamp of the linear speed to MAX_SPEED
     const angDecay = Math.exp(-dt / ANGULAR_DAMPING_TC);
     for (const e of balls) {
       if (e.state !== 'live' || e.body.isStatic || isGrabbedBody(e.body)) continue;
@@ -953,14 +953,14 @@
   }
 
 
-  // ── Diagnostico: vive DENTRO del panel de informacion ──
-  // Antes era una tarjeta monoespaciada dibujada sobre el lienzo, aparte del panel. Ahora es una
-  // seccion mas: una sola tarjeta para todo lo informativo. Se escribe SOLO con el panel abierto —
-  // tocar el DOM en cada frame con el panel cerrado es trabajo tirado.
-  // El nodo se busca PEREZOSAMENTE, no al parsear. El script principal corre ANTES de que exista
-  // el `#infoPanel` (esta mas abajo en el documento), asi que un `getElementById` en la linea de
-  // arriba devolvia null para siempre: ni estadisticas ni grafico. Es el mismo gotcha de orden del
-  // DOM que ya habia mordido en TankWARS.
+  // ── Diagnostics: it lives INSIDE the info panel ──
+  // It used to be a monospaced card drawn on the canvas, separate from the panel. Now it is one
+  // more section: a single card for everything informational. It is written ONLY with the panel open —
+  // touching the DOM every frame with the panel closed is wasted work.
+  // The node is looked up LAZILY, not at parse time. The main script runs BEFORE
+  // `#infoPanel` exists (it is further down the document), so a `getElementById` on the line
+  // above returned null forever: no stats and no chart. It is the same DOM-order gotcha that had
+  // already bitten in TankWARS.
   let fpsEl = null;
   function statsEl() {
     if (!fpsEl) fpsEl = document.getElementById('fpsOverlay');
@@ -979,15 +979,15 @@
     ].join('\n');
   }
 
-  // Igual que Balls: el grafico de velocidades se queda en el lienzo.
+  // Same as Balls: the speed chart stays on the canvas.
   function drawDebugHUD() {
     const liveBalls = balls.filter(e => e.state === 'live');
     const lines = [];
     const lh = 18, padX = 8, padY = 8;
     const statsW = 130;
 
-    // Top-10 velocidades — bar chart (port del overlay de Balls). Matter da velocidad por step;
-    // ×60 para mostrar algo cercano a px/s (asumiendo 60fps), igual que Balls.
+    // Top-10 speeds — bar chart (a port of the Balls overlay). Matter gives velocity per step;
+    // ×60 to show something close to px/s (assuming 60fps), as in Balls.
     const top = liveBalls
       .map(e => ({ e, sp: Math.hypot(e.body.velocity.x, e.body.velocity.y) }))
       .sort((a, b) => b.sp - a.sp)
@@ -996,7 +996,7 @@
     const chartX = padX, chartY = padY;
     const chartW = 8 + labelW + barW + 6 + speedW;
 
-    // stats a la derecha del chart (o pegado al borde si no hay bolas)
+    // stats to the right of the chart (or flush with the edge if there are no balls)
     const statsX = top.length ? (chartX + chartW + 8) : padX;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(statsX, padY, statsW, lh*lines.length + 8);
@@ -1063,9 +1063,9 @@ Marbles again, but by the hundred and tiny: the toy stops being one marble and b
 </div>
 
 <script>
-// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
-// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
-// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+// The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
+// game already had keeps switching it on and off with the same tap: no listener is removed and
+// no existing behaviour is changed. If the game had no meter, nothing happens.
 (function () {
   function armar() {
     var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
@@ -1073,31 +1073,31 @@ Marbles again, but by the hundred and tiny: the toy stops being one marble and b
     if (!btn || !panel) return;
     var fps = document.getElementById('fpsOverlay');
     if (fps && fps.parentNode !== panel) panel.appendChild(fps);
-    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
-    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
-    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    // The bar is MEASURED, not assumed. Several games do not declare `--bar-height` and others
+    // change it with the orientation: with a fixed value the panel ended up covering the buttons
+    // (Hangman) or running off the top in landscape (Tron). Measured live it works in all twenty.
     var bar = document.getElementById('bar');
-    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
-    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
-    // salio de aca", que es lo que hace el de Loop.
-    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
-    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
-    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
-    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
-    // lo mueven segun la orientacion.
+    // The panel is anchored TO THE BUTTON THAT OPENS IT, not to the centre of the screen. Centred
+    // it floated in the middle of the game with no relation to anything; hanging off the button it
+    // reads as "this came from here", which is what Loop's does.
+    //   · the same margin as the button (right if the button is on the right, left otherwise);
+    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //     in games with a bottom bar the panel still ends up over the bar.
+    // It is measured live and not done in CSS because each game puts the button somewhere
+    // different, and several move it with the orientation.
     function ubicar() {
       var vw = window.innerWidth, vh = window.innerHeight, m = 10;
       var rb = btn.getBoundingClientRect();
-      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
-      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
-      // encima de la parte alta de la barra.
+      // If the button lives INSIDE the bar, the vertical reference is the whole bar and not the
+      // button: the buttons align to the foot of the bar, so anchoring to the button left the panel
+      // over the top part of the bar.
       var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
       panel.style.transform = 'none';
       var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
       if ((rb.left + rb.width / 2) > vw / 2) {
-        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
-        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
-        // colgado de un boton a media pantalla arrancaba en x = -199.
+        // Flush with the button's right margin, BUT without running off to the left: if the panel is
+        // wider than the gap, it slides to the edge. Without this cap, a 700 px panel hanging off a
+        // button at mid-screen started at x = -199.
         var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
         panel.style.left = 'auto'; panel.style.right = der + 'px';
       } else {
@@ -1108,14 +1108,14 @@ Marbles again, but by the hundred and tiny: the toy stops being one marble and b
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
-      } else {                                          // boton abajo -> panel por encima
+      } else {                                          // button at the bottom -> panel above it
         panel.style.top = 'auto';
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
-      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
-      // conmutador, asi que si queda tapado el panel no se puede cerrar.
+      // The tight case (Hangman in landscape: the keyboard and the bar eat 319 of 380 px). The panel
+      // stretches to the opposite edge, but WITHOUT covering the button that opened it: the ⓘ is the
+      // only toggle, so if it gets covered the panel cannot be closed.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
         if ((rb.top + rb.height / 2) < vh / 2) {
           panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
@@ -1134,17 +1134,17 @@ Marbles again, but by the hundred and tiny: the toy stops being one marble and b
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
-      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
+      if (abrir) ubicar();                          // measure with the panel ALREADY visible: hidden, offsetWidth is 0
     });
-    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    // Keyboard: the button is a <button>, so Enter/Space fire `click` and not `pointerdown`.
     btn.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      if (e.detail !== 0) return;                 // detail 0 = it came from the keyboard, not the mouse
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
       if (abrir) ubicar();
     });
-    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    // Close with Escape: the panel covers the game and must be dismissable without hunting for the button.
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && panel.classList.contains('show')) {
         panel.classList.remove('show'); btn.classList.remove('on');

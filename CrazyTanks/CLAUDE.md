@@ -23,42 +23,40 @@ See [../CLAUDE.md](../CLAUDE.md) for the shared sprite/main-loop pattern.
 
 ## AUDIO (2026-09-22)
 
-**Chapa de acero y eslabones de oruga sobre un piso que cambia.** No son autos: son cajas metalicas
-con traccion por cadena, y eso manda DOS capas continuas y no una. Un auto tiene una sola voz; un
-tanque tiene el motor y tiene lo que el motor arrastra.
+**Steel plate and track links over a floor that changes.** These are not cars: they are metal boxes
+driven by chain, and that calls for TWO continuous layers, not one. A car has a single voice; a tank
+has the engine and has what the engine drags.
 
-### La oruga cambia de material con el bioma
+### The track changes material with the biome
 
-`THEME_HANDLING` le da a cada bioma un agarre lateral distinto (0.01 en nieve, 0.40 en desierto), y
-ese numero YA existe y ya decide como se maneja el tanque. La oruga lo usa para cambiar de
-material. Medido:
+`THEME_HANDLING` gives each biome a different lateral grip (0.01 on snow, 0.40 on desert), and that
+number ALREADY exists and already decides how the tank handles. The track uses it to change
+material. Measured:
 
-| bioma | agarre | ganancia de la oruga | filtro |
+| biome | grip | track gain | filter |
 |---|---|---|---|
-| desierto | 0.40 | 0.032 | 1920 Hz — duro, granulado |
-| nieve | 0.01 | 0.010 | 520 Hz — sordo, apagado |
+| desert | 0.40 | 0.032 | 1920 Hz — hard, grainy |
+| snow | 0.01 | 0.010 | 520 Hz — dull, muffled |
 
-**El piso se escucha antes de verlo derrapar.**
+**You hear the floor before you see it slide.**
 
-El motor va de 34 a 80 Hz con la velocidad; el pulso del diesel sale del batido entre dos sierras
-casi juntas. El nitro es un **tercer tap del MISMO buffer de ruido** que la oruga, no una fuente
-nueva: un `BufferSource` es de un solo uso, pero sus salidas se ramifican todas las veces que haga
-falta.
+The engine runs 34 to 80 Hz with speed; the diesel pulse comes out of the beating between two
+near-identical sawtooths. Nitro is a **third tap of the SAME noise buffer** as the track, not a new
+source: a `BufferSource` is single-use, but its outputs can branch as many times as needed.
 
-Las tres capas continuas son **un solo grafo por sesion**: se modulan, no se recrean. Se reescriben
-a 20 Hz — escribir seis `AudioParam` por frame no aporta nada audible.
+The three continuous layers are **one single graph per session**: they are modulated, not recreated.
+They are rewritten at 20 Hz — writing six `AudioParam`s per frame adds nothing audible.
 
-Discretos: el disparo es una **TOS de mortero, no un laser** (esto tira bombas por un cano corto),
-el impacto es la chapa primero y el hueco del casco despues, y la cuenta regresiva dispara por
-FLANCO — `seg` se recalcula cada frame y sin el flanco seria un zumbido continuo.
+Discrete: the shot is a **mortar COUGH, not a laser** (this thing lobs bombs out of a short barrel),
+the impact is the plate first and the hull cavity after, and the countdown fires on an EDGE — `seg`
+is recomputed every frame and without the edge it would be a continuous buzz.
 
-Solo suenan las vueltas del JUGADOR: siete tanques cruzando la meta serian siete campanadas sin
-sentido.
+Only the PLAYER's laps play: seven tanks crossing the line would be seven meaningless chimes.
 
-> Patron comun a todo el repo: sintesis WebAudio sin archivos, `AudioContext` creado con
-> `try/catch` en el primer gesto, techo de voces por frame **con su reseteo al tope del `loop()`**,
-> cooldown por voz, boton de mute con persistencia en `localStorage`, y `visibilitychange` para que
-> nada continuo siga sonando con la pestana al fondo. Si el audio falla, el juego sigue andando.
-> Verificado con un arnes headless que envuelve el `AudioContext` y anota cada nodo y cada rampa.
-> **El arnes no escucha**: comprueba que suene lo que se diseno, cuando se diseno y con que
-> parametros. La evaluacion auditiva queda pendiente.
+> Pattern shared across the repo: WebAudio synthesis with no files, an `AudioContext` created
+> inside `try/catch` on the first gesture, a per-frame voice ceiling **with its reset at the top of
+> `loop()`**, a per-voice cooldown, a mute button persisted in `localStorage`, and
+> `visibilitychange` so nothing continuous keeps playing with the tab in the background. If audio
+> fails, the game keeps running. Verified with a headless harness that wraps the `AudioContext` and
+> logs every node and every ramp. **The harness does not listen**: it checks that what was designed
+> plays, when it was designed to, with which parameters. Judging it by ear is still pending.

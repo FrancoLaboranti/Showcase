@@ -99,57 +99,60 @@ cache buster instead.
   fussier about formats than `<img>` is.
 
 
-## El botón ⓘ y el panel de información (2026-09-22)
+## The ⓘ button and the info panel (2026-09-22)
 
-**Antes, en 18 de los 22 juegos el botón ⓘ mostraba un contador de FPS.** Sólo Loop y StickFight
-explicaban cómo se juega. Y `arcade-shell.css` oculta el `#hint` de *todos* los juegos con el
-argumento de que "los controles ya están en el botón ⓘ" — que era falso: la única explicación que
-el jugador tenía estaba apagada, y lo que veía en su lugar eran cuadros por segundo.
+**Before this, in 18 of the 22 games the ⓘ button showed a frame counter.** Only Loop and StickFight
+explained how to play. And `arcade-shell.css` hides the `#hint` of *every* game on the grounds that
+"the controls are already in the ⓘ button" — which was false: the only explanation the player had
+was switched off, and what they saw in its place was frames per second.
 
-Ahora los 22 tienen un `#infoPanel` con reglas reales, sacadas de los controles del port web (no
-del `CLAUDE.md` de la carpeta, que describe sobre todo la versión de Pygame). Los `#hint` fueron la
-mejor fuente: son la descripción de controles del propio autor.
+Now all 22 have an `#infoPanel` with real rules, taken from the web port's controls (not from the
+folder's `CLAUDE.md`, which mostly describes the Pygame version). The `#hint`s were the best source:
+they are the author's own description of the controls.
 
-**El FPS no se quitó: se mudó.** El `#fpsOverlay` pasa a ser un hijo del panel, así que el handler
-que cada juego ya tenía lo sigue prendiendo y apagando — sólo que ahora es una línea adentro de la
-tarjeta. No se clona el botón ni se sacan listeners: los dos handlers escuchan el mismo
-`pointerdown` y parten del mismo estado, así que quedan sincronizados solos.
+**The FPS was not removed: it moved.** `#fpsOverlay` becomes a child of the panel, so the handler
+each game already had keeps switching it on and off — only now it is a line inside the card. The
+button is not cloned and no listeners are removed: both handlers listen to the same `pointerdown`
+and start from the same state, so they stay in sync by themselves.
 
-Tres cosas del panel que no son decorativas:
+Three things about the panel that are not decorative:
 
-- **`touch-action: pan-y` + `overscroll-behavior: contain`.** Varios juegos declaran
-  `touch-action: none` en el `body`, y el navegador resuelve el gesto permitido como la
-  **intersección** con todos los ancestros: sin esa línea el panel no se desplaza con el dedo por
-  más overflow que tenga. Es la misma trampa que Loop ya había pisado.
-- **La barra se MIDE, no se asume.** Se usa `innerHeight − bar.top`, no `--bar-height`: varios
-  juegos no declaran esa variable, y en Hangman la barra flota **encima del teclado en pantalla**,
-  así que con el alto solo el panel le caía justo arriba.
-- **Si arriba de la barra no queda lugar usable, el panel se ancla al piso y tapa lo que haya.**
-  En Hangman apaisado el teclado y la barra se comen 319 de 380 px. Por eso el panel tiene un **✕
-  propio**: cuando se ancla al piso puede quedar por encima del botón que lo abrió, y sin una
-  salida adentro el jugador queda atrapado leyendo las instrucciones.
+- **`touch-action: pan-y` + `overscroll-behavior: contain`.** Several games declare
+  `touch-action: none` on the `body`, and the browser resolves the allowed gesture as the
+  **intersection** with every ancestor: without that line the panel does not scroll under the finger
+  however much overflow it has. It is the same trap Loop had already stepped on.
+- **The bar is MEASURED, not assumed.** It uses `innerHeight − bar.top`, not `--bar-height`: several
+  games do not declare that variable, and in Hangman the bar floats **above the on-screen keyboard**,
+  so going by height alone the panel landed right on top of it.
+- **If no usable room is left above the bar, the panel anchors to the floor and covers whatever is
+  there.** In Hangman in landscape the keyboard and the bar eat 319 of 380 px. When it anchors to
+  the floor it can end up over the button that opened it, so in that case it is positioned to leave
+  the button clear — the ⓘ is the only way to close it and it must stay reachable.
 
-## El acento es una variable, no un color
+**There is no ✕ inside the panel.** The ⓘ button is the only toggle, in all 22: a second control that
+does the same thing as the first is one more thing to find, and it made the panel's own chrome differ
+from game to game. `Escape` also closes it on desktop.
 
-`arcade-shell.css` define `--shell-accent` y **cada juego la redefine con un color de su propia
-paleta**. Es lo que permite que la colección se sienta una sola sin que ningún juego quede con el
-celeste de Loop encima: el buscaminas es verde pasto, Simón es dorado, Tron celeste, los fuegos
-naranjas.
+## The accent is a variable, not a colour
 
-El cuerpo del botón viene de Loop y son tres capas: superficie de panel, **filo de luz arriba**
-(`inset 0 1px 0` — es lo que hace que se lea como pieza física y no como rectángulo pintado) y una
-base oscura corta. El estado activo **encoge** (`scale(.9)`): un botón que crece al tocarlo tapa lo
-que está al lado justo cuando el dedo ya está encima.
+`arcade-shell.css` defines `--shell-accent` and **each game redefines it with a colour from its own
+palette**. That is what lets the collection feel like one thing without leaving every game wearing
+Loop's cyan: Minesweeper is grass green, Simon is gold, Tron cyan, the fireworks orange.
 
-**El área táctil se agranda con un `::after`, no con el cuerpo.** El dibujo mide 32 px porque más
-grande tapa juego, pero un pulgar necesita ~44. La expansión lateral es de sólo 2 px a propósito:
-con `gap: 8px` dos áreas de ±4 se tocarían y el tap caería en el vecino. En los cinco juegos con
-barra propia (CrazyTanks, Pong, Snake, StickFight, TankWARS) los botones están a 38 px de paso con
-cuerpos de 30, así que ahí la ampliación es **sólo vertical**.
+The button body comes from Loop and is three layers: a panel surface, a **light edge on top**
+(`inset 0 1px 0` — that is what makes it read as a physical piece and not a painted rectangle) and a
+short dark base. The active state **shrinks** (`scale(.9)`): a button that grows when touched covers
+what is next to it exactly when the finger is already on top.
 
-**Cinco juegos no incluyen el shell y así queda**: tienen la barra hecha a mano por razones
-propias (botones flotantes, no una fila). A ésos el CSS del panel les va en línea. Duplicación
-deliberada: meterles el shell entero les cambiaría los botones.
+**The touch area is enlarged with an `::after`, not with the body.** The drawing is 32 px because
+bigger covers game, but a thumb needs ~44. The sideways expansion is only 2 px on purpose: with
+`gap: 8px` two areas of ±4 would touch and the tap would land on the neighbour. In the five games
+with their own bar (CrazyTanks, Pong, Snake, StickFight, TankWARS) the buttons sit at a 38 px pitch
+with 30 px bodies, so there the enlargement is **vertical only**.
+
+**Five games do not include the shell and that is fine**: they have a hand-made bar for reasons of
+their own (floating buttons, not a row). Those get the panel CSS inline. Deliberate duplication:
+giving them the whole shell would change their buttons.
 
 ## Gotchas
 

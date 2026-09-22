@@ -136,7 +136,7 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  POKER — port web del Texas Hold'em heads-up de Poker.py
+  //  POKER — web port of the heads-up Texas Hold'em in Poker.py
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
   const ri  = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -155,7 +155,7 @@
   };
 
   // ── EVALUADOR ──
-  // Devuelve tuple (category, ...kickers). Comparable lexicográficamente; mayor = mejor.
+  // Returns a tuple (category, ...kickers). Lexicographically comparable; higher = better.
   function handRank(cards5) {
     const vals = cards5.map(c => RANKS.indexOf(c[0])).sort((a,b) => b - a);
     const suits = cards5.map(c => c[1]);
@@ -205,7 +205,7 @@
             }
     return best;
   }
-  // Versión que devuelve también la combinación ganadora — usada en showdown para el highlight.
+  // A version that also returns the winning combination — used in the showdown for the highlight.
   function bestHandCombo(seven) {
     let best = [0], bestCombo = seven.slice(0, 5);
     const n = seven.length;
@@ -226,7 +226,7 @@
   const ctx = canvas.getContext('2d');
   let W = 0, H = 0, dpr = 1;
   const barEl = document.getElementById('bar');
-  let feltCache = null;                                                            // offscreen canvas con el felt + rail, reconstruido en cada resize
+  let feltCache = null;                                                            // offscreen canvas with the felt + rail, rebuilt on every resize
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     const barH = barEl.offsetHeight;
@@ -237,13 +237,13 @@
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    feltCache = null;                                                              // invalida felt cacheado a la nueva resolución
-    repositionCards();                                                             // cartas en mano siguen ancladas si el usuario rota/redimensiona
+    feltCache = null;                                                              // invalidates the felt cached at the old resolution
+    repositionCards();                                                             // cards in hand stay anchored if the user rotates/resizes
   }
   window.addEventListener('resize', resize);
 
   // ── LAYOUT HELPERS ──
-  // Posiciones expresadas como % del canvas (preserva la escala del Poker.py).
+  // Positions expressed as a % of the canvas (it preserves Poker.py's scale).
   function xp(p) { return p * W; }
   function yp(p) { return p * H; }
   function sp(p) { return p * (W + H) / 2; }
@@ -251,7 +251,7 @@
     const w = Math.min(W, H) * 0.13;
     return { w, h: w * 1.45 };
   }
-  // Posición de la "ranura" según owner + índice — usado tanto en deal/advance como en resize.
+  // Position of the "slot" by owner + index — used both in deal/advance and in resize.
   function slotPos(owner, slot) {
     const { w } = cardSize();
     const dx = w * 1.05;
@@ -260,9 +260,9 @@
     return { tx: xp(0.5) + (slot - 2) * dx, ty: yp(0.46) };                        // community: 5 ranuras
   }
 
-  // ── CARTAS (sprites con animación de movimiento + flip) ──
-  // Cada carta guarda su .slot (índice dentro del grupo) para que un resize() pueda recalcular
-  // targetX/Y desde el slotPos() actualizado, en lugar de quedar ancladas a la W/H vieja.
+  // ── CARDS (sprites with move + flip animation) ──
+  // Each card keeps its .slot (index within the group) so that a resize() can recompute
+  // targetX/Y from the updated slotPos(), instead of staying anchored to the old W/H.
   const cards = [];
   function makeCard(code, slot, owner, hidden) {
     const { w, h } = cardSize();
@@ -302,7 +302,7 @@
     const r = sp(0.008);
     const faceUp = c.flip > 0.5 && !c.hidden;
 
-    // En el showdown: aura dorada bajo cartas ganadoras, dim 0.55 en perdedoras.
+    // In the showdown: a golden aura under the winning cards, dim 0.55 on the losing ones.
     let alphaMul = 1;
     let winning = false;
     if (G.phase === 'hand_end' && G.winningCodes && G.community.length === 5 && faceUp) {
@@ -318,7 +318,7 @@
       ctx.fillRect(c.x - h, c.y - h, h*2, h*2);
     }
 
-    // Sombra elíptica suave bajo la carta — sólo cuando está casi de frente, no en pleno flip.
+    // A soft elliptical shadow under the card — only when it is nearly face on, not mid-flip.
     if (scale > 0.55) {
       ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,0.34)';
@@ -332,7 +332,7 @@
     ctx.globalAlpha = alphaMul;
 
     if (faceUp) {
-      // Fondo papel marfil con un toque de gradiente vertical (cream → off-white) para no parecer plano.
+      // Ivory paper background with a touch of vertical gradient (cream → off-white) so it does not look flat.
       roundRect(ctx, x, y, w, h, r);
       const stock = ctx.createLinearGradient(0, y, 0, y + h);
       stock.addColorStop(0, '#fbf9ed');
@@ -347,17 +347,17 @@
         const color = SUIT_COLOR[c.suit];
         const rtxt = RANK_DISPLAY[c.rank] || c.rank;
         const sym = SUIT_SYMBOL[c.suit];
-        // Rank más chico cuando es '10' (2 chars) para no desbordar la esquina.
+        // A smaller rank when it is '10' (2 chars) so it does not overflow the corner.
         const rankFs = Math.round(sp(0.028) * (rtxt.length > 1 ? 0.78 : 1));
         const suitFs = Math.round(sp(0.022));
         ctx.fillStyle = color;
-        // TL: rank arriba, suit debajo, MISMO eje x (alineado).
+        // TL: rank on top, suit below, the SAME x axis (aligned).
         ctx.textAlign = 'left'; ctx.textBaseline = 'top';
         ctx.font = `bold ${rankFs}px ${CARD_FONT}`;
         ctx.fillText(rtxt, x + w*0.10, y + h*0.06);
         ctx.font = `${suitFs}px ${CARD_FONT}`;
         ctx.fillText(sym, x + w*0.10, y + h*0.06 + rankFs + sp(0.002));
-        // BR: el mismo pip rotado 180° (estilo carta de casino real).
+        // BR: the same pip rotated 180° (real casino card style).
         ctx.save();
         ctx.translate(x + w*0.90, y + h*0.94);
         ctx.rotate(Math.PI);
@@ -366,13 +366,13 @@
         ctx.font = `${suitFs}px ${CARD_FONT}`;
         ctx.fillText(sym, 0, rankFs + sp(0.002));
         ctx.restore();
-        // Pip central — bien grande para que el palo "lea" a la distancia.
+        // Central pip — nice and big so the suit "reads" from a distance.
         ctx.font = `${Math.round(sp(0.075))}px ${CARD_FONT}`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(sym, x + w/2, y + h*0.55);
       }
     } else {
-      // Respaldo: base azul + vignette + lattice diagonal + crest dorado con palo central.
+      // Back: a blue base + vignette + diagonal lattice + a golden crest with a central suit.
       roundRect(ctx, x, y, w, h, r);
       ctx.fillStyle = '#1c356f';
       ctx.fill();
@@ -387,7 +387,7 @@
       if (scale > 0.5) {
         ctx.strokeStyle = 'rgba(180,200,255,0.22)';
         ctx.lineWidth = 1;
-        // Diagonales: dos sets cruzados → lattice rómbico.
+        // Diagonals: two crossed sets → a rhombic lattice.
         const step = w / 5;
         for (let off = -h; off <= w + h; off += step) {
           ctx.beginPath();
@@ -399,7 +399,7 @@
           ctx.lineTo(x + off + h, y);
           ctx.stroke();
         }
-        // Crest dorado al medio con un ♠.
+        // A golden crest in the middle with a ♠.
         ctx.fillStyle = 'rgba(220,180,80,0.62)';
         ctx.beginPath();
         ctx.ellipse(c.x, c.y, w*0.32, h*0.20, 0, 0, TAU);
@@ -415,7 +415,7 @@
         ctx.fillText('♠', c.x, c.y + sp(0.002));
       }
       ctx.restore();
-      // Borde claro como banda exterior tipo carta real.
+      // A light border as an outer band, like a real card.
       roundRect(ctx, x, y, w, h, r);
       ctx.lineWidth = 2;
       ctx.strokeStyle = '#d0d0e6';
@@ -445,13 +445,13 @@
     }
   }
 
-  // ════════════════ STATE MACHINE (mirror de Manager en Poker.py) ════════════════
+  // ════════════════ STATE MACHINE (mirrors Manager in Poker.py) ════════════════
   const SMALL_BLIND = 10;
   const BIG_BLIND   = 20;
   const G = {
     playerChips: 1000, cpuChips: 1000,
-    // Display tweens — chasean al valor real con un k suave; en postBet snapeamos para que apostar
-    // se sienta inmediato y el tween sólo aparezca cuando el pot se vuelca al ganador.
+    // Display tweens — they chase the real value with a gentle k; in postBet we snap so that betting
+    // feels immediate and the tween only shows up when the pot is poured to the winner.
     displayedPlayerChips: 1000, displayedCpuChips: 1000,
     button: Math.random() < 0.5 ? 'player' : 'cpu',
     phase: 'idle',                         // idle | preflop | flop | turn | river | hand_end
@@ -461,12 +461,12 @@
     currentPlayer: 'player',
     raiseAmount: 40,
     message: 'Click DEAL to start',
-    messageT: 0,                            // edad del mensaje en s — drive de la ease-out-back scale-in
+    messageT: 0,                            // the message's age in s — it drives the ease-out-back scale-in
     cpuPending: false, cpuTimer: 0,
     handEndTimer: 0,
-    allInActive: false, allInDelay: 0,      // staged auto-advance cuando alguien quedó all-in
-    playerHandName: '',                     // cached — bestHand() es 21 combos, costoso para tirar cada frame
-    winningCodes: null,                     // Set de códigos que ganan en showdown → halo dorado
+    allInActive: false, allInDelay: 0,      // staged auto-advance when someone is all-in
+    playerHandName: '',                     // cached — bestHand() is 21 combos, expensive to run every frame
+    winningCodes: null,                     // Set of codes that win in the showdown → a golden halo
   };
 
   function setMsg(s) { G.message = s; G.messageT = 0; }
@@ -476,14 +476,14 @@
   }
 
   function postBet(who, amount) {
-    // EL embudo de toda la plata: ciegas, call, raise, all-in y la apuesta de la CPU pasan por aca.
-    // Engancharlo en un solo lugar y no en cada accion evita que una rama nueva nazca muda.
+    // THE funnel for all the money: blinds, call, raise, all-in and the CPU's bet all go through here.
+    // Hooking it in one place and not in each action keeps a new branch from being born mute.
     if (amount > 0) sfx.chips(amount, who === 'cpu', amount >= G.playerChips + G.cpuChips ? true : false);
     if (who === 'player') {
       amount = Math.min(amount, G.playerChips);
       G.playerChips -= amount;
       G.playerBet += amount;
-      G.displayedPlayerChips = G.playerChips;                                      // snap on bet — el contador no "se atrasa" mientras apostás
+      G.displayedPlayerChips = G.playerChips;                                      // snap on bet — the counter does not "lag behind" while you bet
     } else {
       amount = Math.min(amount, G.cpuChips);
       G.cpuChips -= amount;
@@ -493,9 +493,9 @@
     G.pot += amount;
   }
 
-  // Si uno queda con 0 fichas y bets desiguales, devolvemos el exceso al de stack mayor (no hay con
-  // qué emparejar — sería pot fantasma) y marcamos ambos como acted para que el round se cierre y
-  // los streets restantes se vayan revelando solos. revealCpuCards() porque ya no se decide nada.
+  // If one is left with 0 chips and the bets are uneven, we return the excess to the one with the bigger stack (there is nothing
+  // to match it with — it would be a phantom pot) and mark both as acted so the round closes and
+  // the remaining streets reveal themselves. revealCpuCards() because nothing is being decided any more.
   function resolveAllIn() {
     if (G.playerChips > 0 && G.cpuChips > 0) return;
     if (G.playerBet > G.cpuBet) {
@@ -573,7 +573,7 @@
   function actCall() {
     if (!inBetting() || G.currentPlayer !== 'player') return;
     const diff = G.cpuBet - G.playerBet;
-    if (diff > 0) postBet('player', diff);                 // call: las fichas las toca postBet
+    if (diff > 0) postBet('player', diff);                 // call: postBet handles the chips
     else sfx.knock(false);                                 // check: nudillos, cero fichas
     resolveAllIn();
     G.acted.add('player');
@@ -582,53 +582,53 @@
   }
   function actRaise() {
     if (!inBetting() || G.currentPlayer !== 'player') return;
-    if (G.allInActive || G.cpuChips === 0) return;                                 // contra un rival ya all-in no hay raise posible
+    if (G.allInActive || G.cpuChips === 0) return;                                 // against an opponent already all-in there is no possible raise
     const target = G.raiseAmount;
     const need = target - G.playerBet;
     if (need <= 0) return;
     postBet('player', need);
-    // NO resolveAllIn — el oponente todavía tiene que call/fold ante la raise. resolveAllIn vive en
-    // las ramas de CALL únicamente; si lo llamábamos acá refundíamos chips antes de que el otro
-    // respondiera (bug que apareció durante el rediseño: un raise all-in se "auto-desinflaba").
+    // NO resolveAllIn — the opponent still has to call/fold against the raise. resolveAllIn lives in
+    // the CALL branches only; calling it here refunded chips before the other player
+    // responded (a bug that turned up during the redesign: an all-in raise "deflated itself").
     G.lastRaiser = 'player';
     G.acted = new Set(['player']);
     G.currentPlayer = 'cpu';
   }
-  // ALL IN: tira TODO el stack del player. Se rutea como raise o como call según alcance.
+  // ALL IN: throws in the player's WHOLE stack. It is routed as a raise or as a call depending on whether it covers.
   function actAllIn() {
     if (!inBetting() || G.currentPlayer !== 'player' || G.allInActive || G.playerChips <= 0) return;
-    // Rival ya all-in → ALL IN colapsa a un call normal (no hay nada que igualar más allá del bet).
+    // Opponent already all-in → ALL IN collapses to a normal call (there is nothing to match beyond the bet).
     if (G.cpuChips === 0) { actCall(); return; }
-    postBet('player', G.playerChips);                                              // postBet ya clampea al stack
+    postBet('player', G.playerChips);                                              // postBet already clamps to the stack
     if (G.playerBet > G.cpuBet) {
-      // All-in raise: oponente todavía tiene que responder.
+      // All-in raise: the opponent still has to respond.
       G.lastRaiser = 'player';
       G.acted = new Set(['player']);
       G.currentPlayer = 'cpu';
     } else {
-      // All-in call (no alcanzó para cubrir el call entero): cierra el round.
+      // All-in call (it did not cover the whole call): it closes the round.
       resolveAllIn();
       G.acted.add('player');
       G.currentPlayer = 'cpu';
       checkRoundEnd();
     }
   }
-  // Clamp del monto de raise al rango legal. Semántica RAISE-TO (absoluta): raiseAmount = total al
-  // que llevás tu apuesta, no un increment. Antes era raise-BY: el cartel decía $40 pero apostabas
-  // call + 40 = $80 efectivos. Ahora "$40" = lo que vas a tener en tu side del pot.
+  // Clamps the raise amount to the legal range. RAISE-TO (absolute) semantics: raiseAmount = the total you
+  // take your bet to, not an increment. It used to be raise-BY: the label said $40 but you bet
+  // call + 40 = $80 effective. Now "$40" = what you will have on your side of the pot.
   function clampRaiseAmount() {
     const minR = Math.max(G.cpuBet + BIG_BLIND, BIG_BLIND);                        // min raise = bet actual + big blind
-    const maxR = G.playerBet + G.playerChips;                                      // tope = todo lo que podés llegar a poner
+    const maxR = G.playerBet + G.playerChips;                                      // cap = everything you could possibly put in
     G.raiseAmount = Math.max(minR, Math.min(maxR, G.raiseAmount));
   }
-  // El tick SOLO si el monto cambio de verdad: contra el tope, seguir apretando no puede seguir
-  // sonando o el boton miente sobre lo que hizo.
+  // The tick ONLY if the amount really changed: against the cap, holding the button down cannot keep
+  // sounding or the button is lying about what it did.
   function decRaise() { const a = G.raiseAmount; G.raiseAmount -= BIG_BLIND; clampRaiseAmount(); if (G.raiseAmount !== a) sfx.tick(); }
   function incRaise() { const a = G.raiseAmount; G.raiseAmount += BIG_BLIND; clampRaiseAmount(); if (G.raiseAmount !== a) sfx.tick(); }
 
-  // Baseline por categoría (índice = score[0]). Spread más amplio que el viejo score[0]/9: ahora
-  // un par no se hunde por debajo del fold-threshold ante una bet normal, y las categorías altas
-  // dejan margen para que el bluff/value-raise sea distinguible del ruido.
+  // Baseline per category (index = score[0]). A wider spread than the old score[0]/9: now
+  // a pair does not sink below the fold threshold against a normal bet, and the high categories
+  // leave room for the bluff/value raise to be distinguishable from noise.
   const POSTFLOP_BASE = [0, 0.16, 0.40, 0.56, 0.68, 0.76, 0.83, 0.90, 0.96, 0.99];
 
   function evalCpuStrength() {
@@ -647,10 +647,10 @@
       const all7 = G.cpuHole.concat(G.community);
       const score = bestHand(all7);
       strength = POSTFLOP_BASE[score[0]] || 0;
-      // Kicker importa de verdad ahora: el +0.04*top/12 viejo se perdía en el ruido.
+      // The kicker really matters now: the old +0.04*top/12 got lost in the noise.
       if (score[0] === 1 || score[0] === 2) strength += (score[1] / 12) * 0.10;
 
-      // Draw bonuses — sólo si todavía hay cartas por venir y el made-hand es flojo.
+      // Draw bonuses — only if there are still cards to come and the made hand is weak.
       if (score[0] <= 2 && G.community.length < 5) {
         const ranks = all7.map(c => RANKS.indexOf(c[0]));
         const suits = all7.map(c => c[1]);
@@ -659,17 +659,17 @@
         const flushDraw = Object.values(suitCount).some(n => n === 4);
         const uniq = [...new Set(ranks)].sort((a, b) => a - b);
         let oesd = false, gutshot = false;
-        // Ventana deslizante de 5: si tengo 4 cartas dentro y el faltante es interior → gutshot;
-        // si los extremos están y falta uno interior, sigue gutshot; si tengo 4 consecutivos
-        // tocando un extremo → OESD.
+        // A sliding window of 5: if I have 4 cards inside and the missing one is interior → gutshot;
+        // if the ends are there and one interior is missing, it is still a gutshot; if I have 4 consecutive
+        // touching one end → OESD.
         for (let lo = 0; lo <= 8; lo++) {
           const win = uniq.filter(rk => rk >= lo && rk <= lo + 4);
           if (win.length === 4) {
-            if (win[0] === lo && win[3] === lo + 4) gutshot = true;                // un hueco interior
+            if (win[0] === lo && win[3] === lo + 4) gutshot = true;                // one interior gap
             else oesd = true;                                                       // extremo abierto
           }
         }
-        // Rueda: A cuenta como 0 también.
+        // The wheel: A counts as 0 as well.
         if (uniq.includes(12)) {
           const lowSet = uniq.filter(rk => rk <= 3);
           if (lowSet.length === 3) gutshot = true;
@@ -677,7 +677,7 @@
         if (flushDraw)    strength += G.community.length === 3 ? 0.18 : 0.10;
         if (oesd)         strength += G.community.length === 3 ? 0.14 : 0.08;
         else if (gutshot) strength += G.community.length === 3 ? 0.06 : 0.03;
-        // Dos overcards en el flop (ej: AK en un board 9-7-3) → siguen vivos.
+        // Two overcards on the flop (e.g. AK on a 9-7-3 board) → still alive.
         if (score[0] === 1 && G.community.length === 3) {
           const boardMax = Math.max(...G.community.map(c => RANKS.indexOf(c[0])));
           const overs = G.cpuHole.filter(c => RANKS.indexOf(c[0]) > boardMax).length;
@@ -685,11 +685,11 @@
         }
       }
     }
-    // Posición: heads-up el button es OOP preflop e IP postflop (acta último). +0.06 cuando IP.
+    // Position: heads-up the button is OOP preflop and IP postflop (acts last). +0.06 when IP.
     const cpuIsButton = G.button === 'cpu';
     const inPosition = (G.phase === 'preflop') ? !cpuIsButton : cpuIsButton;
     if (inPosition) strength += 0.06;
-    // Ruido reducido (-0.06/+0.06) — antes (-0.12/+0.10) sepultaba el signal.
+    // Reduced noise (-0.06/+0.06) — the old (-0.12/+0.10) buried the signal.
     strength += rnd(-0.06, 0.06);
     return strength;
   }
@@ -697,7 +697,7 @@
   function cpuAct() {
     if (!inBetting() || G.currentPlayer !== 'cpu') return;
     const rawCallAmt = Math.max(0, G.playerBet - G.cpuBet);
-    const callAmt = Math.min(rawCallAmt, G.cpuChips);                              // no podés deber más que tu stack
+    const callAmt = Math.min(rawCallAmt, G.cpuChips);                              // you cannot owe more than your stack
     const strength = evalCpuStrength();
     const potOdds = callAmt / Math.max(G.pot + callAmt, 1);
 
@@ -709,18 +709,18 @@
       return;
     }
 
-    // Raise: '>=' permite el min-raise exacto en el borde stack=callAmt+BB. Y NO se puede raisear
-    // contra un rival ya all-in — no hay chips del otro lado para igualar la subida.
+    // Raise: '>=' allows the exact min-raise at the stack=callAmt+BB edge. And you CANNOT raise
+    // against an opponent already all-in — there are no chips on the other side to match the raise.
     const canRaise = G.cpuChips >= callAmt + BIG_BLIND && G.playerChips > 0;
-    // Value raise: mano fuerte; si ya fui el último raiser, reroll a 0.50 (era 0.25, demasiado pasivo).
+    // Value raise: a strong hand; if I was already the last raiser, reroll to 0.50 (it was 0.25, far too passive).
     const wantValueRaise = canRaise && strength > 0.55 && (G.lastRaiser !== 'cpu' || Math.random() < 0.5);
-    // Bluff raise: ventana fina, frecuencia escalada por street (más blefeo en flop, menos en river).
-    // Sólo si NO acabo de raisear, así no me convierto en un re-raise machine.
+    // Bluff raise: a narrow window, frequency scaled by street (more bluffing on the flop, less on the river).
+    // Only if I did NOT just raise, so I do not turn into a re-raise machine.
     const bluffP = G.phase === 'preflop' ? 0.06 : G.phase === 'flop' ? 0.18 : G.phase === 'turn' ? 0.12 : 0.08;
     const wantBluffRaise = canRaise && !wantValueRaise && strength > 0.15 && G.lastRaiser !== 'cpu' && Math.random() < bluffP;
 
     if (wantValueRaise || wantBluffRaise) {
-      // Sizing: preflop BB-multiples (como antes); postflop fracción de pot — realista y reactivo.
+      // Sizing: preflop BB multiples (as before); postflop a fraction of the pot — realistic and reactive.
       let bump;
       if (G.phase === 'preflop') {
         const mult = [1,1,2,2,3][Math.floor(Math.random() * 5)];
@@ -731,8 +731,8 @@
       }
       bump = Math.min(bump, G.cpuChips - callAmt);
       postBet('cpu', callAmt + bump);
-      // NO resolveAllIn — el player todavía tiene que call/fold. Si lo llamáramos acá, una raise
-      // all-in del CPU se auto-desinflaría antes de que el player respondiera.
+      // NO resolveAllIn — the player still has to call/fold. If we called it here, an all-in
+      // raise by the CPU would deflate itself before the player responded.
       G.lastRaiser = 'cpu';
       G.acted = new Set(['cpu']);
       G.currentPlayer = 'player';
@@ -783,7 +783,7 @@
       showdown();
       return;
     }
-    // Si quedó alguien all-in, programamos el siguiente street para que se revele solo.
+    // If someone is left all-in, we schedule the next street to reveal itself.
     if (G.allInActive && inBetting()) G.allInDelay = 0.9;
   }
 
@@ -810,21 +810,21 @@
       G.playerChips += half;
       G.cpuChips += G.pot - half;
       setMsg(`Split pot — both ${pName}`);
-      // Empate: highlighteamos la unión de las dos combos ganadoras (overlap es común sobre el board).
+      // Tie: we highlight the union of both winning combos (overlap is common on the board).
       G.winningCodes = new Set([...pBest.combo, ...cBest.combo]);
     }
     G.pot = 0;
     G.phase = 'hand_end';
-    G.handEndTimer = 4.5;                                                          // un poco más largo: hay highlight para mirar
+    G.handEndTimer = 4.5;                                                          // a bit longer: there is a highlight to look at
   }
 
   // ════════════════ AUDIO ════════════════
   let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
   try { muted = localStorage.getItem('pokerMuted') === '1'; } catch (e) {}
   const voiceLast = {};
-  // 12 y no 4: ver el comentario de arriba sobre presupuesto por evento. Una mano repartida son 4
-  // disparos de carta + 2 de ciegas en el mismo frame, y el showdown suma revelado + resultado +
-  // cascada del pote. No hay fisica que pueda ametrallar esto.
+  // 12 and not 4: see the comment above about a per-event budget. A dealt hand is 4
+  // card triggers + 2 blinds in the same frame, and the showdown adds the reveal + the result +
+  // the pot cascade. There is no physics that could machine-gun this.
   const SND_PER_FRAME = 12;
 
   function audioResume() {
@@ -841,7 +841,7 @@
   function acOk() { return !!(AC && masterGain && AC.state === 'running'); }
   function ac() { return acOk() && sndThisFrame < SND_PER_FRAME; }
 
-  // Los dos primitivos NO tocan `sndThisFrame`: lo hace `voice()`, una vez por evento.
+  // The two primitives do NOT touch `sndThisFrame`: `voice()` does, once per event.
   function aNote(f0, f1, t0, dur, type, vol) {
     const a = AC; if (!a) return;
     const o = a.createOscillator(), g = a.createGain(), t = a.currentTime + t0;
@@ -877,16 +877,16 @@
   }
   const rndf = (a, b) => a + Math.random() * (b - a);
 
-  // ── Los tres materiales ──
-  // Papel sobre pano: banda ancha y grave, sin ataque duro. Una carta no golpea, se DESLIZA.
+  // ── The three materials ──
+  // Paper on cloth: a wide, low band with no hard attack. A card does not strike, it SLIDES.
   function paper(t0, vol, freq) { aNoise(t0, 0.055, vol, freq || 1700, 1.3, 'bandpass'); }
-  // Arcilla contra arcilla: ataque brillante con Q alto + un cuerpo tonal cortisimo que cae.
-  // `far` = la ficha la tiro la CPU, del otro lado de la mesa: el filtro se cierra y baja el volumen.
+  // Clay against clay: a bright attack with a high Q + a very short tonal body that falls away.
+  // `far` = the chip was thrown by the CPU, from the other side of the table: the filter closes and the volume drops.
   function chipHit(t0, vol, far, hard) {
     aNoise(t0, 0.035, vol, far ? 1800 : (hard ? 2600 : 2300), hard ? 8 : 7, 'bandpass');
     aNote(780, 620, t0, 0.045, 'triangle', vol * 0.55);
   }
-  // La plata se cuenta en fichas, no en decibeles.
+  // Money is counted in chips, not in decibels.
   function chipBurst(amount, t0, far, hard) {
     const n = Math.max(2, Math.min(10, 2 + Math.round(Math.log2(Math.max(1, amount / BIG_BLIND)))))
             + (hard ? 1 : 0);
@@ -897,8 +897,8 @@
     }
   }
 
-  // Varias cartas en el mismo frame tienen que salir una atras de otra, no encimadas: el reparto
-  // es un gesto con ritmo. El contador se reinicia si paso mas de 150 ms desde la ultima.
+  // Several cards in the same frame have to come out one behind the other, not stacked: the deal
+  // is a gesture with rhythm. The counter resets if more than 150 ms passed since the last one.
   let cardSeq = 0, cardSeqT = -1e9;
   const sfx = {
     card(comunitaria) {
@@ -906,35 +906,35 @@
       if (now - cardSeqT > 150) cardSeq = 0;
       cardSeqT = now;
       const t0 = cardSeq * 0.105; cardSeq++;
-      // La carta comunitaria es LA carta: un poco mas presente que una del reparto inicial.
+      // The community card is THE card: a little more present than one from the initial deal.
       voice('card' + cardSeq, 0, () => paper(t0, comunitaria ? 0.050 : 0.042, comunitaria ? 1700 : 1900));
     },
     chips(amount, far, hard) { voice('chips', 0, () => chipBurst(amount, 0, far, hard)); },
-    // Nudillos sobre la madera de la mesa. CERO fichas: pasar es justamente no poner plata.
+    // Knuckles on the table's wood. ZERO chips: checking is precisely not putting money in.
     knock(far) {
       voice('knock', 120, () => {
         aNote(far ? 150 : 168, far ? 112 : 124, 0, 0.055, 'triangle', far ? 0.038 : 0.05);
         aNoise(0, 0.03, far ? 0.024 : 0.032, 430, 2.2, 'bandpass');
       });
     },
-    // Tirar las cartas: papel que se suelta, opaco y corto. La version de la CPU es mas grave
-    // (esta del otro lado) y mas floja.
+    // Throwing the cards away: paper being released, dull and short. The CPU's version is lower
+    // (it is on the other side) and quieter.
     fold(far) { voice('fold', 200, () => aNoise(0, 0.075, far ? 0.022 : 0.030, far ? 660 : 900, 1.0, 'bandpass')); },
-    // Se dan vuelta las cartas de la CPU: dos "tack" secos y brillantes, mas agudos y mas cortos
-    // que el slide del reparto — una carta que se voltea golpea, no desliza.
+    // The CPU's cards are turned over: two dry, bright "tacks", higher and shorter
+    // than the deal's slide — a card being flipped strikes, it does not slide.
     reveal() { voice('reveal', 300, () => { aNoise(0, 0.028, 0.048, 2900, 3.5, 'bandpass'); aNoise(0.12, 0.028, 0.044, 2900, 3.5, 'bandpass'); }); },
-    // El pote se vuelca al ganador. Arranca 0.18 s DESPUES de la resolucion para que no pise el
-    // resultado, y es lo unico que dice cuanto se llevo.
+    // The pot is poured to the winner. It starts 0.18 s AFTER the resolution so it does not step on the
+    // result, and it is the only thing that says how much was taken.
     pot(amount, far) { voice('pot', 300, () => chipBurst(Math.max(amount, BIG_BLIND * 8), 0.18, far, false)); },
-    // El resultado vive POR DEBAJO de los materiales y llega despues de las fichas.
+    // The result lives BELOW the materials and arrives after the chips.
     win()   { voice('res', 500, () => { aNote(523.25, 0, 0.30, 0.20, 'triangle', 0.05); aNote(784, 0, 0.40, 0.26, 'triangle', 0.042); }); },
     lose()  { voice('res', 500, () => aNote(311, 233, 0.30, 0.32, 'sine', 0.032)); },
     split() { voice('res', 500, () => aNote(440, 0, 0.28, 0.22, 'triangle', 0.034)); },
-    // El monto de la raise: 18 ms al fondo de la mezcla. Si sonara como una ficha, subir el monto
-    // se confundiria con apostar.
+    // The raise amount: 18 ms at the back of the mix. If it sounded like a chip, raising the amount
+    // would be confused with betting.
     tick() { voice('tick', 45, () => aNote(1400, 1150, 0, 0.018, 'square', 0.02)); },
-    // Rebuy: la bandeja de fichas que entra. Mas graves y sin el cuerpo de arcilla — es el sonido
-    // del stack completo, no de una apuesta.
+    // Rebuy: the tray of chips coming in. Lower and without the clay body — it is the sound
+    // of the whole stack, not of a bet.
     tray() { voice('tray', 500, () => { let t = 0.35; for (let i = 0; i < 6; i++) { aNoise(t, 0.04, 0.034, 1500, 5, 'bandpass'); t += rndf(0.03, 0.06); } }); },
   };
 
@@ -980,20 +980,20 @@
       audioResume();
     });
   }
-  // Sin nodos continuos no queda nada sonando al fondo; se suspende igual para no dejar un
-  // contexto vivo por cada juego que se abrio en el Arcade.
+  // With no continuous nodes nothing is left sounding in the background; it is suspended anyway so as not to leave a
+  // live context for every game opened in the Arcade.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { if (AC && AC.state === 'running') AC.suspend().catch(() => {}); }
     else audioResume();
   });
 
   function refreshButtons() {
-    // Después de un all-in no hay decisión: ambos bets están commit y los streets se revelan solos.
+    // After an all-in there is no decision: both bets are committed and the streets reveal themselves.
     const myTurn = inBetting() && G.currentPlayer === 'player' && !G.allInActive;
     const callAmt = Math.max(0, G.cpuBet - G.playerBet);
     const cpuAllIn = G.cpuChips === 0;
-    clampRaiseAmount();                                                            // re-clamp por si el contexto de bet cambió desde el último in/decRaise
-    // RAISE requiere: turno, rival NO all-in, y stack suficiente para llegar a min-raise.
+    clampRaiseAmount();                                                            // re-clamp in case the bet context changed since the last in/decRaise
+    // RAISE requires: your turn, an opponent NOT all-in, and enough stack to reach the min-raise.
     const minRaiseTotal = Math.max(G.cpuBet + BIG_BLIND, BIG_BLIND);
     const canMinRaise = (G.playerBet + G.playerChips) >= minRaiseTotal;
     btnDeal.disabled  = G.phase !== 'idle' && G.phase !== 'hand_end';
@@ -1006,13 +1006,13 @@
     btnCall.textContent  = callAmt === 0 ? 'CHECK' : `CALL $${callAmt}`;
     btnRaise.textContent = 'RAISE';
     btnAllIn.textContent = `ALL IN $${G.playerChips}`;
-    // El '→' delante del amount comunica que el número es el TOTAL al que llevás la apuesta
-    // (raise-to), no un incremento (raise-by). Antes el cartel "$40" se leía como "+$40"
-    // y la chip count bajaba el doble cuando había callAmt.
+    // The '→' in front of the amount communicates that the number is the TOTAL you take your bet to
+    // (raise-to), not an increment (raise-by). The old "$40" label read as "+$40"
+    // and the chip count dropped twice as much when there was a callAmt.
     raiseAmtEl.textContent = '→ $' + G.raiseAmount;
   }
 
-  // ── DRAW: tabla con felt gradient + wooden rail (cacheado offscreen) ──
+  // ── DRAW: the table with a felt gradient + a wooden rail (cached offscreen) ──
   function buildFeltCache() {
     const off = document.createElement('canvas');
     off.width = Math.floor(W * dpr);
@@ -1025,7 +1025,7 @@
     const ry = H * 0.43;
     const railW = sp(0.018);
 
-    // Rail de madera: anillo entre dos elipses, evenodd con gradiente vertical.
+    // Wooden rail: a ring between two ellipses, evenodd with a vertical gradient.
     const woodGrad = o.createLinearGradient(0, -ry - railW, 0, ry + railW);
     woodGrad.addColorStop(0,   '#6b3a17');
     woodGrad.addColorStop(0.5, '#3a1c08');
@@ -1035,18 +1035,18 @@
     o.ellipse(0, 0, rx + railW, ry + railW, 0, 0, TAU);
     o.ellipse(0, 0, rx, ry, 0, 0, TAU);
     o.fill('evenodd');
-    // Highlight tenue arriba del rail.
+    // A faint highlight at the top of the rail.
     o.strokeStyle = 'rgba(255,210,150,0.20)';
     o.lineWidth = Math.max(1, sp(0.0022));
     o.beginPath();
     o.ellipse(0, -ry*0.02, rx + railW*0.55, ry + railW*0.55, 0, Math.PI*1.1, Math.PI*1.9);
     o.stroke();
-    // Doble línea oscura en el borde interno (separa rail del felt).
+    // A double dark line on the inner edge (it separates the rail from the felt).
     o.strokeStyle = 'rgba(0,0,0,0.55)';
     o.lineWidth = 1.5;
     o.beginPath(); o.ellipse(0, 0, rx, ry, 0, 0, TAU); o.stroke();
 
-    // Felt: radial gradient cálido en el centro, hundido en el borde — efecto vignette interno.
+    // Felt: a warm radial gradient at the centre, sunken at the edge — an inner vignette effect.
     const felt = o.createRadialGradient(0, -ry*0.15, 0, 0, 0, Math.max(rx, ry));
     felt.addColorStop(0,    '#1d7a35');
     felt.addColorStop(0.55, '#0f5520');
@@ -1054,7 +1054,7 @@
     o.fillStyle = felt;
     o.beginPath(); o.ellipse(0, 0, rx, ry, 0, 0, TAU); o.fill();
 
-    // Ring de "puntada" decorativo.
+    // A decorative "stitch" ring.
     o.strokeStyle = 'rgba(255,255,255,0.06)';
     o.lineWidth = 1.5;
     o.setLineDash([3, 4]);
@@ -1084,7 +1084,7 @@
   }
 
   // ── CHIP STACKS ──
-  // Pickeo de color por denominación (igual que un casino real: blancos, azules, rojos, negros).
+  // Colour picked by denomination (as in a real casino: whites, blues, reds, blacks).
   function chipColor(value) {
     if (value >= 500) return ['#1f1f1f', '#3a3a3a', 'rgba(255,255,255,0.50)'];
     if (value >= 100) return ['#a32626', '#d83a3a', 'rgba(255,200,200,0.55)'];
@@ -1119,7 +1119,7 @@
   }
   function drawChipStack(cx, cy, amount, baseR) {
     if (amount <= 0) return;
-    // Mezcla de hasta 2 denominaciones para que la pila SE LEA como cantidad — no es cambio exacto.
+    // A mix of up to 2 denominations so the stack READS as a quantity — it is not exact change.
     const denoms = amount >= 500 ? [500, 25]
                  : amount >= 100 ? [100, 25]
                  : amount >= 25  ? [25, 5]
@@ -1132,7 +1132,7 @@
       remain -= n * d;
       if (stack.length >= 6) break;
     }
-    if (!stack.length) stack.push(amount);                                         // mini-stack para amounts < 1 (no debería pasar pero por las dudas)
+    if (!stack.length) stack.push(amount);                                         // a mini stack for amounts < 1 (it should not happen but just in case)
     const dyStack = baseR * 0.22;
     for (let i = 0; i < stack.length; i++) {
       const [fill, hi, rim] = chipColor(stack[i]);
@@ -1140,7 +1140,7 @@
     }
   }
 
-  // ── DEALER BUTTON: moneda dorada con notches en el rim, sombra y letra D serif ──
+  // ── DEALER BUTTON: a golden coin with notches in the rim, a shadow and a serif D ──
   function drawDealerChip() {
     const dy = G.button === 'player' ? yp(0.68) : yp(0.26);
     const dx = xp(0.34);
@@ -1148,14 +1148,14 @@
     // Sombra
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.beginPath(); ctx.ellipse(dx + r*0.12, dy + r*0.45, r*0.95, r*0.32, 0, 0, TAU); ctx.fill();
-    // Cuerpo: radial gradient con highlight arriba-izquierda → tono dorado real.
+    // Body: a radial gradient with a highlight at the top left → a real gold tone.
     const rim = ctx.createRadialGradient(dx - r*0.35, dy - r*0.35, 0, dx, dy, r);
     rim.addColorStop(0,   '#fff4c8');
     rim.addColorStop(0.7, '#e8d480');
     rim.addColorStop(1,   '#8a7530');
     ctx.fillStyle = rim;
     ctx.beginPath(); ctx.arc(dx, dy, r, 0, TAU); ctx.fill();
-    // Notches blancas alrededor del rim.
+    // White notches around the rim.
     ctx.strokeStyle = 'rgba(255,255,255,0.6)';
     ctx.lineWidth = Math.max(1.5, r*0.10);
     for (let i = 0; i < 8; i++) {
@@ -1166,7 +1166,7 @@
       const y2 = dy + Math.sin(a) * r * 0.96;
       ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
     }
-    // Disco interior crema + outline marrón.
+    // A cream inner disc + a brown outline.
     ctx.fillStyle = '#f5ebc2';
     ctx.beginPath(); ctx.arc(dx, dy, r * 0.66, 0, TAU); ctx.fill();
     ctx.strokeStyle = 'rgba(60,40,8,0.6)';
@@ -1179,7 +1179,7 @@
     ctx.fillText('D', dx, dy + sp(0.001));
   }
 
-  // ── ACTIVE-PLAYER INDICATOR: anillo de halo ovalado alrededor de la fila de cartas ──
+  // ── ACTIVE-PLAYER INDICATOR: an oval halo ring around the row of cards ──
   function drawActiveIndicator() {
     const isPlayer = G.currentPlayer === 'player';
     const y = isPlayer ? yp(0.78) : yp(0.18);
@@ -1200,17 +1200,17 @@
   }
 
   function drawHud() {
-    // Chip totals con tween display.
+    // Chip totals with a display tween.
     txtBold(sp(0.022), `CPU  $${Math.round(G.displayedCpuChips)}`,    'center', '#f0e8d0', xp(0.5), yp(0.06));
     txtBold(sp(0.022), `YOU  $${Math.round(G.displayedPlayerChips)}`, 'center', '#f0e8d0', xp(0.5), yp(0.94));
 
-    // Pot al centro (con stack visualization a un costado).
+    // Pot at the centre (with a stack visualisation to one side).
     if (G.pot > 0) {
       txtBold(sp(0.026), `POT  $${G.pot}`, 'center', '#ffd86b', xp(0.5), yp(0.355));
       drawChipStack(xp(0.40), yp(0.37), G.pot, sp(0.014));
       drawChipStack(xp(0.60), yp(0.37), G.pot, sp(0.014));
     }
-    // Bets individuales con chip al lado.
+    // Individual bets with a chip alongside.
     if (G.cpuBet > 0) {
       txt(sp(0.017), `$${G.cpuBet}`, 'right', '#fff', xp(0.49), yp(0.30));
       drawChipStack(xp(0.535), yp(0.30) + sp(0.005), G.cpuBet, sp(0.011));
@@ -1223,19 +1223,19 @@
     // Dealer button (moneda 3D).
     drawDealerChip();
 
-    // Active-player glow ring alrededor de la fila de cartas activa.
+    // Active-player glow ring around the active row of cards.
     if (inBetting()) drawActiveIndicator();
 
-    // Hand indicator: ABAJO-IZQUIERDA, fuera del área de cartas. Bien lejos del centro, así que
-    // queda en drawHud (antes de cartas) sin riesgo de overlap.
+    // Hand indicator: BOTTOM LEFT, outside the card area. Well away from the centre, so it
+    // stays in drawHud (before the cards) with no risk of overlap.
     if (G.playerHandName && (inBetting() || G.phase === 'hand_end')) {
       txt(sp(0.016), 'Hand: ' + G.playerHandName, 'left', '#bcffbc', xp(0.025), yp(0.975));
     }
   }
 
-  // Mensaje del centro — separado de drawHud y llamado DESPUÉS de las cartas en el main loop, así
-  // queda por encima de las community cards en lugar de tapado por ellas. Caja semi-transparente
-  // detrás del texto para que se lea aunque caiga sobre el palo del medio.
+  // The centre message — separated from drawHud and called AFTER the cards in the main loop, so that
+  // it stays above the community cards instead of being covered by them. A semi-transparent box
+  // behind the text so it reads even when it falls over the middle suit.
   function drawMessage() {
     if (!G.message) return;
     const age = G.messageT;
@@ -1252,7 +1252,7 @@
     ctx.scale(scale, scale);
     ctx.font = `bold ${Math.round(fontSize)}px 'Segoe UI', system-ui, sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    // Medir + caja oscura con bordes redondeados, para no leer texto encima de un palo.
+    // Measure + a dark box with rounded corners, so as not to read text on top of a suit.
     const m = ctx.measureText(G.message);
     const padX = sp(0.018), padY = sp(0.010);
     const boxW = m.width + padX * 2;
@@ -1272,12 +1272,12 @@
   let lastT = performance.now();
   function loop(now) {
     if (typeof now !== 'number') now = performance.now();
-    sndThisFrame = 0;                                      // OBLIGATORIO: sin esto queda mudo tras SND_PER_FRAME
+    sndThisFrame = 0;                                      // MANDATORY: without this it goes mute after SND_PER_FRAME
     const dt = Math.min(0.05, (now - lastT) / 1000);
     lastT = now;
 
-    // CPU "turn" pacing — delay primera vez que toca, después actúa.
-    // NOTA: el all-in auto-advance fuerza a CPU también; el guard `inBetting()` evita doble disparo.
+    // CPU "turn" pacing — a delay the first time it is their turn, then they act.
+    // NOTE: the all-in auto-advance forces the CPU too; the `inBetting()` guard prevents a double trigger.
     if (inBetting() && G.currentPlayer === 'cpu' && !G.allInActive) {
       if (!G.cpuPending) { G.cpuPending = true; G.cpuTimer = 0.9; }
       else {
@@ -1288,8 +1288,8 @@
       G.cpuPending = false;
     }
 
-    // Hand-end: timer + broke detection. Sólo overrideamos el mensaje del showdown DESPUÉS del
-    // timer — si lo hiciéramos en el mismo frame que el showdown se comería "You win!".
+    // Hand end: timer + broke detection. We only override the showdown's message AFTER the
+    // timer — doing it in the same frame as the showdown would swallow "You win!".
     if (G.phase === 'hand_end') {
       G.handEndTimer -= dt;
       if (G.handEndTimer <= 0) {
@@ -1299,7 +1299,7 @@
       }
     }
 
-    // All-in auto-advance: bets ya están commit, sólo abrimos streets con un delay para que se vea.
+    // All-in auto-advance: the bets are already committed, we just open streets with a delay so it can be seen.
     if (G.allInActive && inBetting()) {
       G.allInDelay -= dt;
       if (G.allInDelay <= 0) {
@@ -1308,8 +1308,8 @@
       }
     }
 
-    // Display tween de chips — chasea hacia el real con k ≈ 1 - e^{-5dt} (~1 s para converger).
-    // En postBet snapeamos, así que esto sólo aparece cuando el pot se vuelca al ganador.
+    // Chip display tween — it chases the real value with k ≈ 1 - e^{-5dt} (~1 s to converge).
+    // In postBet we snap, so this only shows up when the pot is poured to the winner.
     const k = 1 - Math.exp(-dt * 5);
     G.displayedPlayerChips += (G.playerChips - G.displayedPlayerChips) * k;
     G.displayedCpuChips    += (G.cpuChips    - G.displayedCpuChips)    * k;
@@ -1319,9 +1319,9 @@
 
     ctx.clearRect(0, 0, W, H);
     drawTable();
-    // Orden de capas: felt → bets/pot/dealer/glow (HUD) → cartas (con highlight encima) → mensaje
-    // del centro al final, ASÍ no queda tapado por la fila de community cards (era el bug del
-    // screenshot — el "You win!" caía justo sobre el borde inferior de las cartas).
+    // Layer order: felt → bets/pot/dealer/glow (HUD) → cards (with the highlight on top) → the centre
+    // message last, SO it is not covered by the row of community cards (that was the bug in the
+    // screenshot — the "You win!" landed right on the bottom edge of the cards).
     drawHud();
     for (const c of cards) drawCard(c);
     drawMessage();
@@ -1356,9 +1356,9 @@
       const btn = document.getElementById('btnInfo');
       btn.addEventListener('pointerdown', e => {
         e.preventDefault();
-        // El overlay arranca con display:none POR CSS — el style inline está vacío "", así que
-        // comparamos con === 'block' (estado visible explícito) en vez de !== 'none' (que daba true
-        // al inicio y se comía el primer tap).
+        // The overlay starts at display:none FROM CSS — the inline style is empty "", so we
+        // compare against === 'block' (an explicitly visible state) instead of !== 'none' (which was true
+        // at startup and swallowed the first tap).
         const showing = overlay.style.display === 'block';
         overlay.style.display = showing ? 'none' : 'block';
         btn.classList.toggle('on', !showing);
@@ -1388,9 +1388,9 @@ If you run out of chips, <b>DEAL</b> gives you a fresh stack.
 </div>
 
 <script>
-// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
-// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
-// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+// The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
+// game already had keeps switching it on and off with the same tap: no listener is removed and
+// no existing behaviour is changed. If the game had no meter, nothing happens.
 (function () {
   function armar() {
     var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
@@ -1398,31 +1398,31 @@ If you run out of chips, <b>DEAL</b> gives you a fresh stack.
     if (!btn || !panel) return;
     var fps = document.getElementById('fpsOverlay');
     if (fps && fps.parentNode !== panel) panel.appendChild(fps);
-    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
-    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
-    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    // The bar is MEASURED, not assumed. Several games do not declare `--bar-height` and others
+    // change it with the orientation: with a fixed value the panel ended up covering the buttons
+    // (Hangman) or running off the top in landscape (Tron). Measured live it works in all twenty.
     var bar = document.getElementById('bar');
-    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
-    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
-    // salio de aca", que es lo que hace el de Loop.
-    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
-    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
-    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
-    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
-    // lo mueven segun la orientacion.
+    // The panel is anchored TO THE BUTTON THAT OPENS IT, not to the centre of the screen. Centred
+    // it floated in the middle of the game with no relation to anything; hanging off the button it
+    // reads as "this came from here", which is what Loop's does.
+    //   · the same margin as the button (right if the button is on the right, left otherwise);
+    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //     in games with a bottom bar the panel still ends up over the bar.
+    // It is measured live and not done in CSS because each game puts the button somewhere
+    // different, and several move it with the orientation.
     function ubicar() {
       var vw = window.innerWidth, vh = window.innerHeight, m = 10;
       var rb = btn.getBoundingClientRect();
-      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
-      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
-      // encima de la parte alta de la barra.
+      // If the button lives INSIDE the bar, the vertical reference is the whole bar and not the
+      // button: the buttons align to the foot of the bar, so anchoring to the button left the panel
+      // over the top part of the bar.
       var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
       panel.style.transform = 'none';
       var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
       if ((rb.left + rb.width / 2) > vw / 2) {
-        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
-        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
-        // colgado de un boton a media pantalla arrancaba en x = -199.
+        // Flush with the button's right margin, BUT without running off to the left: if the panel is
+        // wider than the gap, it slides to the edge. Without this cap, a 700 px panel hanging off a
+        // button at mid-screen started at x = -199.
         var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
         panel.style.left = 'auto'; panel.style.right = der + 'px';
       } else {
@@ -1433,14 +1433,14 @@ If you run out of chips, <b>DEAL</b> gives you a fresh stack.
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
-      } else {                                          // boton abajo -> panel por encima
+      } else {                                          // button at the bottom -> panel above it
         panel.style.top = 'auto';
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
-      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
-      // conmutador, asi que si queda tapado el panel no se puede cerrar.
+      // The tight case (Hangman in landscape: the keyboard and the bar eat 319 of 380 px). The panel
+      // stretches to the opposite edge, but WITHOUT covering the button that opened it: the ⓘ is the
+      // only toggle, so if it gets covered the panel cannot be closed.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
         if ((rb.top + rb.height / 2) < vh / 2) {
           panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
@@ -1459,17 +1459,17 @@ If you run out of chips, <b>DEAL</b> gives you a fresh stack.
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
-      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
+      if (abrir) ubicar();                          // measure with the panel ALREADY visible: hidden, offsetWidth is 0
     });
-    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    // Keyboard: the button is a <button>, so Enter/Space fire `click` and not `pointerdown`.
     btn.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      if (e.detail !== 0) return;                 // detail 0 = it came from the keyboard, not the mouse
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
       if (abrir) ubicar();
     });
-    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    // Close with Escape: the panel covers the game and must be dismissable without hunting for the button.
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && panel.classList.contains('show')) {
         panel.classList.remove('show'); btn.classList.remove('on');

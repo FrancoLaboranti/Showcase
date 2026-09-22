@@ -53,32 +53,32 @@ See [../CLAUDE.md](../CLAUDE.md) for the shared sprite/main-loop conventions.
 
 ## AUDIO (2026-09-22)
 
-**Papel sobre pano, arcilla contra arcilla y madera.** Ninguno de los tres materiales canta. Todo
-sale de ruido filtrado y muy corto; la unica concesion tonal son las dos notas del resultado, que
-viven POR DEBAJO de los materiales y llegan despues de las fichas, nunca antes.
+**Paper on cloth, clay against clay, and wood.** None of the three materials sings. Everything comes
+out of filtered, very short noise; the only tonal concession is the two notes of the result, which
+live BELOW the materials and arrive after the chips, never before.
 
-**La plata se traduce a CANTIDAD DE FICHAS, no a volumen**: `n = 2 + log2(monto / ciega grande)`,
-topeado entre 2 y 10. Medido: $20 son 2 fichas, $160 son 5, un all-in de $1000 son 9 y mas fuerte.
-El oido cuenta fichas mucho mejor de lo que juzga decibeles, asi que el tamano de la apuesta se
-escucha sin mirar el numero. Las de la CPU tienen el mismo conteo pero el filtro cerrado y menos
-volumen: esta del otro lado de la mesa.
+**Money is translated into A NUMBER OF CHIPS, not into volume**: `n = 2 + log2(amount / big blind)`,
+clamped between 2 and 10. Measured: $20 is 2 chips, $160 is 5, an all-in of $1000 is 9 and louder.
+The ear counts chips far better than it judges decibels, so you hear the size of a bet without
+looking at the number. The CPU's have the same count but a closed filter and less gain: it is on the
+other side of the table.
 
-**Dos embudos, no veinte enganches.** Toda la plata pasa por `postBet()` y todas las cartas por
-`makeCard()`. Engancharlos ahi evita que una rama nueva del juego nazca muda. Las cartas se
-escalonan solas: varias repartidas en el mismo frame salen una atras de otra, con ritmo.
+**Two funnels, not twenty hook-ups.** All money goes through `postBet()` and all cards through
+`makeCard()`. Hooking in there keeps a new branch of the game from being born mute. Cards stagger
+themselves: several dealt in the same frame come out one behind the other, with rhythm.
 
-**Presupuesto por EVENTO, no por nodo.** El techo del patron cuenta al PROGRAMAR, y un all-in
-programa diez fichas en un mismo frame: con el techo de 4 las voces 5 a 10 desaparecerian sin error
-y sin sintoma. Poker no tiene fisica — su maquina de estados serializa todo —, asi que cada disparo
-cuenta una vez y crea sus nodos internos sin volver a tocar el contador. Techo 12.
+**Budget per EVENT, not per node.** The pattern's ceiling counts at SCHEDULE time, and an all-in
+schedules ten chips in one frame: with a ceiling of 4, voices 5 through 10 would vanish with no
+error and no symptom. Poker has no physics — its state machine serialises everything — so each
+trigger counts once and creates its internal nodes without touching the counter again. Ceiling 12.
 
-El tick del monto de la raise suena **solo si el monto cambio de verdad**: contra el tope, seguir
-apretando no puede seguir sonando o el boton miente sobre lo que hizo.
+The raise-amount tick plays **only if the amount actually changed**: against the cap, holding the
+button down cannot keep playing or the button is lying about what it did.
 
-> Patron comun a todo el repo: sintesis WebAudio sin archivos, `AudioContext` creado con
-> `try/catch` en el primer gesto, techo de voces por frame **con su reseteo al tope del `loop()`**,
-> cooldown por voz, boton de mute con persistencia en `localStorage`, y `visibilitychange` para que
-> nada continuo siga sonando con la pestana al fondo. Si el audio falla, el juego sigue andando.
-> Verificado con un arnes headless que envuelve el `AudioContext` y anota cada nodo y cada rampa.
-> **El arnes no escucha**: comprueba que suene lo que se diseno, cuando se diseno y con que
-> parametros. La evaluacion auditiva queda pendiente.
+> Pattern shared across the repo: WebAudio synthesis with no files, an `AudioContext` created
+> inside `try/catch` on the first gesture, a per-frame voice ceiling **with its reset at the top of
+> `loop()`**, a per-voice cooldown, a mute button persisted in `localStorage`, and
+> `visibilitychange` so nothing continuous keeps playing with the tab in the background. If audio
+> fails, the game keeps running. Verified with a headless harness that wraps the `AudioContext` and
+> logs every node and every ramp. **The harness does not listen**: it checks that what was designed
+> plays, when it was designed to, with which parameters. Judging it by ear is still pending.

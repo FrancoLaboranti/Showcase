@@ -16,11 +16,11 @@ BLACK = (0,0,0)
 WHITE = (255,255,255)
 GRAY = (128,128,128)
 
-a_cuantos_puntos = ['A 5 puntos','A 10 puntos','A 20 puntos','A 40 puntos','Practice']
+a_cuantos_puntos = ['First to 5','First to 10','First to 20','First to 40','Practice']
 puntos_victoria = [5,10,20,40,None]
 opcion_puntos = 1
 opcion_menu = 1
-fire_mode = 'sí'
+fire_mode = 'yes'
 apretado = False
 
 j1onfire = False
@@ -109,7 +109,7 @@ while True:
 						opcion_puntos -= 1
 
 				if opcion_menu == 4:
-					fire_mode = 'sí'
+					fire_mode = 'yes'
 
 			if keys[pygame.K_RETURN]:
 				apretado = True
@@ -125,11 +125,11 @@ while True:
 			apretado = False
 
 		crear_texto(grande,'pong',(random.randint(0,255), random.randint(0,255), random.randint(0,255)),SCREEN_WIDTH/2,SCREEN_HEIGHT*3/24)
-		crear_texto(normal,'1 jugador',WHITE if opcion_menu == 1 else GRAY,SCREEN_WIDTH/2,SCREEN_HEIGHT*9/24)
-		crear_texto(normal,'2 jugadores',WHITE if opcion_menu == 2 else GRAY,SCREEN_WIDTH/2,SCREEN_HEIGHT*12/24)
+		crear_texto(normal,'1 player',WHITE if opcion_menu == 1 else GRAY,SCREEN_WIDTH/2,SCREEN_HEIGHT*9/24)
+		crear_texto(normal,'2 players',WHITE if opcion_menu == 2 else GRAY,SCREEN_WIDTH/2,SCREEN_HEIGHT*12/24)
 		crear_texto(normal,a_cuantos_puntos[opcion_puntos],WHITE if opcion_menu == 3 else GRAY,SCREEN_WIDTH/2,SCREEN_HEIGHT*15/24)
-		crear_texto(normal,'Modo Fuego: %s' %(fire_mode),FIRE if fire_mode == 'sí' else WHITE if opcion_menu == 4 and fire_mode == 'no' else GRAY,SCREEN_WIDTH/2,SCREEN_HEIGHT*18/24)
-		crear_texto(normal,'Salir',WHITE if opcion_menu == 5 else GRAY,SCREEN_WIDTH/2,SCREEN_HEIGHT*21/24)
+		crear_texto(normal,'Fire Mode: %s' %(fire_mode),FIRE if fire_mode == 'yes' else WHITE if opcion_menu == 4 and fire_mode == 'no' else GRAY,SCREEN_WIDTH/2,SCREEN_HEIGHT*18/24)
+		crear_texto(normal,'Quit',WHITE if opcion_menu == 5 else GRAY,SCREEN_WIDTH/2,SCREEN_HEIGHT*21/24)
 
 		cond_victoria = puntos_victoria[opcion_puntos]
 
@@ -292,11 +292,11 @@ while True:
 			fireball = False
 			firetrail = False
 
-		if j1racha >= 3 and fire_mode == 'sí':
+		if j1racha >= 3 and fire_mode == 'yes':
 			j1onfire = True
 		if j1racha < 3:
 			j1onfire = False
-		if j2racha >= 3 and fire_mode == 'sí':
+		if j2racha >= 3 and fire_mode == 'yes':
 			j2onfire = True
 		if j2racha < 3:
 			j2onfire = False
@@ -371,7 +371,7 @@ while True:
 			if not keys[pygame.K_p]:
 				apretado = False
 
-			crear_texto(grande,'PAUSA',WHITE,SCREEN_WIDTH/2,SCREEN_HEIGHT/2)
+			crear_texto(grande,'PAUSED',WHITE,SCREEN_WIDTH/2,SCREEN_HEIGHT/2)
 			
 			pygame.display.update()
 

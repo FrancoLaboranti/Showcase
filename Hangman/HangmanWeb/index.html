@@ -215,10 +215,10 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  HANGMAN — port web de Hangman.py.
-  //  Renderiza horca + palabra + categoría/pista en canvas. El teclado
-  //  virtual abajo es HTML para que el toque en mobile sea cómodo.
-  //  Acepta también teclas físicas (incluida Ñ).
+  //  HANGMAN — web port of Hangman.py.
+  //  It renders the gallows + the word + category/hint on canvas. The virtual
+  //  keyboard at the bottom is HTML so that tapping on mobile is comfortable.
+  //  It also accepts physical keys (including Ñ).
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
   const MAX_FAILS = 6;
@@ -227,7 +227,7 @@
     es: 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ',
     en: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ',
   };
-  // Layout QWERTY en 3 filas. La Ñ se suma al final de la fila central en español.
+  // QWERTY layout in 3 rows. The Ñ is appended to the end of the middle row in Spanish.
   const KB_ROWS = {
     es: ['QWERTYUIOP', 'ASDFGHJKLÑ', 'ZXCVBNM'],
     en: ['QWERTYUIOP', 'ASDFGHJKL',  'ZXCVBNM'],
@@ -243,7 +243,7 @@
           wordWas:'THE WORD WAS', tryAgain:'TAP FOR ANOTHER' },
   };
 
-  // ---------- Estado del juego ----------
+  // ---------- Game state ----------
   const state = {
     screen: 'menu',        // 'menu' | 'playing' | 'won' | 'lost'
     lang:   'es',
@@ -257,11 +257,11 @@
     wins: 0, losses: 0,
     shakeT: 0, shakeTotal: 0.4, lastFails: 0,
     flashT: 0,
-    endStateAt: 0,    // performance.now() al entrar a won/lost — gracia para no auto-avanzar
+    endStateAt: 0,    // performance.now() on entering won/lost — a grace period so it does not auto-advance
   };
-  const END_TAP_DELAY_MS = 250;  // ignora taps durante este tiempo después de ganar/perder
+  const END_TAP_DELAY_MS = 250;  // ignore taps for this long after winning/losing
 
-  // ---------- Palabras (texto fuente al final del archivo) ----------
+  // ---------- Words (the source text is at the end of the file) ----------
   function parseWords(raw) {
     const out = [];
     for (let line of raw.split('\n')) {
@@ -278,37 +278,37 @@
   const WORDS = { es: [], en: [] };
 
   // ════════════════════════════════════════════════════════════════════
-  //  AUDIO — síntesis WebAudio, cero archivos, cero dependencias.
+  //  AUDIO — WebAudio synthesis, zero files, zero dependencies.
   //
-  //  La identidad sale del decorado: cuatro maderos, una soga y un muñeco
-  //  de trazo sobre un cuarto oscuro. De ahí salen tres materiales y ni un
-  //  solo sintetizador con melodía:
-  //    · GRAFITO  — el acierto. Ruido corto y brillante, SIN altura: el
-  //      lápiz llenando renglones. Un trazo por casilla destapada, así el
-  //      oído cuenta cuántas reveló la letra.
-  //    · MADERA   — el error. Mazo sobre viga: ruido bandpass grave más un
-  //      cuerpo de triangle. Los seis golpes BAJAN de altura y engordan, o
-  //      sea que sin mirar "FALLOS n/6" sabés en qué fallo estás.
-  //    · SOGA     — aparece dos veces en toda la partida: cruje cuando
-  //      queda una vida y toma el peso en la derrota.
-  //  Lo único afinado es la victoria, y es una marimba (barras de madera)
-  //  para que hasta el festejo esté hecho del material de la horca.
-  //  Nada es continuo: el juego es por turnos y su estado natural es el
-  //  silencio. No hay drones, ni música, ni ambiente.
+  //  The identity comes from the set: four beams, a rope and a stick figure
+  //  on a dark room. Out of that come three materials and not one
+  //  single synthesiser with a melody:
+  //    · GRAPHITE — the hit. Short, bright noise, PITCHLESS: the
+  //      pencil filling in blanks. One stroke per revealed square, so the
+  //      ear counts how many the letter uncovered.
+  //    · WOOD     — the miss. A mallet on a beam: low bandpassed noise plus a
+  //      triangle body. The six blows DESCEND in pitch and thicken, which
+  //      means that without looking at "MISSES n/6" you know which miss you are on.
+  //    · ROPE     — it appears twice in the whole round: it creaks when
+  //      one life is left and takes the weight in defeat.
+  //  The only tuned thing is the victory, and it is a marimba (wooden bars)
+  //  so that even the celebration is made of the gallows' material.
+  //  Nothing is continuous: the game is turn-based and its natural state is
+  //  silence. There are no drones, no music and no ambience.
   // ════════════════════════════════════════════════════════════════════
   let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
-  const voiceLast = {};                    // cooldown por voz
-  // El botón de mute vive en la barra, y la barra queda TAPADA por #menu
-  // (z-index 5 contra 3): desde la primera pantalla no se puede desmutear.
-  // Por eso la persistencia no es opcional — es lo único que respeta el
-  // mute de la sesión anterior mientras el menú está arriba.
+  const voiceLast = {};                    // cooldown per voice
+  // The mute button lives in the bar, and the bar is COVERED by #menu
+  // (z-index 5 against 3): from the first screen there is no way to unmute.
+  // That is why persistence is not optional — it is the only thing that respects the
+  // previous session's mute while the menu is on top.
   try { muted = localStorage.getItem('hangmanMuted') === '1'; } catch (e) {}
 
-  // Techo de voces por frame. 14 y no 4 (StickFight) ni 5 (Loop) porque acá
-  // el peor frame es conocido y NO es una metralleta: es el acierto que gana
-  // la partida — 4 trazos de tiza (el máximo real medido en el corpus: la O
-  // de ZOOLOGICO) + la marimba, que son 4 notas dobladas una octava abajo
-  // más el aleteo del confeti = 13 voces. Con 4 la victoria quedaría muda.
+  // Per-frame voice ceiling. 14 and not 4 (StickFight) or 5 (Loop) because here
+  // the worst frame is known and it is NOT a machine gun: it is the hit that wins
+  // the round — 4 chalk strokes (the real maximum measured in the corpus: the O
+  // in ZOOLOGICO) + the marimba, which is 4 notes doubled an octave down
+  // plus the confetti's flutter = 13 voices. With 4 the victory would be mute.
   const SND_PER_FRAME = 14;
 
   function audioResume() {
@@ -318,15 +318,15 @@
         masterGain = AC.createGain();
         masterGain.gain.value = muted ? 0 : 1;
         masterGain.connect(AC.destination);
-      } catch (e) { return; }            // sin audio el juego SIGUE andando
+      } catch (e) { return; }            // with no audio the game KEEPS running
     }
     if (AC.state === 'suspended') AC.resume().catch(() => {});
   }
 
-  // La única compuerta.
+  // The one gate.
   function ac() { return AC && AC.state === 'running' && sndThisFrame < SND_PER_FRAME; }
 
-  // Un oscilador desechable por disparo. Web Audio los GC-ea solo tras stop().
+  // A disposable oscillator per trigger. Web Audio GCs them by itself after stop().
   function note(f0, f1, t0, dur, type, vol, jitter) {
     const a = AC; if (!a) return;
     sndThisFrame++;
@@ -335,7 +335,7 @@
     const t = a.currentTime + t0;
     o.type = type || 'square';
     o.frequency.setValueAtTime(Math.max(20, f0 * j), t);
-    // exponentialRamp NUNCA a 0 ni desde 0 (lo dice la spec): de ahí los Math.max.
+    // exponentialRamp NEVER to 0 or from 0 (the spec says so): hence the Math.max.
     if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * j), t + dur);
     g.gain.setValueAtTime(Math.max(0.0001, vol), t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
@@ -343,14 +343,14 @@
     o.start(t); o.stop(t + dur + 0.02);
   }
 
-  // Ruido blanco filtrado: el grafito, el mazo, la trampa, el papel.
-  // Dos diferencias con la versión de Loop/StickFight, las dos a propósito:
-  //   · `t0` al final, porque acá casi todo es una secuencia programada de
-  //     una sola llamada (los trazos escalonados, el portón y el peso).
-  //   · la frecuencia del filtro se fija con setValueAtTime y no con `.value`,
-  //     para que quede registrada: es el parámetro que lleva el diseño
-  //     (el brillo creciente de la tiza, la escalera grave del mazo) y así
-  //     se puede verificar desde afuera en vez de creerle al código.
+  // Filtered white noise: the graphite, the mallet, the trapdoor, the paper.
+  // Two differences from Loop/StickFight's version, both on purpose:
+  //   · `t0` at the end, because here almost everything is a sequence scheduled
+  //     from a single call (the staggered strokes, the trapdoor and the weight).
+  //   · the filter frequency is set with setValueAtTime and not with `.value`,
+  //     so that it is logged: it is the parameter that carries the design
+  //     (the chalk's growing brightness, the mallet's descending ladder) and that way
+  //     it can be verified from outside instead of taking the code's word for it.
   function noiseHit(dur, vol, freq, q, type, t0) {
     const a = AC; if (!a) return;
     sndThisFrame++;
@@ -377,24 +377,24 @@
     voiceLast[name] = now; fn();
   }
 
-  // ---------- El vocabulario ----------
-  // Jerarquía de mezcla: principal (mazo y trampa) 0.07-0.12 · secundario
-  // (tiza, marimba, tablero) 0.045-0.055 · interfaz y detalle (tick, soga,
-  // papel, la octava de madera) 0.020-0.035 · ambiente: no hay.
-  // `jitter` va en 0 en casi todo: cada golpe ocurre UNA vez por ronda y su
-  // altura no es adorno, es el número de fallo. Desafinarlo sería borrar el dato.
+  // ---------- The vocabulary ----------
+  // Mix hierarchy: main (mallet and trapdoor) 0.07-0.12 · secondary
+  // (chalk, marimba, board) 0.045-0.055 · interface and detail (tick, rope,
+  // paper, the wooden octave) 0.020-0.035 · ambience: there is none.
+  // `jitter` is 0 in almost everything: each blow happens ONCE per round and its
+  // pitch is not decoration, it is the miss number. Detuning it would erase the data.
   const sfx = {
-    // Se arma el tablero: un apoyo seco de madera y el barrido de tiza que
-    // dibuja los renglones. Cooldown alto: ↻ se puede tapear a repetición.
+    // The board is set up: a dry wooden set-down and the chalk sweep that
+    // draws the blanks. High cooldown: ↻ can be tapped repeatedly.
     newWord() {
       voice('newWord', 150, () => {
         noiseHit(0.05, 0.050, 420, 3.5);
         noiseHit(0.10, 0.025, 2200, 0.7, 'highpass', 0.03);
       });
     },
-    // Un trazo de grafito POR CASILLA revelada, escalonados dentro de una
-    // sola llamada (nada de setInterval) y cada uno 12% más brillante que el
-    // anterior. El máximo real del corpus es 4 (ZOOLOGICO, SALAMANDRA...).
+    // One graphite stroke PER revealed square, staggered within a
+    // single call (no setInterval) and each one 12% brighter than the
+    // last. The real maximum in the corpus is 4 (ZOOLOGICO, SALAMANDRA...).
     reveal(n) {
       voice('reveal', 50, () => {
         const k = Math.max(1, Math.min(4, n));
@@ -403,15 +403,15 @@
         }
       });
     },
-    // Mazo sobre viga seca, un escalón más grave y más gordo por cada fallo.
-    // En el quinto se le suma el crujido de la soga: dos triangles detuneados
-    // 2 Hz para que batan. Es tensión, no un pitido de alarma.
+    // A mallet on a dry beam, one step lower and thicker for each miss.
+    // On the fifth the rope's creak is added: two triangles detuned by
+    // 2 Hz so they beat. It is tension, not an alarm beep.
     miss(fails) {
       voice('miss', 70, () => {
         const f = Math.max(1, Math.min(5, fails));
-        // La pendiente de volumen está elegida para que el quinto mazo (0.116)
-        // quede POR DEBAJO del portón de la derrota (0.120): el golpe más
-        // fuerte de la partida tiene que ser el último, no el anteúltimo.
+        // The volume slope is chosen so that the fifth mallet (0.116)
+        // stays BELOW the defeat's trapdoor (0.120): the loudest blow
+        // of the round has to be the last one, not the second to last.
         noiseHit(0.055 + 0.010 * f, 0.066 + 0.010 * f, 520 - 60 * f, 3);
         const f0 = 210 - 22 * f;
         note(f0, f0 * 0.72, 0, 0.12 + 0.02 * f, 'triangle', 0.050, 0);
@@ -421,21 +421,21 @@
         }
       });
     },
-    // Sexto fallo: la trampa se abre y la soga toma el peso. REEMPLAZA al
-    // mazo (no se apilan) y después no hay nada: el silencio es el final.
-    // Sin jingle de derrota — sería una payasada arriba de un ahorcamiento.
+    // Sixth miss: the trapdoor opens and the rope takes the weight. It REPLACES the
+    // mallet (they do not stack) and after it there is nothing: the silence is the ending.
+    // No defeat jingle — it would be a clown act on top of a hanging.
     drop() {
       voice('drop', 300, () => {
-        noiseHit(0.09, 0.120, 260, 2);                    // el portón
-        note(190, 58, 0.06, 0.34, 'sine', 0.110, 0);      // el peso cayendo
-        noiseHit(0.18, 0.050, 140, 0.7, 'lowpass', 0.06); // el tirón del piso
+        noiseHit(0.09, 0.120, 260, 2);                    // the trapdoor
+        note(190, 58, 0.06, 0.34, 'sine', 0.110, 0);      // the weight falling
+        noiseHit(0.18, 0.050, 140, 0.7, 'lowpass', 0.06); // the tug of the floor
       });
     },
-    // Victoria: marimba, o sea barras de MADERA, no un arpegio electrónico.
-    // Cada nota doblada una octava abajo en triangle para darle cuerpo.
-    // Arranca en t0 0.10 para caer detrás del último trazo de tiza, que es
-    // el que ganó la partida. El confeti (70 partículas) es UN gesto visual
-    // y le toca UN gesto sonoro: una capa de papel, jamás una voz por partícula.
+    // Victory: a marimba, that is, WOODEN bars, not an electronic arpeggio.
+    // Each note doubled an octave down in triangle to give it body.
+    // It starts at t0 0.10 so it falls behind the last chalk stroke, which is
+    // the one that won the round. The confetti (70 particles) is ONE visual gesture
+    // and it gets ONE sound gesture: a layer of paper, never a voice per particle.
     win() {
       voice('win', 300, () => {
         const m = [523, 659, 784, 1047];
@@ -447,9 +447,9 @@
         noiseHit(0.30, 0.020, 3500, 0.7, 'highpass', 0.12);
       });
     },
-    // Tick de madera chiquito para las transiciones de pantalla (idioma en
-    // el menú, ESC de vuelta al menú). Es el sonido más bajo del set porque
-    // el menú tapa la barra y ahí el mute no se puede tocar.
+    // A small wooden tick for the screen transitions (language in
+    // the menu, ESC back to the menu). It is the quietest sound in the set because
+    // the menu covers the bar and there the mute cannot be reached.
     uiTick() {
       voice('tick', 60, () => {
         noiseHit(0.03, 0.035, 900, 2.5);
@@ -458,13 +458,13 @@
     },
   };
 
-  // Desbloqueo en el primer gesto (iOS/Chrome). En este juego el primer
-  // gesto es siempre el menú, así que el contexto ya está en 'running'
-  // antes del primer intento: no se pierde ningún sonido de partida.
+  // Unlock on the first gesture (iOS/Chrome). In this game the first
+  // gesture is always the menu, so the context is already 'running'
+  // before the first attempt: no in-round sound is lost.
   window.addEventListener('pointerdown', audioResume, true);
   window.addEventListener('keydown', audioResume, true);
-  // No hay nodos continuos, pero el juego vive en un iframe del Arcade y la
-  // caída de la derrota programa cola hasta 0.40 s: suspender es barato.
+  // There are no continuous nodes, but the game lives in an Arcade iframe and the
+  // defeat's fall schedules a tail of up to 0.40 s: suspending is cheap.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { if (AC) AC.suspend().catch(() => {}); }
     else audioResume();
@@ -480,8 +480,8 @@
     W = window.innerWidth;
     const kb  = document.getElementById('keyboard');
     const bar = document.getElementById('bar');
-    // En menú el teclado y el bar están ocultos: el canvas usa toda la ventana.
-    // En partida hay que descontar bar + teclado para no dibujar detrás de ellos.
+    // In the menu the keyboard and the bar are hidden: the canvas uses the whole window.
+    // In a round, the bar + keyboard have to be subtracted so nothing is drawn behind them.
     const kbH  = state.screen === 'menu' ? 0 : kb.offsetHeight;
     const barH = state.screen === 'menu' ? 0 : (bar ? bar.offsetHeight : 0);
     H = Math.max(120, window.innerHeight - kbH - barH);
@@ -490,12 +490,12 @@
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    bgGradient = null;  // invalida el gradiente cacheado
+    bgGradient = null;  // invalidates the cached gradient
   }
   window.addEventListener('resize', resize);
   window.addEventListener('orientationchange', () => setTimeout(resize, 50));
 
-  // ---------- Helpers (espejo de xper / yper / sper de la versión Pygame) ----------
+  // ---------- Helpers (mirrors of the Pygame version's xper / yper / sper) ----------
   const xper = p => p * W;
   const yper = p => p * H;
   const sper = p => p * (W + H) / 2;
@@ -528,8 +528,8 @@
     ctx.closePath();
   }
 
-  // Paleta por categoría — se usa en el pill arriba de la palabra. Cubre los
-  // dos idiomas (categorías en ES y EN apuntan al mismo color).
+  // Palette per category — used in the pill above the word. It covers
+  // both languages (categories in ES and EN point to the same colour).
   const CATEGORY_COLORS = {
     ANIMAL:      [125, 220, 125],
     OBJETO:      [127, 168, 255], OBJECT:      [127, 168, 255],
@@ -550,7 +550,7 @@
     return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + alpha + ')';
   }
 
-  // Background — gradient cacheado (se invalida en resize).
+  // Background — a cached gradient (invalidated on resize).
   let bgGradient = null;
   function drawBackground() {
     if (!bgGradient) {
@@ -562,7 +562,7 @@
     ctx.fillRect(0, 0, W, H);
   }
 
-  // ---------- Partículas (confeti al ganar) ----------
+  // ---------- Particles (confetti on winning) ----------
   const particles = [];
   function spawnConfetti() {
     const n = 70;
@@ -612,7 +612,7 @@
     ctx.globalAlpha = 1;
   }
 
-  // ---------- Dibujo de la horca + muñeco ----------
+  // ---------- Drawing the gallows + figure ----------
   function drawGallows() {
     const fails = state.fails;
     let shake = 0;
@@ -621,8 +621,8 @@
       shake = Math.sin(state.shakeT * 80) * sper(0.005) * phase;
     }
 
-    // Layout responsivo: en pantallas angostas (portrait) la horca queda más
-    // chica y centrada arriba; en landscape va a la izquierda.
+    // Responsive layout: on narrow screens (portrait) the gallows is
+    // smaller and centred at the top; in landscape it goes to the left.
     const portrait = W < H * 1.2;
     const cx = portrait ? xper(0.5) : xper(0.25);
     const topY = portrait ? yper(0.10) : yper(0.12);
@@ -634,15 +634,15 @@
     const wood     = '#be965f';
     const woodDim  = '#7d6135';
 
-    // Línea de suelo + sombra elíptica bajo la base (lectura visual de "piso").
+    // A ground line + an elliptical shadow under the base (a visual read of "floor").
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.beginPath();
     ctx.ellipse(cx, botY + thick * 0.6, armW * 1.05, thick * 1.5, 0, 0, TAU);
     ctx.fill();
     line('rgba(120,120,140,0.22)', cx - armW * 1.8, botY + thick * 0.5, cx + armW * 1.8, botY + thick * 0.5, Math.max(1, thick - 2));
 
-    // Estructura de la horca: base, poste, travesaño, soporte diagonal.
-    // Sombra leve a la derecha para sugerir volumen.
+    // The gallows structure: base, post, crossbeam, diagonal support.
+    // A slight shadow to the right to suggest volume.
     line(woodDim, cx - armW * 0.9 + 1, botY + 2, cx + armW * 0.9 + 1, botY + 2, thick);
     line(wood,    cx - armW * 0.9,     botY,     cx + armW * 0.9,     botY,     thick);
     line(woodDim, cx - armW * 0.5 + 1, botY,     cx - armW * 0.5 + 1, topY,     thick);
@@ -656,7 +656,7 @@
     const ropeBot = topY + span * 0.10;
     line('#cccccc', ropeX, ropeTop, ropeX, ropeBot, Math.max(2, thick - 2));
 
-    // ---------- Muñeco ----------
+    // ---------- The figure ----------
     const headR = span * 0.07;
     const bx = ropeX + shake;
     const headCY = ropeBot + headR;
@@ -672,7 +672,7 @@
     const jointR = lw * 0.65;
 
     if (fails >= 1) {
-      // Cabeza con relleno tenue para que se lea volumen.
+      // Head with a faint fill so it reads as volume.
       ctx.fillStyle = dead ? 'rgba(240,90,90,0.18)' : 'rgba(235,220,200,0.10)';
       ctx.beginPath();
       ctx.arc(bx, headCY, headR, 0, TAU);
@@ -686,7 +686,7 @@
       const eoX = headR * 0.4;
       const eoY = headR * 0.15;
       if (dead) {
-        // Ojos X y bocota triste
+        // X eyes and a big sad mouth
         const d = headR * 0.22;
         for (const ox of [-eoX, eoX]) {
           line(manColor, bx + ox - d, headCY - eoY - d, bx + ox + d, headCY - eoY + d, Math.max(2, lw * 0.55));
@@ -700,7 +700,7 @@
       } else {
         circle('#1a1a1a', bx - eoX, headCY - eoY, Math.max(1.5, headR * 0.16));
         circle('#1a1a1a', bx + eoX, headCY - eoY, Math.max(1.5, headR * 0.16));
-        // Boca: línea recta hasta 3 fallos, neutral 4-5, gritito en 5
+        // Mouth: a straight line up to 3 misses, neutral 4-5, a little scream at 5
         ctx.lineCap = 'round';
         if (fails <= 3) {
           line(manColor, bx - headR * 0.25, headCY + headR * 0.42, bx + headR * 0.25, headCY + headR * 0.42, Math.max(1.5, lw * 0.45));
@@ -731,7 +731,7 @@
     if (fails >= 5) {
       const fx = bx - armLen * 0.85, fy = hipY + legLen;
       line(manColor, bx, hipY, fx, fy, lw);
-      // pie: óvalo achatado apuntando hacia afuera
+      // foot: a flattened oval pointing outwards
       ctx.save();
       ctx.translate(fx, fy);
       ctx.rotate(-0.35);
@@ -779,7 +779,7 @@
     const yHint = portrait ? yper(0.68) : yper(0.36);
     const yWord = portrait ? yper(0.78) : yper(0.55);
 
-    // Pill de categoría: rectángulo redondeado pintado con el color del tipo.
+    // Category pill: a rounded rectangle painted with the type's colour.
     if (state.category) {
       const catSize = sper(0.022);
       const padX = sper(0.014);
@@ -801,7 +801,7 @@
     }
 
     const word = state.word;
-    // Auto-ajustar tamaño según longitud para que entre siempre
+    // Auto-fit the size by length so it always fits
     const maxWidth = portrait ? W * 0.92 : W * 0.65;
     let size = sper(0.055);
     let gap  = size * 1.05;
@@ -827,7 +827,7 @@
       const bx = px - boxW / 2;
       const by = yWord - boxH / 2;
 
-      // Caja: fondo + borde. Verde si la acertaste, rojo si perdiste y faltaba.
+      // Box: fill + border. Green if you got it, red if you lost and it was missing.
       let bgColor   = 'rgba(255,255,255,0.04)';
       let edgeColor = 'rgba(255,255,255,0.18)';
       let txtColor  = '#e8e8e8';
@@ -863,8 +863,8 @@
     const t = UI[state.lang];
     const portrait = W < H * 1.2;
     const cx = portrait ? xper(0.5) : xper(0.65);
-    // En portrait el banner va arriba (cerca del techo); en landscape, bien arriba
-    // del bloque palabra.
+    // In portrait the banner goes on top (near the ceiling); in landscape, well above
+    // the word block.
     const yBanner = portrait ? yper(0.06) : yper(0.18);
     const yFoot   = yper(0.96);
 
@@ -876,15 +876,15 @@
       text(sper(0.022), t.tryAgain, 'center', '#c8c8c8', cx, yFoot);
     } else if (state.screen === 'lost') {
       text(sper(0.055), t.lost, 'center', '#f06e6e', cx, yBanner);
-      // "THE WORD WAS: X" entre el banner y la palabra revelada.
+      // "THE WORD WAS: X" between the banner and the revealed word.
       const yWas = portrait ? yper(0.55) : yper(0.41);
       text(sper(0.020), t.wordWas, 'center', '#bababa', cx, yWas);
       text(sper(0.022), t.tryAgain, 'center', '#c8c8c8', cx, yFoot);
     }
   }
 
-  // Flash de overlay tras ganar/perder. Pinta una capa traslúcida que se
-  // desvanece en ~1 s (state.flashT ya viene tickeando).
+  // Overlay flash after winning/losing. It paints a translucent layer that
+  // fades in ~1 s (state.flashT is already ticking).
   function drawFlash() {
     if (state.flashT <= 0) return;
     if (state.screen === 'won') {
@@ -902,20 +902,20 @@
     const now = performance.now();
     const dt = Math.min(0.05, (now - lastT) / 1000);
     lastT = now;
-    // Reset del techo de voces. Va acá y NO en el rAF del overlay de FPS (que
-    // tiene su propio lastT al final del archivo): sin este reset el juego
-    // queda mudo después de SND_PER_FRAME sonidos, sin tirar un solo error.
+    // Reset of the voice ceiling. It goes here and NOT in the FPS overlay's rAF (which
+    // has its own lastT at the end of the file): without this reset the game
+    // goes mute after SND_PER_FRAME sounds, without throwing a single error.
     sndThisFrame = 0;
 
-    // shake al fallar
+    // shake on a miss
     if (state.fails > state.lastFails) state.shakeT = state.shakeTotal;
     state.lastFails = state.fails;
     if (state.shakeT > 0) state.shakeT = Math.max(0, state.shakeT - dt);
     if (state.flashT > 0) state.flashT = Math.max(0, state.flashT - dt);
     updateParticles(dt);
 
-    // Orden de dibujo (atrás → adelante):
-    //   bg → horca/muñeco → palabra+categoría → HUD → flash → mensaje final → confeti
+    // Drawing order (back → front):
+    //   bg → gallows/figure → word+category → HUD → flash → final message → confetti
     drawBackground();
 
     if (state.screen !== 'menu') {
@@ -930,7 +930,7 @@
     requestAnimationFrame(frame);
   }
 
-  // ---------- Lógica del juego ----------
+  // ---------- Game logic ----------
   function startRound() {
     const pool = WORDS[state.lang];
     if (!pool || !pool.length) { state.screen = 'menu'; return; }
@@ -946,14 +946,14 @@
     state.wrong = new Set();
     state.flashT = 0;
     state.shakeT = 0;
-    particles.length = 0;       // limpia confeti de la ronda anterior
+    particles.length = 0;       // clears the previous round's confetti
     state.screen = 'playing';
     buildKeyboard();
     document.getElementById('keyboard').classList.remove('hidden');
     document.getElementById('menu').classList.add('hidden');
     resize();
-    // Un solo punto cubre los CINCO caminos que empiezan ronda: JUGAR, ↻, el
-    // botón de idioma de la barra, el tap-para-seguir y Enter/Espacio.
+    // A single point covers the FIVE routes that start a round: PLAY, ↻, the
+    // bar's language button, tap-to-continue and Enter/Space.
     sfx.newWord();
   }
 
@@ -966,11 +966,11 @@
 
     if (state.word.includes(letter)) {
       state.correct.add(letter);
-      let n = 0;                       // cuántas casillas destapó ESTA letra
+      let n = 0;                       // how many squares THIS letter uncovered
       for (let i = 0; i < state.word.length; i++) {
         if (state.word[i] === letter) { state.revealed[i] = true; n++; }
       }
-      sfx.reveal(n);                   // un trazo de grafito por casilla
+      sfx.reveal(n);                   // one graphite stroke per square
       if (state.revealed.every(Boolean)) {
         state.screen = 'won';
         state.wins++;
@@ -982,7 +982,7 @@
     } else {
       state.wrong.add(letter);
       state.fails++;
-      // El sexto fallo NO apila mazo + caída: es un solo evento, y es la caída.
+      // The sixth miss does NOT stack mallet + fall: it is a single event, and it is the fall.
       if (state.fails >= MAX_FAILS) sfx.drop(); else sfx.miss(state.fails);
       if (state.fails >= MAX_FAILS) {
         state.screen = 'lost';
@@ -1029,7 +1029,7 @@
     });
   }
 
-  // ---------- Input físico ----------
+  // ---------- Physical input ----------
   window.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
       if (state.screen === 'menu') return;
@@ -1044,7 +1044,7 @@
         e.preventDefault();
         state.lang = state.lang === 'es' ? 'en' : 'es';
         applyLangToMenu();
-        sfx.uiTick();       // mismo evento que el tap en SPANISH/ENGLISH
+        sfx.uiTick();       // the same event as tapping SPANISH/ENGLISH
       }
       return;
     }
@@ -1060,7 +1060,7 @@
     if (ch.length === 1) guess(ch);
   });
 
-  // ---------- Menú ----------
+  // ---------- Menu ----------
   function applyLangToMenu() {
     const t = UI[state.lang];
     document.getElementById('menuTitle').textContent = t.title;
@@ -1078,7 +1078,7 @@
     document.getElementById('keyboard').classList.add('hidden');
     applyLangToMenu();
     resize();
-    sfx.uiTick();          // transición de pantalla: reusa el tick, no inventa voz
+    sfx.uiTick();          // screen transition: it reuses the tick, it does not invent a voice
   }
 
   document.querySelectorAll('#menu .lang-btn').forEach(b => {
@@ -1101,11 +1101,11 @@
     e.preventDefault();
     state.lang = state.lang === 'es' ? 'en' : 'es';
     applyLangToMenu();
-    startRound();          // sin uiTick: startRound ya suena, serían dos golpes
+    startRound();          // no uiTick: startRound already sounds, it would be two hits
   });
 
-  // Mute. El botón no se alcanza desde el menú (#menu lo tapa), así que lo que
-  // guarda el estado entre sesiones es el localStorage, no el botón.
+  // Mute. The button cannot be reached from the menu (#menu covers it), so what
+  // keeps the state between sessions is localStorage, not the button.
   const btnMute = document.getElementById('btnMute');
   if (btnMute) {
     btnMute.classList.toggle('muted', muted);
@@ -1118,14 +1118,14 @@
       }
       btnMute.classList.toggle('muted', muted);
       try { localStorage.setItem('hangmanMuted', muted ? '1' : '0'); } catch (e) {}
-      audioResume();       // el tap de desmutear también sirve de gesto
+      audioResume();       // the unmute tap also counts as the gesture
     });
   }
 
-  // Tap-para-continuar cuando terminó la ronda. Se engancha al canvas y al
-  // teclado (cuyas teclas quedan disabled en won/lost — el pointerdown burbujea
-  // hasta el div #keyboard). Hay una breve gracia para que el mismo gesto que
-  // ganó/perdió no dispare la siguiente ronda.
+  // Tap-to-continue once the round is over. It is hooked to the canvas and to the
+  // keyboard (whose keys are disabled in won/lost — the pointerdown bubbles
+  // up to the #keyboard div). There is a brief grace period so that the same gesture that
+  // won/lost does not trigger the next round.
   function advanceIfEnded(e) {
     if (state.screen !== 'won' && state.screen !== 'lost') return;
     if (performance.now() - state.endStateAt < END_TAP_DELAY_MS) return;
@@ -1145,9 +1145,9 @@
   }
 
   // ════════════════════════════════════════════════════════════════════
-  //  Fuentes de palabras — mismo formato que Hangman/words_*.txt
-  //  PALABRA|CATEGORIA|pista (la pista es opcional). Las líneas que
-  //  arrancan con # son comentarios.
+  //  Word sources — same format as Hangman/words_*.txt
+  //  WORD|CATEGORY|hint (the hint is optional). Lines that
+  //  start with # are comments.
   // ════════════════════════════════════════════════════════════════════
   const RAW_WORDS_ES = `
 # --- ANIMALES ---
@@ -2011,9 +2011,9 @@ VACCINE|SCIENCE|trains immunity
       const btn = document.getElementById('btnInfo');
       btn.addEventListener('pointerdown', e => {
         e.preventDefault();
-        // El overlay arranca con display:none POR CSS — el style inline está vacío "", así que
-        // comparamos con === 'block' (estado visible explícito) en vez de !== 'none' (que daba true
-        // al inicio y se comía el primer tap).
+        // The overlay starts at display:none FROM CSS — the inline style is empty "", so we
+        // compare against === 'block' (an explicitly visible state) instead of !== 'none' (which was true
+        // at startup and swallowed the first tap).
         const showing = overlay.style.display === 'block';
         overlay.style.display = showing ? 'none' : 'block';
         btn.classList.toggle('on', !showing);
@@ -2040,9 +2040,9 @@ nothing</b> — it neither adds a miss nor uses a turn. Each word comes with its
 </div>
 
 <script>
-// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
-// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
-// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+// The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
+// game already had keeps switching it on and off with the same tap: no listener is removed and
+// no existing behaviour is changed. If the game had no meter, nothing happens.
 (function () {
   function armar() {
     var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
@@ -2050,31 +2050,31 @@ nothing</b> — it neither adds a miss nor uses a turn. Each word comes with its
     if (!btn || !panel) return;
     var fps = document.getElementById('fpsOverlay');
     if (fps && fps.parentNode !== panel) panel.appendChild(fps);
-    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
-    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
-    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    // The bar is MEASURED, not assumed. Several games do not declare `--bar-height` and others
+    // change it with the orientation: with a fixed value the panel ended up covering the buttons
+    // (Hangman) or running off the top in landscape (Tron). Measured live it works in all twenty.
     var bar = document.getElementById('bar');
-    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
-    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
-    // salio de aca", que es lo que hace el de Loop.
-    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
-    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
-    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
-    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
-    // lo mueven segun la orientacion.
+    // The panel is anchored TO THE BUTTON THAT OPENS IT, not to the centre of the screen. Centred
+    // it floated in the middle of the game with no relation to anything; hanging off the button it
+    // reads as "this came from here", which is what Loop's does.
+    //   · the same margin as the button (right if the button is on the right, left otherwise);
+    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //     in games with a bottom bar the panel still ends up over the bar.
+    // It is measured live and not done in CSS because each game puts the button somewhere
+    // different, and several move it with the orientation.
     function ubicar() {
       var vw = window.innerWidth, vh = window.innerHeight, m = 10;
       var rb = btn.getBoundingClientRect();
-      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
-      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
-      // encima de la parte alta de la barra.
+      // If the button lives INSIDE the bar, the vertical reference is the whole bar and not the
+      // button: the buttons align to the foot of the bar, so anchoring to the button left the panel
+      // over the top part of the bar.
       var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
       panel.style.transform = 'none';
       var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
       if ((rb.left + rb.width / 2) > vw / 2) {
-        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
-        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
-        // colgado de un boton a media pantalla arrancaba en x = -199.
+        // Flush with the button's right margin, BUT without running off to the left: if the panel is
+        // wider than the gap, it slides to the edge. Without this cap, a 700 px panel hanging off a
+        // button at mid-screen started at x = -199.
         var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
         panel.style.left = 'auto'; panel.style.right = der + 'px';
       } else {
@@ -2085,14 +2085,14 @@ nothing</b> — it neither adds a miss nor uses a turn. Each word comes with its
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
-      } else {                                          // boton abajo -> panel por encima
+      } else {                                          // button at the bottom -> panel above it
         panel.style.top = 'auto';
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
-      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
-      // conmutador, asi que si queda tapado el panel no se puede cerrar.
+      // The tight case (Hangman in landscape: the keyboard and the bar eat 319 of 380 px). The panel
+      // stretches to the opposite edge, but WITHOUT covering the button that opened it: the ⓘ is the
+      // only toggle, so if it gets covered the panel cannot be closed.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
         if ((rb.top + rb.height / 2) < vh / 2) {
           panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
@@ -2111,17 +2111,17 @@ nothing</b> — it neither adds a miss nor uses a turn. Each word comes with its
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
-      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
+      if (abrir) ubicar();                          // measure with the panel ALREADY visible: hidden, offsetWidth is 0
     });
-    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    // Keyboard: the button is a <button>, so Enter/Space fire `click` and not `pointerdown`.
     btn.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      if (e.detail !== 0) return;                 // detail 0 = it came from the keyboard, not the mouse
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
       if (abrir) ubicar();
     });
-    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    // Close with Escape: the panel covers the game and must be dismissable without hunting for the button.
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && panel.classList.contains('show')) {
         panel.classList.remove('show'); btn.classList.remove('on');

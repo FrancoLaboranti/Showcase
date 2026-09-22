@@ -56,13 +56,13 @@ Listed in [../Arcade/index.html](../Arcade/index.html) `GAMES` as `'DonkeyKong/D
 See [../CLAUDE.md](../CLAUDE.md) for the shared web-port conventions.
 
 
-## AUDIO — correccion (2026-09-22)
+## AUDIO — fix (2026-09-22)
 
-`AC.resume()` se llamaba **sin `.catch()`**, y este archivo registra un handler de
-`unhandledrejection` que ante un rechazo pinta un panel rojo FIJO en el centro de la pantalla. Como
-el div no lleva `pointer-events: none`, se comia el tap del centro — **que en este juego ES el
-salto**. O sea: un rechazo del audio te dejaba sin saltar.
+`AC.resume()` was called **without `.catch()`**, and this file registers an `unhandledrejection`
+handler that paints a FIXED red panel in the middle of the screen on a rejection. Since the div does
+not carry `pointer-events: none`, it swallowed the tap in the centre — **which in this game IS the
+jump**. In other words: an audio rejection left you unable to jump.
 
-Pendiente (ver la auditoria): no hay `masterGain` ni techo de voces por frame — cada oscilador se
-conecta directo a `destination`, asi que no hay ningun punto donde poner un mute, un ducking o un
-limitador. Es el unico juego del repo con audio y **sin forma de apagarlo**.
+Pending (see the audit): there is no `masterGain` and no per-frame voice ceiling — every oscillator
+connects straight to `destination`, so there is nowhere to put a mute, a duck or a limiter. It is
+the only game in the repo with audio and **no way to turn it off**.

@@ -22,24 +22,24 @@ Four of them were born in the browser and have no Python original.
 | **Stick Fight** — platformer-brawler sandbox | [▶](StickFight/StickFightWeb/index.html) | — |
 | **Donkey Kong** | [▶](DonkeyKong/DonkeyKongWeb/index.html) | — |
 | **Pac-Man** | [▶](Pacman/PacmanWeb/index.html) | — |
-| Canicas — marble physics sandbox | [▶](Balls/BallsWeb/index.html) | [Balls.py](Balls/Balls.py) |
-| Mini Canicas | [▶](MiniBalls/MiniBallsWeb/index.html) | [MiniBalls.py](MiniBalls/MiniBalls.py) |
+| Marbles — marble physics sandbox | [▶](Balls/BallsWeb/index.html) | [Balls.py](Balls/Balls.py) |
+| Mini Marbles | [▶](MiniBalls/MiniBallsWeb/index.html) | [MiniBalls.py](MiniBalls/MiniBalls.py) |
 | Tank Wars | [▶](TankWARS/TankWARSWeb/index.html) | [TankWARS.py](TankWARS/TankWARS.py) |
 | Crazy Tanks | [▶](CrazyTanks/CrazyTanksWeb/index.html) | [CrazyTanks.py](CrazyTanks/CrazyTanks.py) |
 | Sleepy Pong | [▶](Pong/PongWeb/index.html) | [Pong.py](Pong/Pong.py) |
 | Snake | [▶](Snake/SnakeWeb/index.html) | [Snake.py](Snake/Snake.py) |
 | Tron | [▶](Tron/TronWeb/index.html) | [Tron.py](Tron/Tron.py) |
 | Tron V2 | [▶](TronV2/TronV2Web/index.html) | [TronV2.py](TronV2/TronV2.py) |
-| Fuegos Artificiales | [▶](Fireworks/FireworksWeb/index.html) | [Fireworks.py](Fireworks/Fireworks.py) |
-| Fuegos Artificiales V2 | [▶](FireworksV2/FireworksV2Web/index.html) | [FireworksV2.py](FireworksV2/FireworksV2.py) |
-| Ajedrez | [▶](Chess/ChessWeb/index.html) | [Chess.py](Chess/Chess.py) |
-| Póker | [▶](Poker/PokerWeb/index.html) | [Poker.py](Poker/Poker.py) |
-| Buscaminas | [▶](MineSweeperGPT/MineSweeperWeb/index.html) | [MineSweeperGPT.py](MineSweeperGPT/MineSweeperGPT.py) |
-| Ahorcado | [▶](Hangman/HangmanWeb/index.html) | [Hangman.py](Hangman/Hangman.py) |
-| Ta-Te-Ti | [▶](Tateti/TatetiWeb/index.html) | [Tateti.py](Tateti/Tateti.py) |
-| Simón Dice | [▶](SimonSays/SimonSaysWeb/index.html) | [SimonSays.py](SimonSays/SimonSays.py) |
-| Péndulo de Newton | [▶](Newton's%20Cradle/NewtonsCradleWeb/index.html) | [Newton's Cradle.py](Newton's%20Cradle/Newton's%20Cradle.py) |
-| Reloj | [▶](Clock/ClockWeb/index.html) | [Clock.py](Clock/Clock.py) |
+| Fireworks | [▶](Fireworks/FireworksWeb/index.html) | [Fireworks.py](Fireworks/Fireworks.py) |
+| Fireworks V2 | [▶](FireworksV2/FireworksV2Web/index.html) | [FireworksV2.py](FireworksV2/FireworksV2.py) |
+| Chess | [▶](Chess/ChessWeb/index.html) | [Chess.py](Chess/Chess.py) |
+| Poker | [▶](Poker/PokerWeb/index.html) | [Poker.py](Poker/Poker.py) |
+| Minesweeper | [▶](MineSweeperGPT/MineSweeperWeb/index.html) | [MineSweeperGPT.py](MineSweeperGPT/MineSweeperGPT.py) |
+| Hangman | [▶](Hangman/HangmanWeb/index.html) | [Hangman.py](Hangman/Hangman.py) |
+| Tic Tac Toe | [▶](Tateti/TatetiWeb/index.html) | [Tateti.py](Tateti/Tateti.py) |
+| Simon | [▶](SimonSays/SimonSaysWeb/index.html) | [SimonSays.py](SimonSays/SimonSays.py) |
+| Newton's Cradle | [▶](Newton's%20Cradle/NewtonsCradleWeb/index.html) | [Newton's Cradle.py](Newton's%20Cradle/Newton's%20Cradle.py) |
+| Clock | [▶](Clock/ClockWeb/index.html) | [Clock.py](Clock/Clock.py) |
 
 ## How it's built
 
@@ -68,7 +68,7 @@ python -m http.server 8000
 # then open http://localhost:8000
 ```
 
-The Python originals need `pygame` (`pip install pygame`), plus `pymunk` for Canicas. Each one runs
+The Python originals need `pygame` (`pip install pygame`), plus `pymunk` for Marbles. Each one runs
 on its own — there is no entry point:
 
 ```powershell

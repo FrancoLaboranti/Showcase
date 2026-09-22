@@ -31,25 +31,25 @@ See [../CLAUDE.md](../CLAUDE.md) for the shared sprite/main-loop conventions.
 
 ## AUDIO (2026-09-22)
 
-**Madera seca, soga y grafito.** Tres materiales y ningun sintetizador con melodia. El mundo son
-cuatro maderos, una soga y un muneco de trazo sobre un cuarto oscuro: un cadalso de utileria
-montado encima de un juego de lapiz y papel.
+**Dry wood, rope and graphite.** Three materials and not one synthesiser with a melody. The world is
+four beams, a rope and a stick figure drawn on a dark room: a prop gallows built on top of a pencil
+and paper game.
 
-- **Acierto = grafito.** Ruido corto y brillante a 2600 Hz, sin altura definida: el lapiz llenando
-  renglones. **Un trazo por casilla destapada**, ascendiendo — destapar cuatro letras suena a
-  cuatro trazos (medido: 2600 / 2912 / 3224 / 3536 Hz), no a un solo acierto mas fuerte.
-- **Fallo = el mazo del cadalso.** Y la escalera baja: **460 → 400 → 340 → 280 → 220 Hz** con el
-  volumen subiendo de 0.076 a 0.116. Cada error pega mas grave y mas fuerte. No hace falta contar
-  los palos del muneco para saber cuanto queda.
-- **El sexto fallo NO apila mazo + caida.** Es UNA sola voz de derrota, en `sine`. Si se apilaran,
-  el ultimo error sonaria igual que los cinco anteriores mas ruido.
-- **Lo que no suena:** una letra ya probada, una tecla fuera del alfabeto, y tocar el lienzo en
-  partida. Ninguna de las tres es una accion rechazada — son no-acciones.
+- **A hit is graphite.** Short, bright noise at 2600 Hz with no defined pitch: the pencil filling in
+  blanks. **One stroke per revealed square**, ascending — revealing four letters sounds like four
+  strokes (measured: 2600 / 2912 / 3224 / 3536 Hz), not like one louder hit.
+- **A miss is the gallows mallet.** And the ladder descends: **460 → 400 → 340 → 280 → 220 Hz** with
+  the gain rising from 0.076 to 0.116. Each mistake lands lower and louder. You do not need to count
+  the figure's limbs to know how much is left.
+- **The sixth miss does NOT stack mallet + fall.** It is ONE single defeat voice, in `sine`. Stacked,
+  the last mistake would sound like the previous five plus noise.
+- **What does not play:** a letter already tried, a key outside the alphabet, and tapping the canvas
+  mid-round. None of the three is a rejected action — they are non-actions.
 
-> Patron comun a todo el repo: sintesis WebAudio sin archivos, `AudioContext` creado con
-> `try/catch` en el primer gesto, techo de voces por frame **con su reseteo al tope del `loop()`**,
-> cooldown por voz, boton de mute con persistencia en `localStorage`, y `visibilitychange` para que
-> nada continuo siga sonando con la pestana al fondo. Si el audio falla, el juego sigue andando.
-> Verificado con un arnes headless que envuelve el `AudioContext` y anota cada nodo y cada rampa.
-> **El arnes no escucha**: comprueba que suene lo que se diseno, cuando se diseno y con que
-> parametros. La evaluacion auditiva queda pendiente.
+> Pattern shared across the repo: WebAudio synthesis with no files, an `AudioContext` created
+> inside `try/catch` on the first gesture, a per-frame voice ceiling **with its reset at the top of
+> `loop()`**, a per-voice cooldown, a mute button persisted in `localStorage`, and
+> `visibilitychange` so nothing continuous keeps playing with the tab in the background. If audio
+> fails, the game keeps running. Verified with a headless harness that wraps the `AudioContext` and
+> logs every node and every ramp. **The harness does not listen**: it checks that what was designed
+> plays, when it was designed to, with which parameters. Judging it by ear is still pending.

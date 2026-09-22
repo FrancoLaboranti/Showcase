@@ -15,43 +15,41 @@ See [../CLAUDE.md](../CLAUDE.md) for the shared sprite/main-loop pattern.
 
 ## AUDIO (2026-09-22)
 
-**El material del mundo es AGUA**, y el agua no tiene transitorios secos: **ningun sonido de este
-juego puede empezar con un click**. Todas las voces llevan un ataque de 4 a 8 ms. Un
-`setValueAtTime` de golpe sobre la ganancia produce un click de conmutacion audible, y un click es
-justamente lo que el agua no hace.
+**The world's material is WATER**, and water has no dry transients: **no sound in this game may
+start with a click**. Every voice carries a 4 to 8 ms attack. A hard `setValueAtTime` on the gain
+produces an audible switching click, and a click is precisely what water does not do.
 
-Dos familias y ninguna mas:
+Two families and no more:
 
-- **HIDRAULICA** — cuerpo y peso: senos y triangulos de 40 a 250 Hz con ruido pasa-bajo para el
-  desplazamiento de agua. Mordidas, embestidas, golpes, minas, jefes.
-- **BIOLUMINISCENTE** — todo lo que brilla: senos puros de 500 a 1800 Hz, muy cortos, con un
-  armonico a la quinta. Comer, subir de nivel, elegir carta.
+- **HYDRAULIC** — body and weight: sines and triangles from 40 to 250 Hz with lowpassed noise for
+  the displaced water. Bites, charges, hits, mines, bosses.
+- **BIOLUMINESCENT** — everything that glows: pure sines from 500 to 1800 Hz, very short, with a
+  harmonic at the fifth. Eating, levelling up, picking a card.
 
-### El lowpass del master es un instrumento
+### The master lowpass is an instrument
 
-Todo pasa por un lowpass a 2600 Hz: estas abajo del agua, no llega ningun agudo entero. Y el filtro
-se mueve. Medido: **2600 Hz (agua normal) → 1500 (dentro del escudo de medusa) → 2600 → 300
-(hundiendote) → 2600 (reinicio)**. No hace falta ningun sonido nuevo para decir "algo cambio":
-cambia el AGUA.
+Everything goes through a lowpass at 2600 Hz: you are underwater, no treble arrives intact. And the
+filter moves. Measured: **2600 Hz (normal water) → 1500 (inside the jellyfish shield) → 2600 → 300
+(sinking) → 2600 (reset)**. No new sound is needed to say "something changed": the WATER changes.
 
-Otras decisiones:
+Other decisions:
 
-- **Comer es el sonido mas frecuente del juego**, asi que dura 85 ms y vive en 0.045. La altura
-  sube con la rareza de la estrella: una naranja se oye mejor que una amarilla sin mirarla.
-- **La mina tiene timbre PROPIO**, no el de la mordida: metal ahogado. Es lo unico metalico del
-  arrecife y por eso se reconoce sin verlo.
-- **Pegarle a un jefe da DOS timbres** segun si la armadura absorbio: golpe seco y mate si no
-  entro, campanazo si entro. Es la unica forma de saber si la ventana vulnerable estaba abierta sin
-  memorizar la fase de cada jefe.
-- **El borde del lago no es un golpe, es presion**: siseo continuo mientras estas afuera.
-- El fin del escudo, el veneno y la recarga del turbo se disparan **por FLANCO**, comparando contra
-  el valor del frame anterior. Sin el flanco serian una voz por frame, que es justo lo que el
-  cooldown no alcanza a tapar.
+- **Eating is the game's most frequent sound**, so it lasts 85 ms and lives at 0.045. The pitch rises
+  with the star's rarity: an orange one sounds better than a yellow one without looking at it.
+- **The mine has its OWN timbre**, not the bite's: muffled metal. It is the only metallic thing on
+  the reef and that is why it is recognisable without seeing it.
+- **Hitting a boss gives TWO timbres** depending on whether the armour absorbed it: a dry, matte
+  knock if it did not land, a bell if it did. It is the only way to know whether the vulnerable
+  window was open without memorising each boss's phase.
+- **The lake edge is not a knock, it is pressure**: a continuous hiss while you are outside.
+- The end of the shield, the poison and the turbo recharge fire **on an EDGE**, compared against the
+  previous frame's value. Without the edge they would be one voice per frame, which is exactly what
+  the cooldown cannot cover.
 
-> Patron comun a todo el repo: sintesis WebAudio sin archivos, `AudioContext` creado con
-> `try/catch` en el primer gesto, techo de voces por frame **con su reseteo al tope del `loop()`**,
-> cooldown por voz, boton de mute con persistencia en `localStorage`, y `visibilitychange` para que
-> nada continuo siga sonando con la pestana al fondo. Si el audio falla, el juego sigue andando.
-> Verificado con un arnes headless que envuelve el `AudioContext` y anota cada nodo y cada rampa.
-> **El arnes no escucha**: comprueba que suene lo que se diseno, cuando se diseno y con que
-> parametros. La evaluacion auditiva queda pendiente.
+> Pattern shared across the repo: WebAudio synthesis with no files, an `AudioContext` created
+> inside `try/catch` on the first gesture, a per-frame voice ceiling **with its reset at the top of
+> `loop()`**, a per-voice cooldown, a mute button persisted in `localStorage`, and
+> `visibilitychange` so nothing continuous keeps playing with the tab in the background. If audio
+> fails, the game keeps running. Verified with a headless harness that wraps the `AudioContext` and
+> logs every node and every ramp. **The harness does not listen**: it checks that what was designed
+> plays, when it was designed to, with which parameters. Judging it by ear is still pending.

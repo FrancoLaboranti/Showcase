@@ -13,28 +13,28 @@ See [../CLAUDE.md](../CLAUDE.md) for shared conventions across the repo.
 
 ## AUDIO (2026-09-22)
 
-**Fosforo sobre vidrio negro, no madera ni laton.** Este reloj es un instrumento de laboratorio —
-anillos con `shadowBlur`, degrade de cara de vidrio, digitos Orbitron, siete paletas neon —, asi
-que la familia timbrica es cuarzo y vidrio: transitorios secos y altisimos sobre silencio absoluto.
-Sin drone, sin ambiente, sin musica. Lo unico tonal son campanitas inarmonicas.
+**Phosphor on black glass, not wood or brass.** This clock is a laboratory instrument — rings with
+`shadowBlur`, a glass-face gradient, Orbitron digits, seven neon palettes — so the timbral family is
+quartz and glass: dry, very high transients over absolute silence. No drone, no ambience, no music.
+The only tonal material is inharmonic chimes.
 
-El tictac es el corazon y por eso es lo mas dificil de dosificar: suena una vez por segundo
-durante toda la sesion, asi que vive al fondo de la mezcla. Un tictac que se nota es un tictac que
-en diez minutos es insoportable.
+The tick is the heart of it and that is exactly why it is the hardest to dose: it plays once a
+second for the whole session, so it lives at the bottom of the mix. A tick you notice is a tick that
+is unbearable ten minutes later.
 
-| voz | que es |
+| voice | what it is |
 |---|---|
-| `tic(par)` | el escape. Alterna dos alturas, como un escape real |
-| `whir` | el barrido del segundero continuo |
-| `minuto` / `hora` | campanitas de vidrio, inarmonicas |
-| `modo` / `color` / `auto` | la interfaz, apenas audible |
+| `tic(par)` | the escapement. Alternates two pitches, like a real escapement |
+| `whir` | the sweep of the continuous second hand |
+| `minuto` / `hora` | glass chimes, inharmonic |
+| `modo` / `color` / `auto` | the interface, barely audible |
 
-Techo de 10 voces por frame: el reloj no tiene fisica, su pico real es la campanada de la hora.
+Ceiling of 10 voices per frame: the clock has no physics, its real peak is the hour chime.
 
-> Patron comun a todo el repo: sintesis WebAudio sin archivos, `AudioContext` creado con
-> `try/catch` en el primer gesto, techo de voces por frame **con su reseteo al tope del `loop()`**,
-> cooldown por voz, boton de mute con persistencia en `localStorage`, y `visibilitychange` para que
-> nada continuo siga sonando con la pestana al fondo. Si el audio falla, el juego sigue andando.
-> Verificado con un arnes headless que envuelve el `AudioContext` y anota cada nodo y cada rampa.
-> **El arnes no escucha**: comprueba que suene lo que se diseno, cuando se diseno y con que
-> parametros. La evaluacion auditiva queda pendiente.
+> Pattern shared across the repo: WebAudio synthesis with no files, an `AudioContext` created
+> inside `try/catch` on the first gesture, a per-frame voice ceiling **with its reset at the top of
+> `loop()`**, a per-voice cooldown, a mute button persisted in `localStorage`, and
+> `visibilitychange` so nothing continuous keeps playing with the tab in the background. If audio
+> fails, the game keeps running. Verified with a headless harness that wraps the `AudioContext` and
+> logs every node and every ramp. **The harness does not listen**: it checks that what was designed
+> plays, when it was designed to, with which parameters. Judging it by ear is still pending.

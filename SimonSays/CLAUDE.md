@@ -19,13 +19,13 @@ Mixer is pre-initialized with `pygame.mixer.pre_init(frequency=44100, size=-16)`
 See [../CLAUDE.md](../CLAUDE.md) for shared conventions.
 
 
-## AUDIO — correccion (2026-09-22)
+## AUDIO — fix (2026-09-22)
 
-`playTone()` se llama desde `update()`, que corre dentro de `loop()`, y el `requestAnimationFrame`
-esta al final. Si la creacion del contexto tiraba, Simon no quedaba mudo: quedaba **CONGELADO para
-siempre**. Ahora `audioResume()` va en `try/catch` y `playTone` exige `actx.state === 'running'` —
-un contexto interrumpido tira al crear el nodo.
+`playTone()` is called from `update()`, which runs inside `loop()`, and the `requestAnimationFrame`
+is at the end. If creating the context threw, Simon was not left mute: it was left **FROZEN
+forever**. `audioResume()` now sits in `try/catch` and `playTone` requires `actx.state === 'running'`
+— an interrupted context throws when a node is created.
 
-Pendiente, del lado Python: la auditoria midio que **los cuatro tonos no se distinguen entre si y
-uno es inaudible**. En un juego de memoria donde el tono ES la mnemotecnia, eso rompe la funcion
-del audio, no solo la estetica. Los cuatro buffers viven como literales de bytes en `SimonSays.py`.
+Pending, on the Python side: the audit measured that **the four tones are indistinguishable from
+each other and one is inaudible**. In a memory game where the tone IS the mnemonic, that breaks what
+the audio is for, not just how it sounds. The four buffers live as bytes literals in `SimonSays.py`.

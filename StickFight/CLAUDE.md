@@ -1,537 +1,542 @@
 # StickFight
 
-**Sandbox platformer-brawler** de stickmans articulados con estética Fancy Pants (papel beige +
-sombras de hojas, terreno azul-piedra a tinta con rayones, personajes de tinta con pantalón naranja).
-Recorrés un nivel con plataformas flotantes bajando enemigos a piñas hasta llegar a la SALIDA;
-si te bajan, respawneás al inicio (los enemigos ya bajados quedan bajados). **Web-only** (como
-DonkeyKong/Pacman): no hay `.py`, todo vive en [StickFightWeb/index.html](StickFightWeb/index.html).
-Registrado en el Arcade (`landscape`).
+**Platformer-brawler sandbox** of articulated stickmen with a Fancy Pants look (beige paper + leaf
+shadows, blue-stone terrain in ink with scratches, ink characters with orange trousers). You cross a
+level of floating platforms punching enemies down until you reach the EXIT; if they take you down you
+respawn at the start (enemies already downed stay down). **Web-only** (like DonkeyKong/Pacman): there
+is no `.py`, everything lives in [StickFightWeb/index.html](StickFightWeb/index.html). Registered in
+the Arcade (`landscape`).
 
-> Ojo: nació como fighter 1v1 estilo MK (2026-07-22) y Franco lo pivoteó a sandbox (2026-07-23).
-> La cámara sigue SOLO al jugador (`CFG.cam.frac` = alto del muñeco / pantalla ≈ 0.16, escala FPA);
-> los enemigos son N instancias de `Fighter` con un cerebro (`newBrain()`) y radio de aggro c/histéresis.
+> Careful: it was born as a 1v1 MK-style fighter (2026-07-22) and Franco pivoted it to a sandbox
+> (2026-07-23). The camera follows ONLY the player (`CFG.cam.frac` = figure height / screen ≈ 0.16,
+> FPA scale); the enemies are N instances of `Fighter` with a brain (`newBrain()`) and an aggro
+> radius with hysteresis.
 
-## Arquitectura (lo no-obvio)
+## Architecture (the non-obvious parts)
 
-- **Split lógica/render.** Cada peleador tiene DOS esqueletos de 14 puntos:
-  - `logicPts` = FK de `targetPose` (los keytracks nominales de los golpes) → **hitboxes**. Determinista:
-    los resortes jamás alteran el frame-data.
-  - `renderPts` = FK de `poseCur` (resortes críticamente amortiguados por articulación) + IK de piernas +
-    mezcla de ragdoll → **dibujo y hurtboxes** (esquivar moviéndose esquiva de verdad).
-- **Pose en 3 capas** (`buildPose`): (a) locomoción base computada del movimiento (lean por
-  aceleración + lean por velocidad, poses de aire por vy — ley Fancy Pants: la animación se CALCULA,
-  no se reproduce); (b) keytrack del ataque, overwrite enmascarado con peso; (c) aditivas (flinch,
-  squash de aterrizaje, respiración).
+- **Logic/render split.** Each fighter has TWO 14-point skeletons:
+  - `logicPts` = FK of `targetPose` (the nominal keytracks of the moves) → **hitboxes**.
+    Deterministic: the springs never alter the frame data.
+  - `renderPts` = FK of `poseCur` (critically damped springs per joint) + leg IK + ragdoll blend →
+    **drawing and hurtboxes** (dodging by moving really does dodge).
+- **Pose in 3 layers** (`buildPose`): (a) base locomotion computed from the movement (lean by
+  acceleration + lean by velocity, air poses by vy — the Fancy Pants law: animation is COMPUTED, not
+  played back); (b) the attack keytrack, a masked overwrite with weight; (c) additives (flinch,
+  landing squash, breathing).
 
-### REGLA DE ORO para tocar animación de golpes
+### THE GOLDEN RULE for touching strike animation
 
-El alcance de un golpe lo define SÓLO la cadena de FK que llega al limb. Mirando `fk()`:
+A strike's reach is defined ONLY by the FK chain that reaches the limb. Looking at `fk()`:
 
-| golpe | cadena | joints ATADOS | joints LIBRES |
+| strike | chain | BOUND joints | FREE joints |
 |---|---|---|---|
-| puño (limb = mano) | pelvis → columna → hombro → brazo | `torso`, `chest`, `dx`, `dy`, brazo que pega | cabeza, brazo libre, piernas |
-| patada (limb = pie) | pelvis → pierna | `lRu`, `lRl`, `dy`, `dx` | cabeza, `torso`, `chest`, **ambos brazos**, pierna de apoyo |
+| punch (limb = hand) | pelvis → spine → shoulder → arm | `torso`, `chest`, `dx`, `dy`, striking arm | head, free arm, legs |
+| kick (limb = foot) | pelvis → leg | `lRu`, `lRl`, `dy`, `dx` | head, `torso`, `chest`, **both arms**, support leg |
 
-Las piernas **no** heredan el ángulo del torso ni de `chest`, por eso en una patada todo el tren
-superior es libre. `dx` mueve la pelvis, o sea la raíz de TODAS las cadenas: siempre está atado.
-Para lo atado hay tres recursos, todos verificados con el probe headless:
+The legs do **not** inherit the angle of the torso or of `chest`, which is why in a kick the whole
+upper body is free. `dx` moves the pelvis, i.e. the root of EVERY chain: it is always bound.
+For what is bound there are three resources, all verified with the headless probe:
 
-1. Claves de **anticipación** con `at <= startup − 0.033` (2 frames de colchón a 60 Hz): caen fuera de
-   la ventana activa *y* fuera de la cápsula barrida del primer frame activo (que mira la pose del
-   frame ANTERIOR — por eso el colchón, si no el barrido se alarga y el golpe alcanza más lejos).
-2. Claves **PIN** en mitad y fin de la activa con los valores exactos de la curva vieja (los escupe
-   `probe_moves.js`); a partir del pin, el recovery es territorio libre.
-3. Aditivas con `safeAddW()`, que vale **exactamente 0** en toda la ventana activa (y 2 frames antes).
-   Así van el hundido/empuje de `atkDrive`, la anticipación de despegue y el ciclo de aterrizaje.
+1. **Anticipation** keys at `at <= startup − 0.033` (2 frames of cushion at 60 Hz): they fall outside
+   the active window *and* outside the swept capsule of the first active frame (which looks at the
+   PREVIOUS frame's pose — hence the cushion, otherwise the sweep gets longer and the strike reaches
+   further).
+2. **PIN** keys at the middle and end of the active window carrying the exact values of the old curve
+   (`probe_moves.js` prints them); from the pin on, the recovery is free territory.
+3. Additives with `safeAddW()`, which is **exactly 0** across the whole active window (and 2 frames
+   before). That is how `atkDrive`'s sink/push, the take-off anticipation and the landing cycle get in.
 
-Ojo con un cuarto camino silencioso: la **capa base** se filtra a los joints que la máscara no cubre.
-`MASK_PUNCH` no incluye `dy`, así que cualquier cosa que la base le ponga a la pelvis mueve el hombro
-y con él el alcance — por eso `baseLoco` usa `idlePose(tp, quiet)` durante un golpe (sin rebote de
-guardia ni ruido, `dy` exactamente el de `POSES.idle`, como fue siempre).
+Watch out for a silent fourth route: the **base layer** leaks into the joints the mask does not cover.
+`MASK_PUNCH` does not include `dy`, so anything the base puts on the pelvis moves the shoulder and
+with it the reach — which is why `baseLoco` uses `idlePose(tp, quiet)` during a strike (no guard
+bounce, no noise, `dy` exactly that of `POSES.idle`, as it always was).
 
-### Por qué los golpes se sentían cortos (2026-09-21) — medir el RECORRIDO, no el alcance
+### Why the strikes felt short (2026-09-21) — measure the TRAVEL, not the reach
 
-Un golpe se lee como grande por lo que RECORRE el miembro, no por dónde termina. Medido con el
-probe: el brazo mide 76 px y en el wind-up viejo la mano quedaba a **46 px del hombro, o sea el
-63 % ya extendido**; la pierna mide 95 px y el pie del chamber quedaba a 65-78 px (rodilla casi
-recta). Con esos números el jab sólo podía recorrer el 37 % que le quedaba: por eso parecía un
-movimiento de muñeca, aunque la extensión final estuviera al máximo.
+A strike reads as big by how far the limb TRAVELS, not by where it ends up. Measured with the probe:
+the arm is 76 px long and in the old wind-up the hand sat **46 px from the shoulder, i.e. 63 % already
+extended**; the leg is 95 px and the chambered foot sat 65-78 px out (knee almost straight). With
+those numbers the jab could only travel the 37 % it had left: hence it looked like a flick of the
+wrist, even though the final extension was at maximum.
 
-La causa de fondo no estaba en los keytracks sino en las **poses de espera**: `idle`/`stance`/
-`block` tenían las manos estiradas hacia adelante en vez de al mentón. Todo golpe nace de ahí.
+The root cause was not in the keytracks but in the **resting poses**: `idle`/`stance`/`block` had the
+hands stretched forward instead of at the chin. Every strike is born from there.
 
-Arreglo: manos al mentón (25-36 px) y chambers de verdad (pie a ~30 px). Resultado medido:
+Fix: hands at the chin (25-36 px) and real chambers (foot at ~30 px). Measured result:
 
-| | recorrido | más recogido |
+| | travel | most folded |
 |---|---|---|
 | jab | 77 → 124 px | 46 → 30 px |
 | cross | 110 → 145 px | 39 → 20 px |
 | roundhouse | 354 → 408 px | 65 → 28 px |
 | spinkick | 373 → 442 px | 72 → 29 px |
 
-**Lo que hace que esto NO sea un cambio de alcance**: el punto de contacto y el frame-data no se
-tocan. Plegar más el wind-up alarga la cápsula barrida del primer frame activo *hacia el cuerpo*
-(7-21 px), nunca hacia afuera — y esa zona ya estaba cubierta por el radio (`hitR` + hurt ≈ 46 px)
-de la cápsula del frame de contacto, así que no habilita ningún golpe nuevo. El probe mide las dos
-direcciones por separado: **`+ALCANCE` (crecimiento hacia afuera) ≤ +0.13 px en los 11 moves**.
+**What makes this NOT a change of reach**: the contact point and the frame data are untouched. Folding
+the wind-up further lengthens the swept capsule of the first active frame *towards the body* (7-21 px),
+never outwards — and that zone was already covered by the radius (`hitR` + hurt ≈ 46 px) of the contact
+frame's capsule, so it enables no new hit. The probe measures the two directions separately:
+**`+REACH` (outward growth) ≤ +0.13 px across the 11 moves**.
 
-Dos claves que NO se pueden tocar aunque estén antes del startup, porque su segmento entra en la
-ventana activa: la de `0.07` del uppercut (gobierna 0.10-0.13, y la activa arranca en 0.10) y la
-de `0.06` del sweep. En el sweep el chamber se movió a una clave nueva en `0.045` y la de `0.06`
-volvió a sus valores originales; en el uppercut simplemente se dejó el brazo como estaba.
+Two keys that CANNOT be touched even though they sit before the startup, because their segment enters
+the active window: the uppercut's `0.07` (it governs 0.10-0.13, and the active window starts at 0.10)
+and the sweep's `0.06`. In the sweep the chamber moved to a new key at `0.045` and the `0.06` one went
+back to its original values; in the uppercut the arm was simply left as it was.
 
-### Peso y footwork (dónde vive la transferencia de peso)
+### Weight and footwork (where the weight transfer lives)
 
-La pelvis no se puede mover durante un golpe sin mover el alcance, así que el peso se cuenta con los
-PIES, que no están en ninguna cadena de hitbox:
+The pelvis cannot move during a strike without moving the reach, so weight is told with the FEET,
+which are in no hitbox chain:
 
-- `atkWeight()` da la curva −1 (cargado atrás) → +1 (descargado adelante) → 0.
-- `m.fw = {rear, front, heel}` la aplica como offset TEMPORAL sobre el objetivo del pie (nunca sobre
-  `f.px`, así el plantado no se entera y no hay deriva). En una patada sólo existe la pierna de
-  apoyo: ahí ese offset *es* la compensación de equilibrio.
-- **Shuffle de root motion**: mientras el envelope del golpe empuja el cuerpo, los pies barren con él
-  (`dampHL(f.px, stanceX, 0.055, dt)`). Sin esto el torso viajaba y los pies se quedaban: combo tras
-  combo el muñeco terminaba cayéndose de punta. Medido con la métrica `desbalance` (pelvis adelante
-  del punto medio de los pies): 0.30·CH antes → 0.17·CH ahora.
-- `m.drive = {sink, rise, twB, twF}` es lo que la pelvis y el torso SÍ pueden hacer fuera de la activa.
+- `atkWeight()` gives the curve −1 (loaded back) → +1 (unloaded forward) → 0.
+- `m.fw = {rear, front, heel}` applies it as a TEMPORARY offset on the foot's target (never on `f.px`,
+  so the planting never finds out and there is no drift). In a kick only the support leg exists: there
+  that offset *is* the balance compensation.
+- **Root-motion shuffle**: while the strike's envelope pushes the body, the feet sweep along with it
+  (`dampHL(f.px, stanceX, 0.055, dt)`). Without this the torso travelled and the feet stayed: combo
+  after combo the figure ended up toppling over. Measured with the `desbalance` metric (pelvis ahead of
+  the midpoint of the feet): 0.30·CH before → 0.17·CH now.
+- `m.drive = {sink, rise, twB, twF}` is what the pelvis and the torso CAN do outside the active window.
 
-### Locomoción procedural
+### Procedural locomotion
 
-- `runCycle()` calcula el ciclo entero de la fase de marcha: brazos contralaterales, antebrazo con
-  retraso (`elbLag` = overlapping action), balanceo de torso al doble de frecuencia, cabeza que se
-  nivela sola. **`CFG.run.armC/armA` están en ángulo de MUNDO**: los brazos son hijos del torso, así
-  que se les descuenta la inclinación (`- tor`). Autorarlos relativos era justo lo que daba el
-  corredor "llevando una bandeja" — cuanto más se inclinaba, más se le iban los brazos adelante.
-- Rama **slide** de `feetIK` (`SLIDE_STATES` = derrape y dash): los pies NO se plantan, arrastran con
-  el cuerpo en base ancha. Plantarlos mientras el cuerpo se va a 0.34·S es exactamente lo que daba el
-  estirón de patas de araña.
-- `idlePose()` mezcla idle ↔ `POSES.stance` según la cercanía del rival y le suma rebote de guardia.
-  La diferencia entre `idle` y `stance` está casi toda en los BRAZOS **a propósito**: las hurtboxes
-  salen de `renderPts`, así que bajar cabeza o pelvis en la guardia sería regalar/robar blanco.
-- `airPose()` consulta `groundAt()` cuando `vy > 0` y mezcla hacia `POSES.airLand` al acercarse el
-  piso: sin esa anticipación el salto se lee como una estatua volando.
-- **Pie plantado = altura del piso ACTUAL.** Si `f.py` no coincide con la superficie que pisa el
-  cuerpo, quedó de otra plataforma y se corrige de una (sin pasito). Con un solo nivel no se
-  notaba; con varias alturas el pie se quedaba clavado a la altura vieja y terminaba POR ENCIMA
-  de la pelvis. Ojo también: levantarse de un knockdown necesita `replantFeet()` explícito.
-- **Ciclo de marcha procedural** (`strideParams` + rama `gait` de `feetIK`, tuneable en `CFG.gait`):
-  cada pierna alterna APOYO (el pie queda CLAVADO en el mundo — la fase avanza por distancia con
-  ciclo = `2·half/duty`, así la derivada del pie en apoyo es exactamente 0 → cero patinaje) y VUELO
-  (arco `sin(π·u)` con rodilla adelante vía IK). Zancada/duty/altura escalan con la velocidad.
-  Antes había un sistema de "replantado por estiramiento" que parecía patas de araña — no volver a eso.
-  `feetIK` corre TAMBIÉN con dt=0 (freeze de hitstop): si no, las piernas saltan a la pose FK cruda.
-- **La tabla de semividas de resortes es el dial de "sueltitud"** (`CFG.spr`): el limb que golpea baja
-  a `hStrike=0.02 s` durante los frames activos (converge al frame-data justo cuando pega); cabeza y
-  mano libre van 1.4× más lentas (follow-through gratis).
-- **Amortiguación por canal** (`CFG.spr.z*`, `springToZ`): 1 = crítico (llega y se queda); < 1 = la
-  articulación se PASA del objetivo y vuelve. Sobrepaso = `exp(−zπ/√(1−z²))` de la distancia
-  recorrida (0.62 ≈ 7 %, 0.55 ≈ 12 %). Sólo lo usan cabeza, mano libre y el limb en recovery; con
-  z = 1 la función cae en el camino rápido de siempre (sin trigonometría).
-- **El sampler de keytracks interpola POR CANAL** (`sampleMove`): para cada joint busca la clave
-  anterior y la siguiente *que lo definen*. Antes elegía una "clave siguiente" global, así que meter
-  una clave para la cabeza le partía el segmento a la pierna — o sea le cambiaba la trayectoria, o
-  sea el hitbox. Con canales independientes se autora el tren superior de una patada sin rozar el
-  arco del pie. Con los datos viejos da idéntico (todas las claves definían todos sus joints atados).
-- **13 DOF** en `Float64Array` (orden en `J`), autorados mirando a la DERECHA; `facing` espeja en FK.
-  Convención: cadenas "cuelgan" (0 = abajo, dirDown), torso apunta arriba. Rodillas: flexión = valores
-  NEGATIVOS de `lLl/lRl`.
+- `runCycle()` computes the whole cycle from the gait phase: contralateral arms, forearm with lag
+  (`elbLag` = overlapping action), torso sway at twice the frequency, head that levels itself.
+  **`CFG.run.armC/armA` are in WORLD angle**: the arms are children of the torso, so its lean is
+  subtracted (`- tor`). Authoring them relative was exactly what gave the runner "carrying a tray" —
+  the more it leaned, the further forward its arms went.
+- The **slide** branch of `feetIK` (`SLIDE_STATES` = skid and dash): the feet do NOT plant, they drag
+  with the body in a wide base. Planting them while the body leaves at 0.34·S is exactly what gave the
+  spider-leg stretch.
+- `idlePose()` blends idle ↔ `POSES.stance` by how close the opponent is and adds a guard bounce. The
+  difference between `idle` and `stance` is almost entirely in the ARMS **on purpose**: the hurtboxes
+  come out of `renderPts`, so lowering the head or the pelvis in the guard would be giving away or
+  stealing target.
+- `airPose()` consults `groundAt()` when `vy > 0` and blends towards `POSES.airLand` as the ground
+  approaches: without that anticipation the jump reads as a flying statue.
+- **A planted foot = the height of the CURRENT ground.** If `f.py` does not match the surface the body
+  is standing on, it is left over from another platform and is corrected at once (no little step). With
+  a single level it did not show; with several heights the foot stayed nailed to the old height and
+  ended up ABOVE the pelvis. Also careful: getting up from a knockdown needs an explicit
+  `replantFeet()`.
+- **Procedural gait cycle** (`strideParams` + the `gait` branch of `feetIK`, tunable in `CFG.gait`):
+  each leg alternates STANCE (the foot stays NAILED in the world — the phase advances by distance with
+  cycle = `2·half/duty`, so the derivative of the foot in stance is exactly 0 → zero skating) and SWING
+  (a `sin(π·u)` arc with the knee forward via IK). Stride/duty/height scale with speed. There used to
+  be a "replant by stretch" system that looked like spider legs — do not go back to that. `feetIK` runs
+  ALSO with dt=0 (hitstop freeze): otherwise the legs snap to the raw FK pose.
+- **The spring half-life table is the "looseness" dial** (`CFG.spr`): the striking limb drops to
+  `hStrike=0.02 s` during the active frames (it converges to the frame data exactly when it lands);
+  head and free hand run 1.4× slower (free follow-through).
+- **Damping per channel** (`CFG.spr.z*`, `springToZ`): 1 = critical (arrives and stays); < 1 = the
+  joint OVERSHOOTS the target and comes back. Overshoot = `exp(−zπ/√(1−z²))` of the distance travelled
+  (0.62 ≈ 7 %, 0.55 ≈ 12 %). Only the head, the free hand and the limb in recovery use it; with z = 1
+  the function falls into the usual fast path (no trigonometry).
+- **The keytrack sampler interpolates PER CHANNEL** (`sampleMove`): for each joint it looks for the
+  previous and the next key *that define it*. Before, it picked one global "next key", so adding a key
+  for the head split the leg's segment — i.e. changed its trajectory, i.e. its hitbox. With independent
+  channels you can author a kick's upper body without grazing the foot's arc. With the old data it
+  gives identical results (every key defined all of its bound joints).
+- **13 DOF** in a `Float64Array` (order in `J`), authored facing RIGHT; `facing` mirrors in the FK.
+  Convention: chains "hang" (0 = down, dirDown), the torso points up. Knees: flexion = NEGATIVE values
+  of `lLl/lRl`.
 
-### Proporciones: hombros, cuello y cabeza (2026-09-21b)
+### Proportions: shoulders, neck and head (2026-09-21b)
 
-El torso se veía *por debajo* de la cabeza. Medido sobre un retrato de 16 poses: el hombro estaba a
-**0.23·CH** sobre la pelvis y la base de la cabeza a **0.382·CH** → **0.152·CH de cuello pelado, el
-15 % de la altura del personaje**. Encima la camisa se cerraba en PUNTA a la altura del hombro, así
-que los brazos parecían salir del cuello.
+The torso looked like it sat *below* the head. Measured over a 16-pose portrait: the shoulder was at
+**0.23·CH** above the pelvis and the base of the head at **0.382·CH** → **0.152·CH of bare neck, 15 %
+of the character's height**. On top of that the shirt closed to a POINT at shoulder height, so the arms
+looked like they came out of the neck.
 
-El hueco se repartió en tres movimientos chicos, porque cada uno tiene su costo:
+The gap was split across three small moves, because each one has its cost:
 
-| | antes | ahora | costo |
+| | before | now | cost |
 |---|---|---|---|
-| `B.torso` | 0.30 | **0.31** | sube el hombro ⇒ sube el punto de impacto de los puños |
+| `B.torso` | 0.30 | **0.31** | raises the shoulder ⇒ raises the punches' impact point |
 | `B.neck` | 0.08 | **0.022** | — |
-| `B.headR` | 0.10 | **0.108** | mueve la hurtbox de la cabeza |
-| `B.shoDrop` | 0.07 | **0.04** | sube el hombro |
-| hombro sobre pelvis | 0.23 | **0.27** | |
-| cuello pelado | 37 px | **16 px** | |
+| `B.headR` | 0.10 | **0.108** | moves the head's hurtbox |
+| `B.shoDrop` | 0.07 | **0.04** | raises the shoulder |
+| shoulder above pelvis | 0.23 | **0.27** | |
+| bare neck | 37 px | **16 px** | |
 
-Tres arreglos más, todos de dibujo:
+Three more fixes, all of them drawing:
 
-1. **La camisa termina en una LÍNEA DE HOMBROS** (`wSho = 0.088·CH`), no en pico, con silueta cónica
-   (`wChest 0.068`, `wWaist 0.046`), cintura levantada a la cadera y **esquinas redondeadas con
-   `arcTo`** — con vértices filosos el hombro de atrás salía en punta cada vez que el torso se
-   inclinaba, porque el ancho es perpendicular a la columna.
-2. **El cuello se dibuja ANTES de la camisa.** Dibujado después, su cap redondo mordía el escote y
-   dejaba un manchón de piel sobre el pecho (se veía en las 16 poses).
-3. **La cabeza pivota en el ATLAS**, no en la base del cuello (`fk()`). Antes el DOF `head` giraba
-   cuello+cabeza desde abajo con una palanca de 0.13·CH: al mirar hacia abajo (agacharse, encajar un
-   golpe) el cuello se veía estirado en diagonal. Ahora el cuello sigue la columna alta y sólo el
-   cráneo rota, con palanca `B.headR`. **Con `head = 0` el punto es idéntico** (los dos tramos son
-   colineales), así que no hay migración de poses. El atlas es un punto DERIVADO en `drawStick` (no
-   se agregó a `P_`: ni `NP` ni el ragdoll cambian).
+1. **The shirt ends in a SHOULDER LINE** (`wSho = 0.088·CH`), not a point, with a conical silhouette
+   (`wChest 0.068`, `wWaist 0.046`), the waist raised to the hip and **corners rounded with `arcTo`** —
+   with sharp vertices the back shoulder came out pointed every time the torso leaned, because the
+   width is perpendicular to the spine.
+2. **The neck is drawn BEFORE the shirt.** Drawn after, its round cap bit into the neckline and left a
+   smear of skin over the chest (visible across the 16 poses).
+3. **The head pivots at the ATLAS**, not at the base of the neck (`fk()`). Before, the `head` DOF
+   rotated neck+head from below with a 0.13·CH lever: looking down (crouching, taking a hit) the neck
+   looked stretched diagonally. Now the neck follows the upper spine and only the skull rotates, with
+   the `B.headR` lever. **With `head = 0` the point is identical** (the two segments are collinear), so
+   there is no pose migration. The atlas is a DERIVED point in `drawStick` (it was not added to `P_`:
+   neither `NP` nor the ragdoll changed).
 
-**Qué le costó al combate** (medido, ver más abajo): los puños caen **8-10 px más arriba** porque el
-hombro subió; el **alcance horizontal es idéntico** (≤ 0.79 px en los 11 moves, y ése es el
-uppercut, que es vertical). El `lunge` era el único golpe plano y perdía alcance real contra
-agachados (0.66 → 0.50 CH), así que **hunde la cadera esos mismos px durante el golpe**
-(`MASK_PUNCH_DY`, `dy` autorado en sus 7 claves): puño exacto donde caía, brazo igual de estirado.
+**What it cost the combat** (measured, see below): the punches land **8-10 px higher** because the
+shoulder went up; the **horizontal reach is identical** (≤ 0.79 px across the 11 moves, and that one is
+the uppercut, which is vertical). The `lunge` was the only flat strike and it lost real reach against
+crouchers (0.66 → 0.50 CH), so it now **sinks the hip by those same px during the strike**
+(`MASK_PUNCH_DY`, `dy` authored across its 7 keys): the fist lands exactly where it used to, the arm
+just as extended.
 
-#### Lo ÚNICO que el cambio de proporciones le movió al combate
+#### The ONLY thing the proportion change moved in the combat
 
-Matriz `probe_conecta.js`, determinista, 1430 celdas, HEAD vs ahora: **21 celdas distintas
-(8 ganadas, 13 perdidas) — el 1.5 %**. Un paso de la matriz son 0.055 CH ≈ 13.5 px.
+The `probe_conecta.js` matrix, deterministic, 1430 cells, HEAD vs now: **21 different cells (8 gained,
+13 lost) — 1.5 %**. One step of the matrix is 0.055 CH ≈ 13.5 px.
 
-| golpe | blanco | alcance máx (CH) |
+| strike | target | max reach (CH) |
 |---|---|---|
-| jab · cross · airpunch | agachado / bloqueo bajo | −0.055 |
-| cross | de pie | **+0.110** |
-| hook | de pie | **+0.055**; bloqueo bajo −0.110 |
-| uppercut | agachado | mismo alcance, un hueco interno |
-| lunge | bloqueo alto / bajo | −0.055 |
-| sweep | bloqueo alto −0.055 · bloqueo bajo **+0.055** |
-| spinkick | bloqueo bajo | **+0.055** |
-| roundhouse · dropkick · airkick | todos | **sin cambios** |
+| jab · cross · airpunch | crouching / low block | −0.055 |
+| cross | standing | **+0.110** |
+| hook | standing | **+0.055**; low block −0.110 |
+| uppercut | crouching | same reach, an internal gap |
+| lunge | high / low block | −0.055 |
+| sweep | high block −0.055 · low block **+0.055** |
+| spinkick | low block | **+0.055** |
+| roundhouse · dropkick · airkick | all | **unchanged** |
 
-La causa no es el puño sino el **defensor**: su hurtbox de cabeza bajó ~10 px con las proporciones
-nuevas. Por eso también se mueven filas de patadas cuyo contacto es idéntico al píxel.
-Se evaluó y se DESCARTÓ compensarlo agrandando `CFG.fight.hurtHead` un 8 % (subiría el radio sólo
-2.4 px y agrandaría el blanco en todos los demás cruces).
+The cause is not the fist but the **defender**: their head hurtbox dropped ~10 px with the new
+proportions. That is also why rows for kicks whose contact is identical to the pixel move.
+Compensating by growing `CFG.fight.hurtHead` by 8 % was evaluated and DISCARDED (it would raise the
+radius by only 2.4 px and would enlarge the target in every other matchup).
 
-**Los combos no cambiaron** (`probe_combo.js`, 4 cadenas × 16 distancias): mismo número de golpes
-conectados y mismo daño total en todas las celdas, salvo que tres cadenas mantienen su cuenta alta
-UN paso más lejos. Nada perdido.
+**The combos did not change** (`probe_combo.js`, 4 chains × 16 distances): the same number of strikes
+connected and the same total damage in every cell, except that three chains hold their high count ONE
+step further out. Nothing lost.
 
-### Empalme entre estados (2026-09-21b)
+### Blending between states (2026-09-21b)
 
-`targetPose` pegaba **saltos de hasta 2.37 rad en UN frame** al cambiar de estado (medido sobre 18
-escenarios: `idle→jump` 2.37 en `aRu`, `idle→dash` 2.01, `run→jump` 1.98, `skid→run` 1.95,
-`fall→idle` 1.90). El resorte los absorbe, pero un ESCALÓN en el objetivo hace que arranque con
-aceleración máxima: eso es lo que se sentía como "empieza de golpe".
+`targetPose` used to jump **by as much as 2.37 rad in ONE frame** on a state change (measured over 18
+scenarios: `idle→jump` 2.37 on `aRu`, `idle→dash` 2.01, `run→jump` 1.98, `skid→run` 1.95, `fall→idle`
+1.90). The spring absorbs them, but a STEP in the target makes it start at maximum acceleration: that
+is what felt like "it starts all at once".
 
-`buildPose` cruza ahora el objetivo con `smoothstep` desde la última pose del estado anterior
-(`CFG.anim.blendT = 0.075 s`): llega a lo mismo, en el mismo tiempo, pero con derivada nula al
-empezar y al terminar. **Nunca durante un ataque** — ahí `targetPose` ES el frame-data, y el probe
-confirma 0.000 px de diferencia. Medido después: **máximo 0.46 rad** (−81 %).
+`buildPose` now crosses the target with a `smoothstep` from the last pose of the previous state
+(`CFG.anim.blendT = 0.075 s`): it arrives at the same place, in the same time, but with zero derivative
+at the start and at the end. **Never during an attack** — there `targetPose` IS the frame data, and the
+probe confirms 0.000 px of difference. Measured afterwards: **maximum 0.46 rad** (−81 %).
 
-Dos cosas más de la misma tanda:
+Two more things from the same batch:
 
-- **`dirN` continuo** en `runCycle`. Valía ±1 y saltaba de −1 a +1 al cruzar `vx = 0`: al cambiar de
-  sentido el torso invertía su inclinación de golpe (y con él los brazos, que se autoran en ángulo
-  de mundo). Ahora cruza el cero de forma continua.
-- **HITSTUN tiene pose propia** (`hurtPose`). No tenía rama en `baseLoco`: caía en `idlePose()` y el
-  único registro del golpe era la capa de flinch. Los BRAZOS cuentan ahora el impacto — y los brazos
-  **no son hurtbox** (`hurtboxes()` usa cabeza, pelvis→cuello y pelvis→pies), así que no mueve ni un
-  píxel de caja de daño. Además HITSTUN entró en `IK_STATES` y en **`SLIDE_STATES`**: antes las
-  piernas salían de FK pura y los pies viajaban con el cuerpo mientras te empujaban (medido
-  4.83 px/frame, el peor de todos los estados controlables). Va en el arrastre y no en el plantado
-  a propósito: clavarlos con el cuerpo yéndose ES el estirón de patas de araña.
+- **Continuous `dirN`** in `runCycle`. It was ±1 and jumped from −1 to +1 when crossing `vx = 0`: on
+  changing direction the torso flipped its lean all at once (and with it the arms, which are authored
+  in world angle). Now it crosses zero continuously.
+- **HITSTUN has its own pose** (`hurtPose`). It had no branch in `baseLoco`: it fell through to
+  `idlePose()` and the only record of the hit was the flinch layer. The ARMS now tell the impact — and
+  the arms are **not a hurtbox** (`hurtboxes()` uses the head, pelvis→neck and pelvis→feet), so it does
+  not move a single pixel of damage box. HITSTUN also joined `IK_STATES` and **`SLIDE_STATES`**: before,
+  the legs came out of pure FK and the feet travelled with the body while you were being pushed
+  (measured 4.83 px/frame, the worst of all controllable states). It goes in the drag and not in the
+  planting on purpose: nailing them with the body leaving IS the spider-leg stretch.
 
-### Columna en dos segmentos (2026-09-21)
+### Spine in two segments (2026-09-21)
 
-El torso era UN hueso rígido pelvis→cuello y eso topaba con todo: el cuerpo no podía encorvarse
-(la rodada nunca fue una bolita — la distancia pelvis→cabeza era constante), los hombros no podían
-girar independientes de la cadera, y no había con qué contrapesar. Ahora:
+The torso was ONE rigid pelvis→neck bone and that ran into everything: the body could not hunch (the
+roll was never a ball — the pelvis→head distance was constant), the shoulders could not turn
+independently of the hip, and there was nothing to counterbalance with. Now:
 
-- Punto nuevo `P_.chest` (NP 13 → 14) a 42 % del torso; `B.spineLo` + `B.spineUp` = `B.torso`,
-  con la suma hecha por RESTA para que sea exacta.
-- DOF nuevos (NJ 11 → 13, **agregados al final** para no correr ningún índice existente):
-  - `chest` = flexión del segmento superior. Cabeza, hombros y **ambos brazos** cuelgan de él, así
-    que rotarlo gira el tren superior entero dejando la cadera quieta.
-  - `dx` = desplazamiento lateral de la pelvis (en CH, espacio local). El torso se balancea SOBRE
-    los pies plantados en vez de arrastrarlos.
-- `J_LINEAR = [J.dy, J.dx]`: son LONGITUDES. En `springs` no se los envuelve con `wrapPi`.
+- A new point `P_.chest` (NP 13 → 14) at 42 % of the torso; `B.spineLo` + `B.spineUp` = `B.torso`, with
+  the sum done by SUBTRACTION so it is exact.
+- New DOF (NJ 11 → 13, **added at the end** so no existing index shifts):
+  - `chest` = flexion of the upper segment. Head, shoulders and **both arms** hang from it, so rotating
+    it turns the whole upper body while the hip stays still.
+  - `dx` = lateral displacement of the pelvis (in CH, local space). The torso sways OVER the planted
+    feet instead of dragging them.
+- `J_LINEAR = [J.dy, J.dx]`: these are LENGTHS. In `springs` they are not wrapped with `wrapPi`.
 
-**La propiedad que hizo segura la migración**: con `chest = 0` y `dx = 0` la FK devuelve
-exactamente los mismos puntos que la versión de un solo hueso. Verificado con el probe: **0.000 px
-en los 11 moves** antes de tocar ninguna animación. Cada pose se migró después, de a una.
+**The property that made the migration safe**: with `chest = 0` and `dx = 0` the FK returns exactly the
+same points as the single-bone version. Verified with the probe: **0.000 px across the 11 moves** before
+touching any animation. Each pose was migrated afterwards, one at a time.
 
-**Qué DOF entra en la cadena de golpe** (ver la tabla de la regla de oro más arriba):
+**Which DOF enters the strike chain** (see the golden-rule table above):
 
-| DOF | puño | patada | por qué |
+| DOF | punch | kick | why |
 |---|---|---|---|
-| `chest` | **atado** | libre | mueve el hombro, y el brazo cuelga del hombro |
-| `dx` | **atado** | **atado** | mueve la pelvis, y de ella cuelgan hombro Y cadera |
+| `chest` | **bound** | free | moves the shoulder, and the arm hangs from the shoulder |
+| `dx` | **bound** | **bound** | moves the pelvis, and both the shoulder AND the hip hang from it |
 
-Por eso los puños llevan los ángulos de brazo **re-resueltos por IK** en la clave de contacto y en
-los pines: se elige el `chest` deseado y se recalcula el brazo para que la mano caiga en la MISMA
-posición relativa a la pelvis (`probe_retarget.js`, error medido 0.00000 px). La solución es
-analítica y fuerza el lado natural del codo —`l = +acos(...)`, que en este rig es siempre positivo—
-porque elegir la rama por cercanía **invertía la articulación** (probado: el codo saltaba 12 px al
-otro lado). Como el alcance total está fijo, avanzar el hombro obliga a acortar el brazo: por eso
-los valores de contacto son modestos (el brazo queda al 96-98 % de extensión) y la rotación grande
-vive en el wind-up y el recupero, que son zonas libres.
+That is why the punches carry arm angles **re-solved by IK** at the contact key and at the pins: the
+desired `chest` is chosen and the arm is recomputed so the hand lands in the SAME position relative to
+the pelvis (`probe_retarget.js`, measured error 0.00000 px). The solution is analytic and forces the
+natural elbow side —`l = +acos(...)`, which in this rig is always positive— because choosing the branch
+by proximity **inverted the joint** (tested: the elbow jumped 12 px to the other side). Since the total
+reach is fixed, advancing the shoulder forces the arm to shorten: hence the contact values are modest
+(the arm ends at 96-98 % extension) and the large rotation lives in the wind-up and the recovery, which
+are free zones.
 
-**Trampa del sampler por canal con `dx`**: definirlo en la carga y recién otra vez en el recupero
-lo hace interpolar CRUZANDO la ventana activa (y mueve el golpe 1:1). Tiene que quedar clavado en 0
-en la clave de contacto y en los dos pines. Costó 5-8 px de alcance hasta que se cazó.
+**Trap of the per-channel sampler with `dx`**: defining it in the load and then not again until the
+recovery makes it interpolate ACROSS the active window (and moves the strike 1:1). It has to stay
+nailed at 0 at the contact key and at both pins. It cost 5-8 px of reach until it was caught.
 
-**Hurtboxes**: `hurtboxes()` sigue usando la cápsula recta pelvis→cuello (no se partió en dos para
-no tocar el combate). Con la columna doblada el pecho se sale de esa recta, pero poco: medido
-1.1-1.6 px en las poses defensivas. Lo que sí importa es que el cuello se mueve al doblar el
-torso, así que **las poses en las que te pueden pegar llevan `chest` acotado** (idle 0 exacto,
-stance 0.06, block 0.07, crouch 0.09 → la cabeza se corre ≤ 7.8 px sobre un radio de 29). Las
-expresivas van a fondo (ballRoll 0.95, getup 0.34) porque ahí o hay invulnerabilidad o el cuerpo
-de verdad está plegado.
+**Hurtboxes**: `hurtboxes()` still uses the straight pelvis→neck capsule (it was not split in two so as
+not to touch the combat). With the spine bent the chest leaves that line, but barely: measured 1.1-1.6
+px in the defensive poses. What does matter is that the neck moves when the torso bends, so **the poses
+in which you can be hit carry a bounded `chest`** (idle exactly 0, stance 0.06, block 0.07, crouch 0.09
+→ the head shifts ≤ 7.8 px over a radius of 29). The expressive ones go all the way (ballRoll 0.95,
+getup 0.34) because there you are either invulnerable or the body really is folded.
 
-**Ragdoll**: `RAG_BONES` suma pelvis→chest y chest→neck, y los hombros cuelgan del chest (igual que
-en la FK). El piso necesita el offset de reposo del punto nuevo. El torso ahora se dobla al caer
-en vez de quedar como un palo.
+**Ragdoll**: `RAG_BONES` adds pelvis→chest and chest→neck, and the shoulders hang from the chest (just
+as in the FK). The floor needs the new point's rest offset. The torso now bends on falling instead of
+staying like a stick.
 
-**Rodadura del pie, SIN DOF nuevo**: el pie se dibujaba siempre horizontal (apoyar era estampar un
-sello). `footRoll()` en `drawStick` deriva el ángulo de la pantorrilla y lo pesa por cuánto está el
-pie despegado del piso: plantado = plano, en vuelo o pateando = en punta. Cero grados de libertad,
-cero puntos. Se descartaron muñecas y tobillos como DOF reales: con `cam.frac = 0.11` el muñeco
-mide ~80 px en pantalla y una mano son 4 px — a esa escala lo único que se lee es la SILUETA.
-- **Gotcha de `ik2(bendDir)`**: con el y-abajo del canvas, rotar +θ es HORARIO visual → para que la
-  rodilla apunte hacia adelante hay que pasar `-facing` (las piernas de `feetIK` ya lo hacen).
-  Pasar `facing` da piernas de pájaro — ya pasó y Franco lo notó al toque.
-- **`ik2Blend` mezcla el OBJETIVO, jamás los puntos resueltos.** El promedio de dos poses válidas no
-  es una pose válida: interpolar codo y mano entre la solución FK y la IK estira los huesos (medido
-  89 % de error en el brazo al soltar el borde en la trepada). Mezclando el objetivo, la cadena se
-  resuelve una sola vez y los largos quedan exactos por construcción.
-- **Root motion de golpes/dash**: `lungeVel()` devuelve VELOCIDAD instantánea — se suma en la
-  integración (`x += (vx + rootVx)·dt`), **nunca** `vx +=` (acumularía y sale volando; ya pasó).
-- **Ragdoll verlet** (13 partículas, constraints con rest tomado al activar) sólo en KNOCKDOWN/KO;
-  el piso proyecta con offset de reposo POR PARTE (cabeza sobre su radio) — sin eso el cuerpo queda chato.
-- **Hitstop por entidad**: `hitstopT` congela el `simDt` del par; el knockback queda `pendKb` y se
-  aplica al DESCONGELAR.
-- **Aturdimiento con degradación + recuperaciones pedidas** (`CFG.fight.stun*`/`kd*`/`airTechT`):
-  antes cada golpe RESETEABA el stun al 100 %, así que un combo de 4 dejaba al jugador 2.39 s sin
-  poder hacer nada (medido). Ahora:
-  1. `stunDecay`/`stunFloor`: cada golpe seguido de la misma cadena aturde menos (análogo de
-     `jugScale` para el daño). `hitChain`/`hitChainT` viven en el DEFENSOR.
-  2. **Techeo aéreo** (`airTechT`): en LANZADO, salto/puño/patada devuelve el control. El
-     knockback y el daño no se tocan; lo que se acorta es el rato sin poder reaccionar.
-  3. **Ukemi al aterrizar**: si venís pidiendo algo al tocar el piso, caés RODANDO (0.38 s) en vez
-     de knockdown + levantada (~0.6 s). Vale el botón sostenido o el del buffer: machacar funciona.
-  4. **Levantada rápida** (`kdQuickT`) y **techo duro** (`kdMax`) por si el ragdoll no frena.
-  La IA sostiene dirección en LANZADO/KNOCKDOWN, así que cobra el ukemi y la levantada rápida: el
-  recorte no es sólo para el jugador. El techeo aéreo sí es del que apriete un botón.
-  Medido: combo de 4 recibido pasa de **2.39 s → 2.15 s** pasivo, y **0.95 s** si te recuperás.
-- **IA con percepción honesta**: lee snapshots de hace `reactionMs` (nunca el estado actual);
-  arquetipos como filas de datos (`ARCHS`); la dificultad SÓLO escala reacción/bloqueo/drop de combos.
+**Foot roll, with NO new DOF**: the foot used to be drawn always horizontal (planting was stamping a
+seal). `footRoll()` in `drawStick` derives the angle from the shin and weighs it by how far the foot is
+off the ground: planted = flat, in flight or kicking = pointed. Zero degrees of freedom, zero points.
+Wrists and ankles were discarded as real DOF: with `cam.frac = 0.11` the figure is ~80 px on screen and
+a hand is 4 px — at that scale the only thing that reads is the SILHOUETTE.
+- **`ik2(bendDir)` gotcha**: with the canvas's y-down, rotating +θ is visually CLOCKWISE → for the knee
+  to point forward you have to pass `-facing` (the legs in `feetIK` already do). Passing `facing` gives
+  bird legs — it already happened and Franco spotted it immediately.
+- **`ik2Blend` blends the TARGET, never the solved points.** The average of two valid poses is not a
+  valid pose: interpolating elbow and hand between the FK and the IK solution stretches the bones
+  (measured 89 % error in the arm on releasing the ledge in a climb). By blending the target, the chain
+  is solved once and the lengths stay exact by construction.
+- **Root motion of strikes/dash**: `lungeVel()` returns instantaneous VELOCITY — it is added in the
+  integration (`x += (vx + rootVx)·dt`), **never** `vx +=` (it would accumulate and fly off; it already
+  happened).
+- **Verlet ragdoll** (13 particles, constraints with the rest taken on activation) only in KNOCKDOWN/KO;
+  the floor projects with a rest offset PER PART (the head over its radius) — without that the body ends
+  up flat.
+- **Hitstop per entity**: `hitstopT` freezes the pair's `simDt`; the knockback is held in `pendKb` and
+  applied on UNFREEZING.
+- **Stun with decay + requested recoveries** (`CFG.fight.stun*`/`kd*`/`airTechT`): before, every hit
+  RESET the stun to 100 %, so a 4-hit combo left the player 2.39 s unable to do anything (measured). Now:
+  1. `stunDecay`/`stunFloor`: each successive hit of the same chain stuns less (the analogue of
+     `jugScale` for damage). `hitChain`/`hitChainT` live on the DEFENDER.
+  2. **Air tech** (`airTechT`): in LAUNCHED, jump/punch/kick gives control back. The knockback and the
+     damage are untouched; what is shortened is the stretch with no way to react.
+  3. **Ukemi on landing**: if you are asking for something as you touch the ground, you land ROLLING
+     (0.38 s) instead of knockdown + getup (~0.6 s). A held button counts, as does a buffered one:
+     mashing works.
+  4. **Quick getup** (`kdQuickT`) and a **hard ceiling** (`kdMax`) in case the ragdoll does not settle.
+  The AI holds direction in LAUNCHED/KNOCKDOWN, so it gets the ukemi and the quick getup: the cut is not
+  only for the player. The air tech does belong to whoever presses a button.
+  Measured: a 4-hit combo taken goes from **2.39 s → 2.15 s** passive, and **0.95 s** if you recover.
+- **AI with honest perception**: it reads snapshots from `reactionMs` ago (never the current state);
+  archetypes as rows of data (`ARCHS`); difficulty scales ONLY reaction/blocking/combo drop.
 
-### Nivel generado por secciones + grafo de navegación (2026-09-21)
+### Level generated from sections + navigation graph (2026-09-21)
 
-**El nivel se arma en cada partida** (`buildLevel(seed)` en `startMatch`, y después `bakeBg()` +
-`bakeTerrain()` porque los bakes son world-space). `ARENA` es un objeto que se **muta**, no se
-reemplaza: todo el resto del juego lo referencia por `ARENA.surfs` / `.exit` / … y no se enteró.
+**The level is built every round** (`buildLevel(seed)` in `startMatch`, and afterwards `bakeBg()` +
+`bakeTerrain()` because the bakes are world-space). `ARENA` is an object that is **mutated**, not
+replaced: all the rest of the game references it through `ARENA.surfs` / `.exit` / … and never noticed.
 
-La variedad no sale de tirar plataformas al azar: son **14 secciones autoradas a mano** más la
-torre de salida, y lo que varía es cuáles salen, en qué orden, con qué parámetros y si van
-espejadas. Al repertorio original (escalera, puente, arco, pirámide, zigzag, balcón, columnas, doble
-ruta) se sumaron seis patrones en 2026-09-21b: **solapadas** (dos losas que se pisan en x: se pasa
-por abajo o por arriba), **bifurcacion** (dos ramas que salen del mismo rellano y reconectan),
-**saltitos** (cadena de plataformas chicas, saltos encadenados), **islote** (plataforma alta con una
-sola entrada), **pozo** (sector compacto: dos paredes de repisas y una tapa) y **voladizo**
-(asimétrica: una losa larguísima y un muñón corto arriba).
+The variety does not come from throwing platforms around at random: there are **14 hand-authored
+sections** plus the exit tower, and what varies is which ones come up, in what order, with what
+parameters and whether they are mirrored. Six patterns were added to the original repertoire
+(staircase, bridge, arch, pyramid, zigzag, balcony, columns, double route) in 2026-09-21b:
+**solapadas** (two slabs that overlap in x: you pass under or over), **bifurcacion** (two branches that
+leave the same landing and reconnect), **saltitos** (a chain of small platforms, linked jumps),
+**islote** (a high platform with a single entrance), **pozo** (a compact sector: two walls of ledges
+and a lid) and **voladizo** (asymmetric: one very long slab and a short stub above).
 
-#### Bloques sólidos, piso partido y remates (2026-09-21c)
+#### Solid blocks, split floor and finishes (2026-09-21c)
 
-Franco: *«los niveles se sienten todos iguales. misma cantidad de enemigos en todos. salida
-siempre en el mismo lugar escalando unas plataformas. 0 diseño novedoso en lo que envuelve al
-piso y las paredes»*. Tenía razón en los tres, y el tercero escondía algo peor: **las únicas
-paredes del juego eran los dos bordes del mapa** (todas las plataformas son `oneway`, se
-atraviesan de costado), así que wallslide, walljump y colgarse de un borde casi nunca aparecían.
+Franco: *"the levels all feel the same. the same number of enemies in all of them. the exit always in
+the same place up a few platforms. 0 novel design in what surrounds the floor and the walls"*. He was
+right on all three, and the third hid something worse: **the only walls in the game were the two edges
+of the map** (every platform is `oneway`, you pass through them sideways), so wallslide, walljump and
+hanging from a ledge almost never showed up.
 
-**`ARENA.muros`** es el primitivo que faltaba: un AABB con colisión lateral real cuyo techo se
-registra además en `surfs` como superficie NO-oneway. Con ese único primitivo salen mesetas
-(relieve de piso), murallas, chimeneas, pilares y promontorios.
+**`ARENA.muros`** is the primitive that was missing: an AABB with real lateral collision whose top is
+also registered in `surfs` as a NON-oneway surface. Out of that single primitive come plateaus (floor
+relief), ramparts, chimneys, pillars and outcrops.
 
-Cuatro cosas que hubo que resolver para que funcionara, todas medidas:
+Four things had to be solved to make it work, all of them measured:
 
-1. **El orden de la colisión.** La resolución horizontal iba ANTES del aterrizaje, así que el
-   primer frame en que los pies bajaban del techo de un bloque el resolvedor lo tomaba como
-   «estoy adentro» y lo expulsaba **130 px de costado** antes de que el bucle de plataformas
-   pudiera apoyarlo. La IA no se subía a un bloque *nunca*, a ninguna altura (0/6). Con el
-   orden correcto: 6/6 hasta 230 px.
-2. **El piso se parte en tramos.** Un bloque apoyado en el suelo lo corta, y cada tramo es un
-   nodo del grafo. Sin esto el grafo veía TODO el piso como un único nodo, nunca generaba la
-   ruta «tramo izquierdo → techo → tramo derecho» y la IA se quedaba empujando la pared.
-   Dos bloques a menos de 0.95·CH se FUSIONAN (si no, queda un pozo del que no se sale).
-3. **`LVL.riseBloque = 228`, distinto de `LVL.riseMax = 267`.** Subirse al techo de un bloque
-   no es lo mismo que a una losa flotante: contra la pared no se puede tomar carrera ni pasar
-   por debajo. Medido con los 4 arquetipos: **6/6 hasta 230 px, 2/6 a 250, 0/6 de 270**.
-4. **Red de seguridad bajo el piso.** Desde que el piso se parte, debajo no hay nada. Un
-   empujón lateral (separación de cuerpos, knockback) que meta a alguien dentro de un bloque
-   le hace perder la superficie, y el chequeo de apoyo exige venir DESDE ARRIBA: caía para
-   siempre (medido: y = 184 686). Ahora se lo devuelve al terreno más cercano.
+1. **Collision order.** Horizontal resolution came BEFORE landing, so on the first frame the feet
+   dropped off a block's top the resolver read it as "I am inside" and ejected it **130 px sideways**
+   before the platform loop could stand it up. The AI never climbed onto a block *at all*, at any
+   height (0/6). With the right order: 6/6 up to 230 px.
+2. **The floor splits into runs.** A block resting on the ground cuts it, and each run is a node of
+   the graph. Without this the graph saw ALL the floor as a single node, never generated the route
+   "left run → top → right run" and the AI just kept pushing the wall. Two blocks less than 0.95·CH
+   apart are MERGED (otherwise you get a pit there is no way out of).
+3. **`LVL.riseBloque = 228`, different from `LVL.riseMax = 267`.** Climbing onto a block's top is not
+   the same as onto a floating slab: against the wall you cannot take a run-up or pass underneath.
+   Measured with the 4 archetypes: **6/6 up to 230 px, 2/6 at 250, 0/6 from 270**.
+4. **A safety net below the floor.** Since the floor splits, there is nothing underneath. A lateral
+   shove (body separation, knockback) that puts someone inside a block makes them lose the surface,
+   and the support check requires coming FROM ABOVE: they fell forever (measured: y = 184,686). They
+   are now returned to the nearest terrain.
 
-En la IA se agregaron dos reflejos, ninguno toca el cerebro de combate: **saltar el muro** que
-tenga delante si su techo entra en el salto (el grafo no genera esa ruta porque el piso, del
-otro lado, es el mismo nodo) y **walljump** al entrar en WALLSLIDE — pero sólo si el techo está
-FUERA de alcance, porque si está a mano rebotar la alejaba justo de donde quería subir.
+Two reflexes were added to the AI, neither of which touches the combat brain: **jumping the wall** in
+front of it if its top is within the jump (the graph does not generate that route because the floor,
+on the other side, is the same node) and **walljump** on entering WALLSLIDE — but only if the top is
+OUT of reach, because if it is within reach, bouncing took it away from exactly where it wanted to
+climb.
 
-**Remates**: la SALIDA tiene cuatro formas (`torre` zigzag, `meseta` maciza con dos accesos,
-`chimenea` sobre un pozo entre dos torres, `espiral` alrededor de un pilar) y entra en un
-**slot cualquiera** de la secuencia de tramos, no al final. Antes `tx` era siempre el extremo
-derecho: medido, la salida pasó de estar a ~78 % del ancho en todos los niveles a repartirse
-entre ~23 % y ~50 %. Y los huecos entre tramos llevan **promontorios** (50 % de probabilidad):
-sin eso, entre sección y sección el piso es una línea recta y el nivel se lee plano por más
-plataformas flotantes que tenga.
+**Finishes**: the EXIT has four shapes (`torre` zigzag, `meseta` a solid mass with two accesses,
+`chimenea` over a pit between two towers, `espiral` around a pillar) and it goes into **any slot** of
+the sequence of runs, not at the end. Before, `tx` was always the right-hand end: measured, the exit
+went from sitting at ~78 % of the width in every level to spreading between ~23 % and ~50 %. And the
+gaps between runs carry **outcrops** (50 % probability): without those, between one section and the
+next the floor is a straight line and the level reads flat however many floating platforms it has.
 
-**Plantel por nivel** (`plantelDeNivel`): la cantidad de enemigos sale de la etapa y quiénes
-salen (y con qué arquetipo) de la semilla. Medido: **4-6 / 5-7 / 6-8 / 7-9** por etapa y 68
-mezclas de arquetipo distintas en 192 niveles. `game.totalEnem` reemplaza a `enemies.length`
-en el HUD y en el chequeo de «¡LIMPIO!».
+**Roster per level** (`plantelDeNivel`): the number of enemies comes from the stage and who shows up
+(and with which archetype) from the seed. Measured: **4-6 / 5-7 / 6-8 / 7-9** per stage and 68
+different archetype mixes across 192 levels. `game.totalEnem` replaces `enemies.length` in the HUD and
+in the "CLEAR!" check.
 
-**Trampa del generador**: `tx` de un enlace apuntaba al CENTRO de la superficie destino. Con el
-piso partido eso sigue siendo razonable, pero con el piso entero era el centro del mapa: el
-vuelo de prueba cruzaba el nivel y se rechazaban casi todas las secciones con bloques (y la IA,
-al caer al piso, caminaba hacia el medio de la arena). Ahora apunta al punto ÚTIL más cercano
-al despegue.
+**Generator trap**: a link's `tx` pointed at the CENTRE of the destination surface. With the floor
+split that is still reasonable, but with the whole floor it was the centre of the map: the test flight
+crossed the level and almost every section with blocks was rejected (and the AI, on landing on the
+floor, walked towards the middle of the arena). It now points at the USEFUL point closest to the
+take-off.
 
-#### Etapas de dificultad (2026-09-21b)
+#### Difficulty stages (2026-09-21b)
 
-`game.nivel` crece al llegar a la SALIDA (`siguienteNivel()`, cura 45 %) y la etapa sale de
-`etapaDe(nivel)` — **dos niveles por etapa**. La dificultad es ESTRUCTURAL: no toca daño, vida,
-velocidad ni el cerebro de nadie.
+`game.nivel` grows on reaching the EXIT (`siguienteNivel()`, heals 45 %) and the stage comes from
+`etapaDe(nivel)` — **two levels per stage**. The difficulty is STRUCTURAL: it touches nobody's damage,
+health, speed or brain.
 
-| etapa | niveles | patrones | `wK` | `gap` | torre |
+| stage | levels | patterns | `wK` | `gap` | tower |
 |---|---|---|---|---|---|
-| INICIAL | 1-2 | 5 | 1.14 | 296-372 | 5 |
-| INTERMEDIA | 3-4 | 9 | 1.00 | 304-384 | 6 |
-| AVANZADA | 5-6 | 13 | 0.90 | 312-396 | 7 |
-| EXPERTA | 7+ | 14 | 0.82 | 322-408 | 7 |
+| INITIAL | 1-2 | 5 | 1.14 | 296-372 | 5 |
+| INTERMEDIATE | 3-4 | 9 | 1.00 | 304-384 | 6 |
+| ADVANCED | 5-6 | 13 | 0.90 | 312-396 | 7 |
+| EXPERT | 7+ | 14 | 0.82 | 322-408 | 7 |
 
-`wK` escala el ancho de cada plataforma (piso 0.62·CH): más avanzada = menos superficie donde caer
-y por lo tanto huecos efectivos más grandes, **sin mover un solo salto de sitio**. Medido sobre 200
-semillas por etapa: ancho mediano **297 → 275 → 252 → 231 px**.
+`wK` scales the width of each platform (floor 0.62·CH): the more advanced, the less surface to land on
+and therefore the larger the effective gaps, **without moving a single jump**. Measured over 200 seeds
+per stage: median width **297 → 275 → 252 → 231 px**.
 
-**`secs` NO es una palanca**: el ancho de arena (8000 px) corta antes que el contador. Con `secs = 7`
-el generador truncaba en silencio y EXPERTA salía MÁS corta que AVANZADA. Va alto a propósito (8)
-para que el nivel llene la arena siempre y el largo no dependa de la etapa.
+**`secs` is NOT a lever**: the arena width (8000 px) cuts in before the counter does. With `secs = 7`
+the generator truncated silently and EXPERT came out SHORTER than ADVANCED. It is set high on purpose
+(8) so the level always fills the arena and its length does not depend on the stage.
 
-**El ancho total de una sección se DERIVA** de sus plataformas (`max(dx + w)`), ya no se autora a
-mano: autorarlo era la fuente de los solapes raros al espejar.
+**A section's total width is DERIVED** from its platforms (`max(dx + w)`), it is no longer authored by
+hand: authoring it was the source of the odd overlaps when mirroring.
 
-`buildLevel(seed, nivel)` es reproducible: misma semilla + mismo nivel ⇒ misma geometría
-(verificado 32/32, ensuciando el estado entre las dos tiradas). `armarNivel(semilla)` y
-`startMatch(semilla)` aceptan semilla opcional — es lo que usa el QA.
+`buildLevel(seed, nivel)` is reproducible: same seed + same level ⇒ same geometry (verified 32/32,
+dirtying the state between the two runs). `armarNivel(semilla)` and `startMatch(semilla)` take an
+optional seed — that is what the QA uses.
 
-**`NAV` es un grafo sobre las superficies** y lo usan DOS cosas:
-1. La IA, para perseguir entre alturas.
-2. El **generador, para validar**: si la salida no es alcanzable desde el piso, si alguna
-   plataforma no puede volver al piso, o si alguna es una **isla** (sólo se cae en ella), la
-   tirada se descarta y se genera otra. Medido: 0 fallos de cualquier tipo en 300 niveles.
+**`NAV` is a graph over the surfaces** and TWO things use it:
+1. The AI, to chase across heights.
+2. The **generator, to validate**: if the exit is not reachable from the floor, if some platform cannot
+   get back to the floor, or if some platform is an **island** (you can only fall onto it), the roll is
+   discarded and another is generated. Measured: 0 failures of any kind across 300 levels.
 
-Los enlaces salen de la **física real del salto**, no de constantes:
-`alcanceSubiendo(rise)` resuelve el instante en que la parábola vuelve a bajar de `rise` y lo
-multiplica por la velocidad de carrera (≈ 390 px para un salto al máximo, ≈ 540 al mismo nivel).
-Con el `320` fijo que tenía antes, **281 plataformas en 300 niveles quedaban como islas**.
-La tabla de próximo-salto es all-pairs por BFS inversa, calculada una vez por nivel (18 nodos,
-324 entradas, 0.20 ms): en runtime la IA hace un lookup O(1).
+The links come from the **real physics of the jump**, not from constants: `alcanceSubiendo(rise)`
+solves for the instant the parabola comes back down through `rise` and multiplies it by the running
+speed (≈ 390 px for a maximum jump, ≈ 540 at the same level). With the fixed `320` it had before,
+**281 platforms across 300 levels ended up as islands**. The next-jump table is all-pairs by reverse
+BFS, computed once per level (18 nodes, 324 entries, 0.20 ms): at runtime the AI does an O(1) lookup.
 
-### Navegación de la IA (`aiNavegar`)
+### AI navigation (`aiNavegar`)
 
-Corre **antes** de DEFEND y devuelve `false` apenas comparten superficie: de ahí en adelante manda
-el cerebro de combate de siempre, así que **los arquetipos pelean igual que antes** (medido:
-TÉCNICO 19 puños/2 patadas, MATÓN el que más se pega a 0.32·CH).
+It runs **before** DEFEND and returns `false` as soon as they share a surface: from there on the usual
+combat brain is in charge, so **the archetypes fight exactly as before** (measured: TECHNICAL 19
+punches/2 kicks, BRAWLER the one that gets closest at 0.32·CH).
 
-- **El bug que arregla**: el aggro exigía `|Δy| < 2.2·CH` para engancharse. Con el jugador tres
-  plataformas arriba, 0 de 4 enemigos llegaban y **los 4 se quedaban literalmente quietos**. Ahora
-  la condición es que EXISTA UNA RUTA en el grafo; el radio horizontal (3.2·CH) no cambió, así que
-  cada uno sigue cuidando su zona.
-- **Salto PREDICTIVO**: no hay "saltar cuando estoy cerca de un punto mágico". Se resuelve la
-  parábola real con la velocidad actual (y con la que ganaría acelerando en el aire) y se salta en
-  el frame en que el aterrizaje cae dentro de la plataforma destino. Las versiones con
-  anticipación fija por arquetipo fallaban 2 de 6 intentos y el resultado dependía del arquetipo;
-  con la predicción son 6/6 en los cuatro, en ~4 s.
-- **Bajar**: si el destino está justo abajo y la plataforma es one-way, mantiene ABAJO + salto
-  (drop-through); si no, camina hasta pasar el borde y se deja caer.
-- **Carril por enemigo** (`br.navLane`), acotado por el solape que banca el destino: sin él los
-  nueve apuntaban al mismo punto de despegue, se empujaban con `separateBodies` y no subía
-  ninguno. Sin el tope, el carril corría el despegue hasta 83 px y el salto no llegaba nunca.
-- **Anti-atasco**: si no cambia de superficie en 2 s, se baja de donde esté y rehace la ruta desde
-  el piso. Rompe cualquier ciclo de saltos.
-- Costo medido: **0.3 µs/frame para los 9 enemigos** (un frame a 60 fps son 16 700 µs).
+- **The bug it fixes**: the aggro required `|Δy| < 2.2·CH` to latch on. With the player three platforms
+  up, 0 of 4 enemies got there and **all 4 stood literally still**. The condition is now that A ROUTE
+  EXISTS in the graph; the horizontal radius (3.2·CH) did not change, so each one still guards its zone.
+- **PREDICTIVE jump**: there is no "jump when I am near a magic point". The real parabola is solved with
+  the current velocity (and with the velocity it would gain accelerating in the air) and it jumps on the
+  frame where the landing falls inside the destination platform. The versions with a fixed per-archetype
+  anticipation failed 2 of 6 attempts and the result depended on the archetype; with the prediction it
+  is 6/6 on all four, in ~4 s.
+- **Dropping down**: if the destination is directly below and the platform is one-way, it holds DOWN +
+  jump (drop-through); otherwise it walks until past the edge and lets itself fall.
+- **A lane per enemy** (`br.navLane`), bounded by the overlap the destination can take: without it all
+  nine aimed at the same take-off point, shoved each other with `separateBodies` and none of them got
+  up. Without the cap, the lane shifted the take-off by up to 83 px and the jump never made it.
+- **Anti-stall**: if it does not change surface in 2 s, it drops off wherever it is and rebuilds the
+  route from the floor. It breaks any cycle of jumps.
+- Measured cost: **0.3 µs/frame for all 9 enemies** (a frame at 60 fps is 16,700 µs).
 
-> Gotcha de QA: `startMatch()` genera un nivel AL AZAR. Para un test reproducible hay que fijar la
-> semilla DESPUÉS de llamarlo, no antes (me pasó: comparaba dos builds sobre niveles distintos).
-> Y pararse en la plataforma de la SALIDA completa el nivel y **congela la IA** (`game.state`
-> deja de ser `'play'`), así que los escenarios de persecución usan la más alta que no sea ésa.
-- `separateBodies`: clinch mínimo 0.24·CH — más corto que lo usual porque el uppercut llega apenas
-  0.17·CH adelante; si lo agrandás, el uppercut del combo P,P,P deja de conectar.
-- **Estilo**: paleta en `PAPER/ROCK/INK` (p07). El fondo son DOS bakes world-space horneados una vez:
-  `bgCanvas` (sombras de hojas, parallax 0.45) y `terrainCanvas` (roca+tinta+rayones+puerta SALIDA,
-  parallax 1). Nada aditivo en efectos: sobre papel claro el composite 'lighter' se lava a blanco.
-- El tope de velocidad NO es drag-vs-accel: se acelera sólo por debajo de `maxRun` (con drag suave
-  encima para la embalada del dash). Con drag débil el equilibrio quedaba 65% arriba del tope.
+> QA gotcha: `startMatch()` generates a RANDOM level. For a reproducible test the seed has to be fixed
+> AFTER calling it, not before (it happened to me: I was comparing two builds over different levels).
+> And standing on the EXIT platform completes the level and **freezes the AI** (`game.state` stops being
+> `'play'`), so the chase scenarios use the highest one that is not that.
+- `separateBodies`: minimum clinch 0.24·CH — shorter than usual because the uppercut only reaches
+  0.17·CH forward; if you grow it, the uppercut of the P,P,P combo stops connecting.
+- **Style**: palette in `PAPER/ROCK/INK` (p07). The background is TWO world-space bakes baked once:
+  `bgCanvas` (leaf shadows, parallax 0.45) and `terrainCanvas` (rock+ink+scratches+EXIT door, parallax
+  1). Nothing additive in the effects: over light paper the 'lighter' composite washes out to white.
+- The speed cap is NOT drag-vs-accel: it only accelerates below `maxRun` (with a gentle drag above for
+  the dash's run-out). With a weak drag the equilibrium sat 65 % above the cap.
 
-## QA headless (sin node)
+## Headless QA (no node)
 
-Sondas nuevas de 2026-09-21b (todas en el scratchpad, se inyectan antes de `</body>`):
+New probes from 2026-09-21b (all in the scratchpad, injected before `</body>`):
 
-- **`probe_conecta.js`** — matriz ¿CONECTA? de 11 golpes × 5 estados del blanco (de pie, agachado,
-  bloqueo alto, bloqueo bajo, en el aire) × 26 distancias = 1430 celdas. Es la única prueba que
-  mide el ALCANCE EFECTIVO en vez de la geometría. **Ojo con dos trampas que costaron una corrida
-  entera**: (a) el blanco hay que clavarlo en x ABSOLUTO — re-anclarlo a `P1.x` lo hace perseguir
-  al atacante por el root motion y la distancia miente; (b) `this.T` (reloj de respiración) nace en
-  `rnd(0, 9)`, así que sin fijarlo la matriz no es reproducible **ni contra sí misma** (medido:
-  9 filas distintas entre dos corridas del mismo build). Con `P1.T` y `E.T` fijos: 0 filas.
-- **`probe_continuidad.js`** — mide, no asume: salto de `targetPose` en cada cambio de estado, jerk
-  por joint, patinaje de pie plantado POR ESTADO, desbalance pelvis-vs-apoyo, articulación del
-  torso. Hay que descartar una ventana de ~6 frames después de cada teleport del propio test
-  (`resetFighter` pisa `poseCur` de golpe: sin filtro el jerk y el patinaje no miden nada).
-- **`probe_niveles.js`** — reproducibilidad, barrido de 200 semillas × 4 etapas, repertorio de
-  patrones por etapa, persecución de la IA por etapa y progresión de partida (8 niveles seguidos).
-- **`probe_humo.js`** — 6 minutos de partida real con input pseudo-aleatorio reproducible: NaN,
-  estados fuera del enum, hp fuera de rango, peleadores fuera del mundo, pies sobre la pelvis.
-- **`probe_huesos.js`** / **`probe_retrato.js`** — retratos grandes con y sin las articulaciones
-  marcadas encima. Para juzgar proporciones no alcanza con los números: hay que mirar.
-- **`ejes.py`** — descompone el cambio de un golpe en EJES. `compare.py` mide `+ALCANCE` **radial**
-  desde la raíz, así que subir la mano 9 px le da +5.5 px aunque el alcance horizontal no cambie.
+- **`probe_conecta.js`** — a DOES IT CONNECT? matrix of 11 strikes × 5 target states (standing,
+  crouching, high block, low block, in the air) × 26 distances = 1430 cells. It is the only test that
+  measures EFFECTIVE REACH instead of geometry. **Watch out for two traps that cost a whole run**: (a)
+  the target has to be nailed at an ABSOLUTE x — re-anchoring it to `P1.x` makes it chase the attacker
+  through the root motion and the distance lies; (b) `this.T` (the breathing clock) is born at
+  `rnd(0, 9)`, so without fixing it the matrix is not reproducible **even against itself** (measured: 9
+  different rows between two runs of the same build). With `P1.T` and `E.T` fixed: 0 rows.
+- **`probe_continuidad.js`** — it measures rather than assumes: the jump in `targetPose` at each state
+  change, jerk per joint, planted-foot skating PER STATE, pelvis-vs-support imbalance, torso
+  articulation. A window of ~6 frames after each teleport of the test itself has to be discarded
+  (`resetFighter` overwrites `poseCur` outright: without the filter the jerk and the skating measure
+  nothing).
+- **`probe_niveles.js`** — reproducibility, a sweep of 200 seeds × 4 stages, the repertoire of patterns
+  per stage, AI chasing per stage and match progression (8 levels in a row).
+- **`probe_humo.js`** — 6 minutes of real play with reproducible pseudo-random input: NaN, states
+  outside the enum, hp out of range, fighters outside the world, feet above the pelvis.
+- **`probe_huesos.js`** / **`probe_retrato.js`** — large portraits with and without the joints marked on
+  top. Numbers are not enough to judge proportions: you have to look.
+- **`ejes.py`** — decomposes a strike's change into AXES. `compare.py` measures `+REACH` **radially**
+  from the root, so raising the hand 9 px gives it +5.5 px even though the horizontal reach does not
+  change.
 
 
-Chrome headless + `--virtual-time-budget` NO dispara rAF de forma sostenida: **la sim queda congelada
-aunque los timers corran**. El loop está preparado para bombearse a mano:
+Chrome headless + `--virtual-time-budget` does NOT fire rAF in a sustained way: **the sim stays frozen
+even though the timers run**. The loop is set up to be pumped by hand:
 
-- `loop(t)` es global y `scheduleRaf()` tiene dedupe → un driver inyectado puede llamar
-  `loop(qaNow += 16.7)` desde un `setInterval` sin duplicar la cadena rAF.
-- Handle de debug: `window.SF = {P1, P2, CFG, game, cam, MOVES, POSES, ST, simT}`; `SF.simT` es el
-  reloj de simulación acumulado — agendá acciones de test por `simT`, no por tiempo real.
-- `dbgFreeze = true` congela la sim (sigue dibujando) → screenshot exacto del instante deseado.
-- Patrón completo (cazador de errores + driver por escenario + status dump): el harness `qa.py` de la
-  sesión 2026-07-22/23; escenarios útiles: menu/fight/run/skid/jump/jab/combo/kick/ko/hang/boxes.
-- **`--virtual-time-budget` ni hace falta**: `loop(t)` se puede bombear SINCRÓNICAMENTE en un `for`,
-  lo que hace los escenarios deterministas y rápidos. El driver tiene que manejar `keys` (teclado),
-  **no** `inP1`: `pollInputs()` reescribe `inP1` entero en cada frame.
-- Tres harnesses de la sesión de animación (2026-09-20), en el scratchpad:
-  1. **probe de moves**: reconstruye la capa (b) de `buildPose` y muestrea la trayectoria del limb
-     cada 1 ms → compara frame-data exacto, desvío dentro de la activa, **Hausdorff unilateral de
-     la cápsula barrida** y, la métrica que de verdad manda, **`+ALCANCE`**: cuánto más lejos de
-     la raíz llega el barrido nuevo. Positivo = el golpe llega más lejos (eso sí sería cambiar el
-     alcance); ≤0 = sólo creció hacia el cuerpo, que es inofensivo. Corre a 60 y 30 Hz.
-     También mide el **recorrido** del miembro y cuánto se pliega en el wind-up, que es el número
-     que hay que mirar cuando un golpe "se siente corto".
-  2. **harness de simulación**: ~30 escenarios guionados con validador por frame (finitud, largos de
-     hueso, pie sobre pelvis, pie lejos del cuerpo, patinaje en apoyo, jerk, desbalance pelvis/pies,
-     alcance real punta a punta). Corre a 16.7 / 33.3 / 50 ms.
-  3. **tiras de fotogramas**: reasigna el `ctx` global y llama a `drawStick()` para pintar N poses en
-     una grilla, y saca UNA screenshot. Es la única forma práctica de *ver* una animación acá.
-- Ojo al comparar corridas: `Fighter` arranca con `this.T = rnd(0, 9)` (fase de respiración), así que
-  escenarios donde un golpe conecta justo en el límite dan ±8 px de diferencia **entre corridas del
-  mismo build**. Antes de culpar a un cambio, corré el mismo build dos veces.
-- Teclas de debug en vivo: `T` panel de tuning (sliders sobre `CFG`), `H` hit/hurtboxes, `G` cámara
-  lenta, `Y` dump de pose a consola; triple-tap en la versión del menú abre el panel en mobile.
+- `loop(t)` is global and `scheduleRaf()` has dedupe → an injected driver can call `loop(qaNow += 16.7)`
+  from a `setInterval` without duplicating the rAF chain.
+- Debug handle: `window.SF = {P1, P2, CFG, game, cam, MOVES, POSES, ST, simT}`; `SF.simT` is the
+  accumulated simulation clock — schedule test actions by `simT`, not by real time.
+- `dbgFreeze = true` freezes the sim (it keeps drawing) → an exact screenshot of the desired instant.
+- The full pattern (error catcher + per-scenario driver + status dump): the `qa.py` harness from the
+  2026-07-22/23 session; useful scenarios: menu/fight/run/skid/jump/jab/combo/kick/ko/hang/boxes.
+- **`--virtual-time-budget` is not even needed**: `loop(t)` can be pumped SYNCHRONOUSLY in a `for`,
+  which makes the scenarios deterministic and fast. The driver has to drive `keys` (the keyboard),
+  **not** `inP1`: `pollInputs()` rewrites all of `inP1` every frame.
+- Three harnesses from the animation session (2026-09-20), in the scratchpad:
+  1. **move probe**: it reconstructs layer (b) of `buildPose` and samples the limb's trajectory every
+     1 ms → it compares the exact frame data, the deviation inside the active window, the **one-sided
+     Hausdorff of the swept capsule** and, the metric that really matters, **`+REACH`**: how much
+     further from the root the new sweep gets. Positive = the strike reaches further (that really would
+     be changing the reach); ≤0 = it only grew towards the body, which is harmless. It runs at 60 and
+     30 Hz. It also measures the limb's **travel** and how much it folds in the wind-up, which is the
+     number to look at when a strike "feels short".
+  2. **simulation harness**: ~30 scripted scenarios with a per-frame validator (finiteness, bone
+     lengths, foot above pelvis, foot far from the body, skating in stance, jerk, pelvis/feet imbalance,
+     real tip-to-tip reach). It runs at 16.7 / 33.3 / 50 ms.
+  3. **frame strips**: it reassigns the global `ctx` and calls `drawStick()` to paint N poses in a grid,
+     and takes ONE screenshot. It is the only practical way to *see* an animation here.
+- Careful when comparing runs: `Fighter` starts with `this.T = rnd(0, 9)` (breathing phase), so
+  scenarios where a strike connects right at the limit give ±8 px of difference **between runs of the
+  same build**. Before blaming a change, run the same build twice.
+- Live debug keys: `T` tuning panel (sliders over `CFG`), `H` hit/hurtboxes, `G` slow motion, `Y` dump
+  the pose to the console; a triple-tap in the menu version opens the panel on mobile.
 
 ## Gotchas
 
-- Todo el DOM del juego está declarado ANTES del script principal (gotcha TankWARSWeb); el script de
-  cola (info/FPS/mute) va después de `arcade-shell.js`.
-- El trío de context-loss invalida `bgCanvas`, `skyGrad` y `_glowCache` — si agregás un bake nuevo,
-  sumalo ahí (los sprites de chispas guardan la ref en la partícula: se regeneran vía cache Map).
-- Los tiempos de los keytracks (`poses[].at`) son ABSOLUTOS dentro del move y el sampler arranca
-  desde `atkPose0` (la pose real al iniciar el golpe) — una pose parcial sin una clave "sostiene" el
-  último valor definido.
+- All the game's DOM is declared BEFORE the main script (the TankWARSWeb gotcha); the tail script
+  (info/FPS/mute) goes after `arcade-shell.js`.
+- The context-loss trio invalidates `bgCanvas`, `skyGrad` and `_glowCache` — if you add a new bake, add
+  it there too (the spark sprites keep the ref in the particle: they regenerate via a cache Map).
+- The keytrack times (`poses[].at`) are ABSOLUTE within the move and the sampler starts from `atkPose0`
+  (the real pose at the start of the strike) — a partial pose without a key "holds" the last defined
+  value.
 
 
-## AUDIO — correccion (2026-09-22)
+## AUDIO — fix (2026-09-22)
 
-**Morir sonaba exactamente igual que ganar.** `setBanner()` terminaba llamando `sfx.banner()`
-incondicionalmente — el par ASCENDENTE de celebracion — y `onKO` usa `setBanner` para anunciar la
-muerte del jugador (`'TE BAJARON…'`).
+**Dying sounded exactly like winning.** `setBanner()` ended up calling `sfx.banner()`
+unconditionally — the RISING celebration pair — and `onKO` uses `setBanner` to announce the player's
+death (`'YOU WENT DOWN…'`).
 
-`setBanner` ahora acepta un quinto parametro `snd` con la voz del cartel. Por defecto sigue siendo
-`sfx.banner`, que es lo que un cartel quiere decir casi siempre; la muerte pasa `sfx.ko`. Medido:
-el cartel normal da `square` 373 → 529 Hz (sube), el de muerte da `sawtooth` 378 + `square` 206 a
-volumen 0.1 (cae).
+`setBanner` now takes a fifth parameter `snd` holding the banner's voice. It still defaults to
+`sfx.banner`, which is what a banner almost always means; death passes `sfx.ko`. Measured: the
+normal banner gives `square` 373 → 529 Hz (rising), the death one gives `sawtooth` 378 + `square`
+206 at gain 0.1 (falling).

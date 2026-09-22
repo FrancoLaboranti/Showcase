@@ -135,38 +135,38 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  NEWTON'S CRADLE — péndulo de Newton "de verdad", con el shell mobile
-  //  de BallsWeb / ClockWeb.
+  //  NEWTON'S CRADLE — a "real" Newton's cradle, with the mobile shell
+  //  from BallsWeb / ClockWeb.
   //
-  //  Física (reescrita, ya no es el port literal del .py crudo):
-  //   · Cada bola es un péndulo rígido real: la aceleración angular es
-  //     α = -ω²·sin(φ)  (φ = desvío respecto de la vertical), integrada con
-  //     Euler semi-implícito a paso fijo de 5 ms. No es ángulo-chico: usa el
-  //     sin completo, así que amplitudes grandes se ven correctas.
-  //   · Colisiones: choque elástico de masas iguales = INTERCAMBIO de
-  //     velocidad angular (mismo largo de hilo ⇒ intercambiar ω == intercambiar
-  //     la velocidad lineal). Se resuelve iterando la cadena para que el impulso
-  //     se propague entero en un mismo frame (1 bola entra → 1 sale del otro
-  //     lado; 2 entran → 2 salen). COLLISION_LOSS=1 ⇒ sin pérdida en el choque.
-  //   · Reposo: las bolas cuelgan rectas y JUSTO tocándose (separación = 2·radio),
-  //     con una amortiguación de aire muy leve y un snap final, así no tiembla.
+  //  Physics (rewritten, no longer the literal port of the raw .py):
+  //   · Each ball is a real rigid pendulum: the angular acceleration is
+  //     α = -ω²·sin(φ)  (φ = the deviation from the vertical), integrated with
+  //     semi-implicit Euler at a fixed 5 ms step. It is not small-angle: it uses the
+  //     full sin, so large amplitudes look correct.
+  //   · Collisions: an elastic collision of equal masses = an EXCHANGE of
+  //     angular velocity (the same string length ⇒ swapping ω == swapping
+  //     the linear velocity). It is resolved by iterating the chain so the impulse
+  //     propagates fully within one frame (1 ball in → 1 out the other
+  //     side; 2 in → 2 out). COLLISION_LOSS=1 ⇒ no loss in the collision.
+  //   · Rest: the balls hang straight and JUST touching (separation = 2·radius),
+  //     with very slight air damping and a final snap, so nothing trembles.
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
 
-  // ── PERILLAS DE AJUSTE ──
-  const FIXED_DT       = 5;       // ms por paso de física (acumulador → estable e independiente del fps)
-  const OMEGA          = 6.1;     // rad/s — frecuencia natural del péndulo (período chico ≈ 2π/OMEGA ≈ 1.0 s)
-  const DAMP           = 0.15;    // 1/s — amortiguación de aire (chico = oscila mucho rato)
-  const COLLISION_LOSS = 1.0;     // 1 = choque perfectamente elástico; <1 pierde energía en cada impacto
-  const RESIDUAL       = 0.005;    // fracción que NO se transfiere en el choque ⇒ queda algo de sway en la cadena (0 = swap perfecto, fila muerta)
-  const REST_SNAP_ANG  = 0.004;   // rad — por debajo de esto (y vel baja) se clava en reposo
+  // ── TUNING KNOBS ──
+  const FIXED_DT       = 5;       // ms per physics step (an accumulator → stable and independent of the fps)
+  const OMEGA          = 6.1;     // rad/s — the pendulum's natural frequency (a short period ≈ 2π/OMEGA ≈ 1.0 s)
+  const DAMP           = 0.15;    // 1/s — air damping (small = it oscillates for a long time)
+  const COLLISION_LOSS = 1.0;     // 1 = a perfectly elastic collision; <1 loses energy on each impact
+  const RESIDUAL       = 0.005;    // the fraction NOT transferred in the collision ⇒ some sway is left in the chain (0 = a perfect swap, a dead row)
+  const REST_SNAP_ANG  = 0.004;   // rad — below this (and at low speed) it snaps to rest
   const REST_SNAP_VEL  = 0.012;   // rad/s
-  const ANG_EPS        = 0.0015;  // rad — penetración angular por debajo de la cual no se corrige (anti-jitter en reposo)
-  const VEL_EPS        = 1e-3;    // rad/s — umbral de "acercándose" para disparar el swap
-  const FLING_TC       = 0.05;    // s — constante del filtro paso-bajo de la velocidad de arrastre (como MOUSE_SMOOTH_TC de Balls)
-  const FLING_MAX      = 10;      // rad/s — tope del impulso que podés imprimirle a una bola al soltarla
+  const ANG_EPS        = 0.0015;  // rad — angular penetration below which it is not corrected (anti-jitter at rest)
+  const VEL_EPS        = 1e-3;    // rad/s — the "approaching" threshold that triggers the swap
+  const FLING_TC       = 0.05;    // s — the time constant of the drag velocity's lowpass filter (like Balls' MOUSE_SMOOTH_TC)
+  const FLING_MAX      = 10;      // rad/s — cap on the impulse you can impart to a ball on releasing it
 
-  // colores de las bolas (acero cromado, como la foto: highlight brillante y borde oscuro fresnel)
+  // ball colours (chromed steel, as in the photo: a bright highlight and a dark fresnel edge)
   const STEEL = {
     hi:   'rgb(226,233,241)',
     lite: 'rgb(150,162,176)',
@@ -179,34 +179,34 @@
   const ctx = canvas.getContext('2d');
 
   let W = 0, H = 0, dpr = 1;
-  // layout (recalculado en resize y al cambiar la cantidad de bolas)
+  // layout (recomputed on resize and when the number of balls changes)
   let radio = 30, L = 450, origY = 150, centerX = 0;
   let frameLeft = 0, frameRight = 0, frameTop = 0, baseY = 0, k = 1;
-  // Escala de la ESCENA (ventana, luna, horizonte, planta): depende SÓLO de W/H, NO de la cantidad de
-  // bolas. Así, al agregar/quitar bolas, sólo cambian la cuna y el tamaño de la mesa — el fondo queda fijo.
+  // Scale of the SCENE (window, moon, horizon, plant): it depends ONLY on W/H, NOT on the number of
+  // balls. That way, adding/removing balls only changes the cradle and the table's size — the background stays fixed.
   let sceneR = 30, sceneK = 1;
-  let tableTop = 0;             // y de la superficie del mueble donde se apoya la base del péndulo
-  let tableLeft = 0;            // x donde EMPIEZA la mesa (sale por la derecha; la cuna queda cerca de este borde)
-  let sceneDay = null, sceneNight = null;   // FONDO (pared+ventana+biblioteca+penumbra) — detrás de la planta
-  let plantDay = null, plantNight = null;   // PLANTA sola (capa propia para poder animarla con un vaivén)
-  let frontDay = null, frontNight = null;   // MESA (canto + sombra de contacto) — delante de la planta
-  let godRaysDay = null, godRaysNight = null; // rayos de luz del ventanal (bakeados, blit con alpha animado)
-  let frameLayer = null;        // marco del péndulo (arco + base + collares) bakeado — estático entre layouts
-  let ballSprite = null, ballSpriteHalf = 0; // esfera metálica bakeada una vez por layout (mismo radio todas)
-  let vignette = null;          // gradiente de viñeteado (oscurece bordes; da profundidad de "plano de cerca")
-  let nightFactor = 0;          // 0 = día, 1 = noche (transiciona en bucle, independiente del péndulo)
-  let sceneClock = 0;           // ms acumulados para el ciclo día/noche
-  const NIGHT_PERIOD = 54;      // s — duración del ciclo día↔noche completo
+  let tableTop = 0;             // y of the surface of the furniture the pendulum's base rests on
+  let tableLeft = 0;            // x where the table STARTS (it runs off to the right; the cradle sits near this edge)
+  let sceneDay = null, sceneNight = null;   // BACKGROUND (wall+window+bookcase+gloom) — behind the plant
+  let plantDay = null, plantNight = null;   // THE PLANT alone (its own layer so it can be animated with a sway)
+  let frontDay = null, frontNight = null;   // TABLE (edge + contact shadow) — in front of the plant
+  let godRaysDay = null, godRaysNight = null; // light rays from the window (baked, blitted with an animated alpha)
+  let frameLayer = null;        // the pendulum's frame (arch + base + collars) baked — static between layouts
+  let ballSprite = null, ballSpriteHalf = 0; // metal sphere baked once per layout (they all have the same radius)
+  let vignette = null;          // vignette gradient (it darkens the edges; it gives a "close-up plane" depth)
+  let nightFactor = 0;          // 0 = day, 1 = night (it transitions in a loop, independent of the pendulum)
+  let sceneClock = 0;           // accumulated ms for the day/night cycle
+  const NIGHT_PERIOD = 54;      // s — duration of a full day↔night cycle
 
-  // estado de simulación
+  // simulation state
   let nroBalls = 5;
   let balls = [];
-  let ghosted = false;          // toggle: las bolas se atraviesan (sin colisión) + se ven translúcidas
-  let holding = false;          // toggle: congela la gravedad (modo pose)
-  let grabbedBall = null;       // una sola bola agarrada por vez (pegajosa hasta soltar el dedo)
-  let flingVel = 0;             // velocidad angular filtrada del arrastre, para imprimirla al soltar
+  let ghosted = false;          // toggle: the balls pass through each other (no collision) + they look translucent
+  let holding = false;          // toggle: it freezes gravity (pose mode)
+  let grabbedBall = null;       // a single ball grabbed at a time (sticky until you lift the finger)
+  let flingVel = 0;             // filtered angular velocity of the drag, to impart it on release
 
-  // ── geometría ──
+  // ── geometry ──
   const getangle = (ax, ay, bx, by) => Math.atan2(by - ay, bx - ax);
   const colisionRyp = (cx, cy, w, h, px, py) => px > cx && px < cx + w && py > cy && py < cy + h;
 
@@ -216,44 +216,44 @@
   }
   function setPos(b) { b.x = origX(b.nro) + Math.cos(b.angulo) * L; b.y = origY + Math.sin(b.angulo) * L; }
 
-  const INSET_K    = 1.9;         // voladizo del marco más allá de la bola del extremo, en radios
-  const BASE_THK_K = 1.3;         // grosor de la base negra, en radios
-  const STRING_K   = 9.0;         // largo del hilo, en radios (hilos largos ⇒ bolas más chicas, como la foto)
-  // MACETÓN (compartido por drawPlant y por el cálculo de tableLeft en layout, para no desincronizar)
-  const PLANT_CX    = 0.086;      // centro del pote, fracción de W (corrido a la izq: deja gap con la mesa al tener 10 bolas)
-  const PLANT_POTHW = 0.094;      // semiancho del pote, fracción de W (grande ⇒ macetón)
+  const INSET_K    = 1.9;         // overhang of the frame beyond the end ball, in radii
+  const BASE_THK_K = 1.3;         // thickness of the black base, in radii
+  const STRING_K   = 9.0;         // string length, in radii (long strings ⇒ smaller balls, as in the photo)
+  // BIG POT (shared by drawPlant and by the tableLeft computation in layout, so they do not get out of sync)
+  const PLANT_CX    = 0.086;      // centre of the pot, a fraction of W (shifted left: it leaves a gap with the table when there are 10 balls)
+  const PLANT_POTHW = 0.094;      // half-width of the pot, a fraction of W (large ⇒ a big pot)
   function layout() {
     centerX = W / 2;
-    // Plano de cerca: la base del péndulo se apoya sobre el CANTO de la mesa (a ~74% del alto). Arriba
-    // entra una ventana grande; debajo del canto fino, todo a oscuras. Crece hacia arriba.
+    // Close-up plane: the pendulum's base rests on the table's EDGE (at ~74% of the height). Above
+    // it there is a large window; below the thin edge, everything is dark. It grows upwards.
     tableTop = H * 0.74;
-    const topMargin = H * 0.05;                                                    // aire arriba para el hint
-    const divH = STRING_K + 0.15 + 1.1 + BASE_THK_K;                               // alto del aparato / radio
+    const topMargin = H * 0.05;                                                    // air at the top for the hint
+    const divH = STRING_K + 0.15 + 1.1 + BASE_THK_K;                               // height of the apparatus / radius
     const rW = (0.50 * W) / (2 * (nroBalls - 1) + 2 * INSET_K);
     const rH = (tableTop - topMargin) / divH;
     radio = Math.max(6, Math.min(rW, rH));
     k = radio / 30;
-    // escala de escena estable (independiente de nroBalls) — fija ventana/luna/horizonte/planta
+    // stable scene scale (independent of nroBalls) — it fixes the window/moon/horizon/plant
     sceneR = Math.min(W, H) * 0.06;
     sceneK = sceneR / 30;
     L = radio * STRING_K;
     const baseThk = radio * BASE_THK_K;
-    baseY = tableTop - baseThk;                                                    // cara superior de la base (su fondo descansa en la mesa)
-    frameTop = baseY - L - radio * 1.1;                                            // travesaño superior
-    origY = frameTop;                                                              // pivote de los hilos
+    baseY = tableTop - baseThk;                                                    // top face of the base (its bottom rests on the table)
+    frameTop = baseY - L - radio * 1.1;                                            // top crossbeam
+    origY = frameTop;                                                              // pivot of the strings
     const ballSpan = (nroBalls - 1) * radio * 2;
     const inset = radio * INSET_K;
     frameLeft  = centerX - ballSpan / 2 - inset;
     frameRight = centerX + ballSpan / 2 + inset;
-    // la mesa empieza pasado el borde izquierdo de pantalla y sale por la derecha: la cuna queda
-    // cerca del borde IZQUIERDO de la mesa. Pero SIEMPRE con separación visible respecto de la maceta:
-    // nunca arranca a la izquierda del borde derecho del pote + un gap.
-    const potRight = W * PLANT_CX + W * PLANT_POTHW * 1.04;                         // borde der del labio del macetón (ver drawPlant)
+    // the table starts past the left edge of the screen and runs off to the right: the cradle sits
+    // near the table's LEFT edge. But ALWAYS with a visible gap from the pot:
+    // it never starts to the left of the pot's right edge + a gap.
+    const potRight = W * PLANT_CX + W * PLANT_POTHW * 1.04;                         // right edge of the big pot's lip (see drawPlant)
     const gap = Math.min(W, H) * 0.045;
-    const cradleLeft = frameLeft - radio * 2.5;                                     // borde izq de la cuna (la base llega a frameLeft − 2.4·radio)
-    // La mesa SIEMPRE contiene la cuna: su borde no puede quedar a la derecha del pie. Si hay lugar,
-    // además deja un gap respecto del macetón; si la cuna es muy ancha (muchas bolas) gana la contención
-    // y el pote se mete apenas detrás del canto de la mesa.
+    const cradleLeft = frameLeft - radio * 2.5;                                     // left edge of the cradle (the base reaches frameLeft − 2.4·radius)
+    // The table ALWAYS contains the cradle: its edge cannot end up to the right of the foot. If there is room,
+    // it also leaves a gap from the big pot; if the cradle is very wide (many balls) containment wins
+    // and the pot tucks just behind the table's edge.
     tableLeft = Math.min(cradleLeft, potRight + gap);
     for (const b of balls) setPos(b);
   }
@@ -285,21 +285,21 @@
     for (let i = 0; i < nroBalls; i++)
       balls.push({ nro: i, angulo: Math.PI / 2, velocidad: 0, grabbed: false, pushed: false, x: 0, y: 0 });
     layout();
-    buildScenes();                                                                 // el radio/ancho cambió ⇒ rearmar la escena (día + noche)
+    buildScenes();                                                                 // the radius/width changed ⇒ rebuild the scene (day + night)
   }
 
-  // ════════════════ FÍSICA ════════════════
+  // ════════════════ PHYSICS ════════════════
   const W2 = () => OMEGA * OMEGA;
   function integrate(b, dt) {
-    // péndulo real: α = -ω²·sin(φ), con φ = angulo - π/2  ⇒  α = ω²·cos(angulo).
-    // Integración velocity-Verlet: conserva mejor la energía que Euler ⇒ el swing se ve más natural
-    // y parejo (Euler semi-implícito metía amortiguación numérica que lo apagaba de más).
+    // a real pendulum: α = -ω²·sin(φ), with φ = angle - π/2  ⇒  α = ω²·cos(angle).
+    // Velocity-Verlet integration: it conserves energy better than Euler ⇒ the swing looks more natural
+    // and even (semi-implicit Euler introduced numerical damping that killed it too fast).
     const a0 = W2() * Math.cos(b.angulo);
     b.angulo += b.velocidad * dt + 0.5 * a0 * dt * dt;
     const a1 = W2() * Math.cos(b.angulo);
     b.velocidad += 0.5 * (a0 + a1) * dt;
     b.velocidad *= Math.exp(-DAMP * dt);
-    // snap a reposo para que no quede temblando infinitamente
+    // snap to rest so it does not go on trembling forever
     const phi = b.angulo - Math.PI / 2;
     if (Math.abs(phi) < REST_SNAP_ANG && Math.abs(b.velocidad) < REST_SNAP_VEL) {
       b.angulo = Math.PI / 2; b.velocidad = 0;
@@ -307,46 +307,46 @@
   }
 
   function clampAngle(b) {
-    // no pasar de la horizontal a cada lado (igual que el .py)
+    // do not go past the horizontal on either side (the same as the .py)
     if (b.angulo < 0 && b.angulo >= -Math.PI / 2) { b.angulo = 0;       b.velocidad = 0; }
     if (b.angulo > -Math.PI && b.angulo < -Math.PI / 2) { b.angulo = Math.PI; b.velocidad = 0; }
     if (b.angulo < 0) { b.angulo = 0; if (b.velocidad < 0) b.velocidad = 0; }
     if (b.angulo > Math.PI) { b.angulo = Math.PI; if (b.velocidad > 0) b.velocidad = 0; }
   }
 
-  // Colisiones resueltas en ESPACIO DE ÁNGULOS (no por distancia entre centros). Las anclas son paralelas
-  // y equiespaciadas 2·radio, así que dos vecinas se tocan exactamente cuando tienen el mismo ángulo, y la
-  // condición de no-penetración de la cadena es simplemente θ_izq ≥ θ_der. La "penetración" es entonces
-  // pen = θ_b − θ_a (>0 = cruzaron / se pisan). Esto evita el bug del test por distancia: cerca de la
-  // horizontal, si la arrastrada se atrasaba se separaba en VERTICAL, la distancia superaba 2·radio y se
-  // soltaba antes del tope. Con ángulos, arrastrar hasta el extremo funciona igual que abajo.
+  // Collisions resolved in ANGLE SPACE (not by the distance between centres). The anchors are parallel
+  // and spaced 2·radius apart, so two neighbours touch exactly when they have the same angle, and the chain's
+  // non-penetration condition is simply θ_left ≥ θ_right. "Penetration" is then
+  // pen = θ_b − θ_a (>0 = they crossed / overlap). This avoids the bug of the distance test: near the
+  // horizontal, if the dragged one lagged it separated VERTICALLY, the distance exceeded 2·radius and it
+  // let go before the limit. With angles, dragging to the extreme works the same as at the bottom.
   function resolveCollisions(allowSwap) {
     if (ghosted) return;
     for (let iter = 0; iter < nroBalls + 2; iter++) {
       let changed = false;
       for (let i = 0; i < balls.length - 1; i++) {
-        const a = balls[i], b = balls[i + 1];                                      // a a la izquierda, b a la derecha
-        const pen = b.angulo - a.angulo;                                           // >ANG_EPS = se están pisando
+        const a = balls[i], b = balls[i + 1];                                      // a on the left, b on the right
+        const pen = b.angulo - a.angulo;                                           // >ANG_EPS = they are overlapping
         if (pen <= ANG_EPS) continue;
-        // "rígida" = agarrada por el dedo, o ya arrastrada por la cadena agarrada en este frame. La rígida
-        // arrastra a la vecina EN VIVO sin transmitirle velocidad: le clava su mismo ángulo y le deja vel 0.
-        // Se propaga por la cadena (la arrastrada también queda rígida) ⇒ se levantan de a dos/tres/… sin
-        // que ninguna se suelte.
+        // "rigid" = held by the finger, or already dragged by the held chain this frame. The rigid one
+        // drags its neighbour LIVE without transmitting velocity: it nails its own angle to it and leaves it at vel 0.
+        // It propagates along the chain (the dragged one becomes rigid too) ⇒ they lift two/three/… at a time without
+        // any of them letting go.
         const aRigid = a.grabbed || a.pushed;
         const bRigid = b.grabbed || b.pushed;
         if (aRigid && !bRigid)      { b.angulo = a.angulo; setPos(b); b.velocidad = 0; b.pushed = true; changed = true; }
         else if (bRigid && !aRigid) { a.angulo = b.angulo; setPos(a); a.velocidad = 0; a.pushed = true; changed = true; }
         else if (!aRigid && !bRigid) {
-          const mid = (a.angulo + b.angulo) * 0.5;                                 // separar a contacto exacto (mismo ángulo)
+          const mid = (a.angulo + b.angulo) * 0.5;                                 // separate to exact contact (the same angle)
           a.angulo = mid; setPos(a);
           b.angulo = mid; setPos(b);
           changed = true;
-          // choque de masas iguales: intercambio de velocidad, sólo si se acercan. Pero IMPERFECTO: cada
-          // una se queda con una fracción RESIDUAL de su propia velocidad, así la cadena conserva un poco
-          // de movimiento (sway suave) en vez de quedar perfectamente muerta.
+          // a collision of equal masses: an exchange of velocity, only if they are approaching. But IMPERFECT: each
+          // one keeps a RESIDUAL fraction of its own velocity, so the chain retains a little
+          // movement (a gentle sway) instead of going perfectly dead.
           if (allowSwap && (b.velocidad - a.velocidad) > VEL_EPS) {
             const va = a.velocidad, vb = b.velocidad;
-            frameImpactV = Math.max(frameImpactV, vb - va);                         // energía del choque más fuerte de este frame → sonido
+            frameImpactV = Math.max(frameImpactV, vb - va);                         // energy of this frame's strongest collision → sound
             a.velocidad = (vb * (1 - RESIDUAL) + va * RESIDUAL) * COLLISION_LOSS;
             b.velocidad = (va * (1 - RESIDUAL) + vb * RESIDUAL) * COLLISION_LOSS;
           }
@@ -356,7 +356,7 @@
     }
   }
 
-  // ángulo del puntero respecto del ancla de la bola, mapeado al hemisferio inferior [0, π]
+  // angle of the pointer relative to the ball's anchor, mapped to the lower hemisphere [0, π]
   function pointerAngle(b) {
     let ang = getangle(origX(b.nro), origY, mx, my);
     if (ang < 0 && ang >= -Math.PI / 2) ang = 0;
@@ -367,9 +367,9 @@
   function step(dtms) {
     const dt = dtms / 1000;
 
-    // ── soltar: imprimir el impulso del arrastre (como el throw de Balls con mouseVx/Vy) ──
-    // Se usa el flag `pushed` del frame ANTERIOR (todavía en las bolas) para que un grupo levantado
-    // junto salga junto, todas con la misma velocidad angular. Por eso va ANTES del reset de `pushed`.
+    // ── release: impart the drag's impulse (like the Balls throw with mouseVx/Vy) ──
+    // It uses the PREVIOUS frame's `pushed` flag (still on the balls) so that a group lifted
+    // together leaves together, all at the same angular velocity. That is why it goes BEFORE the `pushed` reset.
     if (!mDown && grabbedBall) {
       const fv = Math.max(-FLING_MAX, Math.min(FLING_MAX, flingVel));
       grabbedBall.velocidad = fv;
@@ -377,15 +377,15 @@
       grabbedBall = null;
     }
 
-    for (const b of balls) b.pushed = false;                                       // se recalcula cada frame en resolveCollisions
+    for (const b of balls) b.pushed = false;                                       // it is recomputed each frame in resolveCollisions
 
-    // ── agarre: una sola bola por vez y pegajosa (se mantiene hasta soltar el dedo) ──
+    // ── grab: a single ball at a time and sticky (it holds until you lift the finger) ──
     if (mDown && !grabbedBall) {
       for (const b of balls) {
         if (colisionRyp(b.x - radio, b.y - radio, radio * 2, radio * 2, mx, my)) {
           grabbedBall = b;
           flingVel = 0;
-          b.angulo = pointerAngle(b); setPos(b);                                    // pegar al puntero sin spike de velocidad
+          b.angulo = pointerAngle(b); setPos(b);                                    // stick to the pointer with no velocity spike
           break;
         }
       }
@@ -395,23 +395,23 @@
       ball.grabbed = (ball === grabbedBall);
       if (ball.grabbed) {
         const ang = pointerAngle(ball);
-        const raw = (ang - ball.angulo) / dt;                                       // velocidad angular instantánea del arrastre
+        const raw = (ang - ball.angulo) / dt;                                       // instantaneous angular velocity of the drag
         const kf = 1 - Math.exp(-dt / FLING_TC);
-        flingVel += (raw - flingVel) * kf;                                          // filtro paso-bajo (suaviza el jitter del puntero)
+        flingVel += (raw - flingVel) * kf;                                          // lowpass filter (it smooths the pointer's jitter)
         ball.angulo = ang;
-        ball.velocidad = 0;                                                         // mientras la sostenés no transmite; el impulso se aplica al soltar
+        ball.velocidad = 0;                                                         // while you hold it, it transmits nothing; the impulse is applied on release
       } else if (!holding) {
         integrate(ball, dt);
       }
       clampAngle(ball);
       setPos(ball);
     }
-    // colisiones después de mover todo, para que el impulso se propague por la cadena
+    // collisions after moving everything, so the impulse propagates along the chain
     resolveCollisions(!holding);
   }
 
   // ════════════════ DIBUJO ════════════════
-  // path de rectángulo redondeado en un contexto cualquiera (sirve para el canvas principal y el de la escena)
+  // rounded-rectangle path on any context (it works for the main canvas and for the scene's)
   function rrp(c, x, y, w, h, rad) {
     rad = Math.min(rad, w / 2, h / 2);
     c.beginPath();
@@ -424,19 +424,19 @@
   }
   function rrPath(x, y, w, h, rad) { rrp(ctx, x, y, w, h, rad); }
 
-  // ════════════════ ESCENA (habitación: pared + ventana grande + mesa) ════════════════
-  // Se renderiza dos veces (día y noche) a canvas offscreen; el draw() crossfadea entre ambas.
+  // ════════════════ SCENE (a room: wall + a large window + a table) ════════════════
+  // It is rendered twice (day and night) to offscreen canvases; draw() crossfades between them.
   function buildScenes() {
     if (W <= 0 || H <= 0) return;
-    sceneDay   = renderScene(false); sceneNight = renderScene(true);   // FONDO (detrás de la planta)
-    godRaysDay = renderGodRays(false); godRaysNight = renderGodRays(true); // rayos del ventanal
+    sceneDay   = renderScene(false); sceneNight = renderScene(true);   // BACKGROUND (behind the plant)
+    godRaysDay = renderGodRays(false); godRaysNight = renderGodRays(true); // window rays
     plantDay   = renderPlant(false); plantNight = renderPlant(true);   // PLANTA (capa animable)
-    frontDay   = renderFront(false); frontNight = renderFront(true);   // MESA (delante de la planta)
-    buildFrameLayer();                                                             // marco del péndulo bakeado (estático)
-    bakeBallSprite();                                                              // esfera metálica bakeada (mismo radio todas)
+    frontDay   = renderFront(false); frontNight = renderFront(true);   // TABLE (in front of the plant)
+    buildFrameLayer();                                                             // baked pendulum frame (static)
+    bakeBallSprite();                                                              // baked metal sphere (they all have the same radius)
   }
 
-  // helper: canvas offscreen del tamaño del lienzo, escalado por dpr
+  // helper: an offscreen canvas the size of the drawing surface, scaled by dpr
   function newLayer() {
     const cv = document.createElement('canvas');
     cv.width = Math.max(1, Math.floor(W * dpr));
@@ -445,13 +445,13 @@
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
     return { cv, c };
   }
-  // PLANTA sola, fondo transparente (capa propia para el vaivén)
+  // THE PLANT alone, transparent background (its own layer for the sway)
   function renderPlant(night) { const { cv, c } = newLayer(); drawPlant(c, night); return cv; }
-  // MESA: canto + sombra de contacto del péndulo, fondo transparente (va delante de la planta)
+  // TABLE: edge + the pendulum's contact shadow, transparent background (it goes in front of the plant)
   function renderFront(night) {
     const { cv, c } = newLayer();
     drawTableEdge(c, night);
-    // reflejo suave del aparato sobre el canto pulido (bakeado; cálido de día / tenue-frío de noche)
+    // soft reflection of the apparatus on the polished edge (baked; warm by day / faint-cool by night)
     {
       const topY = tableTop + 1, band = Math.min(H * 0.07, sceneR * 3.2);
       const base = night ? 'rgba(120,140,175,' : 'rgba(150,135,110,';
@@ -476,22 +476,22 @@
     return cv;
   }
 
-  // geometría del ventanal (compartida por drawWindow, renderGodRays y el titileo de estrellas)
+  // geometry of the window (shared by drawWindow, renderGodRays and the star twinkle)
   function windowGeom() {
     const gx = W * 0.305, gy = -H * 0.30, gw = (W + sceneR) - gx, gh = (H + sceneR) - gy;
     return { gx, gy, gw, gh, horizonY: gy + gh * 0.62 };
   }
 
-  // RAYO de luz del ventanal: UN SOLO CONO suave y amplio (bakeado, clipeado al vidrio). En draw() se
-  // blitea con alpha "respirando". Cálido de día (sol naciente → apunta ARRIBA), frío de noche (luna
-  // alta → baja al cuarto). Relleno radial desde la fuente ⇒ cae con la distancia, bordes suaves.
+  // LIGHT RAY from the window: ONE SINGLE soft, wide cone (baked, clipped to the glass). In draw() it is
+  // blitted with a "breathing" alpha. Warm by day (a rising sun → it points UP), cool by night (a high
+  // moon → it comes down into the room). A radial fill from the source ⇒ it falls off with distance, soft edges.
   function renderGodRays(night) {
     const { cv, c } = newLayer();
     const { gx, gy, gw, gh, horizonY } = windowGeom();
     const srcX = night ? gx + gw * 0.55 : gx + gw * 0.42;
     const srcY = night ? H * 0.18 : horizonY;
     const reach = Math.max(W, H) * 1.5;
-    const dir = night ? Math.PI * 0.6 : -Math.PI * 0.5;                             // abajo (noche) / arriba (día)
+    const dir = night ? Math.PI * 0.6 : -Math.PI * 0.5;                             // below (night) / above (day)
     const half = Math.PI * 0.36;                                                    // cono AMPLIO (~±65°)
     c.save();
     c.beginPath(); c.rect(gx, Math.max(0, gy), gw, (gy + gh) - Math.max(0, gy)); c.clip();
@@ -502,7 +502,7 @@
     c.fillStyle = rg;
     c.beginPath();
     c.moveTo(srcX, srcY);
-    c.arc(srcX, srcY, reach, dir - half, dir + half);                              // base del cono como arco suave
+    c.arc(srcX, srcY, reach, dir - half, dir + half);                              // base of the cone as a soft arc
     c.closePath();
     c.fill();
     c.restore();
@@ -516,42 +516,42 @@
     const s = cv.getContext('2d');
     s.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // ── PARED (sólo queda visible la franja izquierda, detrás de la biblioteca) ──
+    // ── WALL (only the left strip is still visible, behind the bookcase) ──
     let g = s.createLinearGradient(0, 0, 0, tableTop);
     if (night) { g.addColorStop(0, 'rgb(20,21,33)'); g.addColorStop(1, 'rgb(36,33,46)'); }
     else       { g.addColorStop(0, 'rgb(46,40,47)'); g.addColorStop(1, 'rgb(76,62,61)'); }
     s.fillStyle = g; s.fillRect(0, 0, W, tableTop);
 
-    // ── VENTANAL GIGANTE, CORTADO: sin marco a la vista ──
-    // Arranca a 0.305W (queda franja de pared contra la biblioteca, con un montante al ras), sale por
-    // la derecha y por arriba (≈1/4 de su alto fuera de pantalla), y la mesa lo corta abajo.
+    // ── GIANT WINDOW, CROPPED: no frame in sight ──
+    // It starts at 0.305W (leaving a strip of wall against the bookcase, with a mullion flush to it), runs off to
+    // the right and off the top (≈1/4 of its height off screen), and the table crops it at the bottom.
     drawWindow(s, night);
 
-    // ── BIBLIOTECA: llena la pared izquierda a lo alto completo (cortada arriba y abajo) ──
+    // ── BOOKCASE: it fills the left wall for its full height (cropped top and bottom) ──
     drawBookshelf(s, night);
 
-    // pool de luz que entra por el ventanal — cálida de día, fría (luna) de noche
+    // pool of light coming in through the window — warm by day, cool (the moon) by night
     const lx0 = W * 0.62;
     const lg = s.createRadialGradient(lx0, H * 0.2, 0, lx0, H * 0.2, Math.max(W, H) * 0.7);
     if (night) { lg.addColorStop(0, 'rgba(150,172,230,0.10)'); lg.addColorStop(1, 'rgba(150,172,230,0)'); }
     else       { lg.addColorStop(0, 'rgba(255,226,170,0.16)'); lg.addColorStop(1, 'rgba(255,226,170,0)'); }
     s.fillStyle = lg; s.fillRect(0, 0, W, tableTop);
 
-    // penumbra del rincón a la izquierda de la mesa (parte del FONDO, detrás de la planta).
-    // La planta y la mesa se rinden en capas aparte (renderPlant/renderFront) para poder mover las hojas.
+    // gloom of the corner to the left of the table (part of the BACKGROUND, behind the plant).
+    // The plant and the table are rendered in separate layers (renderPlant/renderFront) so the leaves can move.
     drawTableShade(s);
     return cv;
   }
 
-  // Ventanal gigante SIN bordes a la vista: sólo vidrio + parteluces. El rect real se extiende más
-  // allá de los 4 lados visibles (izq: detrás de la biblioteca; der/arriba: fuera de pantalla; abajo:
-  // sigue por detrás de la mesa) — estamos viendo ~3/4 de su altura, como un plano de cerca.
+  // A giant window with NO edges in sight: just glass + mullions. The real rect extends beyond
+  // all 4 visible sides (left: behind the bookcase; right/top: off screen; bottom:
+  // it continues behind the table) — we are seeing ~3/4 of its height, like a close-up plane.
   function drawWindow(s, night) {
-    const gx = W * 0.305;                                                           // arranca pasada la biblioteca (queda franja de pared)
-    const gy = -H * 0.30;                                                           // ~1/4 del alto queda arriba, fuera de pantalla
-    const gw = (W + sceneR) - gx;                                                   // sale por la derecha
-    const gh = (H + sceneR) - gy;                                                   // sigue hasta abajo (la mesa lo corta)
-    // vidrio (el gradiente se define sobre el alto TOTAL, así lo visible se lee como un recorte)
+    const gx = W * 0.305;                                                           // it starts past the bookcase (leaving a strip of wall)
+    const gy = -H * 0.30;                                                           // ~1/4 of the height is above, off screen
+    const gw = (W + sceneR) - gx;                                                   // it runs off to the right
+    const gh = (H + sceneR) - gy;                                                   // it continues to the bottom (the table crops it)
+    // glass (the gradient is defined over the TOTAL height, so what is visible reads as a crop)
     const gg = s.createLinearGradient(0, gy, 0, gy + gh);
     if (night) {
       gg.addColorStop(0, 'rgb(10,14,34)'); gg.addColorStop(0.6, 'rgb(22,26,54)'); gg.addColorStop(1, 'rgb(40,40,66)');
@@ -561,20 +561,20 @@
     }
     s.fillStyle = gg; s.fillRect(gx, gy, gw, gh);
 
-    const horizonY = gy + gh * 0.62;                                                // línea de colinas, queda ~mitad visible
+    const horizonY = gy + gh * 0.62;                                                // line of hills, about half of it stays visible
     if (night) {
-      // estrellas (posiciones deterministas, sin Math.random para que no titilen al rearmar)
+      // stars (deterministic positions, no Math.random so they do not flicker on a rebuild)
       for (let i = 0; i < 48; i++) {
         const sx = gx + ((i * 73) % 100) / 100 * gw;
         const sy = ((i * 149) % 100) / 100 * (horizonY - gy) + gy;
-        if (sy < 0) continue;                                                       // fuera de pantalla
+        if (sy < 0) continue;                                                       // off screen
         const r = 0.6 + ((i * 37) % 10) / 10 * 1.1;
-        s.globalAlpha = (0.3 + ((i * 53) % 10) / 10 * 0.6) * 0.6;                   // atenuadas: el titileo en vivo (drawStarTwinkle) suma encima
+        s.globalAlpha = (0.3 + ((i * 53) % 10) / 10 * 0.6) * 0.6;                   // dimmed: the live twinkle (drawStarTwinkle) adds on top
         s.fillStyle = 'rgba(255,255,255,0.85)';
         s.beginPath(); s.arc(sx, sy, r, 0, TAU); s.fill();
       }
       s.globalAlpha = 1;
-      // bloom de la luna (detrás del disco → se lee luminosa, y le da origen a los rayos)
+      // moon bloom (behind the disc → it reads as luminous, and it gives the rays their origin)
       const _moonX = gx + gw * 0.55, _moonY = H * 0.18, _moonR = sceneR * 1.1;
       const nb = s.createRadialGradient(_moonX, _moonY, 0, _moonX, _moonY, _moonR * 5);
       nb.addColorStop(0, 'rgba(200,216,255,0.22)'); nb.addColorStop(0.5, 'rgba(176,200,255,0.07)'); nb.addColorStop(1, 'rgba(190,210,255,0)');
@@ -588,7 +588,7 @@
       mg.addColorStop(0, 'rgb(245,248,255)'); mg.addColorStop(1, 'rgb(196,206,228)');
       s.fillStyle = mg; s.beginPath(); s.arc(mx, my, mr, 0, TAU); s.fill();
     } else {
-      // bloom del sol (amplio y cálido, detrás del disco → ancla los rayos)
+      // sun bloom (wide and warm, behind the disc → it anchors the rays)
       const _sunX = gx + gw * 0.42, _sunY = horizonY;
       const db = s.createRadialGradient(_sunX, _sunY, 0, _sunX, _sunY, H * 0.6);
       db.addColorStop(0, 'rgba(255,238,180,0.34)'); db.addColorStop(0.45, 'rgba(255,212,150,0.13)'); db.addColorStop(1, 'rgba(255,200,140,0)');
@@ -606,23 +606,23 @@
     s.quadraticCurveTo(gx + gw * 0.8, horizonY + H * 0.08, gx + gw, horizonY - H * 0.02);
     s.lineTo(gx + gw, gy + gh); s.lineTo(gx, gy + gh); s.closePath(); s.fill();
 
-    // parteluces: grilla regular sobre el rect TOTAL — las barras se van de pantalla por los 4 lados,
-    // ningún borde del marco a la vista
+    // mullions: a regular grid over the TOTAL rect — the bars run off screen on all 4 sides,
+    // not one edge of the frame in sight
     const bar = Math.max(4, sceneR * 0.42);
     const cell = Math.max(sceneR * 6, H * 0.36);
     s.strokeStyle = night ? 'rgb(46,32,18)' : 'rgb(74,50,28)'; s.lineWidth = bar;
     s.beginPath();
-    s.moveTo(gx + bar * 0.4, gy); s.lineTo(gx + bar * 0.4, gy + gh);               // montante al ras del borde izq (se lee como barra, no como fin de ventana)
+    s.moveTo(gx + bar * 0.4, gy); s.lineTo(gx + bar * 0.4, gy + gh);               // a mullion flush with the left edge (it reads as a bar, not as the end of the window)
     for (let px = gx + cell; px < gx + gw; px += cell) { s.moveTo(px, gy); s.lineTo(px, gy + gh); }
     for (let py = gy + cell; py < gy + gh; py += cell) { s.moveTo(gx, py); s.lineTo(gx + gw, py); }
     s.stroke();
-    // reflejo diagonal sutil en el vidrio
+    // subtle diagonal reflection in the glass
     s.strokeStyle = night ? 'rgba(180,200,255,0.06)' : 'rgba(255,255,255,0.10)'; s.lineWidth = Math.max(4, sceneR * 0.5);
     s.beginPath(); s.moveTo(gx + gw * 0.08, H * 0.5); s.lineTo(gx + gw * 0.55, H * 0.02); s.stroke();
   }
 
-  // Penumbra a la IZQUIERDA del inicio de la mesa (el rincón/biblioteca sigue bajando oscuro). Va
-  // DETRÁS de la planta, así no oscurece la maceta.
+  // Gloom to the LEFT of where the table starts (the corner/bookcase goes on down into the dark). It goes
+  // BEHIND the plant, so it does not darken the pot.
   function drawTableShade(s) {
     const over = s.createLinearGradient(0, tableTop, 0, H);
     over.addColorStop(0, 'rgba(0,0,0,0.25)');
@@ -631,30 +631,30 @@
     s.fillStyle = over; s.fillRect(0, tableTop, tableLeft, H - tableTop);
   }
 
-  // El CANTO FINO de la mesa (tableLeft → W) + su sombra debajo. Va DELANTE de la planta (la tapa,
-  // igual que la cuna). Grosor FIJO (sceneR, no cambia con la cantidad de bolas).
+  // The table's THIN EDGE (tableLeft → W) + its shadow below. It goes IN FRONT of the plant (it covers it,
+  // just like the cradle). FIXED thickness (sceneR, it does not change with the number of balls).
   function drawTableEdge(s, night) {
     const DK = night ? 0.62 : 1;
     const edgeH = sceneR * 2.6;
     const bottom = tableTop + edgeH;
-    // ── canto de madera (tableLeft → W) ──
+    // ── wooden edge (tableLeft → W) ──
     const g = s.createLinearGradient(0, tableTop, 0, bottom);
     g.addColorStop(0,    `rgb(${132*DK|0},${86*DK|0},${50*DK|0})`);                // arista superior, iluminada
     g.addColorStop(0.14, `rgb(${102*DK|0},${65*DK|0},${36*DK|0})`);
     g.addColorStop(1,    `rgb(${54*DK|0},${33*DK|0},${17*DK|0})`);
     s.fillStyle = g; s.fillRect(tableLeft, tableTop, W - tableLeft, edgeH);
-    // realce del canto superior (la arista donde apoya el péndulo)
+    // highlight of the top edge (the arris the pendulum rests on)
     s.strokeStyle = night ? 'rgba(150,170,210,0.45)' : 'rgba(230,186,134,0.75)';
     s.lineWidth = Math.max(1.5, 1.4 * sceneK);
     s.beginPath(); s.moveTo(tableLeft + 2, tableTop + 1); s.lineTo(W, tableTop + 1); s.stroke();
-    // arista izquierda de la mesa (el corte vertical del borde)
+    // left arris of the table (the vertical cut of the edge)
     s.strokeStyle = night ? 'rgba(120,136,170,0.3)' : 'rgba(200,150,100,0.45)';
     s.lineWidth = Math.max(1, sceneK);
     s.beginPath(); s.moveTo(tableLeft + 1, tableTop + 1); s.lineTo(tableLeft + 1, bottom); s.stroke();
-    // una veta fina
+    // a fine grain line
     s.strokeStyle = 'rgba(18,8,4,0.3)'; s.lineWidth = Math.max(1, 0.6 * sceneK);
     s.beginPath(); const ly = tableTop + edgeH * 0.55; s.moveTo(tableLeft, ly); s.lineTo(W, ly); s.stroke();
-    // ── debajo del canto: oscuridad (sombra dura del borde → negro) ──
+    // ── below the edge: darkness (a hard shadow from the edge → black) ──
     const dg = s.createLinearGradient(0, bottom, 0, H);
     dg.addColorStop(0,   'rgba(0,0,0,0.9)');
     dg.addColorStop(0.35, night ? 'rgb(5,5,8)' : 'rgb(9,6,5)');
@@ -662,13 +662,13 @@
     s.fillStyle = dg; s.fillRect(tableLeft, bottom, W - tableLeft, H - bottom);
   }
 
-  // Maceta con planta en PRIMER PLANO, esquina inferior izquierda: la maceta queda cortada por el
-  // borde de abajo (el piso no se ve) y el follaje asoma hasta el nivel de la mesa. Más oscura que
-  // la escena (está cerca de cámara, a contraluz).
+  // A potted plant in the FOREGROUND, bottom-left corner: the pot is cropped by the
+  // bottom edge (the floor is not visible) and the foliage rises to the level of the table. Darker than
+  // the scene (it is close to camera, backlit).
   function drawPlant(s, night) {
     const DK = (night ? 0.5 : 1) * 0.82;
 
-    // ---- color helper: cada canal por DK ----
+    // ---- colour helper: each channel by DK ----
     const C = (r, g, b, a) =>
       a === undefined
         ? "rgb(" + ((r * DK) | 0) + "," + ((g * DK) | 0) + "," + ((b * DK) | 0) + ")"
@@ -684,39 +684,39 @@
       };
     }
 
-    // ---- composicion (toda la planta dentro del ~22% izquierdo) ----
-    const px = W * PLANT_CX;       // centro del pote
-    const lipY = H * 0.85;         // borde superior del pote (más arriba ⇒ cuerpo del macetón más visible)
-    const pot = W * PLANT_POTHW;   // semiancho del pote (macetón)
+    // ---- composition (the whole plant within the leftmost ~22%) ----
+    const px = W * PLANT_CX;       // centre of the pot
+    const lipY = H * 0.85;         // top edge of the pot (higher up ⇒ more of the big pot's body visible)
+    const pot = W * PLANT_POTHW;   // half-width of the pot (a big pot)
 
-    // Sin recorte duro: la cuna se dibuja ENCIMA de la planta (en draw()), así que las hojas que se
-    // estiran hacia la derecha quedan tapadas por la cuna de forma natural, sin el corte vertical feo.
-    // El save() queda como wrapper inofensivo (el restore() al final lo cierra).
+    // No hard clipping: the cradle is drawn ON TOP of the plant (in draw()), so the leaves that
+    // stretch to the right are covered by the cradle naturally, with no ugly vertical cut.
+    // The save() stays as a harmless wrapper (the restore() at the end closes it).
     s.save();
 
     // ============================================================
-    // HOJA-ESPADA: forma curva afinada con arqueo + gravedad,
-    // franja central variegada (verde lima) y nervadura oscura.
-    // baseX/baseY = origen (corona). ang = direccion de salida (rad,
+    // SWORD LEAF: a curved shape tapered with an arch + gravity,
+    // a variegated central band (lime green) and a dark midrib.
+    // baseX/baseY = the origin (the crown). ang = the direction it leaves in (rad,
     // 0 = derecha, -PI/2 = arriba). len, w, arch (curvatura/caida).
-    // backLayer => mas oscura. seed para micro-variacion de tono.
+    // backLayer => darker. seed for micro-variation of tone.
     // ============================================================
     function swordLeaf(baseX, baseY, ang, len, w, arch, backLayer, seed) {
       s.save();
       s.translate(baseX, baseY);
       s.rotate(ang);
 
-      // Eje de la hoja: recto al nacer, luego se arquea hacia afuera y CAE por gravedad. En coords
-      // locales +x es "a lo largo". gs hace que el doblez vaya SIEMPRE hacia abajo en el mundo (sin
-      // importar la direccion de la hoja): asi las hojas de la izquierda tambien cuelgan, no se arquean
-      // para arriba. (local +y mapea a world-y * cos(ang); elegimos el signo que da world-down.)
+      // The leaf's axis: straight at birth, then it arches outwards and FALLS under gravity. In local
+      // coords +x is "along". gs makes the bend ALWAYS go downwards in the world (regardless
+      // of the leaf's direction): that way the left-hand leaves hang too, they do not arch
+      // upwards. (local +y maps to world-y * cos(ang); we pick the sign that gives world-down.)
       const tipX = len;
       const gs = Math.cos(ang) >= 0 ? 1 : -1;
       const c1x = len * 0.42, c1y = gs * len * arch * 0.12;
       const c2x = len * 0.78, c2y = gs * len * arch * 0.45;
       const tipY = gs * len * arch * 0.95;
 
-      // muestreo de la espina (bezier cubica) para construir el contorno
+      // sampling of the spine (a cubic bezier) to build the outline
       const N = 14;
       const spineX = [], spineY = [], nrmX = [], nrmY = [];
       let pxp = 0, pyp = 0;
@@ -737,11 +737,11 @@
         nrmX[i] = -dy / dl; nrmY[i] = dx / dl;
       }
 
-      // ancho a lo largo: hoja-espada -> ancha al ~1/4, afila a PUNTA FINA (→0 en la punta).
-      // (antes el término base 0.18 dejaba la punta con ~18% del ancho ⇒ borde romo/rectangular).
+      // width along the length: a sword leaf -> wide at ~1/4, tapering to a FINE POINT (→0 at the tip).
+      // (the old base term of 0.18 left the tip at ~18% of the width ⇒ a blunt/rectangular edge).
       const halfW = (t) => {
-        const e = Math.sin(Math.pow(t, 0.5) * Math.PI);                            // 0 en base y punta, máx ~t=0.25
-        return w * (e + (1 - t) * 0.05);                                           // pizca de cuerpo en la base; punta a 0
+        const e = Math.sin(Math.pow(t, 0.5) * Math.PI);                            // 0 at the base and the tip, max at ~t=0.25
+        return w * (e + (1 - t) * 0.05);                                           // a pinch of body at the base; 0 at the tip
       };
 
       // --- relleno: gradiente longitudinal (base->punta) ---
@@ -798,7 +798,7 @@
       for (let i = 1; i <= N; i++) s.lineTo(spineX[i], spineY[i]);
       s.stroke();
 
-      // --- borde inferior mas oscuro (volumen) ---
+      // --- darker lower edge (volume) ---
       s.strokeStyle = C(20, 52, 28, 0.4);
       s.lineWidth = Math.max(0.6, w * 0.06);
       s.lineJoin = "round";
@@ -814,7 +814,7 @@
     }
 
     // ============================================================
-    // CANA (tronco lenoso afinado con anillos de cicatriz)
+    // CANE (a woody trunk tapered with scar rings)
     // ============================================================
     function drawCane(cx, baseY, topY, wBase) {
       const h = baseY - topY;
@@ -836,7 +836,7 @@
       s.closePath();
       s.fill();
 
-      // sombra lado izquierdo del tronco
+      // shadow on the trunk's left side
       const sh = s.createLinearGradient(cx - wBase, 0, cx + wBase, 0);
       sh.addColorStop(0.0, C(40, 28, 16, 0.45));
       sh.addColorStop(0.35, C(40, 28, 16, 0.0));
@@ -850,7 +850,7 @@
       s.closePath();
       s.fill();
 
-      // anillos de cicatriz (curvos, abrazando el tronco)
+      // scar rings (curved, hugging the trunk)
       s.lineCap = "round";
       const rings = Math.max(6, (h / (sceneR * 0.7)) | 0);
       for (let i = 1; i < rings; i++) {
@@ -864,7 +864,7 @@
         s.moveTo(xx - w * 0.85, y);
         s.quadraticCurveTo(xx, y + w * 0.35, xx + w * 0.85, y);
         s.stroke();
-        // realce claro debajo del anillo
+        // light highlight below the ring
         s.strokeStyle = C(185, 150, 100, 0.22);
         s.lineWidth = Math.max(0.8, sceneK * 0.35);
         const dy = Math.max(1, sceneK * 0.5);
@@ -878,27 +878,27 @@
     }
 
     // ============================================================
-    // ROSETA: fuente de hojas que se arquean hacia afuera y caen.
-    // Sesgada hacia la IZQUIERDA/arriba (la planta vive abajo-izq, asi
-    // se derrama hacia el rincon y no invade el pendulo a la derecha).
-    // Dos pasadas: traseras (oscuras) + delanteras (mas claras).
+    // ROSETTE: a fountain of leaves that arch outwards and fall.
+    // Biased to the LEFT/up (the plant lives bottom-left, so
+    // it spills into the corner and does not invade the pendulum on the right).
+    // Two passes: back ones (dark) + front ones (lighter).
     // ============================================================
     function rosette(rng, crown, scale, sideBias) {
       const { x: cxr, y: cyr } = crown;
 
-      // ---- CAPA TRASERA (mas hojas, mas oscuras, mas abiertas) ----
+      // ---- BACK LAYER (more leaves, darker, more open) ----
       const backN = 16;
       for (let i = 0; i < backN; i++) {
         const t = i / (backN - 1);
-        // abanico bajo/medio: de casi-horizontal izq a casi-horizontal der,
-        // pero comprimido hacia la izquierda via sideBias.
+        // a low/mid fan: from near-horizontal left to near-horizontal right,
+        // but compressed to the left via sideBias.
         let ang = -Math.PI * 1.02 + t * Math.PI * 0.86;
         ang += sideBias * 0.18;
         ang += (rng() - 0.5) * 0.16;
         const horiz = Math.abs(Math.cos(ang));
-        const len = scale * (1.18 + horiz * 0.6) * (0.9 + rng() * 0.16);            // mas largas
+        const len = scale * (1.18 + horiz * 0.6) * (0.9 + rng() * 0.16);            // longer
         const w = scale * (0.055 + rng() * 0.085);                                  // ancho variado (0.055–0.14): planta real
-        const arch = 0.95 + horiz * 1.25 + rng() * 0.3;                             // caen mas (con gs ⇒ hacia abajo)
+        const arch = 0.95 + horiz * 1.25 + rng() * 0.3;                             // they fall further (with gs ⇒ downwards)
         swordLeaf(cxr, cyr, ang, len, w, arch, true, (i * 7 + 3) | 0);
       }
 
@@ -906,43 +906,43 @@
       const frontN = 18;
       for (let i = 0; i < frontN; i++) {
         const t = i / (frontN - 1);
-        // abanico completo, levemente sesgado a la izquierda.
+        // a full fan, slightly biased to the left.
         let ang = -Math.PI * 1.06 + t * Math.PI * 0.94;
         ang += sideBias * 0.12;
         ang += (rng() - 0.5) * 0.14;
         const up = Math.max(0, -Math.sin(ang));
         const horiz = Math.abs(Math.cos(ang));
-        const len = scale * (0.82 + horiz * 0.78 + (1 - up) * 0.16) * (0.92 + rng() * 0.14);  // mas largas
+        const len = scale * (0.82 + horiz * 0.78 + (1 - up) * 0.16) * (0.92 + rng() * 0.14);  // longer
         const w = scale * (0.048 + rng() * 0.08);                                   // ancho variado (0.048–0.128)
-        const arch = 0.6 + horiz * 1.5 + (rng() - 0.5) * 0.3;                       // caen mas
+        const arch = 0.6 + horiz * 1.5 + (rng() - 0.5) * 0.3;                       // they fall further
         swordLeaf(cxr, cyr, ang, len, w, arch, false, (i * 13 + 5) | 0);
       }
 
-      // ---- HOJAS COLGANTES (weeping): largas y muy caidas, sesgadas abajo/izquierda ----
+      // ---- HANGING (weeping) LEAVES: long and very drooped, biased down/left ----
       const weepN = 6;
       for (let i = 0; i < weepN; i++) {
-        const lr = (i % 3 === 0) ? 1 : -1;                                          // mayoria a la IZQ (rincon), pocas a la der para no chocar el clip
-        let ang = lr > 0 ? -0.05 - rng() * 0.45 : Math.PI + 0.05 + rng() * 0.45;    // casi horizontal a cada lado
+        const lr = (i % 3 === 0) ? 1 : -1;                                          // most to the LEFT (the corner), a few to the right so they do not hit the clip
+        let ang = lr > 0 ? -0.05 - rng() * 0.45 : Math.PI + 0.05 + rng() * 0.45;    // almost horizontal on each side
         ang += sideBias * 0.1;
-        const len = scale * (1.45 + rng() * 0.45);                                  // las mas largas del ramo
+        const len = scale * (1.45 + rng() * 0.45);                                  // the longest in the bunch
         const w = scale * (0.05 + rng() * 0.06);                                    // ancho variado (0.05–0.11)
         const arch = 1.5 + rng() * 0.7;                                             // cuelgan fuerte
         swordLeaf(cxr, cyr, ang, len, w, arch, lr > 0, (i * 29 + 7) | 0);
       }
 
-      // ---- CORONA: hojas erguidas que LLENAN toda la copa (sin hueco arriba) ----
-      // arco superior amplio (arriba-izq → arriba-der pasando por la vertical), largo comparable a las
-      // laterales y arqueo BAJO para que se queden paradas en vez de caer hacia los costados.
+      // ---- CROWN: upright leaves that FILL the whole top (no gap above) ----
+      // a wide upper arc (top-left → top-right passing through the vertical), a length comparable to the
+      // side ones and a LOW arch so they stay upright instead of falling to the sides.
       const crownN = 9;
       for (let i = 0; i < crownN; i++) {
         const t = i / (crownN - 1);
-        let ang = -Math.PI * 0.84 + t * Math.PI * 0.68;                             // de arriba-izq a arriba-der
+        let ang = -Math.PI * 0.84 + t * Math.PI * 0.68;                             // from top-left to top-right
         ang += sideBias * 0.10;
         ang += (rng() - 0.5) * 0.10;
         const horiz = Math.abs(Math.cos(ang));
-        const len = scale * (0.84 + horiz * 0.4) * (0.9 + rng() * 0.16);            // a la altura de las laterales
+        const len = scale * (0.84 + horiz * 0.4) * (0.9 + rng() * 0.16);            // at the height of the side ones
         const w = scale * (0.05 + rng() * 0.07);                                    // ancho variado
-        const arch = 0.26 + horiz * 0.55 + rng() * 0.18;                            // arqueo bajo ⇒ erguidas, llenan la copa
+        const arch = 0.26 + horiz * 0.55 + rng() * 0.18;                            // a low arch ⇒ upright, they fill the top
         swordLeaf(cxr, cyr, ang, len, w, arch, false, (i * 17 + 9) | 0);
       }
     }
@@ -950,9 +950,9 @@
     // ============================================================
     // ENSAMBLE
     // ============================================================
-    // 3 canas de DISTINTA altura. La alta corona ~ H*0.32.
-    // Escalas de hoja reducidas y biases hacia la izquierda para no
-    // invadir la derecha (ademas del clip duro de seguridad).
+    // 3 canes of DIFFERENT heights. The tall one crowns at ~ H*0.32.
+    // Reduced leaf scales and leftward biases so they do not
+    // invade the right (on top of the hard safety clip).
     const canes = [
       // cx,                  topY,        wBase,        leafScale, sideBias
       [px - pot * 0.34, H * 0.50, pot * 0.21, H * 0.185, -0.7], // izq, media
@@ -960,7 +960,7 @@
       [px - pot * 0.02, H * 0.30, pot * 0.26, H * 0.210, -0.35] // central, alta
     ];
 
-    // dibujo de atras hacia adelante (la alta tapa abajo)
+    // drawn back to front (the tall one covers the ones below)
     const crowns = [];
     const order = [1, 0, 2];
     for (const idx of order) {
@@ -968,10 +968,10 @@
       crowns[idx] = drawCane(cx, lipY + pot * 0.05, topY, wBase);
     }
 
-    // (las HOJAS se dibujan AL FINAL, por encima de la maceta — ver más abajo)
+    // (the LEAVES are drawn LAST, above the pot — see below)
 
     // ============================================================
-    // TIERRA / CORTEZA en el borde del pote
+    // SOIL / BARK at the pot's rim
     // ============================================================
     const soilY = lipY - pot * 0.04;
     const soilG = s.createLinearGradient(0, soilY - pot * 0.18, 0, soilY + pot * 0.1);
@@ -981,7 +981,7 @@
     s.beginPath();
     s.ellipse(px, soilY, pot * 0.92, pot * 0.26, 0, 0, TAU);
     s.fill();
-    // montoncitos de corteza (deterministas por hash)
+    // little heaps of bark (deterministic by hash)
     const rngSoil = mulberry32(777);
     for (let i = 0; i < 14; i++) {
       const a = (i / 14) * TAU;
@@ -996,7 +996,7 @@
     }
 
     // ============================================================
-    // MACETA terracota (cuerpo cortado por el borde inferior > H)
+    // terracotta POT (the body cropped by the bottom edge > H)
     // ============================================================
     const bodyG = s.createLinearGradient(px - pot, 0, px + pot, 0);
     bodyG.addColorStop(0.0, C(112, 56, 36));
@@ -1013,7 +1013,7 @@
     s.closePath();
     s.fill();
 
-    // sombreado interno del cuerpo (volumen)
+    // inner shading of the body (volume)
     const bodyShade = s.createLinearGradient(px - pot, 0, px + pot, 0);
     bodyShade.addColorStop(0.0, C(40, 18, 10, 0.5));
     bodyShade.addColorStop(0.32, C(40, 18, 10, 0.0));
@@ -1028,7 +1028,7 @@
     s.closePath();
     s.fill();
 
-    // labio / reborde superior del pote
+    // lip / top rim of the pot
     const lipG = s.createLinearGradient(px - pot, 0, px + pot, 0);
     lipG.addColorStop(0.0, C(132, 68, 44));
     lipG.addColorStop(0.5, C(206, 128, 86));
@@ -1037,38 +1037,38 @@
     rrp(s, px - pot * 1.04, lipY - pot * 0.32, pot * 2.08, pot * 0.44, pot * 0.12);
     s.fill();
 
-    // brillo especular del labio
+    // specular shine on the lip
     s.fillStyle = C(225, 150, 105, 0.45);
     rrp(s, px - pot * 0.96, lipY - pot * 0.28, pot * 1.92, pot * 0.12, pot * 0.06);
     s.fill();
-    // sombra bajo el labio
+    // shadow under the lip
     s.fillStyle = C(40, 18, 10, 0.35);
     rrp(s, px - pot * 0.92, lipY + pot * 0.08, pot * 1.84, pot * 0.07, pot * 0.04);
     s.fill();
 
     // ============================================================
-    // HOJAS (rosetas) — POR ENCIMA de la maceta: las colgantes se derraman sobre el borde del pote
+    // LEAVES (rosettes) — ABOVE the pot: the hanging ones spill over the pot's rim
     // ============================================================
     for (const idx of order) {
       const leafScale = canes[idx][3], sideBias = canes[idx][4];
-      const rng = mulberry32(1000 + idx * 137); // semilla CONSTANTE por cana
+      const rng = mulberry32(1000 + idx * 137); // a CONSTANT seed per cane
       rosette(rng, crowns[idx], leafScale, sideBias);
     }
 
-    s.restore(); // fin del clip de seguridad
+    s.restore(); // end of the safety clip
   }
 
-  // ── BIBLIOTECA (llena toda la pared izquierda; se corta arriba y abajo de la pantalla ⇒ se lee
-  //    ENORME, plano de cerca; la mesa/penumbra la tapan de tableTop para abajo) ──
+  // ── BOOKCASE (it fills the whole left wall; it is cropped above and below the screen ⇒ it reads
+  //    ENORMOUS, a close-up plane; the table/gloom cover it from tableTop down) ──
   const BOOK_COLORS = [[122,52,46],[48,72,96],[150,120,52],[70,96,60],[96,60,96],[176,98,52],[60,70,88],[140,52,52],[44,86,82],[120,108,70]];
   function drawBookshelf(s, night) {
     const DK = night ? 0.5 : 1;
     const bsL = W * 0.012, bsR = W * 0.27;
-    const bsTop = -H * 0.10, bsBottom = H * 1.04;                                  // nace y muere FUERA de pantalla
-    const fr = Math.max(6, W * 0.012);                                             // grosor de la carcasa
-    // sombra del mueble sobre la pared (sólo se ve la del lado derecho)
+    const bsTop = -H * 0.10, bsBottom = H * 1.04;                                  // it is born and dies OFF screen
+    const fr = Math.max(6, W * 0.012);                                             // thickness of the carcass
+    // the unit's shadow on the wall (only the right-hand one is visible)
     s.fillStyle = 'rgba(0,0,0,0.3)'; s.fillRect(bsR, bsTop, fr * 1.6, bsBottom - bsTop);
-    // carcasa de madera
+    // wooden carcass
     const woodG = s.createLinearGradient(bsL, 0, bsR, 0);
     woodG.addColorStop(0,   `rgb(${66*DK|0},${42*DK|0},${21*DK|0})`);
     woodG.addColorStop(0.5, `rgb(${96*DK|0},${62*DK|0},${33*DK|0})`);
@@ -1077,34 +1077,34 @@
     // hueco interior oscuro
     const inL = bsL + fr, inR = bsR - fr;
     s.fillStyle = night ? 'rgb(12,9,7)' : 'rgb(26,17,11)'; s.fillRect(inL, bsTop, inR - inL, bsBottom - bsTop);
-    // estantes ALTOS (libros grandes): la primera y la última fila quedan cortadas por los bordes
+    // TALL shelves (big books): the first and last rows are cropped by the edges
     const rows = 4, rowH = (bsBottom - bsTop) / rows;
     for (let r = 0; r <= rows; r++) {
       const shelfY = bsTop + (r + 1) * rowH;
       let bx = inL + 3, idx = r * 97 + 11;
       while (bx < inR - 6) {
-        const bw = rowH * 0.085 + ((idx * 37) % 100) / 100 * rowH * 0.13;          // lomos proporcionales al estante
+        const bw = rowH * 0.085 + ((idx * 37) % 100) / 100 * rowH * 0.13;          // spines proportional to the shelf
         if (bx + bw > inR - 3) break;
         const bh = rowH * (0.62 + ((idx * 53) % 100) / 100 * 0.3);
         const c = BOOK_COLORS[(idx * 7) % BOOK_COLORS.length];
         const by = shelfY - bh - 3;
         s.fillStyle = `rgb(${c[0]*DK|0},${c[1]*DK|0},${c[2]*DK|0})`;
         s.fillRect(bx, by, bw, bh);
-        s.fillStyle = 'rgba(255,255,255,0.10)'; s.fillRect(bx, by, Math.max(1.5, bw * 0.2), bh);  // brillo del lomo
+        s.fillStyle = 'rgba(255,255,255,0.10)'; s.fillRect(bx, by, Math.max(1.5, bw * 0.2), bh);  // shine on the spine
         s.fillStyle = 'rgba(0,0,0,0.25)'; s.fillRect(bx, by + bh * 0.14, bw, Math.max(1.5, bh * 0.045)); // banda
         bx += bw + 2; idx++;
       }
-      // tabla del estante
+      // the shelf board
       if (shelfY < bsBottom) { s.fillStyle = woodG; s.fillRect(inL, shelfY, inR - inL, Math.max(3, fr * 0.55)); }
     }
-    // canto claro del lado derecho de la carcasa
+    // light edge on the right side of the carcass
     s.strokeStyle = night ? 'rgba(150,170,210,0.22)' : 'rgba(212,170,118,0.4)';
     s.lineWidth = Math.max(1, sceneK);
     s.beginPath(); s.moveTo(bsR - 1, Math.max(0, bsTop)); s.lineTo(bsR - 1, Math.min(H, bsBottom)); s.stroke();
   }
 
-  // varilla de madera torneada (capsule): degradé perpendicular oscuro→lomo iluminado→oscuro = cilindro,
-  // con vetas finas a lo largo y un brillo cálido suave sobre el lomo.
+  // turned wooden rod (a capsule): a perpendicular gradient dark→lit ridge→dark = a cylinder,
+  // with fine grain lines along it and a soft warm shine over the ridge.
   function woodDowel(c, x, y, w, h) {
     const horizontal = w >= h;
     const rad = Math.min(w, h) / 2;
@@ -1127,7 +1127,7 @@
       else            { const lx = x + w * f; c.moveTo(lx, y + rad); c.lineTo(lx, y + h - rad); }
     }
     c.stroke();
-    // brillo cálido sobre el lomo
+    // warm shine over the ridge
     c.strokeStyle = 'rgba(206,132,98,0.42)'; c.lineWidth = Math.max(1, Math.min(w, h) * 0.07);
     c.beginPath();
     if (horizontal) { const ly = y + h * 0.42; c.moveTo(x + rad, ly); c.lineTo(x + w - rad, ly); }
@@ -1136,16 +1136,16 @@
     c.restore();
   }
 
-  // arco "∏" único y limpio: dos parantes + travesaño, todo en madera torneada. Parantes primero y el
-  // travesaño encima, así la curva en las esquinas queda prolija.
+  // a single clean "∏" arch: two uprights + a crossbeam, all in turned wood. The uprights first and the
+  // crossbeam on top, so the curve at the corners comes out tidy.
   function drawArch(c) {
     const thk = radio * 0.32;
-    woodDowel(c, frameLeft - thk / 2,  frameTop, thk, (baseY - frameTop) + thk);             // parante izq (entra en la base)
+    woodDowel(c, frameLeft - thk / 2,  frameTop, thk, (baseY - frameTop) + thk);             // left upright (it goes into the base)
     woodDowel(c, frameRight - thk / 2, frameTop, thk, (baseY - frameTop) + thk);             // parante der
-    woodDowel(c, frameLeft - thk / 2,  frameTop - thk / 2, (frameRight - frameLeft) + thk, thk); // travesaño
+    woodDowel(c, frameLeft - thk / 2,  frameTop - thk / 2, (frameRight - frameLeft) + thk, thk); // crossbeam
   }
 
-  // collar de bronce donde el parante entra en la base
+  // bronze collar where the upright enters the base
   function drawCollar(c, cx) {
     const w = radio * 0.74, h = radio * 0.42;
     const g = c.createLinearGradient(cx - w / 2, 0, cx + w / 2, 0);
@@ -1155,11 +1155,11 @@
     rrp(c, cx - w / 2, baseY - h * 0.55, w, h, h * 0.35); c.fillStyle = g; c.fill();
   }
 
-  // base de madera maciza
+  // solid wood base
   function drawBase(c) {
     const xL = frameLeft - radio * 2.4, xR = frameRight + radio * 2.4;
     const top = baseY, thk = radio * BASE_THK_K, w = xR - xL, rad = radio * 0.26;
-    // sombra en el piso
+    // shadow on the floor
     const sh = c.createLinearGradient(0, top + thk, 0, top + thk + radio * 1.2);
     sh.addColorStop(0, 'rgba(0,0,0,0.4)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = sh; c.fillRect(xL - radio, top + thk - 2, w + radio * 2, radio * 1.3);
@@ -1170,7 +1170,7 @@
     g.addColorStop(1,    'rgb(32,12,7)');
     rrp(c, xL, top, w, thk, rad); c.fillStyle = g; c.fill();
     c.save(); rrp(c, xL, top, w, thk, rad); c.clip();
-    // sheen cálido en la cara superior (bisel)
+    // warm sheen on the top face (a bevel)
     const gloss = c.createLinearGradient(0, top, 0, top + thk * 0.4);
     gloss.addColorStop(0, 'rgba(190,116,82,0.5)');
     gloss.addColorStop(1, 'rgba(190,116,82,0)');
@@ -1183,7 +1183,7 @@
     // canto superior iluminado
     c.strokeStyle = 'rgba(212,140,104,0.6)'; c.lineWidth = Math.max(1, 1.0 * k);
     c.beginPath(); c.moveTo(xL + rad, top + 1); c.lineTo(xR - rad, top + 1); c.stroke();
-    // veta curva de madera torneada (determinista) → "mueble real" en vez de cilindro liso
+    // curved grain of turned wood (deterministic) → "real furniture" instead of a smooth cylinder
     c.strokeStyle = 'rgba(15,5,2,0.16)'; c.lineWidth = Math.max(0.5, 0.4 * k);
     const nv = 7;
     for (let i = 0; i < nv; i++) {
@@ -1193,26 +1193,26 @@
       c.quadraticCurveTo(sx0 + w * 0.12, top + thk * 0.45, sx0 + w * 0.22, top + thk);
       c.stroke();
     }
-    // bisel: sombra fina justo debajo del canto iluminado
+    // bevel: a fine shadow just below the lit edge
     c.strokeStyle = 'rgba(0,0,0,0.30)'; c.lineWidth = Math.max(1.2, 0.7 * k);
     c.beginPath(); c.moveTo(xL + rad, top + Math.max(2, 1.6 * k)); c.lineTo(xR - rad, top + Math.max(2, 1.6 * k)); c.stroke();
     c.restore();
   }
 
-  // El marco no cambia entre frames ⇒ se bakea a un layer y draw() lo blitea (ahorra ~10 gradientes/frame).
+  // The frame does not change between frames ⇒ it is baked to a layer and draw() blits it (it saves ~10 gradients/frame).
   function buildFrameLayer() {
     frameLayer = document.createElement('canvas');
     frameLayer.width  = Math.max(1, Math.floor(W * dpr));
     frameLayer.height = Math.max(1, Math.floor(H * dpr));
     const c = frameLayer.getContext('2d');
     c.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawArch(c);                                                                   // arco de madera único
-    drawBase(c);                                                                   // base por delante (tapa el pie de los parantes)
-    drawCollar(c, frameLeft); drawCollar(c, frameRight);                           // collares donde entran a la base
+    drawArch(c);                                                                   // single wooden arch
+    drawBase(c);                                                                   // the base in front (it covers the feet of the uprights)
+    drawCollar(c, frameLeft); drawCollar(c, frameRight);                           // the collars where they enter the base
   }
 
-  // La esfera es idéntica para todas las bolas ⇒ se bakea UNA vez por layout y se blitea por bola
-  // (antes: 4 gradientes radiales × bola × frame).
+  // The sphere is identical for every ball ⇒ it is baked ONCE per layout and blitted per ball
+  // (before: 4 radial gradients × ball × frame).
   function bakeBallSprite() {
     const r = Math.max(2, radio), pad = 3;
     const S = Math.ceil((r + pad) * 2);
@@ -1224,9 +1224,9 @@
     ballSpriteHalf = S / 2;
   }
 
-  // hilos: cada bola cuelga de dos hilos abiertos en V hacia el travesaño; con un splay > radio los de
-  // bolas vecinas se cruzan y arman la clásica red en X. Finos y con un dejo de brillo metálico.
-  // Hilos de TODAS las bolas en un solo path/stroke (mismo estilo) — antes era 1 stroke por bola.
+  // strings: each ball hangs from two strings splayed in a V towards the crossbeam; with a splay > radius the ones from
+  // neighbouring balls cross and form the classic X net. Thin and with a hint of metallic shine.
+  // The strings of ALL the balls in a single path/stroke (the same style) — it used to be 1 stroke per ball.
   function drawStrings() {
     const splay = radio * 1.15, ay = frameTop;
     ctx.lineWidth = Math.max(1, 0.7 * k);
@@ -1241,9 +1241,9 @@
     ctx.stroke();
   }
 
-  // Sombras de contacto de TODAS las bolas con UN solo save/clip/restore (el clip es el mismo rect de
-  // la base para todas) — antes clipeaba y save/restore por bola. CLIPEADA a la tapa: una bola levantada
-  // fuera de la cuna no proyecta sombra "en el aire".
+  // Contact shadows of ALL the balls with ONE save/clip/restore (the clip is the same rect of
+  // the base for all of them) — it used to clip and save/restore per ball. CLIPPED to the top: a ball lifted
+  // out of the cradle does not cast a shadow "in mid air".
   function drawBallShadows() {
     const baseTop = baseY;
     const xL = frameLeft - radio * 2.4, xR = frameRight + radio * 2.4;
@@ -1254,12 +1254,12 @@
       const t = Math.max(0, Math.min(1, (ball.y - origY) / L));                    // 0 = arriba, 1 = reposo
       let liftFade = (t - 0.66) / (0.94 - 0.66);
       liftFade = Math.max(0, Math.min(1, liftFade));
-      liftFade = liftFade * liftFade * (3 - 2 * liftFade);                          // smoothstep: meseta + caída
+      liftFade = liftFade * liftFade * (3 - 2 * liftFade);                          // smoothstep: a plateau + a falloff
       let a = 0.46 * liftFade;
       if (a < 0.02) continue;
       const dOut = Math.max((xL + fadeZone) - ball.x, ball.x - (xR - fadeZone), 0);
       const edgeFade = Math.max(0, 1 - dOut / fadeZone);
-      a *= edgeFade * edgeFade * edgeFade;                                          // se apaga antes del borde
+      a *= edgeFade * edgeFade * edgeFade;                                          // it fades out before the edge
       if (a < 0.02) continue;
       const sideScale = 0.6 + 0.4 * edgeFade;
       ctx.fillStyle = `rgba(0,0,0,${a})`;
@@ -1270,8 +1270,8 @@
     ctx.restore();
   }
 
-  function drawMetalBall(ctx, x, y, r) {                                           // ctx local: se usa para el bake
-    // cuerpo metálico oscuro: highlight arriba-izquierda → medio → borde oscuro (fresnel)
+  function drawMetalBall(ctx, x, y, r) {                                           // local ctx: it is used for the bake
+    // dark metal body: highlight at the top left → mid → dark edge (fresnel)
     const hx = x - r * 0.4, hy = y - r * 0.42;
     const g = ctx.createRadialGradient(hx, hy, r * 0.06, hx, hy, r * 1.75);
     g.addColorStop(0,    STEEL.hi);
@@ -1283,14 +1283,14 @@
     ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.clip();
     ctx.fillStyle = g; ctx.fillRect(x - r, y - r, r * 2, r * 2);
 
-    // rim-light: arco claro fino sobre el borde inferior-derecho (luz reflejada del ambiente)
+    // rim light: a fine light arc over the bottom-right edge (reflected ambient light)
     const rg = ctx.createRadialGradient(x, y, r * 0.78, x, y, r);
     rg.addColorStop(0, 'rgba(150,160,172,0)');
     rg.addColorStop(0.82, 'rgba(150,160,172,0)');
     rg.addColorStop(1, 'rgba(170,182,196,0.5)');
     ctx.fillStyle = rg; ctx.fillRect(x - r, y - r, r * 2, r * 2);
 
-    // reflejo de rebote (luz del piso) abajo
+    // bounce reflection (light from the floor) below
     const bx = x + r * 0.18, by = y + r * 0.6;
     const g2 = ctx.createRadialGradient(bx, by, 0, bx, by, r * 0.8);
     g2.addColorStop(0, 'rgba(120,132,146,0.4)');
@@ -1298,7 +1298,7 @@
     ctx.fillStyle = g2; ctx.fillRect(x - r, y - r, r * 2, r * 2);
     ctx.restore();
 
-    // hotspot especular nítido (núcleo blanco + halo)
+    // crisp specular hotspot (a white core + a halo)
     const sx = x - r * 0.36, sy = y - r * 0.44;
     const halo = ctx.createRadialGradient(sx, sy, 0, sx, sy, r * 0.34);
     halo.addColorStop(0, 'rgba(255,255,255,0.5)');
@@ -1308,16 +1308,16 @@
     ctx.fillStyle = 'rgba(255,255,255,0.95)';
     ctx.beginPath(); ctx.arc(sx, sy, core, 0, TAU); ctx.fill();
 
-    // contorno fino para despegar del fondo
+    // a fine outline to lift it off the background
     ctx.lineWidth = Math.max(1, 0.8 * k);
     ctx.strokeStyle = 'rgba(0,0,0,0.55)';
     ctx.beginPath(); ctx.arc(x, y, r - 0.4, 0, TAU); ctx.stroke();
   }
 
-  // crossfade día→noche de un par de capas. En las MESETAS (día/noche plenos) blitea UNA sola capa
-  // (antes a noche plena dibujaba día+noche, con la de día 100% tapada → ~4 blits full-screen al pedo).
+  // day→night crossfade of a couple of layers. On the PLATEAUS (full day/night) it blits ONE layer only
+  // (at full night it used to draw day+night, with the day one 100% covered → ~4 pointless full-screen blits).
   function blitDN(day, nite) {
-    if (nightFactor >= 0.999) { if (nite) ctx.drawImage(nite, 0, 0, W, H); return; } // noche plena: sólo noche
+    if (nightFactor >= 0.999) { if (nite) ctx.drawImage(nite, 0, 0, W, H); return; } // full night: night only
     if (day) ctx.drawImage(day, 0, 0, W, H);
     if (nite && nightFactor > 0.001) { ctx.globalAlpha = nightFactor; ctx.drawImage(nite, 0, 0, W, H); ctx.globalAlpha = 1; }
   }
@@ -1325,14 +1325,14 @@
   function draw() {
     const tt = performance.now() / 1000;
     ctx.clearRect(0, 0, W, H);
-    // FONDO (pared + ventana + biblioteca + penumbra) — crossfade día/noche
+    // BACKGROUND (wall + window + bookcase + gloom) — day/night crossfade
     blitDN(sceneDay, sceneNight);
 
-    // RAYOS de luz del ventanal (capa bakeada) con alpha "respirando"
+    // LIGHT RAYS from the window (a baked layer) with a "breathing" alpha
     const rayBreath = 0.78 + Math.sin(tt * 0.4) * 0.22;
     if (godRaysDay && nightFactor < 0.999)   { ctx.globalAlpha = (1 - nightFactor) * rayBreath; ctx.drawImage(godRaysDay, 0, 0, W, H); ctx.globalAlpha = 1; }
     if (godRaysNight && nightFactor > 0.001) { ctx.globalAlpha = nightFactor * rayBreath * 0.85; ctx.drawImage(godRaysNight, 0, 0, W, H); ctx.globalAlpha = 1; }
-    // MOTAS de polvo a la deriva dentro de la luz (live, deterministas, additivas)
+    // DUST motes drifting inside the light (live, deterministic, additive)
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     const dustN = 14, zL = W * 0.45, zR = W, zT = H * 0.02, zB = H * 0.68;
@@ -1350,18 +1350,18 @@
       ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.fill();
     }
     ctx.restore();
-    // TITILEO de estrellas (sólo de noche; mismas posiciones deterministas que el bake, + seno)
+    // STAR TWINKLE (at night only; the same deterministic positions as the bake, + a sine)
     if (nightFactor > 0.02) drawStarTwinkle(tt);
 
-    // PLANTA con vaivén tenue: shear horizontal anclado en la maceta (abajo fijo, hojas arriba se mecen).
-    // Dos senoides desfasadas → brisa orgánica. performance.now() para el tiempo (no afecta la física).
+    // THE PLANT with a faint sway: a horizontal shear anchored at the pot (fixed at the bottom, the leaves above rock).
+    // Two out-of-phase sines → an organic breeze. performance.now() for the time (it does not affect the physics).
     const anchorY = H * 0.86;
     const sway = Math.sin(tt * 0.55) * 0.012 + Math.sin(tt * 1.27 + 0.7) * 0.006;
     ctx.save();
     ctx.transform(1, 0, sway, 1, -sway * anchorY, 0);
     blitDN(plantDay, plantNight);
     ctx.restore();
-    // MESA (canto + sombra de contacto) — delante de la planta
+    // TABLE (edge + contact shadow) — in front of the plant
     blitDN(frontDay, frontNight);
     if (frameLayer) ctx.drawImage(frameLayer, 0, 0, W, H);                          // marco bakeado
     if (!ghosted) drawBallShadows();
@@ -1370,11 +1370,11 @@
     const bh = ballSpriteHalf;
     for (const ball of balls) ctx.drawImage(ballSprite, ball.x - bh, ball.y - bh, bh * 2, bh * 2); // esfera bakeada
     ctx.globalAlpha = 1;
-    // oclusión de contacto entre bolas que se tocan (las lee como esferas sólidas, no translúcidas)
+    // contact occlusion between touching balls (it reads them as solid spheres, not translucent)
     drawContactOcclusion();
-    // viñeteado (profundidad / plano de cerca)
+    // vignetting (depth / a close-up plane)
     if (vignette) { ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H); }
-    // COLOR GRADE unificado (absorbe el veil de noche): lerp cálido-dorado (día) → frío-azul (noche)
+    // Unified COLOUR GRADE (it absorbs the night veil): a lerp from warm gold (day) → cool blue (night)
     {
       const nf = nightFactor;
       const r = Math.round(255 * (1 - nf) + 30 * nf);
@@ -1386,7 +1386,7 @@
     }
   }
 
-  // titileo de estrellas en vivo (mismas posiciones que el bake nocturno + seno por estrella)
+  // live star twinkle (the same positions as the night bake + a sine per star)
   function drawStarTwinkle(tt) {
     const { gx, gy, gw, horizonY } = windowGeom();
     for (let i = 0; i < 48; i++) {
@@ -1404,7 +1404,7 @@
     ctx.globalAlpha = 1;
   }
 
-  // oclusión de contacto: oscurece la costura entre bolas que se tocan
+  // contact occlusion: it darkens the seam between touching balls
   function drawContactOcclusion() {
     if (ghosted) return;
     for (let i = 0; i < balls.length - 1; i++) {
@@ -1412,7 +1412,7 @@
       const d = Math.hypot(b.x - a.x, b.y - a.y);
       if (d > radio * 2.06) continue;
       const k2 = 1 - d / (radio * 2.06);
-      if (k2 < 0.05) continue;                                                      // en reposo la costura es casi nula → no dibujar
+      if (k2 < 0.05) continue;                                                      // at rest the seam is almost nil → do not draw
       const cxm = (a.x + b.x) / 2, cym = (a.y + b.y) / 2;
       ctx.fillStyle = `rgba(0,0,0,${0.30 * k2})`;
       ctx.beginPath(); ctx.ellipse(cxm, cym, radio * 0.28, radio * 0.14, 0, 0, TAU); ctx.fill();
@@ -1434,10 +1434,10 @@
   canvas.addEventListener('pointercancel', endPointer);
   canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-  // ── botones (pointerdown, no click: responden aunque haya otro toque activo) ──
+  // ── buttons (pointerdown, not click: they respond even with another touch active) ──
   function addBall()    { if (nroBalls < 10) { nroBalls++; buildBalls(); } }
   function removeBall() { if (nroBalls > 1)  { nroBalls--; buildBalls(); } }
-  function reset()      { buildBalls(); }                                          // reconstruye en reposo, misma cantidad
+  function reset()      { buildBalls(); }                                          // rebuilds at rest, the same number
 
   function holdable(el, fn) {
     let iv = null, pid = null;
@@ -1476,13 +1476,13 @@
   tappable(btnHold, () => { holding = !holding; btnHold.classList.toggle('on', holding); });
   tappable(document.getElementById('btnReset'), reset);
 
-  // ════════════════ SONIDO (clic metálico sintetizado en Web Audio) ════════════════
-  // No hay samples en esta carpeta, así que el "clac" se genera: un par de parciales inarmónicos con
-  // decaída rápida (la campanita metálica) + un transitorio de ruido filtrado (el ataque). Se dispara
-  // a lo sumo una vez por frame, con cooldown, escalando volumen/pitch con la fuerza del choque.
+  // ════════════════ SOUND (a metallic click synthesised in Web Audio) ════════════════
+  // There are no samples in this folder, so the "clack" is generated: a pair of inharmonic partials with
+  // a fast decay (the metallic chime) + a filtered noise transient (the attack). It is triggered
+  // at most once per frame, with a cooldown, scaling volume/pitch with the force of the collision.
   let actx = null, lastClickT = 0, frameImpactV = 0;
-  const SND_COOLDOWN = 32;     // ms mínimos entre clics (evita ametralladora)
-  const SND_VTHR     = 0.4;    // rad/s — por debajo no suena (roces numéricos)
+  const SND_COOLDOWN = 32;     // minimum ms between clicks (it avoids a machine gun)
+  const SND_VTHR     = 0.4;    // rad/s — below this it does not sound (numerical rubbing)
   function audioResume() {
     try {
       if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1490,22 +1490,22 @@
     } catch (e) {}
   }
   function playClick(intensity) {
-    // No alcanza con que el contexto EXISTA: uno cerrado o interrumpido tira al tocar el grafo.
+    // It is not enough for the context to EXIST: a closed or interrupted one throws on touching the graph.
     if (!actx || actx.state !== 'running') return;
     const t = actx.currentTime;
-    // tic MUY suave: blip tonal grave, redondeado con un lowpass (sin agudos hirientes ni ruido de
-    // ataque), volumen bajísimo. Mínimo audible para que siempre se escuche el tic.
+    // a VERY soft tick: a low tonal blip, rounded off with a lowpass (no piercing treble and no attack
+    // noise), at a very low volume. The audible minimum so the tick is always heard.
     const vol = (0.3 + 0.7 * Math.max(0, Math.min(1, intensity))) * 0.035;
     const pitch = 1 + (Math.random() * 2 - 1) * 0.06;
     const g = actx.createGain();
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(vol, t + 0.003);                                // ataque suave (3ms): tic sin click digital
-    g.gain.exponentialRampToValueAtTime(0.0003, t + 0.06);                         // decaída corta
-    const lp = actx.createBiquadFilter();                                          // redondea: corta lo hiriente
+    g.gain.linearRampToValueAtTime(vol, t + 0.003);                                // soft attack (3ms): a tick with no digital click
+    g.gain.exponentialRampToValueAtTime(0.0003, t + 0.06);                         // short decay
+    const lp = actx.createBiquadFilter();                                          // rounds it off: it cuts what is piercing
     lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 0.6;
     g.connect(lp).connect(actx.destination);
     const base = 1050 * pitch;
-    for (const [m, gg] of [[1, 1], [2.0, 0.12]]) {                                 // fundamental + un dejo de octava
+    for (const [m, gg] of [[1, 1], [2.0, 0.12]]) {                                 // fundamental + a hint of the octave
       const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = base * m;
       const og = actx.createGain(); og.gain.value = gg;
       o.connect(og).connect(g); o.start(t); o.stop(t + 0.07);
@@ -1517,20 +1517,20 @@
   function frame(now) {
     if (typeof now !== 'number') now = performance.now();
     let elapsed = now - lastT; lastT = now;
-    if (elapsed > 100) elapsed = 100;                                            // anti spiral-of-death tras un blur de ventana
+    if (elapsed > 100) elapsed = 100;                                            // anti spiral-of-death after a window blur
     acc += elapsed;
     frameImpactV = 0;
     while (acc >= FIXED_DT) { step(FIXED_DT); acc -= FIXED_DT; }
-    // sonido del choque más fuerte de este frame (con cooldown)
+    // sound of this frame's strongest collision (with a cooldown)
     if (frameImpactV > SND_VTHR && now - lastClickT > SND_COOLDOWN) {
       lastClickT = now;
-      // El try/catch NO es por prolijidad: `playClick` se llama desde dentro de `frame()` y el
-      // `requestAnimationFrame(frame)` esta mas abajo. Una excepcion del audio — un contexto
-      // interrumpido en mobile tira `InvalidStateError` al escribir cualquier parametro — no
-      // dejaria el pendulo mudo: lo dejaria QUIETO, sin volver a pedir un cuadro nunca mas.
+      // The try/catch is NOT for tidiness: `playClick` is called from inside `frame()` and the
+      // `requestAnimationFrame(frame)` is further down. An audio exception — an interrupted context
+      // on mobile throws `InvalidStateError` when writing any parameter — would not
+      // leave the cradle mute: it would leave it STILL, never asking for another frame again.
       try { playClick(Math.min(1, frameImpactV / 6)); } catch (e) {}
     }
-    // ciclo día↔noche (independiente del péndulo): mesetas largas + transiciones suaves con smoothstep
+    // day↔night cycle (independent of the pendulum): long plateaus + soft transitions with smoothstep
     sceneClock += elapsed;
     const ph = (sceneClock / 1000 % NIGHT_PERIOD) / NIGHT_PERIOD;
     const ss = (a, b, x) => { x = Math.max(0, Math.min(1, (x - a) / (b - a))); return x * x * (3 - 2 * x); };
@@ -1554,7 +1554,7 @@
   <script>
     (function() {
       let frameCount = 0, lastT = performance.now();
-      let fpsOn = false;                                                            // estado real (no depender del display inline, que arranca vacío)
+      let fpsOn = false;                                                            // the real state (do not depend on the inline display, which starts out empty)
       const overlay = document.getElementById('fpsOverlay');
       function loop() {
         frameCount++;
@@ -1600,9 +1600,9 @@ so you can tell time is passing.</span>
 </div>
 
 <script>
-// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
-// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
-// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+// The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
+// game already had keeps switching it on and off with the same tap: no listener is removed and
+// no existing behaviour is changed. If the game had no meter, nothing happens.
 (function () {
   function armar() {
     var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
@@ -1610,31 +1610,31 @@ so you can tell time is passing.</span>
     if (!btn || !panel) return;
     var fps = document.getElementById('fpsOverlay');
     if (fps && fps.parentNode !== panel) panel.appendChild(fps);
-    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
-    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
-    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    // The bar is MEASURED, not assumed. Several games do not declare `--bar-height` and others
+    // change it with the orientation: with a fixed value the panel ended up covering the buttons
+    // (Hangman) or running off the top in landscape (Tron). Measured live it works in all twenty.
     var bar = document.getElementById('bar');
-    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
-    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
-    // salio de aca", que es lo que hace el de Loop.
-    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
-    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
-    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
-    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
-    // lo mueven segun la orientacion.
+    // The panel is anchored TO THE BUTTON THAT OPENS IT, not to the centre of the screen. Centred
+    // it floated in the middle of the game with no relation to anything; hanging off the button it
+    // reads as "this came from here", which is what Loop's does.
+    //   · the same margin as the button (right if the button is on the right, left otherwise);
+    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //     in games with a bottom bar the panel still ends up over the bar.
+    // It is measured live and not done in CSS because each game puts the button somewhere
+    // different, and several move it with the orientation.
     function ubicar() {
       var vw = window.innerWidth, vh = window.innerHeight, m = 10;
       var rb = btn.getBoundingClientRect();
-      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
-      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
-      // encima de la parte alta de la barra.
+      // If the button lives INSIDE the bar, the vertical reference is the whole bar and not the
+      // button: the buttons align to the foot of the bar, so anchoring to the button left the panel
+      // over the top part of the bar.
       var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
       panel.style.transform = 'none';
       var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
       if ((rb.left + rb.width / 2) > vw / 2) {
-        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
-        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
-        // colgado de un boton a media pantalla arrancaba en x = -199.
+        // Flush with the button's right margin, BUT without running off to the left: if the panel is
+        // wider than the gap, it slides to the edge. Without this cap, a 700 px panel hanging off a
+        // button at mid-screen started at x = -199.
         var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
         panel.style.left = 'auto'; panel.style.right = der + 'px';
       } else {
@@ -1645,14 +1645,14 @@ so you can tell time is passing.</span>
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
-      } else {                                          // boton abajo -> panel por encima
+      } else {                                          // button at the bottom -> panel above it
         panel.style.top = 'auto';
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
-      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
-      // conmutador, asi que si queda tapado el panel no se puede cerrar.
+      // The tight case (Hangman in landscape: the keyboard and the bar eat 319 of 380 px). The panel
+      // stretches to the opposite edge, but WITHOUT covering the button that opened it: the ⓘ is the
+      // only toggle, so if it gets covered the panel cannot be closed.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
         if ((rb.top + rb.height / 2) < vh / 2) {
           panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
@@ -1671,17 +1671,17 @@ so you can tell time is passing.</span>
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
-      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
+      if (abrir) ubicar();                          // measure with the panel ALREADY visible: hidden, offsetWidth is 0
     });
-    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    // Keyboard: the button is a <button>, so Enter/Space fire `click` and not `pointerdown`.
     btn.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      if (e.detail !== 0) return;                 // detail 0 = it came from the keyboard, not the mouse
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
       if (abrir) ubicar();
     });
-    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    // Close with Escape: the panel covers the game and must be dismissable without hunting for the button.
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && panel.classList.contains('show')) {
         panel.classList.remove('show'); btn.classList.remove('on');

@@ -405,63 +405,63 @@
   <div id="player"></div>
 
   <script>
-    // Versión visible (splash + footer). SUBIR este número en cada update → permite confirmar
-    // de un vistazo si la PWA tomó el último deploy (Android cachea fuerte).
+    // Visible version (splash + footer). BUMP this number on every update → it lets you confirm
+    // at a glance whether the PWA picked up the latest deploy (Android caches hard).
     const VERSION = 'v2.0';
     { const sv = document.getElementById('splashVer'); if (sv) sv.textContent = VERSION;
       const fv = document.getElementById('footerVer'); if (fv) fv.textContent = VERSION + ' · © 2026 Franco Laboranti'; }
 
-    // iOS Safari "Add to Home Screen": en versiones viejas no matchea (display-mode: standalone),
-    // así que detectamos por navigator.standalone y agregamos body.pwa-ios → el CSS de #exitApp lo prende.
+    // iOS Safari "Add to Home Screen": on old versions it does not match (display-mode: standalone),
+    // so we detect it via navigator.standalone and add body.pwa-ios → #exitApp's CSS switches it on.
     if (window.navigator.standalone === true) document.body.classList.add('pwa-ios');
 
-    // Catálogo de juegos: [thumb (archivo en thumbnails/), nombre, ruta, orientación].
-    // 'landscape' rota el iframe por CSS (sostenés el celu de costado); 'portrait' = normal.
-    // El color de cada tarjeta ya NO se setea por juego: lo hereda del --accent GLOBAL que cicla
-    // sincronizado con el shine del logo (ver @property + @keyframes accentCycle al inicio del CSS).
-    // El 5° campo (hue) queda como dato histórico, lo ignora el factory.
+    // Game catalogue: [thumb (a file in thumbnails/), name, path, orientation].
+    // 'landscape' rotates the iframe in CSS (you hold the phone sideways); 'portrait' = normal.
+    // Each card's colour is NO LONGER set per game: it inherits the GLOBAL --accent, which cycles
+    // in sync with the logo's shine (see @property + @keyframes accentCycle at the top of the CSS).
+    // The 5th field (hue) is left as a historical note, the factory ignores it.
     const GAMES = [
-      ['Loop.webp',           'Loop',          'Loop/LoopWeb/',                     'landscape', '#7df9ff'],
-      ['Snake.webp',          'Snake',         'Snake/SnakeWeb/',                   'portrait',  '#84cc16'],
-      ['TankWars.webp',       'Tank Wars',     'TankWARS/TankWARSWeb/',             'landscape', '#f59e0b'],
-      ['CrazyTanks.webp',     'Crazy Tanks',   'CrazyTanks/CrazyTanksWeb/',         'landscape', '#fb923c'],
-      ['Pong.webp',           'Sleepy Pong',   'Pong/PongWeb/',                     'landscape', '#6ee7b7'],
-      ['Balls.webp',          'Canicas',       'Balls/BallsWeb/',                   'portrait',  '#c084fc'],
-      ['MiniBalls.webp',      'Mini Canicas',  'MiniBalls/MiniBallsWeb/',           'portrait',  '#67e8f9'],
-      ['Fireworks.webp',      'Fuegos',        'Fireworks/FireworksWeb/',           'portrait',  '#f472b6'],
-      ['FireworksV2.webp',    'Fuegos V2',     'FireworksV2/FireworksV2Web/',       'landscape', '#22d3ee'],
-      ['Tron.webp',           'Tron',          'Tron/TronWeb/',                     'portrait',  '#38bdf8'],
-      ['TronV2.webp',         'Tron V2',       'TronV2/TronV2Web/',                 'landscape', '#fb7185'],
-      ['DonkeyKong.webp',     'Donkey Kong',   'DonkeyKong/DonkeyKongWeb/',         'portrait',  '#e83b2a'],
-      ['Pacman.webp',         'Pac-Man',       'Pacman/PacmanWeb/',                 'portrait',  '#ffe300'],
-      ['StickFight.webp',     'Stick Fight',   'StickFight/StickFightWeb/',         'landscape', '#35d6ff'],
-      ['Chess.webp',          'Ajedrez',       'Chess/ChessWeb/',                   'portrait',  '#fbbf24'],
-      ['Clock.webp',          'Reloj',         'Clock/ClockWeb/',                   'portrait',  '#94a3b8'],
-      ['MineSweeper.webp',    'Buscaminas',    'MineSweeperGPT/MineSweeperWeb/',    'portrait',  '#ef4444'],
-      ['Hangman.webp',        'Ahorcado',      'Hangman/HangmanWeb/',               'portrait',  '#a3e635'],
-      ['NewtonsCradle.webp',  'Péndulo',       "Newton's Cradle/NewtonsCradleWeb/", 'landscape', '#5eead4'],
-      ['Poker.webp',          'Póker',         'Poker/PokerWeb/',                   'landscape', '#dc2626'],
-      ['Simon.webp',          'Simón Dice',    'SimonSays/SimonSaysWeb/',           'portrait',  '#e879f9'],
-      ['Tateti.webp',         'Ta-Te-Ti',      'Tateti/TatetiWeb/',                 'portrait',  '#60a5fa'],
+      ['Loop.webp',          'Loop',            'Loop/LoopWeb/',                     'landscape', '#7df9ff'],
+      ['Snake.webp',         'Snake',           'Snake/SnakeWeb/',                   'portrait',  '#84cc16'],
+      ['TankWars.webp',      'Tank Wars',       'TankWARS/TankWARSWeb/',             'landscape', '#f59e0b'],
+      ['CrazyTanks.webp',    'Crazy Tanks',     'CrazyTanks/CrazyTanksWeb/',         'landscape', '#fb923c'],
+      ['Pong.webp',          'Sleepy Pong',     'Pong/PongWeb/',                     'landscape', '#6ee7b7'],
+      ['Balls.webp',         'Marbles',         'Balls/BallsWeb/',                   'portrait',  '#c084fc'],
+      ['MiniBalls.webp',     'Mini Marbles',    'MiniBalls/MiniBallsWeb/',           'portrait',  '#67e8f9'],
+      ['Fireworks.webp',     'Fireworks',       'Fireworks/FireworksWeb/',           'portrait',  '#f472b6'],
+      ['FireworksV2.webp',   'Fireworks V2',    'FireworksV2/FireworksV2Web/',       'landscape', '#22d3ee'],
+      ['Tron.webp',          'Tron',            'Tron/TronWeb/',                     'portrait',  '#38bdf8'],
+      ['TronV2.webp',        'Tron V2',         'TronV2/TronV2Web/',                 'landscape', '#fb7185'],
+      ['DonkeyKong.webp',    'Donkey Kong',     'DonkeyKong/DonkeyKongWeb/',         'portrait',  '#e83b2a'],
+      ['Pacman.webp',        'Pac-Man',         'Pacman/PacmanWeb/',                 'portrait',  '#ffe300'],
+      ['StickFight.webp',    'Stick Fight',     'StickFight/StickFightWeb/',         'landscape', '#35d6ff'],
+      ['Chess.webp',         'Chess',           'Chess/ChessWeb/',                   'portrait',  '#fbbf24'],
+      ['Clock.webp',         'Clock',           'Clock/ClockWeb/',                   'portrait',  '#94a3b8'],
+      ['MineSweeper.webp',   'Minesweeper',     'MineSweeperGPT/MineSweeperWeb/',    'portrait',  '#ef4444'],
+      ['Hangman.webp',       'Hangman',         'Hangman/HangmanWeb/',               'portrait',  '#a3e635'],
+      ['NewtonsCradle.webp', "Newton's Cradle", "Newton's Cradle/NewtonsCradleWeb/", 'landscape', '#5eead4'],
+      ['Poker.webp',         'Poker',           'Poker/PokerWeb/',                   'landscape', '#dc2626'],
+      ['Simon.webp',         'Simon',           'SimonSays/SimonSaysWeb/',           'portrait',  '#e879f9'],
+      ['Tateti.webp',        'Tic Tac Toe',     'Tateti/TatetiWeb/',                 'portrait',  '#60a5fa'],
     ];
     {
       const grid = document.getElementById('grid');
       let idx = 0;
       for (const [thumb, name, path, orient] of GAMES) {
         const src = encodeURI('../' + path);   // codifica el espacio de "Newton's Cradle"
-        // cell = item de grilla. Sólo lleva el stagger; el --accent es GLOBAL y cicla con el logo.
+        // cell = a grid item. It only carries the stagger; --accent is GLOBAL and cycles with the logo.
         const cell = document.createElement('div');
         cell.className = 'cell';
         cell.style.setProperty('--i', idx++);
         const a = document.createElement('a');
         a.className = 'tile';
-        a.href = src;                            // fallback si se abre suelto (sin la shell)
+        a.href = src;                            // fallback if it is opened standalone (without the shell)
         a.dataset.src = src;
         a.dataset.orient = orient;
         a.setAttribute('aria-label', name);
-        // `lazy`: solo se bajan las miniaturas que se ven. Con 22 tarjetas pidiendose todas de
-        // una, en un telefono la mitad ni estan en pantalla cuando se piden.
-        // `async`: decodificar no bloquea el hilo principal mientras entran las tarjetas.
+        // `lazy`: only the thumbnails in view are downloaded. With 22 cards all requesting at
+        // once, on a phone half of them are not even on screen when they are requested.
+        // `async`: decoding does not block the main thread while the cards come in.
         a.innerHTML = '<img src="thumbnails/' + thumb + '" alt="" loading="lazy" decoding="async">';
         const label = document.createElement('div');
         label.className = 'tile-name';
@@ -472,19 +472,19 @@
       }
     }
 
-    // Registrar service worker (necesario para que la PWA sea "instalable")
+    // Register the service worker (needed for the PWA to be "installable")
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js').catch(() => {});
       });
     }
 
-    // Instalación: Chrome ya no muestra banner automático. Capturamos el evento,
-    // mostramos un botón propio y disparamos el prompt nativo al tocarlo.
+    // Installation: Chrome no longer shows an automatic banner. We capture the event,
+    // show a button of our own and fire the native prompt on tapping it.
     let deferredPrompt = null;
     const installBtn = document.getElementById('installBtn');
     window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();            // evita el mini-infobar; lo controlamos nosotros
+      e.preventDefault();            // avoids the mini-infobar; we control it ourselves
       deferredPrompt = e;
       installBtn.classList.add('show');
     });
@@ -495,20 +495,20 @@
       deferredPrompt = null;
       installBtn.classList.remove('show');
     });
-    // Si ya está instalada (o se instala), ocultar el botón.
+    // If it is already installed (or gets installed), hide the button.
     window.addEventListener('appinstalled', () => installBtn.classList.remove('show'));
 
-    // Salir de la app. window.close() cierra la PWA SIEMPRE QUE no haya historial de
-    // navegación — por eso los juegos NO usan pushState (ver launch/closeGame), así el
-    // historial queda en 1 y este botón siempre puede cerrar la app. El botón sólo se
-    // muestra en PWA instalada (ver CSS @media display-mode arriba), así que en pestaña
-    // del browser no se llega a clickear.
+    // Quit the app. window.close() closes the PWA AS LONG AS there is no navigation
+    // history — which is why the games do NOT use pushState (see launch/closeGame), so the
+    // history stays at 1 and this button can always close the app. The button is only
+    // shown in an installed PWA (see the CSS @media display-mode above), so in a browser
+    // tab you never get to click it.
     document.getElementById('exitApp').addEventListener('click', () => {
       try { window.close(); } catch (e) {}
     });
 
-    // Botón ⛶ del Arcade (sólo navegador, no PWA): toggla fullscreen al nivel de la shell. El click ES
-    // un gesto de usuario, así que requestFullscreen no se rechaza por falta de activación.
+    // The Arcade's ⛶ button (browser only, not PWA): it toggles fullscreen at the shell level. The click IS
+    // a user gesture, so requestFullscreen is not rejected for lack of activation.
     document.getElementById('fsApp').addEventListener('click', () => {
       const doc = document, root = doc.documentElement;
       if (doc.fullscreenElement || doc.webkitFullscreenElement) {
@@ -522,10 +522,10 @@
       }
     });
 
-    // ── ORIENTACIÓN + REPRODUCTOR (shell) ─────────────────────────────────────
+    // ── ORIENTATION + PLAYER (shell) ─────────────────────────────────────
     const player = document.getElementById('player');
     const root   = document.documentElement;
-    let frame = null;   // se crea uno nuevo por juego y se destruye al salir
+    let frame = null;   // a new one is created per game and destroyed on exiting
 
     function lockOrient(o) {
       try {
@@ -535,9 +535,9 @@
         }
       } catch (e) {}
     }
-    // Lock portrait CON REINTENTOS: al pasar a fullscreen DESDE landscape, en varios Android el
-    // lock se rechaza al primer intento. Reintentamos unas veces; si igual falla, lo mostramos
-    // en el footer (para diagnosticar). En éxito no toca el footer.
+    // Portrait lock WITH RETRIES: on switching to fullscreen FROM landscape, on several Androids the
+    // lock is rejected on the first attempt. We retry a few times; if it still fails, we show it
+    // in the footer (for diagnosis). On success it does not touch the footer.
     function lockPortrait(tries) {
       tries = tries || 0;
       let p;
@@ -549,69 +549,69 @@
       });
     }
     function showLockErr(msg) {
-      // TODOS los errores del orientation lock son falsos positivos para el usuario final:
-      //  · NotSupportedError → desktop sin API (Chrome/Firefox de PC)
-      //  · AbortError → request superseded o se perdió la activación (común en desktop FS)
-      //  · SecurityError → necesitaba un gesto que no estaba disponible
-      // Ninguno es un bug del Arcade — el lock simplemente no aplica en ese contexto.
-      // Mantenemos diagnóstico en consola (por si aparece algo raro en un Android nuevo) pero NO
-      // pisamos el footer del copyright: la línea inferior es la firma de la app, no un panel de errores.
+      // ALL orientation-lock errors are false positives for the end user:
+      //  · NotSupportedError → desktop with no API (Chrome/Firefox on a PC)
+      //  · AbortError → the request was superseded or the activation was lost (common on desktop FS)
+      //  · SecurityError → it needed a gesture that was not available
+      // None of them is an Arcade bug — the lock simply does not apply in that context.
+      // We keep the diagnostics in the console (in case something odd turns up on a new Android) but we do NOT
+      // overwrite the copyright footer: the bottom line is the app's signature, not an error panel.
       try { console.warn('orientation.lock failed:', msg); } catch (e) {}
     }
-    let entered = false;   // true tras tocar "ENTRAR" (gesto inicial de la app)
+    let entered = false;   // true after tapping "ENTER" (the app's initial gesture)
 
-    // La pantalla de entrada (y el menú) van en VERTICAL. En la PWA instalada Android Chrome
-    // permite fijar la orientación al cargar sin gesto; en pestaña falla en silencio. Esto va
-    // en la carga (no junto al requestFullscreen del toque), así no reintroduce el bug de 2 toques.
+    // The entry screen (and the menu) are PORTRAIT. In the installed PWA, Android Chrome
+    // allows fixing the orientation on load with no gesture; in a tab it fails silently. This goes
+    // on load (not next to the tap's requestFullscreen), so it does not reintroduce the 2-tap bug.
     lockOrient('portrait');
 
-    // Sólo Fullscreen API (notch + barra de estado). La orientación del DISPOSITIVO NO cambia:
-    // queda en portrait fijo (lock arriba). Los juegos landscape se rotan por CSS (clase
-    // .landscape al iframe en launch), no rotando el aparato → cero flashes de orientación.
+    // Fullscreen API only (notch + status bar). The DEVICE's orientation does NOT change:
+    // it stays locked portrait (the lock above). Landscape games are rotated in CSS (the
+    // .landscape class on the iframe in launch), not by rotating the device → zero orientation flashes.
     function requestFs() {
       if (document.fullscreenElement || !root.requestFullscreen) return Promise.resolve();
       let p; try { p = root.requestFullscreen(); } catch (e) { return Promise.reject(e); }
       return (p && p.then) ? p : Promise.resolve();
     }
-    // volver de un juego (bfcache incl.) re-asegura portrait (no-op si ya está → sin flash)
+    // coming back from a game (bfcache included) re-asserts portrait (a no-op if it already is → no flash)
     window.addEventListener('pageshow', () => { if (entered && !player.classList.contains('show')) lockOrient('portrait'); });
 
-    // Pantalla de entrada (gesto inicial, vía 'click' = gesto completo). Si el fullscreen es
-    // rechazado, mostramos el motivo en el splash y podés volver a tocar para reintentar.
+    // Entry screen (the initial gesture, via 'click' = a complete gesture). If the fullscreen is
+    // rejected, we show the reason on the splash and you can tap again to retry.
     const enterEl  = document.getElementById('enter');
     const enterMsg = enterEl.querySelector('.es');
     function enterApp() {
-      // El splash SIEMPRE se cierra al primer click — entrar al menú no debe depender de que
-      // el browser acepte fullscreen (en desktop suele fallar silenciosamente sin causa visible
-      // para el usuario, y mantenerlo trabado en el splash es UX rota). Lock + FS son best-effort.
+      // The splash ALWAYS closes on the first click — getting into the menu must not depend on
+      // the browser accepting fullscreen (on desktop it often fails silently with no visible cause
+      // for the user, and keeping them stuck on the splash is broken UX). Lock + FS are best-effort.
       entered = true;
       enterEl.classList.add('hide');
       requestFs().then(lockPortrait, (e) => {
-        // Diagnóstico opcional en el footer (no bloquea al usuario)
+        // Optional diagnostics in the footer (it does not block the user)
         const fv = document.getElementById('footerVer');
         if (fv && e) fv.textContent = VERSION + ' · FS✗ ' + ((e.name || e) + '');
       });
     }
     enterEl.addEventListener('click', enterApp);
 
-    // Lanzar un juego: el TAP del tile es un gesto válido → pedimos Fullscreen API real
-    // (gana el notch + oculta la barra de estado) y bloqueamos la orientación del juego.
-    // Creamos un IFRAME NUEVO por juego (su carga inicial no agrega entrada al historial) y
-    // NO usamos pushState: así el historial queda en 1 y el botón "salir de la app" siempre
-    // puede cerrar la PWA. Contrapartida elegida: el botón atrás del cel dentro de un juego
-    // cierra la app (para volver al menú se usa la ✕ del juego).
+    // Launching a game: the tile's TAP is a valid gesture → we request the real Fullscreen API
+    // (it takes the notch + hides the status bar) and lock the game's orientation.
+    // We create a NEW IFRAME per game (its initial load adds no history entry) and
+    // do NOT use pushState: that way the history stays at 1 and the "quit the app" button can always
+    // close the PWA. The trade-off chosen: the phone's back button inside a game
+    // closes the app (to go back to the menu you use the game's ✕).
     function launch(src, orient) {
-      requestFs().catch(() => {});   // fullscreen para el notch; el aparato NO rota (portrait fijo)
-      // html.gameOpen → CSS pausa todas las animaciones infinitas del menú y oculta el DOM de fondo.
-      // Sin esto, --accent ciclando en :root invalidaba estilos del documento padre cada frame → FPS↓.
+      requestFs().catch(() => {});   // fullscreen for the notch; the device does NOT rotate (locked portrait)
+      // html.gameOpen → the CSS pauses all the menu's infinite animations and hides the background DOM.
+      // Without this, --accent cycling on :root invalidated the parent document's styles every frame → FPS↓.
       document.documentElement.classList.add('gameOpen');
       frame = document.createElement('iframe');
       frame.id = 'frame';
       frame.allow = 'fullscreen; accelerometer; gyroscope; autoplay';
       frame.setAttribute('allowfullscreen', '');
-      // Juego landscape → rotación por CSS (no se rota el dispositivo). Portrait → normal.
+      // A landscape game → rotation in CSS (the device is not rotated). Portrait → normal.
       if (orient === 'landscape') frame.classList.add('landscape');
-      // cache-buster: el juego carga siempre su última versión (evita caché vieja tras deploy).
+      // cache-buster: the game always loads its latest version (it avoids a stale cache after a deploy).
       frame.src = src + (src.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
       player.appendChild(frame);
       player.classList.add('show');
@@ -619,23 +619,23 @@
     function closeGame() {
       if (!player.classList.contains('show')) return;   // evita doble cierre
       player.classList.remove('show');
-      document.documentElement.classList.remove('gameOpen');   // reanuda animaciones del menú
+      document.documentElement.classList.remove('gameOpen');   // resumes the menu's animations
       if (frame) {
-        // about:blank ANTES de remove(): fuerza al renderer a TIRAR YA el documento del juego
-        // (canvases, buffers de GPU, AudioContext, mundos de Matter, loops de requestAnimationFrame).
-        // Un remove() pelado deja esa memoria "colgada" un rato en mobile —iOS Safari tiene un budget
-        // de canvas POR PESTAÑA, y todos los iframes la comparten—. Tras varios juegos el renderer
-        // quedaba cerca del techo y el siguiente que alocaba mucho al cargar (Pong hornea fondo +
-        // sprites de ladrillo) fallaba: negro y después el ícono de "imagen rota" (subframe crasheado).
-        // Navegar a blank descarga el documento en el acto; recién ahí lo removemos.
+        // about:blank BEFORE remove(): it forces the renderer to THROW AWAY the game's document AT ONCE
+        // (canvases, GPU buffers, AudioContext, Matter worlds, requestAnimationFrame loops).
+        // A bare remove() leaves that memory "hanging" for a while on mobile —iOS Safari has a canvas
+        // budget PER TAB, and every iframe shares it—. After several games the renderer
+        // sat near the ceiling and the next one that allocated a lot on loading (Pong bakes a background +
+        // brick sprites) failed: black, and then the "broken image" icon (a crashed subframe).
+        // Navigating to blank unloads the document on the spot; only then do we remove it.
         try { frame.src = 'about:blank'; } catch (e) {}
         frame.remove(); frame = null;
       }
-      lockOrient('portrait');                            // menú vertical
+      lockOrient('portrait');                            // portrait menu
     }
 
-    // Cada tile con data-src lanza su juego (preventDefault del <a>, que queda de fallback
-    // si se abre la página suelta sin la shell).
+    // Each tile with data-src launches its game (preventDefault on the <a>, which stays as a fallback
+    // if the page is opened standalone without the shell).
     document.getElementById('grid').addEventListener('click', (e) => {
       const tile = e.target.closest('.tile[data-src]');
       if (!tile) return;
@@ -643,9 +643,9 @@
       launch(tile.dataset.src, tile.dataset.orient);
     });
 
-    // Mensajes del juego embebido:
-    //  • arcade:exit       → cerrar el reproductor (volver al menú)
-    //  • arcade:fullscreen → toggle del fullscreen real (lo maneja la shell, no el iframe)
+    // Messages from the embedded game:
+    //  • arcade:exit       → close the player (back to the menu)
+    //  • arcade:fullscreen → toggle the real fullscreen (the shell handles it, not the iframe)
     window.addEventListener('message', (e) => {
       if (!e.data) return;
       if (e.data.type === 'arcade:exit') { closeGame(); return; }
@@ -654,9 +654,9 @@
         else if (root.requestFullscreen) { try { const p = root.requestFullscreen(); if (p && p.catch) p.catch(() => {}); } catch (x) {} }
       }
     });
-    // Al (re)entrar a fullscreen, re-fijar portrait (el lock sólo agarra confiable en fullscreen,
-    // y un toggle pudo soltarlo). Además avisamos al juego el estado para que sincronice el ícono.
-    // body.fs-on alimenta el toggle ⛶↔⊞ del #fsApp.
+    // On (re)entering fullscreen, re-assert portrait (the lock only takes reliably in fullscreen,
+    // and a toggle may have released it). We also tell the game the state so it can sync its icon.
+    // body.fs-on drives #fsApp's ⛶↔⊞ toggle.
     document.addEventListener('fullscreenchange', () => {
       const on = !!document.fullscreenElement;
       document.body.classList.toggle('fs-on', on);

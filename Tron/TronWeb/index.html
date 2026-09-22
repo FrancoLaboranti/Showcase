@@ -173,63 +173,63 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  TRON (v1) — port web fiel de Tron/Tron.py, con el shell mobile de BallsWeb.
-  //  Light-cycles que dejan estela; morís si tu frente choca contra cualquier
-  //  estela (incluida la propia). El campo hace wrap toroidal — no hay paredes.
+  //  TRON (v1) — faithful web port of Tron/Tron.py, with BallsWeb's mobile shell.
+  //  Light cycles that leave a trail; you die if your front hits any
+  //  trail (your own included). The field wraps toroidally — there are no walls.
   //
-  //  El original detecta colisiones leyendo píxeles (windowSurface.get_at).
-  //  Acá lo replicamos con una GRILLA DE OCUPACIÓN del tamaño del canvas
-  //  (lectura O(1); el canvas se pinta en paralelo sólo para mostrar).
+  //  The original detects collisions by reading pixels (windowSurface.get_at).
+  //  Here we replicate that with an OCCUPANCY GRID the size of the canvas
+  //  (O(1) reads; the canvas is painted in parallel only for display).
   // ════════════════════════════════════════════════════════════════════
-  const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));               // randint inclusivo (como random.randint)
+  const ri = (a, b) => a + Math.floor(Math.random() * (b - a + 1));               // inclusive randint (like random.randint)
   const TAU = Math.PI * 2;
 
   // ── TUNING ──
-  const SPEED_MULT  = 1;                                                         // velocidad relativa al original (un poco más rápido)
-  const HEAD_FADE   = 0.6;                                                         // seg que tarda la "cabeza" en bajar del brillo caliente al color base
-  const HEAD_GLOW   = 16;                                                          // shadowBlur del núcleo de la cabeza
-  const HEAD_DOT    = 2.8;                                                         // radio del núcleo blanco de la cabeza
-  const TRAIL_BLOOM = 6;                                                           // px de desenfoque del halo neón de las estelas (0 = sin glow)
-  const GRID_ALPHA  = 0.06;                                                        // opacidad de la grilla de fondo estilo arena (0 = sin grilla)
-  const GRID_CELLS  = 22;                                                          // ~celdas a lo ancho del lado más corto
-  const BG          = '#03060d';                                                   // fondo casi negro con leve tinte azul (arena Tron)
+  const SPEED_MULT  = 1;                                                         // speed relative to the original (a little faster)
+  const HEAD_FADE   = 0.6;                                                         // seconds the "head" takes to come down from the hot glow to the base colour
+  const HEAD_GLOW   = 16;                                                          // shadowBlur of the head's core
+  const HEAD_DOT    = 2.8;                                                         // radius of the head's white core
+  const TRAIL_BLOOM = 6;                                                           // px of blur on the trails' neon halo (0 = no glow)
+  const GRID_ALPHA  = 0.06;                                                        // opacity of the arena-style background grid (0 = no grid)
+  const GRID_CELLS  = 22;                                                          // ~cells across the shorter side
+  const BG          = '#03060d';                                                   // near-black background with a slight blue tint (the Tron arena)
 
-  // ── IA ── navega por anticipación (mide espacio libre adelante/izq/der) con ruido para que no sea
-  // determinista, y mete giros erráticos ocasionales — pero nunca uno que sea muerte inmediata.
-  const AI_DECIDE_CD = 0.04;                                                       // s entre decisiones (no cada frame, así no tiembla)
-  const AI_LOOK      = 150;                                                        // px de anticipación al medir cuánto hay libre en una dirección
-  const AI_JITTER    = 70;                                                         // px de ruido random sumado a cada medición (vuelve la navegación impredecible)
-  const AI_PANIC     = 16;                                                         // si el frente tiene menos px libres que esto → dobla ya al lado más despejado
-  const AI_GREED     = 80;                                                         // un costado debe superar al frente por esto (px) para doblar "por gusto"
-  const AI_ERRATIC   = 0.07;                                                       // prob. por decisión de un giro errático (sólo si es seguro)
+  // ── AI ── it navigates by lookahead (it measures the free space ahead/left/right) with noise so it is not
+  // deterministic, and throws in occasional erratic turns — but never one that is immediate death.
+  const AI_DECIDE_CD = 0.04;                                                       // s between decisions (not every frame, so it does not jitter)
+  const AI_LOOK      = 150;                                                        // px of lookahead when measuring how much is free in a direction
+  const AI_JITTER    = 70;                                                         // px of random noise added to each measurement (it makes the navigation unpredictable)
+  const AI_PANIC     = 16;                                                         // if the front has fewer free px than this → turn at once to the clearer side
+  const AI_GREED     = 80;                                                         // one side must beat the front by this (px) to turn "for the fun of it"
+  const AI_ERRATIC   = 0.07;                                                       // probability per decision of an erratic turn (only if it is safe)
 
   // ════════════════════════════════════════════════════════════════════
-  //  AUDIO — síntesis WebAudio, cero archivos.
+  //  AUDIO — WebAudio synthesis, zero files.
   //
-  //  Tron no está hecho de materia: no hay madera, metal, goma ni piel. El mundo entero son líneas
-  //  de luz sobre negro. Lo único que existe ahí es SEÑAL ELÉCTRICA, así que el material del audio
-  //  es señal eléctrica: onda de SIERRA por un lowpass RESONANTE cuyo cutoff BARRE. Ese barrido es
-  //  la firma — no un clic mecánico, no un golpe, no un pitido puro. Sintetizador del 82, no sampler.
+  //  Tron is not made of matter: there is no wood, metal, rubber or skin. The whole world is lines
+  //  of light on black. The only thing that exists there is ELECTRICAL SIGNAL, so the audio's material
+  //  is electrical signal: a SAWTOOTH wave through a RESONANT lowpass whose cutoff SWEEPS. That sweep is
+  //  the signature — not a mechanical click, not a knock, not a pure beep. An '82 synthesiser, not a sampler.
   //
   //  Consecuencias concretas:
-  //   · el giro de 90° suena como un snap de filtro cuya DIRECCIÓN te dice hacia dónde doblaste
+  //   · the 90° turn sounds like a filter snap whose DIRECTION tells you which way you turned;
   //     (izquierda barre hacia abajo, derecha hacia arriba);
-  //   · el motor se vuelve más agudo y más abierto cuanto menos espacio libre tenés adelante;
-  //   · el ruido blanco aparece UNA sola vez en todo el vocabulario — el derezz — porque ése es el
-  //     único momento en que el juego destruye algo y el cuerpo se descompone en píxeles;
-  //   · el menú es de OTRO material: triangle puro, sin filtro. La interfaz no es la arena.
-  //   · cada cycle tiene su altura fija igual que tiene su color: oís QUIÉN murió.
+  //   · the engine gets higher and more open the less free space you have ahead;
+  //   · white noise appears ONCE in the whole vocabulary — the derezz — because that is the
+  //     only moment the game destroys something and the body breaks up into pixels;
+  //   · the menu is of ANOTHER material: pure triangle, no filter. The interface is not the arena.
+  //   · each cycle has its fixed pitch just as it has its colour: you hear WHO died.
   // ════════════════════════════════════════════════════════════════════
-  const NOTE_OF = [110, 146.83, 174.61, 220];                                      // TÚ / RINZLER / SARK / CLU
-  const MAX_VOICES = 4;                                                            // techo de voces por frame (se resetea al tope del loop)
+  const NOTE_OF = [110, 146.83, 174.61, 220];                                      // YOU / RINZLER / SARK / CLU
+  const MAX_VOICES = 4;                                                            // per-frame voice ceiling (reset at the top of the loop)
   let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
-  const voiceLast = {};                                                            // cooldown por voz
+  const voiceLast = {};                                                            // cooldown per voice
   try { muted = localStorage.getItem('tronMuted') === '1'; } catch (e) {}
 
-  // Nodos CONTINUOS del motor: se crean una sola vez por sesión y se modulan (PATRON §8).
+  // CONTINUOUS engine nodes: they are created once per session and modulated (PATRON §8).
   let engGain = null, engFilt = null, engA = null, engB = null, engSwarm = null, engSwarmGain = null;
-  let engAcc = 0;                                                                  // acumulador: el motor se reescribe a 20 Hz, no a 60
-  let engLastG = -1, engLastF = -1, engLastP = -1, engLastS = -1;                   // últimos targets escritos (evita rampas redundantes)
+  let engAcc = 0;                                                                  // accumulator: the engine is rewritten at 20 Hz, not at 60
+  let engLastG = -1, engLastF = -1, engLastP = -1, engLastS = -1;                   // last targets written (avoids redundant ramps)
 
   function audioResume() {
     if (!AC) {
@@ -239,22 +239,22 @@
         masterGain.gain.value = muted ? 0 : 1;
         masterGain.connect(AC.destination);
         buildEngine();
-      } catch (e) { AC = null; return; }                                           // sin audio el juego SIGUE andando
+      } catch (e) { AC = null; return; }                                           // with no audio the game KEEPS running
     }
     if (AC.state === 'suspended') AC.resume().catch(() => {});
   }
 
-  // El contexto se suspende SOLO en mobile (llamada entrante, cambio de app, pestaña al fondo) y ahí
-  // escribir cualquier AudioParam tira InvalidStateError. Acá eso no sería un fallo silencioso: el
-  // handler de window.onerror de arriba pinta un panel rojo enorme TAPANDO la partida. Nada toca el
-  // grafo sin pasar por acá primero.
+  // The context is suspended ONLY on mobile (an incoming call, an app switch, the tab in the background) and there
+  // writing any AudioParam throws InvalidStateError. Here that would not be a silent failure: the
+  // window.onerror handler above paints a huge red panel COVERING the game. Nothing touches the
+  // graph without going through here first.
   function acOk() { return !!(AC && AC.state === 'running'); }
-  // La única compuerta de los one-shots. Sin el techo, los 4 wraps simultáneos del arranque (todos
-  // nacen en y=0.95·H mirando arriba) o 4 muertes en el mismo frame son una metralleta.
+  // The one gate for the one-shots. Without the ceiling, the 4 simultaneous wraps at startup (they all
+  // spawn at y=0.95·H facing up) or 4 deaths in the same frame are a machine gun.
   function ac() { return acOk() && sndThisFrame < MAX_VOICES; }
 
-  // Oscilador desechable. NO chequea ac(): la compuerta está en voice(), así un sonido de varias
-  // capas (el derezz son tres) nunca sale cortado por la mitad.
+  // A disposable oscillator. It does NOT check ac(): the gate is in voice(), so a multi-layer
+  // sound (the derezz is three) is never cut off halfway.
   function note(f0, f1, t0, dur, type, vol, jitter) {
     const a = AC; if (!a) return;
     sndThisFrame++;
@@ -264,14 +264,14 @@
     o.type = type || 'sawtooth';
     o.frequency.setValueAtTime(Math.max(20, f0 * j), t);
     if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * j), t + dur);
-    g.gain.setValueAtTime(Math.max(0.0001, vol), t);                               // exponentialRamp nunca toca el 0 (lo dice la spec)
+    g.gain.setValueAtTime(Math.max(0.0001, vol), t);                               // exponentialRamp never touches 0 (the spec says so)
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(masterGain);
     o.start(t); o.stop(t + dur + 0.02);
   }
 
-  // LA voz del juego: sierra por un lowpass resonante cuyo cutoff barre de c0 a c1. La dirección
-  // del barrido es información, no adorno.
+  // THE game's voice: a sawtooth through a resonant lowpass whose cutoff sweeps from c0 to c1. The direction
+  // of the sweep is information, not decoration.
   function sweep(f0, f1, c0, c1, t0, dur, vol, q, jitter) {
     const a = AC; if (!a) return;
     sndThisFrame++;
@@ -290,8 +290,8 @@
     o.start(t); o.stop(t + dur + 0.02);
   }
 
-  // El ÚNICO ruido blanco del vocabulario. Barre la frecuencia del bandpass porque el derezz es un
-  // movimiento (300 → 6000 Hz = el cuerpo desarmándose hacia arriba), no un golpe estático.
+  // The ONLY white noise in the vocabulary. It sweeps the bandpass frequency because the derezz is a
+  // movement (300 → 6000 Hz = the body coming apart upwards), not a static knock.
   function noiseSweep(t0, dur, vol, f0, f1, q) {
     const a = AC; if (!a) return;
     sndThisFrame++;
@@ -316,12 +316,12 @@
     const now = performance.now();
     if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
     voiceLast[name] = now;
-    try { fn(); } catch (e) {}                                                     // ningún sfx puede tirar (ver el panel rojo)
+    try { fn(); } catch (e) {}                                                     // no sfx may throw (see the red panel)
   }
 
-  // ── Motor de la light-cycle (continuo) ──
-  // Dos sierras desafinadas 7 cents + una tercera a media frecuencia que representa al ENJAMBRE de
-  // IAs vivas, todo por un lowpass resonante. Un solo grafo por sesión: se modula, no se recrea.
+  // ── Light cycle engine (continuous) ──
+  // Two sawtooths detuned by 7 cents + a third at half frequency standing for the SWARM of
+  // living AIs, all through a resonant lowpass. One graph per session: it is modulated, not recreated.
   function buildEngine() {
     engFilt = AC.createBiquadFilter(); engFilt.type = 'lowpass';
     engFilt.frequency.value = 420; engFilt.Q.value = 4;
@@ -347,25 +347,25 @@
     } catch (e) {}
   }
 
-  // Convierte en sonido el dato que el juego YA calcula para la IA: cuánto espacio libre hay adelante.
-  // Cuanto menos queda, más agudo y más abierto. Pasar raspando una estela deja de ser sólo visual.
-  // 90 px con paso 2 son 45 lecturas de un Uint8Array — nada al lado del bloom del frame.
+  // It turns into sound the number the game ALREADY computes for the AI: how much free space there is ahead.
+  // The less is left, the higher and the more open. Shaving past a trail stops being purely visual.
+  // 90 px in steps of 2 is 45 reads of a Uint8Array — nothing next to the frame's bloom.
   function engineUpdate(dt) {
     if (!acOk() || !engGain) return;
     engAcc += dt;
-    if (engAcc < 0.05) return;                                                     // 20 Hz: escribir 4 AudioParam por frame no aporta nada
+    if (engAcc < 0.05) return;                                                     // 20 Hz: writing 4 AudioParams per frame adds nothing
     engAcc = 0;
     const t = AC.currentTime;
     const p0 = players.find(p => p.id === 0);
     if (!p0 || !p0.alive || p0.stop) { engSet(0, 420, 58, 0, t); return; }
-    const tens = 1 - clearDist(p0.x, p0.y, p0.direction, 90) / 90;                 // 0 = campo abierto, 1 = estela pegada al frente
+    const tens = 1 - clearDist(p0.x, p0.y, p0.direction, 90) / 90;                 // 0 = open field, 1 = a trail right in front
     engSet(0.020 + 0.016 * tens,                                                   // ambiente: 0.020 → 0.036
            420 + 1400 * tens,                                                      // cutoff:   420 → 1820 Hz
            58 + 26 * tens,                                                         // altura:   58 → 84 Hz
-           0.006 * Math.max(0, aliveCount() - 1), t);                              // enjambre: una capa por IA viva
+           0.006 * Math.max(0, aliveCount() - 1), t);                              // swarm: one layer per living AI
   }
 
-  // Bajar a 0, nunca parar: un oscilador parado no se puede volver a arrancar, y cortar en seco clickea.
+  // Drop to 0, never stop: a stopped oscillator cannot be restarted, and cutting it dead clicks.
   function engineOff() {
     if (!acOk() || !engGain) return;
     try {
@@ -375,29 +375,29 @@
     } catch (e) {}
   }
 
-  // ── El vocabulario ──
+  // ── The vocabulary ──
   const sfx = {
-    // PRINCIPAL. El giro es la ÚNICA acción que el jugador ejecuta y hoy no tiene ninguna
-    // confirmación: si el tap cae mal y no registra, te enterás recién cuando chocás.
+    // THE MAIN ONE. The turn is the ONLY action the player performs and today it has no
+    // confirmation: if the tap lands badly and does not register, you find out only when you crash.
     turn(side) {
       voice('turn', 45, () => side < 0
-        ? sweep(NOTE_OF[0], NOTE_OF[0], 1600, 380, 0, 0.06, 0.05, 9, 0.08)         // izquierda: el filtro baja
-        : sweep(NOTE_OF[0], NOTE_OF[0], 380, 1600, 0, 0.06, 0.05, 9, 0.08));       // derecha: el filtro sube
+        ? sweep(NOTE_OF[0], NOTE_OF[0], 1600, 380, 0, 0.06, 0.05, 9, 0.08)         // left: the filter goes down
+        : sweep(NOTE_OF[0], NOTE_OF[0], 380, 1600, 0, 0.06, 0.05, 9, 0.08));       // right: the filter goes up
     },
 
-    // PRINCIPAL. El clímax, y el único ruido blanco del juego.
+    // THE MAIN ONE. The climax, and the game's only white noise.
     derezz(id) {
       if (id === 0) {
-        // El humano: grave y largo. Ruido ASCENDENTE (el cuerpo desarmándose en píxeles) + la sierra
-        // que se apaga dos octavas abajo + un segundo golpe corto de ruido, el eco del cristal.
+        // The human: low and long. ASCENDING noise (the body coming apart into pixels) + the sawtooth
+        // fading out two octaves down + a second short noise hit, the echo of the glass.
         voice('derezzP0', 120, () => {
           noiseSweep(0, 0.22, 0.09, 300, 6000, 1.4);
           sweep(180, 28, 2200, 200, 0, 0.45, 0.07, 7, 0.05);
           noiseSweep(0.02, 0.07, 0.05, 2600, 900, 2.2);
         });
       } else {
-        // Las IAs: corto y AGUDO para que no compita con el tuyo, y en la altura de ESE jugador.
-        // voice() compartida por las tres: dos que chocan de frente mueren en el mismo frame.
+        // The AIs: short and HIGH so they do not compete with yours, and at THAT player's pitch.
+        // A voice() shared by all three: two that crash head-on die in the same frame.
         voice('derezzAI', 80, () => {
           const f = NOTE_OF[id] || 220;
           noiseSweep(0, 0.10, 0.035, 900, 4500, 1.6);
@@ -406,23 +406,23 @@
       }
     },
 
-    // SECUNDARIO. El evento visualmente más confuso: tu cycle desaparece y reaparece lejísimos.
-    // Un tick de 50 ms lo desambigua; el de las IAs va cuatro veces más bajo y con voz compartida
-    // porque los 4 wrappean JUNTOS a los ~2 s del arranque (todos nacen en la misma fila).
+    // SECONDARY. The visually most confusing event: your cycle disappears and reappears miles away.
+    // A 50 ms tick disambiguates it; the AIs' is four times lower and with a shared voice
+    // because all 4 wrap TOGETHER about 2 s after the start (they all spawn in the same row).
     wrap(id) {
       if (id === 0) voice('wrapP0', 150, () => sweep(NOTE_OF[0] * 2, NOTE_OF[0] * 4, 4000, 4000, 0, 0.05, 0.03, 3, 0.06));
       else          voice('wrapAI', 250, () => { const f = NOTE_OF[id] || 220; sweep(f, f * 2, 3000, 3000, 0, 0.05, 0.012, 3, 0.06); });
     },
 
-    // SECUNDARIO. Entrada a la Grid: un motor por cycle, escalonados. Oís cuántas entraron.
+    // SECONDARY. Entry to the Grid: one engine per cycle, staggered. You hear how many came in.
     roundStart(n) {
       voice('roundStart', 400, () => {
         for (let i = 0; i < n; i++) sweep(NOTE_OF[i] || 220, (NOTE_OF[i] || 220) * 2, 200, 3000, i * 0.06, 0.35, 0.05, 5, 0.04);
       });
     },
 
-    // SECUNDARIO. Ganaste la ronda: quinta ascendente con el filtro abriéndose.
-    // La perdiste: tres notas bajando con el filtro cerrándose.
+    // SECONDARY. You won the round: a rising fifth with the filter opening.
+    // You lost it: three notes descending with the filter closing.
     roundEnd(won) {
       voice('roundEnd', 400, () => {
         if (won) { sweep(330, 330, 500, 2600, 0, 0.18, 0.06, 5, 0); sweep(440, 440, 700, 3000, 0.14, 0.18, 0.06, 5, 0); }
@@ -434,9 +434,9 @@
       });
     },
 
-    // SECUNDARIO. El único desenlace real (las rondas son parciales). Tríada mayor si ganaste,
-    // menor + glissando del sub a 35 Hz si perdiste: un corte de corriente. Sin fanfarria: esto
-    // sigue siendo la Grid.
+    // SECONDARY. The only real outcome (the rounds are partials). A major triad if you won,
+    // minor + a glissando of the sub to 35 Hz if you lost: a power cut. No fanfare: this
+    // is still the Grid.
     setEnd(won) {
       voice('setEnd', 800, () => {
         const tri = won ? [220, 277.18, 329.63] : [220, 261.63, 329.63];
@@ -445,32 +445,32 @@
       });
     },
 
-    // INTERFAZ. Triangle PURO, sin filtro, a propósito: la interfaz es de otro material que la arena
-    // y así un tick de menú no se puede confundir con un giro dentro del juego.
+    // INTERFACE. PURE triangle, no filter, on purpose: the interface is a different material from the arena
+    // so a menu tick cannot be confused with a turn inside the game.
     menuTick(delta) { voice('menuTick', 60, () => note(delta > 0 ? 780 : 520, 0, 0, 0.035, 'triangle', 0.04, 0)); },
     menuNav()       { voice('menuNav',  60, () => note(390, 0, 0, 0.03, 'triangle', 0.03, 0)); },
     confirm()       { voice('confirm', 250, () => { note(523.25, 0, 0,    0.10, 'triangle', 0.05, 0);
                                                     note(783.99, 0, 0.06, 0.10, 'triangle', 0.05, 0); }); },
-    // Salir de la Grid: corte de corriente. Cierra el arco que abre el swell de arranque.
+    // Leaving the Grid: a power cut. It closes the arc the startup swell opens.
     powerDown()     { voice('powerDown', 300, () => sweep(300, 60, 2400, 150, 0, 0.28, 0.05, 6, 0.04)); },
   };
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
 
-  // SCREEN_X/SCREEN_Y del original (1280×720) ahora son responsive = tamaño del canvas.
-  let W = 0, H = 0, dpr = 1, scl = 1;                                              // scl = factor de fuente (los px del original eran sobre 1280×720)
-  let grid = new Uint8Array(0);                                                    // ocupación: grid[y*W+x] = 1 si hay estela
-  // Estela PERMANENTE (color base) horneada en un canvas offscreen; cada frame se blitea a la pantalla y
-  // encima se dibuja la "cabeza" brillante de cada jugador, que se desvanece hasta el color base. Separar
-  // las dos capas evita que el brillo se acumule (como el cartel viejo) — el overlay es transitorio.
+  // The original's SCREEN_X/SCREEN_Y (1280×720) are now responsive = the canvas's size.
+  let W = 0, H = 0, dpr = 1, scl = 1;                                              // scl = font factor (the original's px were over 1280×720)
+  let grid = new Uint8Array(0);                                                    // occupancy: grid[y*W+x] = 1 if there is a trail
+  // A PERMANENT trail (base colour) baked into an offscreen canvas; each frame it is blitted to the screen and
+  // each player's bright "head" is drawn on top, fading down to the base colour. Separating
+  // the two layers keeps the glow from accumulating (as the old card did) — the overlay is transient.
   let trailCv = null, tctx = null;
-  let glowCv = null, gctx = null;                                                 // buffer de glow a media resolución (bloom barato)
+  let glowCv = null, gctx = null;                                                 // half-resolution glow buffer (cheap bloom)
 
   const xper = p => p * W;
   const yper = p => p * H;
 
-  // Lectura de ocupación con wrap toroidal y truncado tipo Python (floor + módulo positivo).
+  // Occupancy read with toroidal wrap and Python-style truncation (floor + positive modulo).
   function occ(fx, fy) {
     let xi = Math.floor(fx), yi = Math.floor(fy);
     xi = ((xi % W) + W) % W;
@@ -478,9 +478,9 @@
     return grid[yi * W + xi];
   }
 
-  // vectores unitarios por dirección (0 arriba, 1 derecha, 2 abajo, 3 izquierda)
+  // unit vectors per direction (0 up, 1 right, 2 down, 3 left)
   const DIR_VEC = [[0,-1],[1,0],[0,1],[-1,0]];
-  // anticipación: cuántos px hay libres hacia 'dir' desde (x,y), muestreando en pasos hasta maxPx.
+  // lookahead: how many px are free towards 'dir' from (x,y), sampling in steps up to maxPx.
   function clearDist(x, y, dir, maxPx) {
     const vx = DIR_VEC[dir][0], vy = DIR_VEC[dir][1];
     for (let s = 2; s <= maxPx; s += 2) {
@@ -488,16 +488,16 @@
     }
     return maxPx;
   }
-  // ¿girar a 'dir' NO es muerte inmediata? (frente despejado a 2 y 4 px)
+  // is turning to 'dir' NOT immediate death? (front clear at 2 and 4 px)
   function safeAhead(x, y, dir) {
     const vx = DIR_VEC[dir][0], vy = DIR_VEC[dir][1];
     return occ(x + vx * 2, y + vy * 2) === 0 && occ(x + vx * 4, y + vy * 4) === 0;
   }
-  // Estampa un punto de estela (≈ el círculo radio-1 del original): 3×3 en la grilla + cuadradito en canvas.
-  // OJO: recorta (no envuelve) las celdas fuera de pantalla, igual que pygame.draw.circle. Si envolviera
-  // con módulo, al cruzar un borde dejaría una estela fantasma en el lado opuesto —justo donde el jugador
-  // reaparece— y moriría al wrappear. La colisión occ() sí envuelve (como el `% SCREEN` del original).
-  // marca una celda 3×3 en la grilla (recorta fuera de pantalla, no envuelve — igual que pygame.draw.circle)
+  // Stamps a trail point (≈ the original's radius-1 circle): 3×3 in the grid + a little square on the canvas.
+  // CAREFUL: it clips (does not wrap) the cells off screen, just like pygame.draw.circle. If it wrapped
+  // with a modulo, crossing an edge would leave a phantom trail on the opposite side —exactly where the player
+  // reappears— and you would die on wrapping. The occ() collision does wrap (like the original's `% SCREEN`).
+  // marks a 3×3 cell in the grid (clips off screen, does not wrap — just like pygame.draw.circle)
   function markCell(ix, iy) {
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
@@ -507,9 +507,9 @@
       }
     }
   }
-  // Pinta un TRAMO de estela. Con `connect` rasteriza una línea continua de (x0,y0) a (x1,y1) — así la
-  // estela no queda entrecortada aunque se caigan frames (el jugador se mueve varios px por frame). Sin
-  // connect (primer punto o wrap), estampa un solo punto en (x1,y1).
+  // Paints a STRETCH of trail. With `connect` it rasterises a continuous line from (x0,y0) to (x1,y1) — so the
+  // trail is not broken up even if frames are dropped (the player moves several px per frame). Without
+  // connect (the first point or a wrap), it stamps a single point at (x1,y1).
   function paintTrail(x0, y0, x1, y1, color, connect) {
     if (connect) {
       const steps = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0)));
@@ -527,11 +527,11 @@
 
   function clearField() {
     grid.fill(0);
-    tctx.clearRect(0, 0, W, H);                                                   // estela transparente (el halo neón se compone al blitear)
+    tctx.clearRect(0, 0, W, H);                                                   // transparent trail (the neon halo is composited on blitting)
     ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
   }
 
-  // fondo: casi negro + grilla tenue de arena (se redibuja cada frame, es barato)
+  // background: near-black + a faint arena grid (redrawn each frame, it is cheap)
   function drawBackground() {
     ctx.fillStyle = BG;
     ctx.fillRect(0, 0, W, H);
@@ -546,9 +546,9 @@
     }
   }
 
-  // degradé de la cabeza: t=0 (cola) → color base; t=1 (cabeza) → casi blanco caliente.
+  // head gradient: t=0 (tail) → base colour; t=1 (head) → almost hot white.
   function hot(base, t) {
-    const wt = Math.max(0, t) * Math.max(0, t) * 0.75;                            // ease cuadrático hacia el blanco
+    const wt = Math.max(0, t) * Math.max(0, t) * 0.75;                            // quadratic ease towards white
     return [ base[0] + (255 - base[0]) * wt, base[1] + (255 - base[1]) * wt, base[2] + (255 - base[2]) * wt ];
   }
 
@@ -563,35 +563,35 @@
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.imageSmoothingEnabled = false;                                            // blit de la pista base 1:1, sin desenfoque
-    scl = Math.min(W / 1280, H / 720);                                            // mantiene el texto adentro como en el original
+    ctx.imageSmoothingEnabled = false;                                            // 1:1 blit of the base track, no blur
+    scl = Math.min(W / 1280, H / 720);                                            // keeps the text inside as in the original
     grid = new Uint8Array(W * H);
-    // canvas offscreen de la estela permanente (mismo tamaño en px de dispositivo que el visible)
+    // offscreen canvas of the permanent trail (the same size in device px as the visible one)
     trailCv = trailCv || document.createElement('canvas');
     trailCv.width = canvas.width; trailCv.height = canvas.height;
     tctx = trailCv.getContext('2d');
     tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // buffer de glow a MEDIA resolución: blurear acá (1/4 del área) es ~4× más barato que blurear la
-    // pantalla completa cada frame — clave para no perder frames en mobile.
+    // glow buffer at HALF resolution: blurring here (1/4 of the area) is ~4× cheaper than blurring the
+    // full screen every frame — key to not dropping frames on mobile.
     glowCv = glowCv || document.createElement('canvas');
     glowCv.width = Math.max(1, Math.floor(canvas.width / 2));
     glowCv.height = Math.max(1, Math.floor(canvas.height / 2));
     gctx = glowCv.getContext('2d');
-    // Cambiar de tamaño invalida la pista; volvemos al menú (la grilla vieja no sirve).
+    // Resizing invalidates the track; we go back to the menu (the old grid is no use).
     backToMenu();
   }
   window.addEventListener('resize', resize);
 
-  // ── COLORES neón estilo Tron (más saturados/contrastados que el original para que "brillen" sobre el
-  // fondo): cyan + naranja (el dúo canónico de Tron) + verde + magenta. ──
+  // ── Tron-style neon COLOURS (more saturated/contrasted than the original so they "glow" against the
+  // background): cyan + orange (Tron's canonical duo) + green + magenta. ──
   const PLAYER_COLORS = [ [0,240,255], [255,120,0], [120,255,30], [255,40,200] ];
-  const PLAYER_NAMES  = [ 'TÚ', 'RINZLER', 'SARK', 'CLU' ];                        // id 0 = humano; el resto, IAs con nombre
-  const CPU_COLOR     = [ 235, 80, 90 ];                                           // color del "campo" (CPU) en el marcador
-  const BEST_OF       = [ 1, 3, 5, 7 ];                                            // 1 = partida única; resto = torneo TÚ vs CPU
+  const PLAYER_NAMES  = [ 'TÚ', 'RINZLER', 'SARK', 'CLU' ];                        // id 0 = human; the rest, named AIs
+  const CPU_COLOR     = [ 235, 80, 90 ];                                           // colour of the "field" (CPU) on the scoreboard
+  const BEST_OF       = [ 1, 3, 5, 7 ];                                            // 1 = a single game; anything else = a YOU vs CPU tournament
   const rgb  = c => `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
   const rgba = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
   const lerpC = (a, b, t) => [ a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t ];
-  const FONT = "'Orbitron', 'Segoe UI', system-ui, sans-serif";                   // fuente tecno para todo el canvas
+  const FONT = "'Orbitron', 'Segoe UI', system-ui, sans-serif";                   // techno font for the whole canvas
 
   function roundRectPath(x, y, w, h, r) {
     r = Math.min(r, h / 2, w / 2);
@@ -599,8 +599,8 @@
     ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
     ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
   }
-  // texto centrado (port de create_text; siempre center). size en px del original → ×scl.
-  // glow = shadowBlur opcional; boxColor = caja redondeada de fondo (para el botón JUGAR).
+  // centred text (a port of create_text; always centre). size in the original's px → ×scl.
+  // glow = optional shadowBlur; boxColor = a rounded background box (for the PLAY button).
   function createText(size, content, color, fx, fy, glow = 0, boxColor = null) {
     const fp = Math.round(size * scl);
     ctx.font = `600 ${fp}px ${FONT}`;
@@ -618,14 +618,14 @@
     ctx.shadowBlur = 0;
   }
 
-  // ════════════════ PLAYER (port de la clase Player) ════════════════
+  // ════════════════ PLAYER (a port of the Player class) ════════════════
   // directions[dir] = [vx, vy,  dx2,dy2,  scoutDx,scoutDy]
   //   [0,1] = velocidad (px/s, ×deltaT)         [2,3] = look-ahead inmediato (2 px) → muerte / IA
-  //   [4,5] = scout que la IA randomiza (5..50 px) cada 2 s
-  // NOTA: el original usaba look-ahead asimétrico (derecha/abajo a 1 px, arriba/izquierda a 2 px),
-  // un ajuste al círculo radio-1 de pygame. Acá la estela es 3×3 (±1 px), así que un look-ahead de
-  // 1 px caería sobre la propia estela y matarías al girar a derecha/abajo. Lo hacemos simétrico a
-  // 2 px (> medio-ancho de la estela) para que nunca se lea a sí misma.
+  //   [4,5] = the scout the AI randomises (5..50 px) every 2 s
+  // NOTE: the original used an asymmetric look-ahead (right/down at 1 px, up/left at 2 px),
+  // an adjustment to pygame's radius-1 circle. Here the trail is 3×3 (±1 px), so a look-ahead of
+  // 1 px would land on your own trail and you would die turning right/down. We make it symmetric at
+  // 2 px (> half the trail's width) so it never reads itself.
   function dirTemplate() {
     return {
       0: [0,-150, 0,-2, 0,0],   // arriba
@@ -645,10 +645,10 @@
       this.rightpressed = false;
       this.stop = false;
       this.alive = true;
-      this.ai_incd = 0;                                                           // acumulador para la cadencia de decisión de la IA
+      this.ai_incd = 0;                                                           // accumulator for the AI's decision cadence
 
-      // todos arrancan en la MISMA fila (y = 0.95), repartidos en x — así con 4 jugadores no salen
-      // desde alturas distintas, sino en paralelo desde abajo.
+      // they all start in the SAME row (y = 0.95), spread out in x — so with 4 players they do not come
+      // from different heights, but in parallel from the bottom.
       const n = totalplayers;
       const startpos = {
         0: [ (n < 4 ? 0.75 : 0.8), 0.95 ],
@@ -661,14 +661,14 @@
       this.name = PLAYER_NAMES[id] || ('P' + (id + 1));
       this.x = xper(startpos[id][0]);
       this.y = yper(startpos[id][1]);
-      this.head = [];                                                             // cola reciente {x, y, age} para el degradé de brillo
-      this.lastX = null; this.lastY = null;                                       // última posición estampada (para conectar la estela con línea)
+      this.head = [];                                                             // recent tail {x, y, age} for the brightness gradient
+      this.lastX = null; this.lastY = null;                                       // last stamped position (to connect the trail with a line)
     }
 
-    // giro manual (botones / mitades de pantalla / teclado) — sólo el humano.
-    // El sfx vive acá y no en los tres call sites: la rama humana de process() también pasa por acá
-    // (antes repetía la aritmética inline), así que un solo lugar cubre tap, botones ◄► y teclas.
-    // Las IAs NO pasan por acá: escriben this.direction directo, que es justo lo que queremos.
+    // manual turn (buttons / screen halves / keyboard) — the human only.
+    // The sfx lives here and not in the three call sites: process()'s human branch also goes through here
+    // (it used to repeat the arithmetic inline), so a single place covers the tap, the ◄► buttons and the keys.
+    // The AIs do NOT go through here: they write this.direction directly, which is exactly what we want.
     turnLeft()  { this.direction = (this.direction - 1 + 4) % 4; if (this.id === 0) sfx.turn(-1); }
     turnRight() { this.direction = (this.direction + 1) % 4;     if (this.id === 0) sfx.turn(+1); }
 
@@ -676,20 +676,20 @@
       const d = this.directions;
 
       if (this.id === 0 || this.mode === 1) {
-        // ── HUMANO ── latch igual que el original: un giro por pulsación.
+        // ── HUMAN ── the same latch as the original: one turn per press.
         if (!this.leftpressed && keys[this.left])  { this.turnLeft();  this.leftpressed = true; }
         if (!this.rightpressed && keys[this.right]) { this.turnRight(); this.rightpressed = true; }
         if (!keys[this.left])  this.leftpressed = false;
         if (!keys[this.right]) this.rightpressed = false;
       } else {
-        // ── IA por ANTICIPACIÓN + aleatoriedad ──
-        // Decide a una cadencia fija (no cada frame, así no tiembla). Mide el espacio libre hacia
-        // adelante / izquierda / derecha muestreando varios px (clearDist), y le suma ruido para que la
-        // navegación no sea determinista. Tres comportamientos:
-        //   · pánico: si el frente está casi tapado, dobla ya al lado más despejado;
-        //   · errático: a veces dobla a un lado al azar — pero sólo si NO es muerte inmediata;
-        //   · codicia: si un costado está bastante más abierto que el frente, dobla hacia ahí.
-        // Si nada de eso aplica, sigue derecho (estelas largas y limpias).
+        // ── AI by LOOKAHEAD + randomness ──
+        // It decides at a fixed cadence (not every frame, so it does not jitter). It measures the free space
+        // ahead / left / right by sampling several px (clearDist), and adds noise so the
+        // navigation is not deterministic. Three behaviours:
+        //   · panic: if the front is almost blocked, it turns at once to the clearer side;
+        //   · erratic: sometimes it turns to a random side — but only if it is NOT immediate death;
+        //   · greed: if one side is considerably more open than the front, it turns that way.
+        // If none of that applies, it goes straight (long, clean trails).
         this.ai_incd += dt;
         if (this.ai_incd > AI_DECIDE_CD) {
           this.ai_incd = 0;
@@ -700,19 +700,19 @@
           const openSide = sL >= sR ? dL : dR;
           const blockedSide = sL >= sR ? dR : dL;
 
-          if (fF < AI_PANIC) {                                                     // peligro adelante → al lado más despejado (seguro)
+          if (fF < AI_PANIC) {                                                     // danger ahead → to the clearer side (safe)
             if (safeAhead(this.x, this.y, openSide)) this.direction = openSide;
             else if (safeAhead(this.x, this.y, blockedSide)) this.direction = blockedSide;
-          } else if (Math.random() < AI_ERRATIC) {                                 // capricho errático, sólo si no es suicidio
+          } else if (Math.random() < AI_ERRATIC) {                                 // an erratic whim, only if it is not suicide
             const side = Math.random() < 0.5 ? dL : dR;
             if (safeAhead(this.x, this.y, side)) this.direction = side;
-          } else if (Math.max(sL, sR) > fF + AI_GREED) {                           // un costado mucho más abierto → doblar por gusto
+          } else if (Math.max(sL, sR) > fF + AI_GREED) {                           // one side much more open → turn for the fun of it
             if (safeAhead(this.x, this.y, openSide)) this.direction = openSide;
           }
         }
       }
 
-      // wrap toroidal en los bordes (idéntico al original)
+      // toroidal wrap at the edges (identical to the original)
       let wrapped = false;
       if (this.x > W) { this.x = 0; wrapped = true; }
       if (this.x < 0) { this.x = W; wrapped = true; }
@@ -720,25 +720,25 @@
       if (this.y < 0) { this.y = H; wrapped = true; }
       if (wrapped) sfx.wrap(this.id);
 
-      // muerte: COLISIÓN BARRIDA (no un solo punto). Muestreo todo el tramo que recorrerá la cycle este
-      // frame —de 2px adelante hasta donde llega la cabeza + margen— así no salta por encima de una estela
-      // fina cuando avanza varios px por frame.
+      // death: SWEPT COLLISION (not a single point). I sample the whole stretch the cycle will cover this
+      // frame —from 2px ahead to where the head lands + a margin— so it does not jump over a thin
+      // trail when it advances several px per frame.
       const dir = this.direction;
       if (!this.stop) {
         const ux = Math.sign(d[dir][0]), uy = Math.sign(d[dir][1]);
         const moveDist = Math.hypot(d[dir][0], d[dir][1]) * dt * SPEED_MULT;
         const reach = moveDist + 2;
         for (let s = 2; s <= reach; s += 1) {
-          if (occ(this.x + ux * s, this.y + uy * s)) { this.alive = false; sfx.derezz(this.id); return; }   // el ÚNICO punto donde alive pasa a false
+          if (occ(this.x + ux * s, this.y + uy * s)) { this.alive = false; sfx.derezz(this.id); return; }   // the ONLY place where alive becomes false
         }
         this.x += d[dir][0] * dt * SPEED_MULT;
         this.y += d[dir][1] * dt * SPEED_MULT;
-        this.head.push({ x: this.x, y: this.y, age: 0 });                         // nuevo punto de cabeza (brillante)
+        this.head.push({ x: this.x, y: this.y, age: 0 });                         // new head point (bright)
       }
     }
 
-    // estampa la estela base permanente (offscreen) conectando con la posición previa (línea continua);
-    // si saltó por un wrap (distancia grande) o es el primer punto, estampa un punto suelto.
+    // stamps the permanent base trail (offscreen) connecting to the previous position (a continuous line);
+    // if it jumped through a wrap (a large distance) or it is the first point, it stamps a lone point.
     draw() {
       const far = Math.min(W, H) * 0.5;
       const connect = this.lastX !== null && Math.hypot(this.x - this.lastX, this.y - this.lastY) <= far;
@@ -746,8 +746,8 @@
       this.lastX = this.x; this.lastY = this.y;
     }
 
-    // dibuja la cola reciente con degradé de brillo, CONECTANDO los puntos con segmentos (así no queda
-    // entrecortada con frames bajos). Cola → color base; cabeza → casi blanca + núcleo con glow.
+    // draws the recent tail with a brightness gradient, CONNECTING the points with segments (so it is not
+    // broken up at low frame rates). Tail → base colour; head → almost white + a core with glow.
     drawHead(dt) {
       for (const h of this.head) h.age += dt;
       this.head = this.head.filter(h => h.age <= HEAD_FADE);
@@ -756,12 +756,12 @@
       ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
       for (let k = 1; k < this.head.length; k++) {
         const a = this.head[k - 1], b = this.head[k];
-        if (Math.hypot(b.x - a.x, b.y - a.y) > far) continue;                     // no cruzar un wrap
+        if (Math.hypot(b.x - a.x, b.y - a.y) > far) continue;                     // do not cross a wrap
         const t = 1 - b.age / HEAD_FADE;                                          // 1 = cabeza, 0 = cola (= color base)
         ctx.strokeStyle = rgb(hot(this.colorArr, t));
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       }
-      if (this.alive && !this.stop) {                                             // núcleo blanco brillante en la punta
+      if (this.alive && !this.stop) {                                             // bright white core at the tip
         const tip = this.head[this.head.length - 1];
         ctx.save();
         ctx.shadowColor = this.color; ctx.shadowBlur = HEAD_GLOW;
@@ -772,15 +772,15 @@
     }
   }
 
-  // ════════════════ DRIVER (menú + estado) ════════════════
+  // ════════════════ DRIVER (menu + state) ════════════════
   const gh = {
     menu: true,
     option: 0,            // fila seleccionada: 0 = N Players, 1 = best-of
     players: 0,           // +2 → 2..4
-    mode: 0,              // 0 = Player vs AI (siempre: sólo vs IA)
-    bestOfIdx: 1,         // índice en BEST_OF (default 3)
+    mode: 0,              // 0 = Player vs AI (always: AI only)
+    bestOfIdx: 1,         // index into BEST_OF (default 3)
     keypressed: false,
-    // ── TORNEO (TÚ vs CPU): ganás la ronda si sobrevivís último; la perdés si morís ──
+    // ── TOURNAMENT (YOU vs CPU): you win the round by surviving last; you lose it by dying ──
     youWins: 0, cpuWins: 0, targetWins: 1,
     roundScored: false,
     lastWinner: 'you', lastWinnerName: null,
@@ -790,7 +790,7 @@
   function aliveCount() { let n = 0; for (const p of players) if (p.alive) n++; return n; }
   function setOver() { return gh.youWins >= gh.targetWins || gh.cpuWins >= gh.targetWins; }
 
-  function startRound() {                                                          // una ronda (no toca marcador)
+  function startRound() {                                                          // one round (it does not touch the scoreboard)
     const n = gh.players + 2;
     clearField();
     players = [];
@@ -798,7 +798,7 @@
     bindControls();
     gh.menu = false;
     gh.roundScored = false;
-    sfx.roundStart(n);                                                            // entrada a la Grid: un motor por cycle, escalonados
+    sfx.roundStart(n);                                                            // entry to the Grid: one engine per cycle, staggered
   }
   function startGame() {                                                           // set nuevo (resetea marcador)
     const bo = BEST_OF[gh.bestOfIdx];
@@ -808,7 +808,7 @@
   }
   function nextRound() { startRound(); }
   function restart() { startGame(); }
-  function scoreRound() {                                                          // asigna el punto UNA vez
+  function scoreRound() {                                                          // awards the point ONCE
     if (gh.roundScored) return;
     gh.roundScored = true;
     const p0 = players.find(p => p.id === 0);
@@ -820,22 +820,22 @@
       const aiAlive = players.filter(p => p.alive && p.id !== 0);
       gh.lastWinnerName = aiAlive.length === 1 ? aiAlive[0].name : null;
     }
-    engineOff();                                                                  // la ronda terminó: el motor se apaga antes del desenlace
-    // Una ronda es un parcial y el set es el desenlace real. Si el set terminó suena SÓLO `setEnd`:
-    // apilar los dos convierte el final en un choque de dos jingles y ninguno se entiende.
+    engineOff();                                                                  // the round is over: the engine switches off before the outcome
+    // A round is a partial and the set is the real outcome. If the set ended, ONLY `setEnd` plays:
+    // stacking the two turns the ending into a collision of two jingles and neither reads.
     if (setOver()) sfx.setEnd(youW);
     else           sfx.roundEnd(youW);
   }
-  function advance() { setOver() ? startGame() : nextRound(); }                    // tap/Enter en fin de ronda
+  function advance() { setOver() ? startGame() : nextRound(); }                    // tap/Enter at the end of a round
   function backToMenu() {
-    engineOff();                                                                  // no hay cycle en la Grid: el motor no puede seguir sonando
+    engineOff();                                                                  // no cycle in the Grid: the engine cannot keep sounding
     clearField();
     players = [];
     gh.menu = true;
-    gh.keypressed = true;                                                          // evita que una tecla sostenida dispare el menú al instante
+    gh.keypressed = true;                                                          // keeps a held key from triggering the menu instantly
   }
 
-  // mapeo de teclas por jugador (igual que el original): P1 ←/↓, P2 Q/W, P3 O/P, P4 V/B
+  // key mapping per player (as in the original): P1 ←/↓, P2 Q/W, P3 O/P, P4 V/B
   const CONTROLS = [
     ['ArrowLeft', 'ArrowDown'],
     ['KeyQ', 'KeyW'],
@@ -846,13 +846,13 @@
     for (const p of players) { p.left = CONTROLS[p.id][0]; p.right = CONTROLS[p.id][1]; }
   }
 
-  // ── MENÚ estilo CrazyTanks: cada fila es una opción que se TOCA para ciclar su valor (mitad izq/der
-  // del toque = anterior/siguiente); la seleccionada se muestra entre ‹ › con glow; el hover del mouse
-  // mueve la selección; y un botón ▶ JUGAR abajo arranca la partida. ──
-  // Sólo se juega contra la IA → una sola opción (cantidad de jugadores) + JUGAR.
-  // Layout COMPACTO centrado: tamaños y separaciones en px proporcionales a min(W,H) (no a la altura
-  // total) — así no se desparrama en mobile y entra bien en cualquier orientación.
-  let hoverY = -1;                                                                // y del mouse sobre el canvas (CSS px); -1 = sin hover
+  // ── CrazyTanks-style MENU: each row is an option you TAP to cycle its value (the left/right half
+  // of the tap = previous/next); the selected one is shown between ‹ › with glow; the mouse hover
+  // moves the selection; and a ▶ PLAY button at the bottom starts the game. ──
+  // It is AI-only → a single option (number of players) + PLAY.
+  // COMPACT centred layout: sizes and spacings in px proportional to min(W,H) (not to the total
+  // height) — so it does not sprawl on mobile and fits properly in any orientation.
+  let hoverY = -1;                                                                // the mouse's y over the canvas (CSS px); -1 = no hover
   function menuLayout() {
     const S = Math.min(W, H), cy = H * 0.46;
     return {
@@ -868,7 +868,7 @@
     else gh.bestOfIdx = (gh.bestOfIdx + delta + BEST_OF.length) % BEST_OF.length;
   }
   function bestOfLabel() { const bo = BEST_OF[gh.bestOfIdx]; return bo === 1 ? 'Single round' : 'Best of ' + bo; }
-  function tapMenu(lx, ly) {                                                       // toque/click sobre el menú (coords del canvas)
+  function tapMenu(lx, ly) {                                                       // touch/click on the menu (canvas coords)
     const L = menuLayout(), dir = lx < W * 0.5 ? -1 : 1;                          // mitad izq/der = anterior/siguiente
     if (Math.abs(ly - L.opt1Y) < L.tol)      { gh.option = 0; menuChangeValue(dir); }
     else if (Math.abs(ly - L.opt2Y) < L.tol) { gh.option = 1; menuChangeValue(dir); }
@@ -886,18 +886,18 @@
     if (!keys.ArrowLeft && !keys.ArrowRight && !keys.ArrowUp && !keys.ArrowDown) gh.keypressed = false;
   }
 
-  // Color de acento del menú: cicla SUAVE por la paleta neón con crossfade continuo (mejora del título de
-  // V2, que saltaba de color al tocar el negro). Todo el menú late con este mismo color.
+  // The menu's accent colour: it cycles SMOOTHLY through the neon palette with a continuous crossfade (an improvement on V2's title,
+  // which jumped colour when it hit black). The whole menu pulses with this same colour.
   function accentNow() {
     const n = PLAYER_COLORS.length;
-    const t = (typeof T === 'number' && isFinite(T)) ? T : 0;                      // defensa: nunca indexar con NaN/negativo
-    const pos = (((t / 3.4) % n) + n) % n;                                         // módulo siempre en [0, n)
+    const t = (typeof T === 'number' && isFinite(T)) ? T : 0;                      // defensive: never index with NaN/negative
+    const pos = (((t / 3.4) % n) + n) % n;                                         // modulo always in [0, n)
     const i = Math.floor(pos), f = pos - i;
     const ff = f * f * (3 - 2 * f);                                                // smoothstep
     return lerpC(PLAYER_COLORS[i], PLAYER_COLORS[(i + 1) % n], ff);
   }
 
-  // Título "TRON": halo radial + bloom multicapa + núcleo blanco caliente + tracking ancho. Respira.
+  // The "TRON" title: a radial halo + multi-layer bloom + a hot white core + wide tracking. It breathes.
   function drawTitle(yPx, fp, col) {
     fp = Math.round(fp);
     const px = W * 0.5, py = yPx;
@@ -907,7 +907,7 @@
     ctx.font = `900 ${fp}px ${FONT}`;
     ctx.letterSpacing = (fp * 0.10).toFixed(1) + 'px';
 
-    // halo radial detrás (fuente de luz)
+    // radial halo behind (the light source)
     const haloR = fp * 1.7;
     const g = ctx.createRadialGradient(px, py, 0, px, py, haloR);
     g.addColorStop(0, rgba(col, 0.16 + 0.12 * breathe));
@@ -915,23 +915,23 @@
     ctx.fillStyle = g;
     ctx.fillRect(px - haloR, py - haloR, haloR * 2, haloR * 2);
 
-    // bloom: pasadas con shadowBlur decreciente, todas del color de acento
+    // bloom: passes with decreasing shadowBlur, all in the accent colour
     ctx.shadowColor = rgb(col);
     ctx.fillStyle = rgb(col);
     for (const blur of [40, 22, 0]) {
       ctx.shadowBlur = blur * (0.7 + 0.3 * breathe);
       ctx.fillText('TRON', px, py);
     }
-    // núcleo blanco caliente
+    // hot white core
     ctx.shadowBlur = 12;
     ctx.fillStyle = `rgba(255,255,255,${0.5 + 0.3 * breathe})`;
     ctx.fillText('TRON', px, py);
 
     ctx.restore();
-    ctx.letterSpacing = '0px';                                                     // que no contagie al resto del texto
+    ctx.letterSpacing = '0px';                                                     // so it does not spread to the rest of the text
   }
 
-  // Fila de opción: seleccionada → color de acento, con ‹ › y glow; si no → gris apagado.
+  // Option row: selected → the accent colour, with ‹ › and glow; otherwise → dull grey.
   function drawOption(label, yPx, selected, col, fp) {
     fp = Math.round(fp);
     const txt = selected ? '‹  ' + label + '  ›' : label;
@@ -941,7 +941,7 @@
     ctx.fillText(txt, W * 0.5, yPx); ctx.shadowBlur = 0;
   }
 
-  // Botón ▶ JUGAR: píldora neón con borde + glow, late y se intensifica al hover.
+  // ▶ PLAY button: a neon pill with a border + glow, it pulses and intensifies on hover.
   function drawPlay(yPx, col, fp) {
     fp = Math.round(fp);
     const hj = hoverY >= 0 && Math.abs(hoverY - yPx) < fp * 1.1, pulse = 0.6 + 0.4 * Math.sin(T * 4);
@@ -963,12 +963,12 @@
   }
 
   function drawMenu() {
-    drawBackground();                                                             // grilla de arena (mismo look que el juego)
+    drawBackground();                                                             // arena grid (the same look as the game)
     const L = menuLayout(), col = accentNow();
 
     drawTitle(L.titleY, L.titlePx, col);
 
-    // divisor neón bajo el título
+    // neon divider under the title
     const dw = Math.min(W * 0.55, 420);
     ctx.save();
     ctx.strokeStyle = rgba(col, 0.55); ctx.shadowColor = rgb(col); ctx.shadowBlur = 12; ctx.lineWidth = 2;
@@ -980,7 +980,7 @@
     drawPlay(L.playY, col, L.playPx);
   }
 
-  // Marcador TÚ vs CPU: pips a izq (vos) y der (CPU), centrados. Sólo si hay torneo (targetWins > 1).
+  // YOU vs CPU scoreboard: pips on the left (you) and the right (CPU), centred. Only if there is a tournament (targetWins > 1).
   function drawScoreboard(yFrac, scale) {
     const cx = W * 0.5, y = H * yFrac, n = gh.targetWins;
     const pipR = 6 * scale, step = 18 * scale, mid = 28 * scale, fp = Math.round(20 * scale);
@@ -1028,10 +1028,10 @@
   });
   window.addEventListener('keyup', e => { keys[e.code] = false; });
 
-  // ── Desbloqueo del audio ──
-  // Sin esto NADA de todo lo de arriba existe: el navegador no deja crear un AudioContext sin un
-  // gesto, `audioResume()` es el único lugar donde se crea, y `buildEngine()` vive adentro. Fase de
-  // captura y a nivel window para que lo dispare el primer toque, sea sobre el canvas o sobre un botón.
+  // ── Audio unlocking ──
+  // Without this NOTHING above exists: the browser will not let an AudioContext be created without a
+  // gesture, `audioResume()` is the only place it is created, and `buildEngine()` lives inside it. Capture
+  // phase and at window level so the first touch triggers it, whether on the canvas or on a button.
   window.addEventListener('pointerdown', audioResume, true);
   window.addEventListener('keydown', audioResume, true);
 
@@ -1044,25 +1044,25 @@
       muted = !muted;
       if (masterGain && AC) { masterGain.gain.cancelScheduledValues(AC.currentTime); masterGain.gain.value = muted ? 0 : 1; }
       btnMute.classList.toggle('muted', muted);
-      try { localStorage.setItem('tronMuted', muted ? '1' : '0'); } catch (e) {}   // Safari privado tira al escribir
-      audioResume();                                                              // el toque de "desmutear" también sirve de gesto
+      try { localStorage.setItem('tronMuted', muted ? '1' : '0'); } catch (e) {}   // private Safari throws on writing
+      audioResume();                                                              // the "unmute" touch also counts as the gesture
     });
   }
 
-  // ── Pestaña al fondo ──
-  // El motor es un nodo continuo: tres osciladores arrancados una vez y nunca detenidos. Con la
-  // pestaña oculta el rAF se frena, `engineUpdate` deja de correr y el zumbido queda sonando.
+  // ── Tab in the background ──
+  // The engine is a continuous node: three oscillators started once and never stopped. With the
+  // tab hidden the rAF stalls, `engineUpdate` stops running and the hum is left sounding.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
       engineOff();
       if (AC && AC.state === 'running') AC.suspend().catch(() => {});
     } else {
-      audioResume();                                                              // en mobile el contexto se auto-suspende
+      audioResume();                                                              // on mobile the context auto-suspends
     }
   });
 
-  // Toque en el canvas: en menú toca la opción (mitad izq/der cicla su valor); en juego, tocar la mitad
-  // izquierda dobla a la izquierda y la derecha dobla a la derecha; en game over reinicia.
+  // Touch on the canvas: in the menu it taps the option (the left/right half cycles its value); in game, touching the
+  // left half turns left and the right half turns right; on game over it restarts.
   canvas.addEventListener('pointerdown', e => {
     const r = canvas.getBoundingClientRect();
     const lx = e.clientX - r.left, ly = e.clientY - r.top;
@@ -1075,40 +1075,40 @@
       if (p0) (lx < W * 0.5 ? p0.turnLeft() : p0.turnRight());
     }
   });
-  // hover del mouse (desktop): sólo para iluminar el botón JUGAR al pasar el cursor
+  // mouse hover (desktop): only to light up the PLAY button on passing the cursor over it
   canvas.addEventListener('mousemove', e => {
     const r = canvas.getBoundingClientRect();
     hoverY = e.clientY - r.top;
   });
   canvas.addEventListener('mouseleave', () => { hoverY = -1; });
 
-  // botones de la barra. pointerdown (no click) para que respondan aun con otro toque activo (estilo BallsWeb).
+  // bar buttons. pointerdown (not click) so they respond even with another touch active (BallsWeb style).
   function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
   function humanTurn(side) {
     const p0 = players.find(p => p.id === 0 && p.alive);
     if (p0) (side < 0 ? p0.turnLeft() : p0.turnRight());
   }
-  // ◄ ►: en menú cambian el valor de la opción seleccionada; en juego doblan al humano.
+  // ◄ ►: in the menu they change the selected option's value; in game they turn the human.
   tappable(document.getElementById('btnLeft'),  () => { gh.menu ? menuChangeValue(-1) : humanTurn(-1); });
   tappable(document.getElementById('btnRight'), () => { gh.menu ? menuChangeValue(+1) : humanTurn(+1); });
-  tappable(document.getElementById('btnMenu'), () => { if (!gh.menu) backToMenu(); });  // vuelve al menú
+  tappable(document.getElementById('btnMenu'), () => { if (!gh.menu) backToMenu(); });  // back to the menu
 
   // ════════════════ LOOP ════════════════
-  // OJO mobile: NO inicializar lastT con performance.now() y después medir contra el timestamp de rAF —
-  // en varios WebView de celular esos relojes tienen épocas distintas, y el primer (now - lastT) da un
+  // CAREFUL on mobile: do NOT initialise lastT with performance.now() and then measure against the rAF timestamp —
+  // in several phone WebViews those clocks have different epochs, and the first (now - lastT) gives a
   // negativo enorme → dt negativo → T negativo → accentNow() indexa PLAYER_COLORS[-1] = undefined → crash.
-  // Se arregla midiendo siempre contra el MISMO reloj (el now que entra) y clampeando dt a [0, 0.05].
+  // It is fixed by always measuring against the SAME clock (the now that comes in) and clamping dt to [0, 0.05].
   let lastT = null;
-  let T = 0;                                                                      // tiempo acumulado (seg) para los pulsos del menú
+  let T = 0;                                                                      // accumulated time (s) for the menu's pulses
   function loop(now) {
     if (typeof now !== 'number') now = performance.now();
     if (lastT === null) lastT = now;
     let dt = (now - lastT) / 1000;
     lastT = now;
-    if (!(dt >= 0) || dt > 0.05) dt = 0.01;                                       // descarta NaN / saltos raros / desfase de épocas
-    T += dt;                                                                      // tiempo para los pulsos del menú
-    sndThisFrame = 0;                                                             // OBLIGATORIO: sin esto el juego queda mudo tras MAX_VOICES
-    engineUpdate(dt);                                                             // el motor se reescribe a 20 Hz (el acumulador está adentro)
+    if (!(dt >= 0) || dt > 0.05) dt = 0.01;                                       // discards NaN / odd jumps / epoch mismatches
+    T += dt;                                                                      // time for the menu's pulses
+    sndThisFrame = 0;                                                             // MANDATORY: without this the game goes mute after MAX_VOICES
+    engineUpdate(dt);                                                             // the engine is rewritten at 20 Hz (the accumulator is inside)
 
     if (gh.menu) {
       processMenu();
@@ -1117,30 +1117,30 @@
       for (const p of players) {
         if (!p.alive) continue;
         p.process(dt);
-        if (p.alive) p.draw();                                                    // estampa estela base sólo si sigue vivo tras el chequeo
+        if (p.alive) p.draw();                                                    // stamp the base trail only if it is still alive after the check
       }
-      // componer el frame: fondo + halo neón + estela nítida + cabezas brillantes.
-      // Bloom BARATO: la estela se reduce a media resolución y se blurea ahí (1/4 del área); después se
-      // re-estira con suavizado. Mucho más liviano que blurear la pantalla completa cada frame (mobile).
+      // compose the frame: background + neon halo + crisp trail + bright heads.
+      // CHEAP bloom: the trail is downscaled to half resolution and blurred there (1/4 of the area); then it is
+      // stretched back with smoothing. Much lighter than blurring the full screen every frame (mobile).
       drawBackground();
       if (TRAIL_BLOOM > 0) {
         gctx.setTransform(1, 0, 0, 1, 0, 0);
         gctx.clearRect(0, 0, glowCv.width, glowCv.height);
         gctx.filter = `blur(${TRAIL_BLOOM * 0.6}px)`;
-        gctx.drawImage(trailCv, 0, 0, glowCv.width, glowCv.height);                // downscale + blur (área chica)
+        gctx.drawImage(trailCv, 0, 0, glowCv.width, glowCv.height);                // downscale + blur (a small area)
         gctx.filter = 'none';
         ctx.imageSmoothingEnabled = true;
-        ctx.drawImage(glowCv, 0, 0, W, H);                                         // upscale suave → halo neón
+        ctx.drawImage(glowCv, 0, 0, W, H);                                         // smooth upscale → neon halo
         ctx.imageSmoothingEnabled = false;
       }
-      ctx.drawImage(trailCv, 0, 0, W, H);                                          // estela nítida encima del halo
+      ctx.drawImage(trailCv, 0, 0, W, H);                                          // crisp trail on top of the halo
       for (const p of players) p.drawHead(dt);
-      if (gameOver()) {                                                            // fin de ronda: frenar, puntuar (1 vez) y mostrar
+      if (gameOver()) {                                                            // end of round: stop, score (once) and show it
         for (const p of players) p.stop = true;
         scoreRound();
         drawWinner();
       } else if (gh.targetWins > 1) {
-        drawScoreboard(0.06, 0.8);                                                 // marcador chico arriba durante la ronda
+        drawScoreboard(0.06, 0.8);                                                 // small scoreboard at the top during the round
       }
     }
     requestAnimationFrame(loop);
@@ -1177,9 +1177,9 @@
       const btn = document.getElementById('btnInfo');
       btn.addEventListener('pointerdown', e => {
         e.preventDefault();
-        // El overlay arranca con display:none POR CSS — el style inline está vacío "", así que
-        // comparamos con === 'block' (estado visible explícito) en vez de !== 'none' (que daba true
-        // al inicio y se comía el primer tap).
+        // The overlay starts at display:none FROM CSS — the inline style is empty "", so we
+        // compare against === 'block' (an explicitly visible state) instead of !== 'none' (which was true
+        // at startup and swallowed the first tap).
         const showing = overlay.style.display === 'block';
         overlay.style.display = showing ? 'none' : 'block';
         btn.classList.toggle('on', !showing);
@@ -1209,9 +1209,9 @@ one, and so do the trails. A round is a leg; the <b>set</b> is the real result.
 </div>
 
 <script>
-// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
-// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
-// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+// The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
+// game already had keeps switching it on and off with the same tap: no listener is removed and
+// no existing behaviour is changed. If the game had no meter, nothing happens.
 (function () {
   function armar() {
     var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
@@ -1219,31 +1219,31 @@ one, and so do the trails. A round is a leg; the <b>set</b> is the real result.
     if (!btn || !panel) return;
     var fps = document.getElementById('fpsOverlay');
     if (fps && fps.parentNode !== panel) panel.appendChild(fps);
-    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
-    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
-    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    // The bar is MEASURED, not assumed. Several games do not declare `--bar-height` and others
+    // change it with the orientation: with a fixed value the panel ended up covering the buttons
+    // (Hangman) or running off the top in landscape (Tron). Measured live it works in all twenty.
     var bar = document.getElementById('bar');
-    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
-    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
-    // salio de aca", que es lo que hace el de Loop.
-    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
-    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
-    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
-    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
-    // lo mueven segun la orientacion.
+    // The panel is anchored TO THE BUTTON THAT OPENS IT, not to the centre of the screen. Centred
+    // it floated in the middle of the game with no relation to anything; hanging off the button it
+    // reads as "this came from here", which is what Loop's does.
+    //   · the same margin as the button (right if the button is on the right, left otherwise);
+    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //     in games with a bottom bar the panel still ends up over the bar.
+    // It is measured live and not done in CSS because each game puts the button somewhere
+    // different, and several move it with the orientation.
     function ubicar() {
       var vw = window.innerWidth, vh = window.innerHeight, m = 10;
       var rb = btn.getBoundingClientRect();
-      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
-      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
-      // encima de la parte alta de la barra.
+      // If the button lives INSIDE the bar, the vertical reference is the whole bar and not the
+      // button: the buttons align to the foot of the bar, so anchoring to the button left the panel
+      // over the top part of the bar.
       var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
       panel.style.transform = 'none';
       var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
       if ((rb.left + rb.width / 2) > vw / 2) {
-        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
-        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
-        // colgado de un boton a media pantalla arrancaba en x = -199.
+        // Flush with the button's right margin, BUT without running off to the left: if the panel is
+        // wider than the gap, it slides to the edge. Without this cap, a 700 px panel hanging off a
+        // button at mid-screen started at x = -199.
         var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
         panel.style.left = 'auto'; panel.style.right = der + 'px';
       } else {
@@ -1254,14 +1254,14 @@ one, and so do the trails. A round is a leg; the <b>set</b> is the real result.
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
-      } else {                                          // boton abajo -> panel por encima
+      } else {                                          // button at the bottom -> panel above it
         panel.style.top = 'auto';
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
-      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
-      // conmutador, asi que si queda tapado el panel no se puede cerrar.
+      // The tight case (Hangman in landscape: the keyboard and the bar eat 319 of 380 px). The panel
+      // stretches to the opposite edge, but WITHOUT covering the button that opened it: the ⓘ is the
+      // only toggle, so if it gets covered the panel cannot be closed.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
         if ((rb.top + rb.height / 2) < vh / 2) {
           panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
@@ -1280,17 +1280,17 @@ one, and so do the trails. A round is a leg; the <b>set</b> is the real result.
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
-      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
+      if (abrir) ubicar();                          // measure with the panel ALREADY visible: hidden, offsetWidth is 0
     });
-    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    // Keyboard: the button is a <button>, so Enter/Space fire `click` and not `pointerdown`.
     btn.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      if (e.detail !== 0) return;                 // detail 0 = it came from the keyboard, not the mouse
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
       if (abrir) ubicar();
     });
-    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    // Close with Escape: the panel covers the game and must be dismissable without hunting for the button.
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && panel.classList.contains('show')) {
         panel.classList.remove('show'); btn.classList.remove('on');

@@ -128,7 +128,7 @@
   <script src="matter.min.js"></script>
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  BALLS — port web fiel del sandbox de pymunk.
+  //  BALLS — faithful web port of the pymunk sandbox.
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
   const mod = (a, n) => ((a % n) + n) % n;
@@ -148,10 +148,10 @@
   const PATTERN_ALPHA    = 1;      // translucency of the PATTERN overlay (stripes / dots / dot-rims). Higher than BALL_ALPHA so the pattern reads as solid paint sitting on top of the glass body.
   const MAX_BALLS        = 100;
   const INITIAL_BALLS    = 1;
-  const GROWTH_RATE      = 250;    // px/s de la animación de crecer/encoger (como pymunk).
+  const GROWTH_RATE      = 250;    // px/s of the grow/shrink animation (as in pymunk).
 
-  const GRAB_GAIN        = 1;      // bumped from 0.5 → la bola sigue al cursor sin lag visible en desktop. El cap GRAB_MAX_SPEED sigue actuando como freno anti-tunneling.
-  const GRAB_MAX_SPEED   = 120;    // bumped from 55 (px/step en matter ≈ 5700 px/s a 60fps) → permite flicks rápidos sin clampear.
+  const GRAB_GAIN        = 1;      // bumped from 0.5 → the ball follows the cursor with no visible lag on desktop. The GRAB_MAX_SPEED cap still acts as an anti-tunneling brake.
+  const GRAB_MAX_SPEED   = 120;    // bumped from 55 (px/step in matter ≈ 5700 px/s at 60fps) → allows fast flicks without clamping.
   const MOUSE_SMOOTH_TC  = 0.04;   // time constant (sec) of the pointer-velocity low-pass — port of pymunk's MOUSE_SMOOTH_TC. Frame-rate independent via smoothing = 1 - exp(-dt/TC).
 
   const JUMP_VELOCITY    = 22;
@@ -159,16 +159,16 @@
   const SHAKE_THRESHOLD  = 22;
   const SHAKE_COOLDOWN_MS= 600;
 
-  // Sonido — todos canica, samples reales grabados por Franco en sounds/cuts/.
-  const SND_MAX_PER_FRAME = 1;                                                    // hard ceiling para no saturar cuando se desplomen varias bolas a la vez
-  const PITCH_JITTER     = 0.06;                                                  // ± random sobre playbackRate, naturaliza repetición de samples
+  // Sound — all marble, real samples recorded by Franco in sounds/cuts/.
+  const SND_MAX_PER_FRAME = 1;                                                    // hard ceiling so it does not saturate when several balls come down at once
+  const PITCH_JITTER     = 0.06;                                                  // ± random on playbackRate, makes the sample repetition sound natural
   // Umbrales en matter velocity units (px/step, ~×60 = px/s).
-  const VTHR_AUDIBLE     = 2.5;                                                   // por debajo no suena nada (vibración numérica)
+  const VTHR_AUDIBLE     = 2.5;                                                   // below this nothing plays (numerical jitter)
   const VTHR_MED         = 6;                                                     // bajo→medio
-  const VTHR_HARD        = 13;                                                    // medio→fuerte; arriba de esto suena MarbleClick a fondo
-  // Roll loop: cuándo una bola "rueda" en el piso (sólo wallMode 1).
-  const ROLL_MIN_HSPEED  = 4;                                                     // vy horizontal mínima para empezar a sonar
-  const ROLL_FULL_HSPEED = 18;                                                    // vy horizontal donde el gain del roll llega al máximo
+  const VTHR_HARD        = 13;                                                    // medium→hard; above this MarbleClick plays at full
+  // Roll loop: when a ball is "rolling" on the floor (wallMode 1 only).
+  const ROLL_MIN_HSPEED  = 4;                                                     // minimum horizontal vy to start sounding
+  const ROLL_FULL_HSPEED = 18;                                                    // horizontal vy at which the roll gain reaches its maximum
 
   // ── SETUP MATTER ──
   const { Engine, World, Bodies, Body, Composite, Query, Vector, Sleeping } = Matter;
@@ -181,11 +181,11 @@
 
   let W = 0, H = 0, dpr = 1;
   let walls = [];
-  // physicsScale: las constantes de velocidad (gravedad, jump, grab cap, umbrales de sonido y roll) están
-  // en unidades de matter (px/step). Sin escalar, a más resolución todo se ve "más lento" o "más débil"
-  // porque la misma cantidad de píxeles ocupa menos pantalla. Recomputamos en resize() = min(W,H)/720.
+  // physicsScale: the speed constants (gravity, jump, grab cap, sound and roll thresholds) are
+  // in matter units (px/step). Unscaled, at higher resolution everything looks "slower" or "weaker"
+  // because the same number of pixels covers less screen. We recompute in resize() = min(W,H)/720.
   let physicsScale = 1;
-  let wallMode = 1;                                                                // 1 = todas las paredes, 2 = sin laterales (techo+piso, wrap horizontal), 3 = sin techo/piso (laterales, wrap vertical), 4 = sin ninguna pared (wrap ambos ejes). Port extendido de WALL_MODE.
+  let wallMode = 1;                                                                // 1 = all walls, 2 = no sides (ceiling+floor, horizontal wrap), 3 = no ceiling/floor (sides, vertical wrap), 4 = no walls at all (wrap on both axes). Extended port of WALL_MODE.
   const pinnedBodies = new Map();                                                  // body → {x, y} for every pinned ball; position+velocity overwritten each frame so they stay nailed. Grabbing a pinned ball unpins it automatically.
   let showDebug = false;                                                           // toggles the debug HUD (FPS, off-screen count)
 
@@ -194,11 +194,11 @@
     walls = [];
     const t = 600;                                                                 // thick offscreen so a ball pushed past the edge stays inside the capsule and gets shoved back in — same intent as WALL_THICKNESS=100 in pymunk
     const opt = { isStatic: true, restitution: BALL_WALL_RESTITUTION, friction: 0.4 };
-    if (wallMode === 1 || wallMode === 2) {                                        // techo + piso en modos 1 y 2
+    if (wallMode === 1 || wallMode === 2) {                                        // ceiling + floor in modes 1 and 2
       walls.push(Bodies.rectangle(W/2, -t/2,    W + 2*t, t, opt));
       walls.push(Bodies.rectangle(W/2, H + t/2, W + 2*t, t, opt));
     }
-    if (wallMode === 1 || wallMode === 3) {                                        // laterales en modos 1 y 3
+    if (wallMode === 1 || wallMode === 3) {                                        // sides in modes 1 and 3
       walls.push(Bodies.rectangle(-t/2, H/2,    t, H + 2*t, opt));
       walls.push(Bodies.rectangle(W + t/2, H/2, t, H + 2*t, opt));
     }
@@ -215,7 +215,7 @@
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    physicsScale = Math.min(W, H) / 720;                                           // baseline = 720px; a 1440 todo se mueve 2× en matter units (= mismo screen-fraction/seg)
+    physicsScale = Math.min(W, H) / 720;                                           // baseline = 720px; at 1440 everything moves 2× in matter units (= the same screen-fraction/s)
     engine.gravity.y = GRAVITY_Y * physicsScale;
     buildWalls();
   }
@@ -232,8 +232,8 @@
   const tint    = (c, t) => [clamp(c[0]*t), clamp(c[1]*t), clamp(c[2]*t)];
   const rgbStr  = (c, t=1) => `rgb(${clamp(c[0]*t)},${clamp(c[1]*t)},${clamp(c[2]*t)})`;
 
-  // ════════════════ MÁSCARAS DE PATRÓN (port de Balls.py) ════════════════
-  // Todas dibujan blanco en coords locales centradas en (0,0); el caller hace translate/rotate.
+  // ════════════════ PATTERN MASKS (port of Balls.py) ════════════════
+  // They all draw white in local coords centred on (0,0); the caller does the translate/rotate.
   function stripesFlat(m, r, n) {
     const spacing = (2*r)/n, bandW = spacing*0.5;
     for (let i = 0; i < n; i++) {
@@ -372,7 +372,7 @@
     return localDots ? localDots.map(([x,y,dr]) => [cx + x/SS, cy + y/SS, dr/SS]) : null;
   }
 
-  // ════════════════ BAKE (esfera + patrón + hotspot), 1 vez por bola ════════════════
+  // ════════════════ BAKE (sphere + pattern + hotspot), once per ball ════════════════
   function newOff(S) {
     const o = document.createElement('canvas');
     o.width = o.height = Math.ceil(S*dpr);
@@ -411,12 +411,12 @@
     if (e.style !== 'plain') {
       const mask = newOff(S);
       const dots = drawMask(mask.c, e, cx, cy, r);
-      // rim oscuro alrededor de los lunares cuando el overlay es tenue (igual que pymunk)
+      // dark rim around the dots when the overlay is faint (same as pymunk)
       if (dots && Math.max(...e.overlay) < 200) {
         c.fillStyle = 'rgba(0,0,0,0.27)';
         for (const [px, py, dr] of dots) { c.beginPath(); c.arc(px, py, dr + Math.max(1, dr*0.07), 0, TAU); c.fill(); }
       }
-      // overlay = esfera en overlayColor, recortada por la máscara (= BLEND_RGBA_MULT)
+      // overlay = sphere in overlayColor, clipped by the mask (= BLEND_RGBA_MULT)
       const ov = newOff(S);
       paintSphere(ov.c, cx, cy, r, e.overlay);
       ov.c.globalCompositeOperation = 'destination-in';
@@ -433,7 +433,7 @@
     e.sprite = o; e.spriteHalf = S/2;
   }
 
-  // ════════════════ BOLAS (objetos con estado growing/live/removing) ════════════════
+  // ════════════════ BALLS (objects with growing/live/removing state) ════════════════
   let balls = [];
   function liveCount() { let n = 0; for (const e of balls) if (e.state !== 'removing') n++; return n; }
 
@@ -446,7 +446,7 @@
     const hue = Math.random();
     const color = hsv255(hue, rnd(0.95, 1.0), rnd(0.95, 1.0));
 
-    // estilo (mismas probabilidades y parámetros que Balls.py)
+    // style (same probabilities and parameters as Balls.py)
     const sr = Math.random();
     const e = { color, targetR: r, visR: 1, x, y, angle: 0, state: 'growing' };
     if      (sr < 0.1) { e.style='striped_flat';     e.styleAngle=rnd(0,Math.PI); e.n=ri(3,7); }
@@ -471,7 +471,7 @@
 
     bakeBall(e);
 
-    // cuerpo (creado ya, pero se agrega al mundo recién cuando termina de crecer)
+    // body (created already, but only added to the world once it finishes growing)
     const body = Bodies.circle(x, y, r * COLLISION_RADIUS_MULT, {
       restitution: BALL_BALL_RESTITUTION, friction: BALL_FRICTION,
       frictionAir: BALL_FRICTION_AIR, density: 0.001,
@@ -486,7 +486,7 @@
     makeBall(rnd(W*0.15, W*0.85), rnd(H*0.12, H*0.4));
   }
   function removeBall() {
-    // la última 'live' que no esté agarrada (las pineadas SÍ se pueden remover — se desclavan al irse)
+    // the last 'live' one that is not grabbed (pinned ones CAN be removed — they unpin on the way out)
     for (let i = balls.length - 1; i >= 0; i--) {
       const e = balls[i];
       if (e.state === 'live' && !isGrabbedBody(e.body)) {
@@ -531,18 +531,18 @@
 
   function wrapBalls() {
     // Teleport balls that left the playfield in the wrap-active axes — pymunk has no native wrapping either; same idea.
-    if (wallMode === 1) return;                                                    // mode 1: paredes cerradas, no wrap
+    if (wallMode === 1) return;                                                    // mode 1: closed walls, no wrap
     for (const e of balls) {
       if (e.state !== 'live') continue;
       if (pinnedBodies.has(e.body)) continue;
       const r = e.body.circleRadius;
       const p = e.body.position;
       let nx = p.x, ny = p.y;
-      if (wallMode === 2 || wallMode === 4) {                                      // wrap horizontal cuando no hay laterales
+      if (wallMode === 2 || wallMode === 4) {                                      // horizontal wrap when there are no sides
         if (nx < -r) nx = W + r;
         else if (nx > W + r) nx = -r;
       }
-      if (wallMode === 3 || wallMode === 4) {                                      // wrap vertical cuando no hay techo/piso
+      if (wallMode === 3 || wallMode === 4) {                                      // vertical wrap when there is no ceiling/floor
         if (ny < -r) ny = H + r;
         else if (ny > H + r) ny = -r;
       }
@@ -653,11 +653,11 @@
   canvas.addEventListener('pointercancel', endPointer);
   canvas.addEventListener('contextmenu', e => { e.preventDefault(); });            // only suppress the OS context menu on long-press / right-click — jump is now the explicit button
 
-  // botones (con mantener-apretado en +/−)
-  // Touch capture implícito: cuando ponés un dedo en un botón el browser lo "captura", entonces los
-  // pointermove/leave no dispararían aunque arrastres fuera. releasePointerCapture libera eso para que
-  // los moves fluyan al elemento debajo; además trackeamos bounds en document.pointermove para parar
-  // cuando el dedo se sale del botón (drag-off cancela el hold, como pediste).
+  // buttons (with press-and-hold on +/−)
+  // Implicit touch capture: when you put a finger on a button the browser "captures" it, so the
+  // pointermove/leave would not fire even if you drag outside. releasePointerCapture releases that so
+  // the moves flow to the element underneath; we also track bounds on document.pointermove to stop
+  // when the finger leaves the button (drag-off cancels the hold, as you asked).
   function holdable(el, fn) {
     let iv = null, pid = null;
     const stop = () => {
@@ -695,16 +695,16 @@
   tappable(document.getElementById('btnReset'), reset);
   tappable(document.getElementById('btnJump'), jumpAll);
 
-  // Wall mode: cycles 1 → 2 → 3 → 4 → 1. SVG per modo (encapsulado / túnel / wrap / infinito).
+  // Wall mode: cycles 1 → 2 → 3 → 4 → 1. An SVG per mode (enclosed / tunnel / wrap / infinite).
   // Rebuilds the wall set on each tap.
   const WALL_ICONS = {
     // 1 = caja completa (rect cerrado)
     1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg>',
-    // 2 = techo + piso (dos rayas horizontales, los lados abiertos)
+    // 2 = ceiling + floor (two horizontal lines, the sides open)
     2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M4 7h16M4 17h16"/></svg>',
     // 3 = laterales (dos rayas verticales, techo/piso abiertos)
     3: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M7 4v16M17 4v16"/></svg>',
-    // 4 = sin paredes (4 flechas diagonales abriéndose)
+    // 4 = no walls (4 diagonal arrows opening outwards)
     4: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10 4 4M4 9V4h5M14 10l6-6M15 4h5v5M10 14l-6 6M4 15v5h5M14 14l6 6M20 15v5h-5"/></svg>',
   };
   const btnWall = document.getElementById('btnWall');
@@ -713,7 +713,7 @@
     wallMode = (wallMode % 4) + 1;
     btnWall.innerHTML = WALL_ICONS[wallMode];
     buildWalls();
-    if (wallMode !== 1 && wallMode !== 2) stopAllRolls();                          // sin piso (modos 3/4), no hay rolls que seguir
+    if (wallMode !== 1 && wallMode !== 2) stopAllRolls();                          // no floor (modes 3/4), there are no rolls to follow
   });
 
   // Pin: tap toggles the pinned state of each currently-grabbed ball. Pinning makes the body STATIC
@@ -741,9 +741,9 @@
   }
   tappable(btnPin, togglePinGrabbed);
 
-  // Keyboard (desktop): Q pinea/despinea la bola actualmente agarrada (mismo toggle que el botón
-  // chinche), Space hace saltar a todas (mismo que el botón ↑). Tienen que ser keydown con repeat-skip
-  // para no spamear si el usuario deja la tecla apretada. preventDefault en Space evita el scroll.
+  // Keyboard (desktop): Q pins/unpins the currently grabbed ball (the same toggle as the pin
+  // button), Space makes them all jump (same as the ↑ button). They have to be keydown with repeat-skip
+  // so it does not spam if the user holds the key down. preventDefault on Space avoids the scroll.
   window.addEventListener('keydown', e => {
     if (e.repeat) return;
     if (e.code === 'KeyQ') { togglePinGrabbed(); }
@@ -757,7 +757,7 @@
     btnInfo.classList.toggle('on', showDebug);
   });
 
-  // ── ACELERÓMETRO (requiere HTTPS / WebView de la app) ──
+  // ── ACCELEROMETER (requires HTTPS / the app's WebView) ──
   let motionReady = false, lastShake = 0;
   function enableMotion() {
     if (motionReady) return; motionReady = true;
@@ -773,12 +773,12 @@
   }
 
   // ════════════════ SONIDO ════════════════
-  // Sistema de samples reales — todas canicas. Files en sounds/cuts/. Cada "bucket" tiene N variantes
-  // numeradas (ej: MarbleLowClick.mp3, MarbleLowClick2.mp3, …); cuando hay que tocar uno se pickea
-  // random del pool del bucket. Buffers se cargan async al primer audioResume() (autoplay policy).
+  // Real sample system — all marbles. Files in sounds/cuts/. Each "bucket" has N numbered
+  // variants (e.g. MarbleLowClick.mp3, MarbleLowClick2.mp3, …); when one has to play it is picked at
+  // random from the bucket's pool. Buffers load async on the first audioResume() (autoplay policy).
   let actx = null;
   const SOUND_DIR = 'sounds/';
-  // bucket → cuántas variantes esperar (sin sufijo + sufijo numérico 2..N)
+  // bucket → how many variants to expect (no suffix + numeric suffix 2..N)
   const SOUND_BUCKETS = {
     MarbleClick:       1,
     MarbleLowClick:    6,
@@ -790,8 +790,8 @@
   };
   const soundBuffers = {};                                                         // bucket → AudioBuffer[]
   let samplesLoading = false;
-  // Cooldowns por bucket: clicks fuertes con más espacio (no saturar), bag con menos (queremos densidad
-  // cuando el grabbed está revolviendo una pila).
+  // Cooldowns per bucket: hard clicks with more space (do not saturate), bag with less (we want density
+  // when the grabbed ball is stirring a pile).
   const BUCKET_COOLDOWN = {
     MarbleClick:       80,
     MarbleLowClick:    120,
@@ -818,7 +818,7 @@
           soundBuffers[bucket][i] = await actx.decodeAudioData(arr);
         } catch (_) { /* missing variant: pool just queda más chico */ }
       }
-      soundBuffers[bucket] = soundBuffers[bucket].filter(Boolean);                 // compactar huecos así random pickea uniforme
+      soundBuffers[bucket] = soundBuffers[bucket].filter(Boolean);                 // compact the gaps so random picks uniformly
     }
   }
 
@@ -828,10 +828,10 @@
     loadSamples();
   }
 
-  // pitch modulation por tamaño: chica = más aguda, grande = más grave. Multiplicador sobre playbackRate.
+  // pitch modulation by size: small = higher, large = lower. A multiplier on playbackRate.
   function pitchForBall(b) {
     const minDim = Math.min(W, H);
-    const r = b.circleRadius / COLLISION_RADIUS_MULT;                              // radio visual (deshace el inflado del collider)
+    const r = b.circleRadius / COLLISION_RADIUS_MULT;                              // visual radius (undoes the collider's inflation)
     const sizeNorm = (r/minDim - R_MIN_FRAC) / (R_MAX_FRAC - R_MIN_FRAC);          // 0=chica, 1=grande
     return 1.0 + (0.5 - sizeNorm) * 0.35;                                          // 1.175 (chica) … 0.825 (grande)
   }
@@ -866,41 +866,41 @@
 
       const grabbed = isGrabbedBody(bodyA) || isGrabbedBody(bodyB);
       const wallHit = bodyA.isStatic || bodyB.isStatic;
-      // Para pitch: usamos la bola (más chica gana — más aguda).
+      // For pitch: we use the ball (the smaller one wins — higher).
       let pitchBody;
       if (wallHit) pitchBody = bodyA.isStatic ? bodyB : bodyA;
       else pitchBody = (bodyA.circleRadius <= bodyB.circleRadius) ? bodyA : bodyB;
       const pitch = pitchForBall(pitchBody);
 
-      // Los sonidos InHand NO se dispararan acá — viven en updateBagSounds(), que cuenta cuántas bolas
-      // toca el grabbed cada frame y sólo dispara cuando el contador ≥ BAG_MIN_CONTACTS. Mientras tanto
-      // los clicks fuertes/suaves siguen el flujo normal igual que para bolas libres.
+      // The InHand sounds will NOT fire here — they live in updateBagSounds(), which counts how many balls
+      // the grabbed one touches each frame and only fires when the counter is ≥ BAG_MIN_CONTACTS. Meanwhile
+      // the hard/soft clicks follow the normal flow just as for free balls.
       const vthrAud = VTHR_AUDIBLE * physicsScale;
       const vthrMed = VTHR_MED * physicsScale;
       const vthrHard = VTHR_HARD * physicsScale;
       const intensity = (vrel - vthrAud) / (vthrHard - vthrAud);
-      if (false && vrel >= vthrHard && !grabbed) {                                 // MarbleClick DESACTIVADO de momento — todo hit fuerte cae a MarbleLowClick. Restaurar quitando `false &&`.
+      if (false && vrel >= vthrHard && !grabbed) {                                 // MarbleClick DISABLED for now — every hard hit falls through to MarbleLowClick. Restore by removing `false &&`.
         tryPlay('MarbleClick', Math.min(1, intensity), pitch);
       } else if (vrel >= vthrMed) {
         tryPlay('MarbleLowClick', intensity, pitch);
       } else {
-        // baja velocidad: el sample específico depende de qué chocó.
+        // low speed: the specific sample depends on what it hit.
         if (wallHit) {
-          tryPlay('MarbleLowClick', intensity * 0.7, pitch);                      // ShortBounceEnd desactivado de momento — todo wall-hit a baja velocidad usa MarbleLowClick suave
+          tryPlay('MarbleLowClick', intensity * 0.7, pitch);                      // ShortBounceEnd disabled for now — every low-speed wall hit uses the soft MarbleLowClick
         } else {
-          tryPlay('MarbleLowClick', intensity * 0.7, pitch);                       // ShortDoubleBounce desactivado de momento — bola-bola a baja velocidad usa MarbleLowClick suave
+          tryPlay('MarbleLowClick', intensity * 0.7, pitch);                       // ShortDoubleBounce disabled for now — low-speed ball-ball uses the soft MarbleLowClick
         }
       }
     }
   });
 
   // ── ROLL LOOP ──
-  // Sample LongRoll en loop continuo por bola que esté "rodando" en el piso (sólo wallMode 1).
-  // Cada bola tiene un nodo {src, gain}; el gain se modula con la velocidad horizontal y se atenúa
-  // cuando deja de rodar. Cleanup en remove/reset/cambio de wallMode.
-  const ROLL_NEAR_FLOOR_FRAC = 0.4;                                                // ventana vertical: dentro de r*0.4 del piso cuenta como "en el piso"
-  const ROLL_ATTACK_TC = 0.08;                                                     // segundos para subir el volumen
-  const ROLL_RELEASE_TC = 0.18;                                                    // segundos para bajarlo
+  // A LongRoll sample looping continuously per ball that is "rolling" on the floor (wallMode 1 only).
+  // Each ball has a node {src, gain}; the gain is modulated by the horizontal speed and fades out
+  // when it stops rolling. Cleanup on remove/reset/wallMode change.
+  const ROLL_NEAR_FLOOR_FRAC = 0.4;                                                // vertical window: within r*0.4 of the floor counts as "on the floor"
+  const ROLL_ATTACK_TC = 0.08;                                                     // seconds to bring the volume up
+  const ROLL_RELEASE_TC = 0.18;                                                    // seconds to bring it down
 
   function stopRollNode(e) {
     if (!e || !e.rollNode) return;
@@ -933,7 +933,7 @@
           e.rollNode = { src, gain };
         }
         const t = Math.min(1, (hSpeed - ROLL_MIN_HSPEED * physicsScale) / ((ROLL_FULL_HSPEED - ROLL_MIN_HSPEED) * physicsScale));
-        const target = t * 0.35;                                                   // tope de gain del roll para no tapar los clicks
+        const target = t * 0.35;                                                   // cap on the roll gain so it does not cover the clicks
         const k = 1 - Math.exp(-dt / ROLL_ATTACK_TC);
         e.rollNode.gain.gain.value += (target - e.rollNode.gain.gain.value) * k;
       } else if (e.rollNode) {
@@ -945,10 +945,10 @@
   }
 
   // ── BAG SOUNDS ──
-  // InHand sólo suena cuando la bola grabbed está tocando ≥ BAG_MIN_CONTACTS bolas no-estáticas al mismo
-  // tiempo (estado "metiste la mano en la bolsa, hay revoltijo"). Corremos el conteo cada frame usando
-  // engine.pairs.list (los pares activos que mantiene matter.js); pickea bucket A/B random y deja que
-  // tryPlay aplique su cooldown.
+  // InHand only plays when the grabbed ball is touching ≥ BAG_MIN_CONTACTS non-static balls at the same
+  // time (the "you put your hand in the bag, there is a jumble" state). We run the count each frame using
+  // engine.pairs.list (the active pairs matter.js keeps); it picks bucket A/B at random and lets
+  // tryPlay apply its cooldown.
   const BAG_MIN_CONTACTS = 4;
   function updateBagSounds() {
     if (!actx) return;
@@ -964,7 +964,7 @@
       }
       if (n >= BAG_MIN_CONTACTS) {
         const bucket = Math.random() < 0.65 ? 'MarblesInHand' : 'MarblesInHandB';
-        tryPlay(bucket, Math.min(1, 0.5 + n / 16), pitchForBall(b));               // gain crece con la cantidad de contactos
+        tryPlay(bucket, Math.min(1, 0.5 + n / 16), pitchForBall(b));               // the gain grows with the number of contacts
       }
     }
   }
@@ -1016,21 +1016,21 @@
 
     ctx.clearRect(0, 0, W, H);
     for (const e of balls) drawBall(e);
-    showDebug = infoAbierto();                    // el grafico aparece con el panel, como antes
+    showDebug = infoAbierto();                    // the chart appears with the panel, as before
     updateStats();
     if (showDebug) drawDebugHUD();
     requestAnimationFrame(loop);
   }
 
 
-  // ── Diagnostico: vive DENTRO del panel de informacion ──
-  // Antes era una tarjeta monoespaciada dibujada sobre el lienzo, aparte del panel. Ahora es una
-  // seccion mas: una sola tarjeta para todo lo informativo. Se escribe SOLO con el panel abierto —
-  // tocar el DOM en cada frame con el panel cerrado es trabajo tirado.
-  // El nodo se busca PEREZOSAMENTE, no al parsear. El script principal corre ANTES de que exista
-  // el `#infoPanel` (esta mas abajo en el documento), asi que un `getElementById` en la linea de
-  // arriba devolvia null para siempre: ni estadisticas ni grafico. Es el mismo gotcha de orden del
-  // DOM que ya habia mordido en TankWARS.
+  // ── Diagnostics: it lives INSIDE the info panel ──
+  // It used to be a monospaced card drawn on the canvas, separate from the panel. Now it is one
+  // more section: a single card for everything informational. It is written ONLY with the panel open —
+  // touching the DOM every frame with the panel closed is wasted work.
+  // The node is looked up LAZILY, not at parse time. The main script runs BEFORE
+  // `#infoPanel` exists (it is further down the document), so a `getElementById` on the line
+  // above returned null forever: no stats and no chart. It is the same DOM-order gotcha that had
+  // already bitten in TankWARS.
   let fpsEl = null;
   function statsEl() {
     if (!fpsEl) fpsEl = document.getElementById('fpsOverlay');
@@ -1049,26 +1049,26 @@
     ].join('\n');
   }
 
-  // Sigue dibujando SOLO el grafico de velocidades. Es la excepcion pedida: su valor esta en
-  // ver las barras moverse contra el fisico, y una lista de numeros no da eso.
+  // It still draws ONLY the speed chart. It is the requested exception: its value is in
+  // watching the bars move against the physics, and a list of numbers does not give you that.
   function drawDebugHUD() {
     const liveBalls = balls.filter(e => e.state === 'live');
     const lines = [];
     const lh = 18, padX = 8, padY = 8;
     const statsW = 110;
 
-    // Top-10 speeds bar chart — port of the pymunk debug overlay. Matter.js velocity es por step;
-    // multiplico ×60 para mostrar algo cercano a px/s (asumiendo target 60fps), igual que Balls.py.
+    // Top-10 speeds bar chart — port of the pymunk debug overlay. Matter.js velocity is per step;
+    // I multiply by 60 to show something close to px/s (assuming a 60fps target), as Balls.py does.
     const top = liveBalls
       .map(e => ({ e, sp: Math.hypot(e.body.velocity.x, e.body.velocity.y) }))
       .sort((a, b) => b.sp - a.sp)
       .slice(0, 10);
     const labelW = 28, barW = 160, barH = 11, rowGap = 16, speedW = 56;
-    const chartX = padX;                                                           // chart a la izquierda
+    const chartX = padX;                                                           // chart on the left
     const chartY = padY;
     const chartW = 8 + labelW + barW + 6 + speedW;
 
-    // stats a la derecha del chart (o pegado al borde izquierdo si no hay bolas)
+    // stats to the right of the chart (or flush with the left edge if there are no balls)
     const statsX = top.length ? (chartX + chartW + 8) : padX;
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(statsX, padY, statsW, lh*lines.length + 8);
@@ -1140,9 +1140,9 @@ of numbers does not give.</span>
 </div>
 
 <script>
-// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
-// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
-// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+// The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
+// game already had keeps switching it on and off with the same tap: no listener is removed and
+// no existing behaviour is changed. If the game had no meter, nothing happens.
 (function () {
   function armar() {
     var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
@@ -1150,31 +1150,31 @@ of numbers does not give.</span>
     if (!btn || !panel) return;
     var fps = document.getElementById('fpsOverlay');
     if (fps && fps.parentNode !== panel) panel.appendChild(fps);
-    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
-    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
-    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    // The bar is MEASURED, not assumed. Several games do not declare `--bar-height` and others
+    // change it with the orientation: with a fixed value the panel ended up covering the buttons
+    // (Hangman) or running off the top in landscape (Tron). Measured live it works in all twenty.
     var bar = document.getElementById('bar');
-    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
-    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
-    // salio de aca", que es lo que hace el de Loop.
-    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
-    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
-    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
-    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
-    // lo mueven segun la orientacion.
+    // The panel is anchored TO THE BUTTON THAT OPENS IT, not to the centre of the screen. Centred
+    // it floated in the middle of the game with no relation to anything; hanging off the button it
+    // reads as "this came from here", which is what Loop's does.
+    //   · the same margin as the button (right if the button is on the right, left otherwise);
+    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //     in games with a bottom bar the panel still ends up over the bar.
+    // It is measured live and not done in CSS because each game puts the button somewhere
+    // different, and several move it with the orientation.
     function ubicar() {
       var vw = window.innerWidth, vh = window.innerHeight, m = 10;
       var rb = btn.getBoundingClientRect();
-      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
-      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
-      // encima de la parte alta de la barra.
+      // If the button lives INSIDE the bar, the vertical reference is the whole bar and not the
+      // button: the buttons align to the foot of the bar, so anchoring to the button left the panel
+      // over the top part of the bar.
       var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
       panel.style.transform = 'none';
       var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
       if ((rb.left + rb.width / 2) > vw / 2) {
-        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
-        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
-        // colgado de un boton a media pantalla arrancaba en x = -199.
+        // Flush with the button's right margin, BUT without running off to the left: if the panel is
+        // wider than the gap, it slides to the edge. Without this cap, a 700 px panel hanging off a
+        // button at mid-screen started at x = -199.
         var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
         panel.style.left = 'auto'; panel.style.right = der + 'px';
       } else {
@@ -1185,14 +1185,14 @@ of numbers does not give.</span>
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
-      } else {                                          // boton abajo -> panel por encima
+      } else {                                          // button at the bottom -> panel above it
         panel.style.top = 'auto';
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
-      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
-      // conmutador, asi que si queda tapado el panel no se puede cerrar.
+      // The tight case (Hangman in landscape: the keyboard and the bar eat 319 of 380 px). The panel
+      // stretches to the opposite edge, but WITHOUT covering the button that opened it: the ⓘ is the
+      // only toggle, so if it gets covered the panel cannot be closed.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
         if ((rb.top + rb.height / 2) < vh / 2) {
           panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
@@ -1211,17 +1211,17 @@ of numbers does not give.</span>
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
-      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
+      if (abrir) ubicar();                          // measure with the panel ALREADY visible: hidden, offsetWidth is 0
     });
-    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    // Keyboard: the button is a <button>, so Enter/Space fire `click` and not `pointerdown`.
     btn.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      if (e.detail !== 0) return;                 // detail 0 = it came from the keyboard, not the mouse
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
       if (abrir) ubicar();
     });
-    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    // Close with Escape: the panel covers the game and must be dismissable without hunting for the button.
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && panel.classList.contains('show')) {
         panel.classList.remove('show'); btn.classList.remove('on');

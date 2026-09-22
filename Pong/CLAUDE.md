@@ -13,30 +13,29 @@ See [../CLAUDE.md](../CLAUDE.md) for the shared conventions this file does not f
 
 ## AUDIO (2026-09-22)
 
-**Luz cargada y vidrio.** El fondo es un degrade radial casi negro con grilla azul, todo se dibuja
-con `shadowBlur` y las particulas van en `lighter`: no hay una sola superficie mate en pantalla.
-Por eso ningun impacto es un golpe — es una DESCARGA, un transitorio vidrioso con cola resonante
-AFINADA.
+**Charged light and glass.** The background is a near-black radial gradient with a blue grid,
+everything is drawn with `shadowBlur` and the particles run in `lighter`: there is not one matte
+surface on screen. So no impact is a knock — it is a DISCHARGE, a glassy transient with a TUNED
+resonant tail.
 
-**La escalera del peloteo.** La altura de la devolucion sube con `rallyHits`: medido, 293 Hz en el
-peldano 0 y 1186 Hz en el 8. Un rally largo se oye tensarse. La velocidad de la pelota escala el
-volumen aparte (0.048 lento vs 0.075 rapido), asi que altura = cuanto llevan, volumen = que tan
-fuerte viene.
+**The rally ladder.** The pitch of the return rises with `rallyHits`: measured, 293 Hz on step 0 and
+1186 Hz on step 8. You hear a long rally tighten. Ball speed scales the gain separately (0.048 slow
+vs 0.075 fast), so pitch = how long they have been at it, gain = how hard it is coming.
 
-**La cancha en llamas cambia el timbre, no el volumen**: el mismo golpe pasa de `triangle` a
-`sawtooth`. Mismo gesto, otra consecuencia.
+**The court on fire changes the timbre, not the volume**: the same hit goes from `triangle` to
+`sawtooth`. Same gesture, different consequence.
 
-### El bug que tenia
+### The bug it had
 
-`sndThisFrame++` estaba en tres lugares y **`sndThisFrame = 0` en ninguno**. Es exactamente la
-trampa que documenta el patron: el contador solo sube, `ac()` corta en 10, y el juego se queda mudo
-PARA SIEMPRE a los diez sonidos sin tirar un solo error. Medido con el arnes antes del arreglo: el
-contador termino en 13 y los golpes posteriores no sonaron.
+`sndThisFrame++` was in three places and **`sndThisFrame = 0` in none**. It is exactly the trap the
+pattern documents: the counter only goes up, `ac()` cuts off at 10, and the game goes mute FOREVER
+after ten sounds without throwing a single error. Measured with the harness before the fix: the
+counter ended at 13 and subsequent hits did not play.
 
-> Patron comun a todo el repo: sintesis WebAudio sin archivos, `AudioContext` creado con
-> `try/catch` en el primer gesto, techo de voces por frame **con su reseteo al tope del `loop()`**,
-> cooldown por voz, boton de mute con persistencia en `localStorage`, y `visibilitychange` para que
-> nada continuo siga sonando con la pestana al fondo. Si el audio falla, el juego sigue andando.
-> Verificado con un arnes headless que envuelve el `AudioContext` y anota cada nodo y cada rampa.
-> **El arnes no escucha**: comprueba que suene lo que se diseno, cuando se diseno y con que
-> parametros. La evaluacion auditiva queda pendiente.
+> Pattern shared across the repo: WebAudio synthesis with no files, an `AudioContext` created
+> inside `try/catch` on the first gesture, a per-frame voice ceiling **with its reset at the top of
+> `loop()`**, a per-voice cooldown, a mute button persisted in `localStorage`, and
+> `visibilitychange` so nothing continuous keeps playing with the tab in the background. If audio
+> fails, the game keeps running. Verified with a headless harness that wraps the `AudioContext` and
+> logs every node and every ramp. **The harness does not listen**: it checks that what was designed
+> plays, when it was designed to, with which parameters. Judging it by ear is still pending.

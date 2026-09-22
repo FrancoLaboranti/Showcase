@@ -126,87 +126,87 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  FIREWORKS — port web fiel de Fireworks.py (V1) (Canvas, sin física externa).
-  //  Cohetes que suben, deceleran y explotan; explosiones con 3 estilos de
-  //  dibujo y una capa de recursión (chispas hijas).
-  //  Diferencias con FireworksV2Web (el modelo): cohetes más grandes
-  //  (FW_RADIUS_FRAC 0.005 vs 0.0015), lanzamiento "alto" más fuerte
-  //  (2.4 vs 1.8) y cursor rojo más grande — los valores del .py V1.
-  //  La pausa en el .py V1 es un no-op; acá la dejo funcional (mejor UX).
+  //  FIREWORKS — faithful web port of Fireworks.py (V1) (Canvas, no external physics).
+  //  Rockets that rise, decelerate and explode; explosions with 3 drawing
+  //  styles and one layer of recursion (child sparks).
+  //  Differences from FireworksV2Web (the model): larger rockets
+  //  (FW_RADIUS_FRAC 0.005 vs 0.0015), a stronger "high" launch
+  //  (2.4 vs 1.8) and a bigger red cursor — the V1 .py's values.
+  //  The pause in the V1 .py is a no-op; here I leave it working (better UX).
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
   const ri  = (a, b) => a + Math.floor(Math.random() * (b - a + 1));               // randint inclusivo
   const rnd = (a, b) => a + Math.random() * (b - a);                               // uniform
 
   // ── TUNING KNOBS ──
-  // Las fracciones son las mismas que Fireworks.py (sper(...) sobre (W+H)/2), así escalan con la pantalla.
-  // El cohete tiene un OBJETIVO (dónde explota) y un TIEMPO al azar para llegar. Tres estilos de
-  // trayectoria (ver makeFirework): 'arc' (balístico: sube fuerte y cae al objetivo), 'decel'
-  // (sube rápido y frena al llegar) y 'direct' (sube casi recto y explota). Deja estela + chispas.
-  const FW_MAX           = 100;      // tope de cohetes vivos: si está lleno, no se spawnea
-  const FW_RADIUS_FRAC   = 0.0045;   // radio de la cabeza del cohete (chico = delicado)
-  const EXPLODE_TOP_FRAC = 0.08;     // banda donde explotan (fracción de H): desde acá (arriba)...
-  const EXPLODE_MID_FRAC = 0.5;      // ...hasta la mitad de la pantalla
-  const MIN_RISE_FRAC    = 0.15;     // subida mínima desde el toque (para que siempre suba algo)
-  const LEAN_MAX         = 0.38;     // inclinación máx respecto a la vertical (rad) → vuelo menos derecho
-  const FLIGHT_TIME      = [0.45, 1.6];   // s para llegar al objetivo (al azar) — rango amplio
-  const ARC_GRAV_FRAC    = [1.0, 2.0];    // gravedad del estilo balístico (más alto = arco más alto, cae antes de explotar)
-  const DUD_CHANCE       = 0.10;     // chance de que un cohete NO explote: queda cayendo y se apaga
-  const DUD_GRAV_FRAC    = 0.5;      // gravedad de caída del cohete fallado (vía sper)
-  const TRAIL_LEN        = 12;       // largo de la estela del cohete (en puntos)
-  const EMBER_RATE       = 0.04;     // s entre chispas que larga el cohete al subir
+  // The fractions are the same as Fireworks.py (sper(...) over (W+H)/2), so they scale with the screen.
+  // The rocket has a TARGET (where it explodes) and a random TIME to get there. Three trajectory
+  // styles (see makeFirework): 'arc' (ballistic: rises hard and falls to the target), 'decel'
+  // (rises fast and brakes on arrival) and 'direct' (rises almost straight and explodes). It leaves a trail + sparks.
+  const FW_MAX           = 100;      // cap on live rockets: if it is full, nothing spawns
+  const FW_RADIUS_FRAC   = 0.0045;   // radius of the rocket's head (small = delicate)
+  const EXPLODE_TOP_FRAC = 0.08;     // band where they explode (a fraction of H): from here (the top)...
+  const EXPLODE_MID_FRAC = 0.5;      // ...to the middle of the screen
+  const MIN_RISE_FRAC    = 0.15;     // minimum rise from the tap (so it always goes up at least a little)
+  const LEAN_MAX         = 0.38;     // max tilt from the vertical (rad) → a less straight flight
+  const FLIGHT_TIME      = [0.45, 1.6];   // s to reach the target (at random) — a wide range
+  const ARC_GRAV_FRAC    = [1.0, 2.0];    // gravity of the ballistic style (higher = a higher arc, it falls before exploding)
+  const DUD_CHANCE       = 0.10;     // chance that a rocket does NOT explode: it keeps falling and goes out
+  const DUD_GRAV_FRAC    = 0.5;      // falling gravity of the failed rocket (via sper)
+  const TRAIL_LEN        = 12;       // length of the rocket's trail (in points)
+  const EMBER_RATE       = 0.04;     // s between sparks the rocket sheds on the way up
   const EMBER_LIFE       = [0.2, 0.5];
-  const EMBER_GRAV       = 0.4;      // gravedad suave de las chispas (vía sper)
-  const EMBER_MAX        = 350;      // tope global de chispas
+  const EMBER_GRAV       = 0.4;      // gentle gravity of the sparks (via sper)
+  const EMBER_MAX        = 350;      // global cap on sparks
 
-  // EXPLOSIÓN: simulación de partículas reales (cada chispa con velocidad, gravedad y fricción) +
-  // motion-blur (el canvas no se limpia a negro puro, deja estelas de luz). Mucho más "trabajo de arte".
-  const SPARK_SPEED_FRAC = 0.55;     // velocidad inicial base de las chispas (vía sper) → cuán grande abre
-  const SPARK_DRAG       = 0.12;     // fricción: vel *= DRAG^dt por segundo (bajo = frena fuerte → envolvente)
-  const SPARK_GRAV_FRAC  = 0.35;     // gravedad base de las chispas (vía sper)
-  const SPARK_LIFE       = [0.7, 2.0];   // vida base (s) — rango amplio: bursts cortitos y otros que duran
-  const SPARK_SIZE_FRAC  = 0.0038;   // radio base de una chispa (vía sper)
-  const BURST_BIG_CHANCE = 0.3;      // prob de un burst notablemente más grande
-  const BURST_BIG_MULT   = [1.5, 2.6];    // los grandes, bien grandes
-  const BURST_SIZE_VAR   = [0.6, 1.3];    // variación de tamaño de los normales (más chicos ↔ más grandes)
-  const MAX_SPARKS       = 2400;     // tope global de chispas (perf)
-  const TRAIL_FADE       = 0.3;      // opacidad del negro por-frame: bajo = estelas largas que cuelgan, alto = limpia rápido (sin rastro al desaparecer)
-  const BLOWALL_CAP      = 40;       // máx de cohetes que Q revienta de una (perf)
+  // EXPLOSION: a simulation of real particles (each spark with velocity, gravity and friction) +
+  // motion blur (the canvas is not cleared to pure black, it leaves trails of light). Much more "art work".
+  const SPARK_SPEED_FRAC = 0.55;     // base initial speed of the sparks (via sper) → how wide it opens
+  const SPARK_DRAG       = 0.12;     // friction: vel *= DRAG^dt per second (low = brakes hard → enveloping)
+  const SPARK_GRAV_FRAC  = 0.35;     // base gravity of the sparks (via sper)
+  const SPARK_LIFE       = [0.7, 2.0];   // base lifetime (s) — a wide range: short bursts and others that linger
+  const SPARK_SIZE_FRAC  = 0.0038;   // base radius of a spark (via sper)
+  const BURST_BIG_CHANCE = 0.3;      // probability of a noticeably larger burst
+  const BURST_BIG_MULT   = [1.5, 2.6];    // the big ones, properly big
+  const BURST_SIZE_VAR   = [0.6, 1.3];    // size variation of the normal ones (smaller ↔ larger)
+  const MAX_SPARKS       = 2400;     // global cap on sparks (perf)
+  const TRAIL_FADE       = 0.3;      // per-frame black opacity: low = long trails that hang around, high = clears fast (no trace on disappearing)
+  const BLOWALL_CAP      = 40;       // max rockets that Q blows at once (perf)
 
-  const LAUNCH_INTERVAL  = 0.6;     // s entre cohetes mientras se mantiene apretado (más cooldown entre lanzamientos)
-  const MULTI_COUNT      = 5;        // cohetes por disparo con el toggle ×5
-  const AUTO_INTERVAL    = [0.4, 0.85];  // s entre cohetes del show automático (al azar)
-  const SALVO_EVERY      = 25;       // cada cuántos lanzamientos sale el salvo garantizado (amarillo-blanco-...)
-  const BLOWONE_CD       = 0.12;     // s entre explosiones al mantener "reventar de a uno"
-  const CURSOR_R_FRAC    = 0.01;     // marcador bajo cada dedo/cursor activo (V1: sper(0.01))
+  const LAUNCH_INTERVAL  = 0.6;     // s between rockets while the button is held (more cooldown between launches)
+  const MULTI_COUNT      = 5;        // rockets per shot with the ×5 toggle
+  const AUTO_INTERVAL    = [0.4, 0.85];  // s between the automatic show's rockets (at random)
+  const SALVO_EVERY      = 25;       // how many launches apart the guaranteed salvo comes (yellow-white-...)
+  const BLOWONE_CD       = 0.12;     // s between explosions while holding "blow one at a time"
+  const CURSOR_R_FRAC    = 0.01;     // marker under each active finger/cursor (V1: sper(0.01))
 
   // ── CANVAS ──
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
-  const skyCanvas = document.getElementById('sky');                               // canvas de fondo: cielo de noche
+  const skyCanvas = document.getElementById('sky');                               // background canvas: the night sky
   const sky = skyCanvas.getContext('2d');
   let W = 0, H = 0, dpr = 1;
 
   const xper = p => p * W;
   const yper = p => p * H;
-  const sper = p => p * (W + H) / 2;                                               // promedio de ejes, como en el .py
+  const sper = p => p * (W + H) / 2;                                               // the average of the axes, as in the .py
 
   const barEl = document.getElementById('bar');
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const barH = barEl.offsetHeight;                                             // incluye el safe-area-inset-bottom en iOS
+    const barH = barEl.offsetHeight;                                             // includes the safe-area-inset-bottom on iOS
     W = window.innerWidth;
-    H = window.innerHeight - barH;                                               // el playfield ocupa sólo lo de arriba de la barra
+    H = window.innerHeight - barH;                                               // the playfield takes only what is above the bar
     canvas.width  = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    drawSky();                                                                   // redibuja el cielo de fondo al cambiar el tamaño
+    drawSky();                                                                   // redraws the background sky when the size changes
   }
 
-  // Cielo de noche: dibujado UNA vez por resize en el canvas de fondo (#sky), detrás del juego.
-  // Gradiente vertical + nebulosas tenues + estrellas (densidad por área, algunas con glow y tinte).
+  // Night sky: drawn ONCE per resize on the background canvas (#sky), behind the game.
+  // A vertical gradient + faint nebulae + stars (density by area, some with glow and a tint).
   function drawSky() {
     skyCanvas.width  = Math.floor(W * dpr);
     skyCanvas.height = Math.floor(H * dpr);
@@ -227,14 +227,14 @@
       sky.fillStyle = g2; sky.fillRect(0, 0, W, H);
     }
 
-    const n = Math.round(W * H / 2600);                                          // estrellas: ~1 cada 2600 px²
+    const n = Math.round(W * H / 2600);                                          // stars: ~1 every 2600 px²
     for (let i = 0; i < n; i++) {
       const x = Math.random() * W, y = Math.random() * H, br = Math.random();
       const bright = br > 0.95;
       const r = bright ? rnd(1.1, 1.9) : rnd(0.4, 1.0);
       const a = bright ? rnd(0.75, 1) : rnd(0.18, 0.6);
-      const tint = br < 0.5 ? '255,255,255' : (br < 0.78 ? '200,220,255' : '255,238,214');  // blanco / frío / cálido
-      if (bright) {                                                              // glow para las pocas brillantes
+      const tint = br < 0.5 ? '255,255,255' : (br < 0.78 ? '200,220,255' : '255,238,214');  // white / cool / warm
+      if (bright) {                                                              // glow for the few bright ones
         const gg = sky.createRadialGradient(x, y, 0, x, y, r*4);
         gg.addColorStop(0, `rgba(${tint},${a*0.45})`); gg.addColorStop(1, `rgba(${tint},0)`);
         sky.fillStyle = gg; sky.beginPath(); sky.arc(x, y, r*4, 0, TAU); sky.fill();
@@ -252,12 +252,12 @@
   const modifyColorPerc = (c, f) => [clamp255(c[0]*f), clamp255(c[1]*f), clamp255(c[2]*f)];
   const rgbStr = c => `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
 
-  // Paleta curada de pirotecnia (vívidos). El blanco cálido y el dorado dan los clásicos.
+  // A curated pyrotechnic palette (vivid). The warm white and the gold give you the classics.
   const PALETTE = [
     [255, 70, 70],    // rojo
     [255, 140, 50],   // naranja
-    [255, 210, 90],   // ámbar
-    [255, 245, 235],  // blanco cálido
+    [255, 210, 90],   // amber
+    [255, 245, 235],  // warm white
     [150, 255, 90],   // lima
     [70, 230, 140],   // esmeralda
     [70, 200, 255],   // celeste
@@ -265,14 +265,14 @@
     [200, 120, 255],  // violeta
     [255, 100, 210],  // magenta
   ];
-  const GOLD = [255, 200, 95];                                                     // dorado de sauces/palmeras
-  const C_YELLOW = [255, 224, 64];                                                 // amarillo del salvo
-  const C_WHITE  = [255, 250, 240];                                                // blanco del salvo
+  const GOLD = [255, 200, 95];                                                     // the gold of willows/palms
+  const C_YELLOW = [255, 224, 64];                                                 // the salvo's yellow
+  const C_WHITE  = [255, 250, 240];                                                // the salvo's white
   const pickColor = () => PALETTE[ri(0, PALETTE.length - 1)];
-  const mixWhite  = (c, amt) => [c[0]+(255-c[0])*amt, c[1]+(255-c[1])*amt, c[2]+(255-c[2])*amt];   // hacia el blanco caliente
+  const mixWhite  = (c, amt) => [c[0]+(255-c[0])*amt, c[1]+(255-c[1])*amt, c[2]+(255-c[2])*amt];   // towards hot white
 
-  // Glow radial pre-renderizado y cacheado por color: el bloom de cada chispa es 1 drawImage de esta
-  // textura (gaussiano suave) en vez de un arco plano o un gradiente por-frame → más lindo y barato.
+  // A pre-rendered radial glow cached per colour: each spark's bloom is 1 drawImage of this
+  // texture (a soft gaussian) instead of a flat arc or a per-frame gradient → prettier and cheaper.
   const _glowCache = new Map();
   function glowSprite(c) {
     const rgb = (c[0]|0) + ',' + (c[1]|0) + ',' + (c[2]|0);
@@ -289,7 +289,7 @@
     return s;
   }
 
-  // Estrella/flare blanca pre-renderizada (núcleo + 2 púas): glint sutil en las chispas más brillantes.
+  // A pre-rendered white star/flare (core + 2 spikes): a subtle glint on the brightest sparks.
   function _makeFlare() {
     const S = 64, c = document.createElement('canvas'); c.width = c.height = S;
     const g = c.getContext('2d'), m = S/2;
@@ -297,7 +297,7 @@
     rg.addColorStop(0, 'rgba(255,255,255,1)'); rg.addColorStop(1, 'rgba(255,255,255,0)');
     g.fillStyle = rg; g.beginPath(); g.arc(m, m, S*0.16, 0, TAU); g.fill();
     g.globalCompositeOperation = 'lighter';
-    for (let k = 0; k < 2; k++) {                                                 // dos púas perpendiculares (cruz)
+    for (let k = 0; k < 2; k++) {                                                 // two perpendicular spikes (a cross)
       g.save(); g.translate(m, m); g.rotate(k * Math.PI/2);
       const lg = g.createLinearGradient(-m, 0, m, 0);
       lg.addColorStop(0, 'rgba(255,255,255,0)'); lg.addColorStop(0.5, 'rgba(255,255,255,0.85)'); lg.addColorStop(1, 'rgba(255,255,255,0)');
@@ -310,25 +310,25 @@
 
   // ── ESTADO ──
   let fireworks = [];
-  let sparks = [];                                                                // chispas de las explosiones (física real)
-  let flashes = [];                                                               // destello central del estallido
-  let embers = [];                                                                // chispas que largan los cohetes al subir
-  let multiLaunch = false;                                                         // toggle ×5: lanza 5 por disparo
-  let autoLaunch = false;                                                          // show automático: tira fuegos solos
-  let autoCD = 0;                                                                  // cooldown del show automático
+  let sparks = [];                                                                // sparks from the explosions (real physics)
+  let flashes = [];                                                               // central flash of the burst
+  let embers = [];                                                                // sparks the rockets shed on the way up
+  let multiLaunch = false;                                                         // ×5 toggle: it launches 5 per shot
+  let autoLaunch = false;                                                          // automatic show: it fires fireworks on its own
+  let autoCD = 0;                                                                  // cooldown of the automatic show
   let showDebug = false;
-  let blowCD = 0;                                                                  // cooldown de "reventar de a uno"
-  let blowOneHeld = false;                                                         // se mantiene apretado el botón de reventar uno
+  let blowCD = 0;                                                                  // cooldown of "blow one at a time"
+  let blowOneHeld = false;                                                         // the blow-one button is being held
 
   // ════════════════ COHETE ════════════════
   function makeFirework(x, y, forced, pat) {
-    if (fireworks.length >= FW_MAX) return;                                       // cap: si está lleno, no se spawnea
+    if (fireworks.length >= FW_MAX) return;                                       // cap: if it is full, nothing spawns
 
-    // OBJETIVO en la mitad superior de la pantalla (banda absoluta): lanzando desde abajo (cerca de
-    // los botones) el recorrido es largo. Siempre al menos MIN_RISE arriba del toque, con inclinación.
+    // TARGET in the top half of the screen (an absolute band): launching from the bottom (near
+    // the buttons) the run is long. Always at least MIN_RISE above the tap, with a tilt.
     let ty = yper(rnd(EXPLODE_TOP_FRAC, EXPLODE_MID_FRAC));
-    ty = Math.min(ty, y - yper(MIN_RISE_FRAC));                                   // que siempre suba algo desde el toque
-    ty = Math.max(ty, yper(EXPLODE_TOP_FRAC));                                    // sin pasar el margen de arriba
+    ty = Math.min(ty, y - yper(MIN_RISE_FRAC));                                   // so it always rises at least a little from the tap
+    ty = Math.max(ty, yper(EXPLODE_TOP_FRAC));                                    // without passing the top margin
     const lean = Math.tan(rnd(-LEAN_MAX, LEAN_MAX));
     const tx = Math.max(xper(0.04), Math.min(xper(0.96), x + (y - ty) * lean));
     const T = rnd(FLIGHT_TIME[0], FLIGHT_TIME[1]);
@@ -339,100 +339,100 @@
       duration: T, age: 0, style,
       radius: sper(FW_RADIUS_FRAC),
       color: forced || pickColor(),
-      pattern: pat,                                                               // patrón de explosión forzado (salvos); undefined = al azar
+      pattern: pat,                                                               // forced explosion pattern (salvos); undefined = at random
       trail: [], emberCD: 0,
-      dud: !forced && Math.random() < DUD_CHANCE,                                 // los del salvo nunca fallan
+      dud: !forced && Math.random() < DUD_CHANCE,                                 // the salvo's never fail
     };
-    if (style === 'arc') {                                                        // balístico: resolver la v inicial para caer al objetivo en T
+    if (style === 'arc') {                                                        // ballistic: solve the initial v to land on the target in T
       fw.g  = sper(rnd(ARC_GRAV_FRAC[0], ARC_GRAV_FRAC[1]));
       fw.vx = (tx - x) / T;
       fw.vy = (ty - y) / T - 0.5 * fw.g * T;                                      // muy negativa → dispara fuerte hacia arriba
     }
-    playVoice('launch');                                                          // "whoomph" de encendido al lanzar (el cooldown lo limita en salvos/×5)
+    playVoice('launch');                                                          // the ignition "whoomph" on launching (the cooldown limits it in salvos/×5)
     fireworks.push(fw);
     return fw;
   }
 
-  // Salvo garantizado cada SALVO_EVERY lanzamientos: una tanda "de golpe" con esquema de color y forma
-  // sorteados al azar, así varía cada vez. Las formas 'abanico'/'columna' usan dónde tocaste.
+  // A guaranteed salvo every SALVO_EVERY launches: a batch "all at once" with a colour scheme and shape
+  // drawn at random, so it varies each time. The 'abanico'/'columna' shapes use where you tapped.
   let launchCount = 0;
   const SALVO_SCHEMES = [
-    [C_YELLOW, C_WHITE],                  // amarillo · blanco (el clásico que pediste)
+    [C_YELLOW, C_WHITE],                  // yellow · white (the classic you asked for)
     [GOLD, [255, 70, 70]],                // dorado · rojo
     [[70, 200, 255], C_WHITE],            // celeste · blanco
     [[120, 130, 255], [200, 120, 255]],   // azul · violeta
     [[255, 100, 210], C_WHITE],           // magenta · blanco
-    'rainbow',                            // arcoíris (recorre la paleta)
+    'rainbow',                            // rainbow (it runs through the palette)
   ];
   const _salvoColor = (scheme, i) => scheme === 'rainbow' ? PALETTE[i % PALETTE.length] : scheme[i % scheme.length];
   function salvo(x, y) {
     const scheme = SALVO_SCHEMES[ri(0, SALVO_SCHEMES.length - 1)];
     const shape  = ri(0, 2);                                                      // 0 = fila ancha · 1 = abanico · 2 = columna
-    const pat    = pickPattern();                                                 // un patrón de explosión compartido por todo el salvo
+    const pat    = pickPattern();                                                 // one explosion pattern shared by the whole salvo
     const n = ri(5, 7);
     for (let i = 0; i < n; i++) {
       let fx;
-      if (shape === 0)      fx = xper(0.5 + (i - (n - 1) / 2) * 0.15);             // fila a lo ancho de la pantalla
-      else if (shape === 1) fx = Math.max(xper(0.18), Math.min(xper(0.82), x)) + (i - (n - 1) / 2) * xper(0.06);  // abanico alrededor del toque
-      else                  fx = Math.max(xper(0.12), Math.min(xper(0.88), x)) + rnd(-xper(0.015), xper(0.015));  // columna en el punto
+      if (shape === 0)      fx = xper(0.5 + (i - (n - 1) / 2) * 0.15);             // a row across the width of the screen
+      else if (shape === 1) fx = Math.max(xper(0.18), Math.min(xper(0.82), x)) + (i - (n - 1) / 2) * xper(0.06);  // a fan around the tap
+      else                  fx = Math.max(xper(0.12), Math.min(xper(0.88), x)) + rnd(-xper(0.015), xper(0.015));  // a column at the point
       makeFirework(fx, H, _salvoColor(scheme, i), pat);
     }
   }
-  function launch(x, y) {                                                         // lanzamiento normal; cada SALVO_EVERY tira el salvo en vez del cohete suelto
+  function launch(x, y) {                                                         // normal launch; every SALVO_EVERY it fires the salvo instead of the single rocket
     if ((++launchCount % SALVO_EVERY) === 0) salvo(x, y);
     else makeFirework(x, y);
   }
 
-  function spawnEmber(fw, bright) {                                               // chispita que se desprende de la cola del cohete
+  function spawnEmber(fw, bright) {                                               // a little spark shed from the rocket's tail
     if (embers.length >= EMBER_MAX) return;
     const life = rnd(EMBER_LIFE[0], EMBER_LIFE[1]);
     embers.push({
       x: fw.x, y: fw.y,
       vx: rnd(-sper(0.015), sper(0.015)),
-      vy: rnd(-sper(0.005), sper(0.03)),                                          // tienden a quedarse atrás / caer
-      life, maxLife: life, cstr: rgbStr(fw.color),                                // string de color cacheado (no rebuild por frame)
-      bright: bright === undefined ? 1 : bright,                                  // los duds que caen largan chispas cada vez más tenues
+      vy: rnd(-sper(0.005), sper(0.03)),                                          // they tend to lag behind / fall
+      life, maxLife: life, cstr: rgbStr(fw.color),                                // cached colour string (not rebuilt per frame)
+      bright: bright === undefined ? 1 : bright,                                  // falling duds shed ever fainter sparks
     });
   }
 
-  function processFirework(fw, dt) {                                              // todo va por fw.age (segundos reales) — dt correcto
-    if (fw.falling) {                                                            // dud: no explotó, cae mientras su luz se apaga
+  function processFirework(fw, dt) {                                              // everything goes by fw.age (real seconds) — correct dt
+    if (fw.falling) {                                                            // dud: it did not explode, it falls while its light goes out
       fw.vy += fw.g * dt;
       fw.x += fw.vx * dt; fw.y += fw.vy * dt;
-      const bottomY = H + sper(0.06);                                            // apagado proporcional a lo que falta hasta abajo
+      const bottomY = H + sper(0.06);                                            // fade-out proportional to how far is left to the bottom
       fw.dim = Math.max(0, Math.min(1, (bottomY - fw.y) / (bottomY - fw.fallStartY)));
       fw.trail.push({ x: fw.x, y: fw.y });
       if (fw.trail.length > TRAIL_LEN) fw.trail.shift();
       fw.emberCD -= dt;
-      if (fw.emberCD <= 0) { fw.emberCD = EMBER_RATE * 1.6; spawnEmber(fw, fw.dim); }  // chispas cada vez más tenues
-      if (fw.y > bottomY) fw.dead = true;                                        // completó la caída → se elimina
+      if (fw.emberCD <= 0) { fw.emberCD = EMBER_RATE * 1.6; spawnEmber(fw, fw.dim); }  // ever fainter sparks
+      if (fw.y > bottomY) fw.dead = true;                                        // it completed the fall → it is removed
       return;
     }
 
     fw.age += dt;
     const u = Math.min(1, fw.age / fw.duration);
     const px = fw.x, py = fw.y;
-    if (fw.style === 'arc') {                                                     // posición balística: sube, frena, cae al objetivo
+    if (fw.style === 'arc') {                                                     // ballistic position: it rises, brakes, falls to the target
       fw.x = fw.sx + fw.vx * fw.age;
       fw.y = fw.sy + fw.vy * fw.age + 0.5 * fw.g * fw.age * fw.age;
-    } else {                                                                      // interpolado start→target con curva
-      const p = fw.style === 'decel' ? 1 - Math.pow(1 - u, 3)                     // sube rápido y frena al llegar
+    } else {                                                                      // interpolated start→target with a curve
+      const p = fw.style === 'decel' ? 1 - Math.pow(1 - u, 3)                     // rises fast and brakes on arrival
                                      : 1 - Math.pow(1 - u, 1.5);                  // 'direct': casi recto, explota arriba
       fw.x = fw.sx + (fw.tx - fw.sx) * p;
       fw.y = fw.sy + (fw.ty - fw.sy) * p;
     }
-    if (dt > 0) { fw.vEstX = (fw.x - px) / dt; fw.vEstY = (fw.y - py) / dt; }      // velocidad actual (para arrancar la caída del dud)
+    if (dt > 0) { fw.vEstX = (fw.x - px) / dt; fw.vEstY = (fw.y - py) / dt; }      // current speed (to start the dud's fall)
 
     fw.trail.push({ x: fw.x, y: fw.y });                                          // estela
     if (fw.trail.length > TRAIL_LEN) fw.trail.shift();
 
-    fw.emberCD -= dt;                                                             // va largando chispas
+    fw.emberCD -= dt;                                                             // it keeps shedding sparks
     if (fw.emberCD <= 0) { fw.emberCD = EMBER_RATE; spawnEmber(fw); }
 
-    if (fw.age >= fw.duration) {                                                  // llegó al objetivo
-      if (fw.dud) {                                                               // falló: no explota, queda cayendo desde su velocidad actual
+    if (fw.age >= fw.duration) {                                                  // it reached the target
+      if (fw.dud) {                                                               // it failed: it does not explode, it keeps falling from its current speed
         fw.falling = true;
-        fw.fallStartY = fw.y;                                                     // referencia: el apagado se basa en lo que falta hasta abajo
+        fw.fallStartY = fw.y;                                                     // reference: the fade-out is based on how far is left to the bottom
         fw.dim = 1;
         fw.vx = fw.vEstX || 0;
         fw.vy = fw.vEstY || 0;
@@ -445,16 +445,16 @@
   }
 
   function drawFirework(fw) {
-    const dim = fw.dim === undefined ? 1 : fw.dim;                                // duds que caen se van apagando
+    const dim = fw.dim === undefined ? 1 : fw.dim;                                // falling duds fade out
     const tr = fw.trail;
-    ctx.strokeStyle = rgbStr(fw.color); ctx.lineCap = 'round';                    // constantes por cohete → fuera del loop
-    for (let i = 1; i < tr.length; i++) {                                         // estela tenue (no debe brillar mucho en vuelo)
-      const a = i / tr.length;                                                    // 1 = cerca de la cabeza
+    ctx.strokeStyle = rgbStr(fw.color); ctx.lineCap = 'round';                    // per-rocket constants → outside the loop
+    for (let i = 1; i < tr.length; i++) {                                         // faint trail (it must not glow much in flight)
+      const a = i / tr.length;                                                    // 1 = near the head
       ctx.globalAlpha = a * a * 0.22 * dim;
       ctx.lineWidth = Math.max(0.5, fw.radius * 1.5 * a);
       ctx.beginPath(); ctx.moveTo(tr[i-1].x, tr[i-1].y); ctx.lineTo(tr[i].x, tr[i].y); ctx.stroke();
     }
-    const gr = fw.radius * 5;                                                     // glow suave de la cabeza (delicado)
+    const gr = fw.radius * 5;                                                     // soft glow of the head (delicate)
     ctx.globalAlpha = 0.45 * dim;
     ctx.drawImage(glowSprite(fw.color), fw.x - gr, fw.y - gr, gr*2, gr*2);
     ctx.globalAlpha = 0.85 * dim;                                                 // cabeza
@@ -474,10 +474,10 @@
     ctx.globalAlpha = 1;
   }
 
-  // ════════════════ EXPLOSIÓN (partículas con física real) ════════════════
-  // El estallido siembra N chispas con velocidad inicial según el PATRÓN; después cada chispa vuela
-  // sola con gravedad + fricción, vira de blanco-caliente a su color y se apaga. El motion-blur del
-  // loop (negro semi-transparente) dibuja las estelas de luz. Las chispas de 'crossette' re-estallan.
+  // ════════════════ EXPLOSION (particles with real physics) ════════════════
+  // The burst seeds N sparks with an initial velocity according to the PATTERN; after that each spark flies
+  // on its own with gravity + friction, turns from hot white to its colour and goes out. The loop's motion blur
+  // (semi-transparent black) draws the trails of light. The 'crossette' sparks re-burst.
   function pickPattern() {
     const sr = Math.random();
     if      (sr < 0.20) return 'peony';
@@ -491,14 +491,14 @@
     else                return 'glitter';
   }
 
-  // Dirección al azar sobre la esfera unidad. Como la velocidad 2D usa (dx,dy) SIN normalizar, las
-  // chispas cerca de los "polos" salen lento (quedan en el centro) y las del ecuador vuelan lejos →
-  // la proyección de la esfera da un disco lleno y con volumen. dz queda como profundidad visual.
+  // A random direction over the unit sphere. Since the 2D velocity uses (dx,dy) UNNORMALISED, the
+  // sparks near the "poles" come out slow (they stay in the centre) and the equatorial ones fly far →
+  // the sphere's projection gives a full disc with volume. dz is left as visual depth.
   function dir3() {
     const u = Math.random()*2 - 1, th = rnd(0, TAU), s = Math.sqrt(1 - u*u);
     return { dx: s*Math.cos(th), dy: s*Math.sin(th), dz: u };
   }
-  function tiltDir(ax, ay, a) {                                                    // círculo en XY rotado en X e Y → anillo/elipse 3D
+  function tiltDir(ax, ay, a) {                                                    // a circle in XY rotated in X and Y → a 3D ring/ellipse
     let x = Math.cos(a), y = Math.sin(a), z = 0;
     let ny = y*Math.cos(ax) - z*Math.sin(ax), nz = y*Math.sin(ax) + z*Math.cos(ax); y = ny; z = nz;
     let nx = x*Math.cos(ay) + z*Math.sin(ay);  nz = -x*Math.sin(ay) + z*Math.cos(ay); x = nx; z = nz;
@@ -512,21 +512,21 @@
       g: o.g, drag: o.drag,
       life: o.life, maxLife: o.life,
       size: o.size, color,
-      glow: glowSprite(color),                                                    // sprite cacheado 1 vez (evita lookup por frame)
-      depth: o.depth === undefined ? 1 : o.depth,                                 // 0..1: 1 = adelante (más grande/brillante)
+      glow: glowSprite(color),                                                    // sprite cached once (avoids a per-frame lookup)
+      depth: o.depth === undefined ? 1 : o.depth,                                 // 0..1: 1 = in front (bigger/brighter)
       flicker: o.flicker || 0, flickerPh: rnd(0, TAU),
-      tw: o.flicker ? 0 : (Math.random() < 0.32 ? rnd(20, 34) : 0),               // ~1/3 titila al final de su vida (crackle)
+      tw: o.flicker ? 0 : (Math.random() < 0.32 ? rnd(20, 34) : 0),               // ~1/3 flicker at the end of their life (crackle)
       fadePow: o.fadePow || 1.2,
-      bornHot: o.bornHot !== false,                                               // arranca blanco caliente y vira al color
+      bornHot: o.bornHot !== false,                                               // starts hot white and turns towards the colour
       seed: !!o.seed, seedAt: o.seedAt || 0, seedColor: o.seedColor,
     });
   }
 
-  // Patrones que, además del boom, "sacan más luces" (chispas secundarias) → les sumo el sample sparks.mp3.
+  // Patterns that, besides the boom, "throw more lights" (secondary sparks) → I add the sparks.mp3 sample to them.
   const SPARKLE_PATTERNS = ['crossette', 'glitter', 'pistil'];
   function spawnBurst(x, y, radius, isChild, color, forcePattern) {
     color = color || pickColor();
-    const pattern = isChild ? null : (forcePattern || pickPattern());            // el salvo fuerza un patrón compartido
+    const pattern = isChild ? null : (forcePattern || pickPattern());            // the salvo forces a shared pattern
     const big = !isChild && Math.random() < BURST_BIG_CHANCE;
     const sizeMul = (big ? rnd(BURST_BIG_MULT[0], BURST_BIG_MULT[1]) : rnd(BURST_SIZE_VAR[0], BURST_SIZE_VAR[1])) * (isChild ? 0.5 : 1);
     const V = sper(SPARK_SPEED_FRAC) * sizeMul;                                   // velocidad base
@@ -535,15 +535,15 @@
 
     flashes.push({ x, y, life: 0.13, maxLife: 0.13, color: mixWhite(color, 0.3), r: V * 0.16 });
 
-    if (isChild) {                                                                // mini-explosión (crossette): pop chico y barato, sin patrones densos
+    if (isChild) {                                                                // mini explosion (crossette): a small, cheap pop, no dense patterns
       const n = ri(8, 16);
       for (let i = 0; i < n; i++) { const d = dir3(); spawnSpark(x, y, d.dx*V, d.dy*V, color,
         { g: G*0.7, drag: SPARK_DRAG, life: rnd(0.5, 1.0), size: SZ, depth: d.dz*0.5+0.5, fadePow: 1.3 }); }
       return;
     }
 
-    playVoice('explosion', Math.min(1.3, 0.7 + sizeMul * 0.35), 1 / Math.sqrt(Math.max(0.6, sizeMul)));  // boom: más grave y fuerte cuanto más grande el burst
-    if (SPARKLE_PATTERNS.includes(pattern)) playVoice('sparks');                  // crackle extra para las que sacan más luces (crossette/glitter/pistil)
+    playVoice('explosion', Math.min(1.3, 0.7 + sizeMul * 0.35), 1 / Math.sqrt(Math.max(0.6, sizeMul)));  // boom: lower and louder the bigger the burst
+    if (SPARKLE_PATTERNS.includes(pattern)) playVoice('sparks');                  // extra crackle for the ones that throw more lights (crossette/glitter/pistil)
 
     switch (pattern) {
       case 'peony': {                                                             // bola redonda llena
@@ -552,7 +552,7 @@
           { g: G*0.7, drag: SPARK_DRAG, life: rnd(SPARK_LIFE[0], SPARK_LIFE[1]), size: SZ, depth: d.dz*0.5+0.5, fadePow: 1.4 }); }
         break;
       }
-      case 'chrysanthemum': {                                                     // araña: poca fricción, estelas largas
+      case 'chrysanthemum': {                                                     // spider: little friction, long trails
         const n = ri(32, 76);
         for (let i = 0; i < n; i++) { const d = dir3(); spawnSpark(x, y, d.dx*V*1.1, d.dy*V*1.1, color,
           { g: G*0.85, drag: 0.5, life: rnd(1.2, 2.4), size: SZ*0.95, depth: d.dz*0.5+0.5, fadePow: 1.7 }); }
@@ -585,13 +585,13 @@
         }
         break;
       }
-      case 'spiky': {                                                             // estrella: púas largas/cortas
+      case 'spiky': {                                                             // star: long/short spikes
         const n = ri(16, 42);
         for (let i = 0; i < n; i++) { const d = dir3(), sp = V * ((i%2===0) ? 1.2 : 0.6);
           spawnSpark(x, y, d.dx*sp, d.dy*sp, color, { g: G*0.55, drag: SPARK_DRAG, life: rnd(0.8, 1.7), size: SZ, depth: d.dz*0.5+0.5 }); }
         break;
       }
-      case 'crossette': {                                                         // multi-break: cada chispa vuelve a estallar
+      case 'crossette': {                                                         // multi-break: each spark bursts again
         const sc = Math.random() < 0.5 ? pickColor() : color;
         const n = ri(6, 12);
         for (let i = 0; i < n; i++) { const d = dir3(), life = rnd(0.7, 1.0);
@@ -599,7 +599,7 @@
             { g: G*0.6, drag: 0.4, life, size: SZ*1.1, depth: d.dz*0.5+0.5, seed: !isChild, seedAt: life*0.35, seedColor: sc }); }
         break;
       }
-      case 'pistil': {                                                            // anillo + corazón denso de otro color
+      case 'pistil': {                                                            // a ring + a dense heart in another colour
         const c2 = pickColor();
         const n = ri(32, 70), ax = rnd(0.3,1.1)*(Math.random()<0.5?-1:1), ay = rnd(0,TAU);
         for (let i = 0; i < n; i++) { const d = tiltDir(ax, ay, TAU*i/n); spawnSpark(x, y, d.dx*V, d.dy*V, color,
@@ -625,7 +625,7 @@
     if (p.flicker) b *= 0.3 + 0.7*Math.max(0, Math.sin(p.life*p.flicker + p.flickerPh));
     else if (p.tw && lf < 0.5) b *= 0.45 + 0.55*Math.max(0, Math.sin(p.life*p.tw + p.flickerPh));  // crackle final
     if (b <= 0.015) return;
-    const dep = 0.6 + 0.4*p.depth;                                                // profundidad: adelante más grande/brillante
+    const dep = 0.6 + 0.4*p.depth;                                                // depth: in front is bigger/brighter
     const bd = b * dep;
     const r = Math.max(0.5, p.size * (0.5 + 0.5*lf) * dep);
     const gA = bd * 0.42;                                                         // glow gaussiano (sprite cacheado en p.glow)
@@ -634,14 +634,14 @@
       ctx.globalAlpha = Math.min(1, gA);
       ctx.drawImage(p.glow, p.x - gr, p.y - gr, gr*2, gr*2);
     }
-    if (bd > 0.12) {                                                             // núcleo: sólo si aporta (el glow ya tapa a los tenues)
-      const c0 = p.color;                                                         // mezcla a blanco combinada, inline (sin alocar arrays)
+    if (bd > 0.12) {                                                             // core: only if it adds something (the glow already covers the faint ones)
+      const c0 = p.color;                                                         // combined blend to white, inline (no arrays allocated)
       const w = 0.35 + 0.65 * ((p.bornHot && lf > 0.6) ? (lf - 0.6) * 2.25 : 0);
       ctx.globalAlpha = Math.min(1, bd);
       ctx.fillStyle = 'rgb(' + ((c0[0]+(255-c0[0])*w)|0) + ',' + ((c0[1]+(255-c0[1])*w)|0) + ',' + ((c0[2]+(255-c0[2])*w)|0) + ')';
       ctx.beginPath(); ctx.arc(p.x, p.y, r, 0, TAU); ctx.fill();
     }
-    const fa = (bd - 0.72) / 0.28;                                              // glint tipo estrella sólo en las más brillantes
+    const fa = (bd - 0.72) / 0.28;                                              // star-style glint only on the brightest ones
     if (fa > 0) {
       const fr = r * (3 + 5*Math.min(1, fa));
       ctx.globalAlpha = Math.min(0.6, fa * 0.55);
@@ -650,21 +650,21 @@
   }
 
   function drawFlash(f) {
-    const a = f.life / f.maxLife;                                                  // destello suave (mismo glow, tenue)
+    const a = f.life / f.maxLife;                                                  // soft flash (the same glow, faint)
     const gr = f.r * (1.5 - a) * 2.2;
     ctx.globalAlpha = a * 0.32;
     ctx.drawImage(glowSprite(f.color), f.x - gr, f.y - gr, gr*2, gr*2);
   }
 
-  // ════════════════ ACCIONES (= teclas Q / W del .py) ════════════════
-  function blowAll() {                                                            // Q: reventar todos los cohetes en vuelo
+  // ════════════════ ACTIONS (= the .py's Q / W keys) ════════════════
+  function blowAll() {                                                            // Q: blow up every rocket in flight
     let n = 0;
     for (const fw of fireworks) {
       fw.dead = true;
       if (n++ < BLOWALL_CAP) spawnBurst(fw.x, fw.y, fw.radius, false, fw.color);
     }
   }
-  function blowOne() {                                                            // reventar uno al azar (con cooldown)
+  function blowOne() {                                                            // blow up one at random (with a cooldown)
     if (blowCD > 0 || !fireworks.length) return;
     const idx = ri(0, fireworks.length - 1);
     const fw = fireworks[idx];
@@ -674,15 +674,15 @@
   }
 
   // ════════════════ INPUT ════════════════
-  // Multi-touch: cada dedo/cursor activo lanza su propio chorro de cohetes con su propio cooldown.
+  // Multi-touch: each active finger/cursor launches its own stream of rockets with its own cooldown.
   const pointers = new Map();                                                      // pointerId → { x, y, cd }
   function evtPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
 
   canvas.addEventListener('pointerdown', e => {
-    audioResume();                                                                 // desbloquea el audio en el primer gesto (autoplay policy)
+    audioResume();                                                                 // unlocks the audio on the first gesture (autoplay policy)
     canvas.setPointerCapture(e.pointerId);
     const p = evtPos(e);
-    pointers.set(e.pointerId, { x: p.x, y: p.y, cd: 0 });                          // cd=0 → primer cohete al toque sale ya
+    pointers.set(e.pointerId, { x: p.x, y: p.y, cd: 0 });                          // cd=0 → the first rocket comes out on the tap
   });
   canvas.addEventListener('pointermove', e => {
     const ps = pointers.get(e.pointerId);
@@ -694,7 +694,7 @@
   canvas.addEventListener('pointercancel', endPointer);
   canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-  // botones — tap dispara en pointerdown (responde aunque haya un dedo ocupado en el canvas)
+  // buttons — a tap fires on pointerdown (it responds even with a finger busy on the canvas)
   function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); audioResume(); fn(); }); }
   function toggle(el, get, set) {
     tappable(el, () => { set(!get()); el.classList.toggle('on', get()); });
@@ -704,7 +704,7 @@
   const btnAuto = document.getElementById('btnAuto');
   tappable(btnAuto, () => { autoLaunch = !autoLaunch; autoCD = 0; btnAuto.classList.toggle('on', autoLaunch); });
 
-  // Reventar de a uno: se mantiene apretado y sigue reventando con cooldown (no es un tap suelto).
+  // Blow one at a time: you hold it down and it keeps blowing with a cooldown (it is not a single tap).
   const btnBlowOne = document.getElementById('btnBlowOne');
   btnBlowOne.addEventListener('pointerdown', e => { e.preventDefault(); audioResume(); blowOneHeld = true; blowOne(); btnBlowOne.classList.add('on'); });
   const releaseBlowOne = () => { blowOneHeld = false; btnBlowOne.classList.remove('on'); };
@@ -717,25 +717,25 @@
   const btnInfo = document.getElementById('btnInfo');
   tappable(btnInfo, () => { showDebug = !showDebug; btnInfo.classList.toggle('on', showDebug); });
   const btnMute = document.getElementById('btnMute');
-  tappable(btnMute, () => { setMuted(!muted); btnMute.classList.toggle('muted', muted); });  // ícono se actualiza solo
-  // Fullscreen + lock de orientación + exit los maneja arcade-shell.js (al final del body).
+  tappable(btnMute, () => { setMuted(!muted); btnMute.classList.toggle('muted', muted); });  // the icon updates itself
+  // Fullscreen + orientation lock + exit are handled by arcade-shell.js (at the end of the body).
 
   // ════════════════ SONIDO ════════════════
-  // Misma idea que BallsWeb: Web Audio API con buffers cacheados que se cargan al PRIMER gesto del
-  // usuario (la política de autoplay bloquea el audio hasta entonces). Acá cada "voz" es un archivo
-  // único en sounds/ (sin variantes numeradas): launch.mp3 = encendido al lanzar, sparks.mp3 = chispas
-  // POST-explosión (las que sacan más luces), fw explosion.mp3 = estallido, background.mp3 = ambiente en
-  // loop. Cooldown por voz + tope por frame para no saturar.
+  // The same idea as BallsWeb: the Web Audio API with cached buffers loaded on the user's FIRST
+  // gesture (the autoplay policy blocks audio until then). Here each "voice" is a single
+  // file in sounds/ (no numbered variants): launch.mp3 = ignition on launching, sparks.mp3 = POST-explosion
+  // sparks (the ones that throw more lights), fw explosion.mp3 = the burst, background.mp3 = looping
+  // ambience. A cooldown per voice + a per-frame cap so it does not saturate.
   let actx = null, masterGain = null, bgGain = null, bgNode = null;
   let muted = false, samplesLoading = false, sndThisFrame = 0;
   const SOUND_DIR = 'sounds/';
   const SOUND_FILES = { launch: 'launch.mp3', sparks: 'sparks.mp3', explosion: 'fw explosion.mp3', background: 'background.mp3' };
   const soundBuffers = {};                                                         // voz → AudioBuffer
-  const SND_MAX_PER_FRAME = 4;                                                     // tope de one-shots por frame (blowAll/salvos no saturan)
-  const PITCH_JITTER = 0.10;                                                       // ± variación de tono por disparo
-  const VOICE_COOLDOWN = { launch: 70, sparks: 60, explosion: 55 };                // ms mínimos entre disparos de cada voz
-  const VOICE_GAIN = { launch: 0.4, sparks: 0.35, explosion: 0.8 };                // volumen base por voz
-  const BG_GAIN = 0.3;                                                             // volumen del ambiente en loop
+  const SND_MAX_PER_FRAME = 4;                                                     // cap on one-shots per frame (blowAll/salvos do not saturate)
+  const PITCH_JITTER = 0.10;                                                       // ± pitch variation per trigger
+  const VOICE_COOLDOWN = { launch: 70, sparks: 60, explosion: 55 };                // minimum ms between triggers of each voice
+  const VOICE_GAIN = { launch: 0.4, sparks: 0.35, explosion: 0.8 };                // base volume per voice
+  const BG_GAIN = 0.3;                                                             // volume of the looping ambience
   const lastVoiceT = {};
 
   async function loadSamples() {
@@ -744,7 +744,7 @@
     for (const [voice, file] of Object.entries(SOUND_FILES)) {
       if (soundBuffers[voice]) continue;
       try {
-        const r = await fetch(SOUND_DIR + encodeURIComponent(file));               // encodeURIComponent: 'fw explosion.mp3' tiene un espacio
+        const r = await fetch(SOUND_DIR + encodeURIComponent(file));               // encodeURIComponent: 'fw explosion.mp3' has a space
         if (!r.ok) continue;
         soundBuffers[voice] = await actx.decodeAudioData(await r.arrayBuffer());
       } catch (_) { /* archivo faltante: esa voz simplemente no suena */ }
@@ -752,9 +752,9 @@
     startBackground();
   }
 
-  function audioResume() {                                                         // llamar en el PRIMER gesto (pointerdown / tap de botón)
-    // try/catch OBLIGATORIO: si el constructor tira, la excepcion se lleva puesto el handler que
-    // llamo a esto y el juego queda INMANEJABLE — no lanza cohetes y ningun boton responde.
+  function audioResume() {                                                         // call on the FIRST gesture (pointerdown / a button tap)
+    // try/catch MANDATORY: if the constructor throws, the exception takes out the handler that
+    // called this and the game is left UNPLAYABLE — it launches no rockets and no button responds.
     if (!actx) {
       try {
         actx = new (window.AudioContext || window.webkitAudioContext)();
@@ -765,15 +765,15 @@
     try { loadSamples(); startBackground(); } catch (e) {}
   }
 
-  // `background.mp3` es un BufferSource con `loop = true`: es el unico nodo continuo del juego y
-  // sigue sonando con la pestana oculta o el telefono en otra app. El rAF se frena, el juego se
-  // congela, y el ambiente sigue.
+  // `background.mp3` is a BufferSource with `loop = true`: it is the game's only continuous node and
+  // it keeps playing with the tab hidden or the phone in another app. The rAF stalls, the game
+  // freezes, and the ambience goes on.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { if (actx && actx.state === 'running') actx.suspend().catch(() => {}); }
     else if (actx) actx.resume().catch(() => {});
   });
 
-  function startBackground() {                                                     // ambiente en loop (idempotente: no arranca dos veces)
+  function startBackground() {                                                     // looping ambience (idempotent: it does not start twice)
     if (!actx || bgNode || muted || !soundBuffers.background) return;
     bgNode = actx.createBufferSource(); bgNode.buffer = soundBuffers.background; bgNode.loop = true;
     bgGain = actx.createGain(); bgGain.gain.value = BG_GAIN;
@@ -799,8 +799,8 @@
   function setMuted(m) {
     muted = m;
     if (masterGain) masterGain.gain.value = muted ? 0 : 1;
-    if (muted) { if (bgNode) { try { bgNode.stop(); } catch (_) {} bgNode = null; } }  // corta el loop del todo
-    else startBackground();                                                        // al reactivar, reanuda el ambiente
+    if (muted) { if (bgNode) { try { bgNode.stop(); } catch (_) {} bgNode = null; } }  // stops the loop entirely
+    else startBackground();                                                        // on reactivating, it resumes the ambience
   }
 
   // ── LOOP ──
@@ -808,15 +808,15 @@
   let dtSmoothed = 1/60;
   function loop(now) {
     if (typeof now !== 'number') now = performance.now();
-    const dt = Math.min(0.05, (now - lastT) / 1000);                              // dt real, clamp a 50ms como el deltaT del .py
+    const dt = Math.min(0.05, (now - lastT) / 1000);                              // real dt, clamped to 50ms like the .py's deltaT
     lastT = now;
     dtSmoothed = dtSmoothed * 0.9 + dt * 0.1;
-    sndThisFrame = 0;                                                              // reset del tope de one-shots por frame
+    sndThisFrame = 0;                                                              // reset of the per-frame one-shot cap
 
     blowCD = Math.max(blowCD - dt, 0);
-    if (blowOneHeld) blowOne();                                                   // reventar de a uno mientras se mantiene apretado (con cooldown)
+    if (blowOneHeld) blowOne();                                                   // blow one at a time while the button is held (with a cooldown)
 
-    // lanzar desde cada dedo activo, con su cooldown
+    // launch from each active finger, with its own cooldown
     for (const ps of pointers.values()) {
       ps.cd -= dt;
       if (ps.cd <= 0) {
@@ -826,7 +826,7 @@
       }
     }
 
-    if (autoLaunch) {                                                            // show automático: cohetes solos desde abajo, por cooldown
+    if (autoLaunch) {                                                            // automatic show: rockets on their own from the bottom, by cooldown
       autoCD -= dt;
       if (autoCD <= 0) {
         const ax = xper(rnd(0.12, 0.88)), n = multiLaunch ? MULTI_COUNT : 1;
@@ -835,10 +835,10 @@
       }
     }
 
-    const wind = Math.sin(now * 0.00018) * sper(0.05) + Math.sin(now * 0.00041 + 1.7) * sper(0.025);  // brisa suave, deriva orgánica
+    const wind = Math.sin(now * 0.00018) * sper(0.05) + Math.sin(now * 0.00041 + 1.7) * sper(0.025);  // a gentle breeze, organic drift
 
     for (const fw of fireworks) processFirework(fw, dt);
-    for (const p of sparks) {                                                     // física de cada chispa: fricción + gravedad + brisa
+    for (const p of sparks) {                                                     // each spark's physics: friction + gravity + breeze
       const k = Math.pow(p.drag, dt);
       p.vx *= k; p.vy *= k;
       p.vy += p.g * dt;
@@ -847,19 +847,19 @@
       if (p.seed && p.life <= p.seedAt) { p.seed = false; spawnBurst(p.x, p.y, 0, true, p.seedColor); }  // multi-break
     }
     for (const f of flashes) f.life -= dt;
-    for (const em of embers) {                                                    // chispas que largan los cohetes al subir
+    for (const em of embers) {                                                    // sparks the rockets shed on the way up
       em.life -= dt;
       em.x += (em.vx + wind) * dt; em.y += em.vy * dt;
       em.vy += sper(EMBER_GRAV) * dt;                                             // caen suave
-      em.vx *= Math.pow(0.2, dt);                                                 // fricción horizontal (framerate-indep)
+      em.vx *= Math.pow(0.2, dt);                                                 // horizontal friction (framerate-independent)
     }
     fireworks = fireworks.filter(fw => !fw.dead);
     sparks = sparks.filter(p => p.life > 0);
     flashes = flashes.filter(f => f.life > 0);
     embers = embers.filter(em => em.life > 0);
 
-    // render — motion blur SOBRE el cielo: el fade va a TRANSPARENTE (destination-out), no a negro,
-    // así las estelas se desvanecen revelando el cielo de fondo en vez de pintarse de negro.
+    // render — motion blur OVER the sky: the fade goes to TRANSPARENT (destination-out), not to black,
+    // so the trails fade revealing the background sky instead of painting themselves black.
     ctx.globalCompositeOperation = 'destination-out';
     ctx.fillStyle = 'rgba(0,0,0,' + TRAIL_FADE + ')';
     ctx.fillRect(0, 0, W, H);
@@ -870,7 +870,7 @@
     for (const p of sparks) drawSpark(p);
     ctx.globalCompositeOperation = 'source-over';
 
-    // marcador bajo cada dedo/cursor activo (como el cursor (100,0,0) del .py V1)
+    // marker under each active finger/cursor (like the .py V1's (100,0,0) cursor)
     ctx.fillStyle = 'rgb(100,0,0)';
     for (const ps of pointers.values()) {
       ctx.beginPath(); ctx.arc(ps.x, ps.y, sper(CURSOR_R_FRAC), 0, TAU); ctx.fill();
@@ -880,14 +880,14 @@
     requestAnimationFrame(loop);
   }
 
-  // ── Diagnostico: vive DENTRO del panel de informacion ──
-  // Antes era una tarjeta monoespaciada dibujada sobre el lienzo, aparte del panel. Ahora es una
-  // seccion mas: una sola tarjeta para todo lo informativo. Se escribe SOLO con el panel abierto —
-  // tocar el DOM en cada frame con el panel cerrado es trabajo tirado.
-  // El nodo se busca PEREZOSAMENTE, no al parsear. El script principal corre ANTES de que exista
-  // el `#infoPanel` (esta mas abajo en el documento), asi que un `getElementById` en la linea de
-  // arriba devolvia null para siempre: ni estadisticas ni grafico. Es el mismo gotcha de orden del
-  // DOM que ya habia mordido en TankWARS.
+  // ── Diagnostics: it lives INSIDE the info panel ──
+  // It used to be a monospaced card drawn on the canvas, separate from the panel. Now it is one
+  // more section: a single card for everything informational. It is written ONLY with the panel open —
+  // touching the DOM every frame with the panel closed is wasted work.
+  // The node is looked up LAZILY, not at parse time. The main script runs BEFORE
+  // `#infoPanel` exists (it is further down the document), so a `getElementById` on the line
+  // above returned null forever: no stats and no chart. It is the same DOM-order gotcha that had
+  // already bitten in TankWARS.
   let fpsEl = null;
   function statsEl() {
     if (!fpsEl) fpsEl = document.getElementById('fpsOverlay');
@@ -936,9 +936,9 @@ A sky to launch fireworks into. No score and no end: the show is yours to run.
 </div>
 
 <script>
-// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
-// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
-// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+// The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
+// game already had keeps switching it on and off with the same tap: no listener is removed and
+// no existing behaviour is changed. If the game had no meter, nothing happens.
 (function () {
   function armar() {
     var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
@@ -946,31 +946,31 @@ A sky to launch fireworks into. No score and no end: the show is yours to run.
     if (!btn || !panel) return;
     var fps = document.getElementById('fpsOverlay');
     if (fps && fps.parentNode !== panel) panel.appendChild(fps);
-    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
-    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
-    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    // The bar is MEASURED, not assumed. Several games do not declare `--bar-height` and others
+    // change it with the orientation: with a fixed value the panel ended up covering the buttons
+    // (Hangman) or running off the top in landscape (Tron). Measured live it works in all twenty.
     var bar = document.getElementById('bar');
-    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
-    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
-    // salio de aca", que es lo que hace el de Loop.
-    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
-    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
-    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
-    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
-    // lo mueven segun la orientacion.
+    // The panel is anchored TO THE BUTTON THAT OPENS IT, not to the centre of the screen. Centred
+    // it floated in the middle of the game with no relation to anything; hanging off the button it
+    // reads as "this came from here", which is what Loop's does.
+    //   · the same margin as the button (right if the button is on the right, left otherwise);
+    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //     in games with a bottom bar the panel still ends up over the bar.
+    // It is measured live and not done in CSS because each game puts the button somewhere
+    // different, and several move it with the orientation.
     function ubicar() {
       var vw = window.innerWidth, vh = window.innerHeight, m = 10;
       var rb = btn.getBoundingClientRect();
-      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
-      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
-      // encima de la parte alta de la barra.
+      // If the button lives INSIDE the bar, the vertical reference is the whole bar and not the
+      // button: the buttons align to the foot of the bar, so anchoring to the button left the panel
+      // over the top part of the bar.
       var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
       panel.style.transform = 'none';
       var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
       if ((rb.left + rb.width / 2) > vw / 2) {
-        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
-        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
-        // colgado de un boton a media pantalla arrancaba en x = -199.
+        // Flush with the button's right margin, BUT without running off to the left: if the panel is
+        // wider than the gap, it slides to the edge. Without this cap, a 700 px panel hanging off a
+        // button at mid-screen started at x = -199.
         var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
         panel.style.left = 'auto'; panel.style.right = der + 'px';
       } else {
@@ -981,14 +981,14 @@ A sky to launch fireworks into. No score and no end: the show is yours to run.
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
-      } else {                                          // boton abajo -> panel por encima
+      } else {                                          // button at the bottom -> panel above it
         panel.style.top = 'auto';
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
-      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
-      // conmutador, asi que si queda tapado el panel no se puede cerrar.
+      // The tight case (Hangman in landscape: the keyboard and the bar eat 319 of 380 px). The panel
+      // stretches to the opposite edge, but WITHOUT covering the button that opened it: the ⓘ is the
+      // only toggle, so if it gets covered the panel cannot be closed.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
         if ((rb.top + rb.height / 2) < vh / 2) {
           panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
@@ -1007,17 +1007,17 @@ A sky to launch fireworks into. No score and no end: the show is yours to run.
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
-      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
+      if (abrir) ubicar();                          // measure with the panel ALREADY visible: hidden, offsetWidth is 0
     });
-    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    // Keyboard: the button is a <button>, so Enter/Space fire `click` and not `pointerdown`.
     btn.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      if (e.detail !== 0) return;                 // detail 0 = it came from the keyboard, not the mouse
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
       if (abrir) ubicar();
     });
-    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    // Close with Escape: the panel covers the game and must be dismissable without hunting for the button.
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && panel.classList.contains('show')) {
         panel.classList.remove('show'); btn.classList.remove('on');

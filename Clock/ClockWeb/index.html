@@ -152,30 +152,30 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  CLOCK — port web fiel de Clock.py, con el mismo shell mobile que BallsWeb.
-  //  Reloj analógico dibujado desde Date(). El botón (o un toque en el reloj)
-  //  alterna el segundero entre tic-tac (segundero=0) y suave (segundero=1).
+  //  CLOCK — faithful web port of Clock.py, with the same mobile shell as BallsWeb.
+  //  An analogue clock drawn from Date(). The button (or a tap on the clock)
+  //  toggles the second hand between ticking (segundero=0) and sweeping (segundero=1).
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
 
-  // ── TEMAS DE COLOR ──
-  // Todo el reloj se deriva de UN color base (el "bright"). El resto de los tonos —oscuro, acento,
-  // anillos, viñeta, cara de vidrio, hub— son escalas de ese color, así el contraste neón se mantiene
-  // sea cual sea el color elegido. El verde [0,255,0] reproduce exactamente los valores del Clock.py.
+  // ── COLOUR THEMES ──
+  // The whole clock derives from ONE base colour (the "bright"). The rest of the tones —dark, accent,
+  // rings, vignette, glass face, hub— are scales of that colour, so the neon contrast holds
+  // whatever colour is chosen. Green [0,255,0] reproduces Clock.py's values exactly.
   const clampC = v => Math.max(0, Math.min(255, Math.round(v)));
   function makeTheme(base) {
     const [r, g, b] = base;
     const s  = t      => `rgb(${clampC(r*t)},${clampC(g*t)},${clampC(b*t)})`;
     const sa = (t, a) => `rgba(${clampC(r*t)},${clampC(g*t)},${clampC(b*t)},${a})`;
-    const lighten = c => clampC(c + (255 - c) * 0.745);                           // mezcla hacia blanco (highlight del hub)
+    const lighten = c => clampC(c + (255 - c) * 0.745);                           // blend towards white (the hub highlight)
     return {
       base,
       bright:  s(1),        // GREEN original
       dark:    s(0.706),    // DARKGREEN original (0,180,0)
-      accent:  s(0.902),    // aguja de minutos (0,230,0)
+      accent:  s(0.902),    // minute hand (0,230,0)
       ringMid: sa(0.706, 0.35),
       ringOut: sa(1, 0.16),
-      bg0:     s(0.085),    // centro de la viñeta
+      bg0:     s(0.085),    // centre of the vignette
       bg1:     s(0.04),
       face0:   sa(0.216, 0.55),
       face1:   sa(0.094, 0.35),
@@ -183,9 +183,9 @@
       pinhole: s(0.078),
     };
   }
-  // `pitch` es la AFINACIÓN del reloj en Hz, y no es adorno: la usan el ping del tic, el ping del
-  // botón de color y (dividida por 4) la campanada de la hora. Cálido = grave, frío = agudo, así
-  // cambiar de color cambia literalmente cómo suena el aparato. Ver la sección AUDIO más abajo.
+  // `pitch` is the clock's TUNING in Hz, and it is not decoration: the tick's ping, the colour
+  // button's ping and (divided by 4) the hour chime all use it. Warm = low, cold = high, so
+  // changing colour literally changes how the device sounds. See the AUDIO section below.
   const PALETTES = [
     { name: 'Verde',   base: [0, 255, 0],     pitch: 1800 },
     { name: 'Cyan',    base: [0, 220, 255],   pitch: 2200 },
@@ -198,13 +198,13 @@
   let themeIndex = 0;
   let T = makeTheme(PALETTES[0].base);
 
-  // mismas abreviaturas que strftime por defecto (locale C → inglés)
+  // the same abbreviations as strftime by default (locale C → English)
   const DIAS  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
   const MESES = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const dos = n => String(n).padStart(2, '0');
 
-  // fuentes modernas (Google Fonts, fallback a system): Orbitron para los números de la hora
-  // (dígitos monoespaciados, no bailan al cambiar el segundo), Rajdhani para la fecha.
+  // modern fonts (Google Fonts, falling back to system): Orbitron for the hour digits
+  // (monospaced digits, they do not dance when the second changes), Rajdhani for the date.
   const FONT_TIME = "'Orbitron', system-ui, sans-serif";
   const FONT_DATE = "'Rajdhani', 'Segoe UI', system-ui, sans-serif";
 
@@ -212,39 +212,39 @@
   const ctx = canvas.getContext('2d');
 
   let W = 0, H = 0, dpr = 1;
-  let S = 0;                 // lado de referencia (= SCREEN_WIDTH/HEIGHT en Clock.py)
+  let S = 0;                 // reference side (= SCREEN_WIDTH/HEIGHT in Clock.py)
   let radio = 0, centroX = 0, centroY = 0, k = 1;
-  let segundero = 0;         // 0 = tic-tac (salta por segundo), 1 = suave (interpolado por ms)
+  let segundero = 0;         // 0 = ticking (jumps per second), 1 = sweeping (interpolated per ms)
 
   const barEl = document.getElementById('bar');
   function resize() {
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     const barH = barEl.offsetHeight;                                             // includes the safe-area-inset-bottom padding on iOS
     W = window.innerWidth;
-    H = window.innerHeight - barH;                                               // el reloj vive sólo sobre la barra
+    H = window.innerHeight - barH;                                               // the clock lives only above the bar
     canvas.width  = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    // S = lado del cuadrado que entra en el área de dibujo. Las fórmulas de Clock.py
-    // asumían SCREEN_WIDTH == SCREEN_HEIGHT == 650; acá lo hacemos responsive.
+    // S = the side of the square that fits in the drawing area. Clock.py's formulas
+    // assumed SCREEN_WIDTH == SCREEN_HEIGHT == 650; here we make it responsive.
     S = Math.min(W, H);
-    radio   = (S + S) / 4.25;          // = S/2.125, igual que (SCREEN_WIDTH+SCREEN_HEIGHT)/4.25
+    radio   = (S + S) / 4.25;          // = S/2.125, the same as (SCREEN_WIDTH+SCREEN_HEIGHT)/4.25
     centroX = W / 2;
     centroY = H / 2;
-    k = S / 650;                       // escala de los anchos de línea (definidos a 650 px)
+    k = S / 650;                       // scale of the line widths (defined at 650 px)
   }
   window.addEventListener('resize', resize);
 
-  // ── HELPERS DE DIBUJO (con glow neón) ──
-  // Todo el look nuevo es verde-fósforo sobre negro: cada trazo importante se acompaña de un
-  // shadowBlur del mismo color, que en canvas equivale a un halo de neón.
+  // ── DRAWING HELPERS (with neon glow) ──
+  // The whole new look is phosphor green on black: every important stroke is accompanied by a
+  // shadowBlur of the same colour, which in canvas amounts to a neon halo.
   function setGlow(color, blur) { ctx.shadowColor = color; ctx.shadowBlur = blur * k; }
   function clearGlow() { ctx.shadowBlur = 0; ctx.shadowColor = 'transparent'; }
 
-  // texto centrado, chico y prolijo (mucho más chico que los 30 px del Clock.py original)
+  // centred text, small and tidy (much smaller than the original Clock.py's 30 px)
   function crearTexto(texto, color, posx, posy, size, glow, font, weight) {
     ctx.font = (weight || 600) + ' ' + Math.round(size * k) + 'px ' + (font || FONT_DATE);
     ctx.textAlign = 'center';
@@ -271,8 +271,8 @@
     else       { ctx.fillStyle = color; ctx.fill(); }
   }
 
-  // aguja cónica tipo lozenge: ancha en el perno, afilada en la punta, con colita atrás.
-  // baseW/tipW van en px-650 (se escalan por k); length y tailLen ya vienen en px.
+  // a conical lozenge-type hand: wide at the pin, sharp at the tip, with a little tail behind.
+  // baseW/tipW are in px-650 (they are scaled by k); length and tailLen already come in px.
   function drawHand(ang, length, baseW, tipW, tailLen, color, glow) {
     const dx = Math.cos(ang), dy = Math.sin(ang), px = -dy, py = dx;   // dir + perpendicular
     const bw = baseW * k * 0.5, tw = tipW * k * 0.5;
@@ -293,41 +293,41 @@
   }
 
   // ════════════════════════════════════════════════════════════════════
-  //  AUDIO — cuarzo y vidrio. Sintetizado, cero archivos, cero dependencias.
+  //  AUDIO — quartz and glass. Synthesised, zero files, zero dependencies.
   //
-  //  Este reloj no es de madera ni de latón: es fósforo sobre vidrio negro, un instrumento de
-  //  laboratorio que da la hora. Así que la familia tímbrica es transitorio seco y altísimo
-  //  (bandpass de 2,7 a 5 kHz, de 4 a 14 ms, cero cuerpo) sobre silencio absoluto. Nada de drone,
-  //  nada de ambiente, nada de música. Lo único tonal son campanitas de vidrio inarmónicas y su
-  //  altura la dicta el COLOR (PALETTES[].pitch).
+  //  This clock is not made of wood or brass: it is phosphor on black glass, a laboratory
+  //  instrument that tells the time. So the timbral family is a dry, very high transient
+  //  (bandpass from 2.7 to 5 kHz, 4 to 14 ms, zero body) over absolute silence. No drone,
+  //  no ambience, no music. The only tonal material is inharmonic glass chimes and their
+  //  pitch is dictated by the COLOUR (PALETTES[].pitch).
   //
-  //  Y el toggle del segundero deja de ser cosmético: tic-tac es un cuarzo (1 golpe por segundo,
-  //  alternando tic y tac de verdad) y suave es un mecánico (zumbido de 8 golpes por segundo, el
-  //  alternado de un movimiento de 28.800 A/h). Es exactamente la diferencia física que el botón
+  //  And the second-hand toggle stops being cosmetic: ticking is a quartz movement (1 beat per second,
+  //  really alternating tick and tock) and sweeping is a mechanical one (a hum of 8 beats per second, the
+  //  alternation of a 28,800 A/h movement). It is exactly the physical difference the button
   //  representa en pantalla.
   //
-  //  Jerarquía de mezcla (el repo mezcla bajo, para el parlante de un teléfono):
-  //    · principal  campanada de la hora   0.050 / 0.020 / 0.012 (los tres parciales)
-  //    · principal  clic de minuto         0.040   ← el golpe más fuerte que se oye seguido
+  //  Mix hierarchy (the repo mixes low, for a phone speaker):
+  //    · main      hour chime            0.050 / 0.020 / 0.012 (the three partials)
+  //    · main      minute click          0.040   ← the loudest hit you hear regularly
   //    · principal  tic/tac                0.030 ruido + 0.012 ping
   //    · interfaz   modo 0.028, color 0.025, auto 0.022
-  //    · ambiente   zumbido del barrido    0.008
-  //  El tic queda por DEBAJO del piso de "principal" del patrón del repo (0.05) a propósito: es la
-  //  voz principal, sí, pero suena 3600 veces por hora y para siempre. A 0.05 sería una tortura.
+  //    · ambience  sweep hum             0.008
+  //  The tick sits BELOW the pattern's "main" floor (0.05) on purpose: it is the
+  //  main voice, yes, but it plays 3600 times an hour and forever. At 0.05 it would be torture.
   // ════════════════════════════════════════════════════════════════════
   let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
-  const voiceLast = {};                       // cooldown por voz
-  // Techo de voces por frame. El peor frame POSIBLE acá es el segundo 0 de cada hora: tic
-  // (ruido + ping = 2) + clic de minuto (1) + campanada (3 parciales) = 6, y puede caerle encima
-  // una voz de interfaz si justo tocás un botón. Con el 4 del patrón la campanada saldría mutilada
-  // una vez por hora, que es justo el caso imposible de reproducir a mano. Acá no hay bucles de
-  // física: el máximo es determinista, así que 10 es techo de seguridad, no de mezcla.
+  const voiceLast = {};                       // cooldown per voice
+  // Per-frame voice ceiling. The worst POSSIBLE frame here is second 0 of each hour: tick
+  // (noise + ping = 2) + minute click (1) + chime (3 partials) = 6, and an interface voice
+  // can land on top if you happen to touch a button. With the pattern's 4 the chime would come out mutilated
+  // once an hour, which is exactly the case that cannot be reproduced by hand. There are no physics
+  // loops here: the maximum is deterministic, so 10 is a safety ceiling, not a mix one.
   const SND_PER_FRAME = 10;
-  let tickPitch = 1800;                       // Hz; lo fija applyTheme() desde la paleta
+  let tickPitch = 1800;                       // Hz; applyTheme() sets it from the palette
 
-  // UN buffer de ruido blanco para toda la sesión. Cada golpe toca una rebanada distinta (offset
-  // aleatorio), así ningún tic es idéntico al anterior y no se aloca nada por disparo: en modo suave
-  // son 8 golpes por segundo, o sea 28.800 AudioBuffer por hora si se generara uno por vez.
+  // ONE white-noise buffer for the whole session. Each hit takes a different slice (a random
+  // offset), so no tick is identical to the last and nothing is allocated per trigger: in sweep mode
+  // that is 8 hits per second, i.e. 28,800 AudioBuffers an hour if one were generated each time.
   let noiseBuf = null;
 
   function audioResume() {
@@ -341,35 +341,35 @@
         noiseBuf = AC.createBuffer(1, n, AC.sampleRate);
         const d = noiseBuf.getChannelData(0);
         for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
-      } catch (e) { return; }                 // sin audio el reloj SIGUE andando
+      } catch (e) { return; }                 // with no audio the clock KEEPS running
     }
     if (AC.state === 'suspended') AC.resume().catch(() => {});
   }
 
-  // La única compuerta.
+  // The one gate.
   function ac() { return AC && AC.state === 'running' && sndThisFrame < SND_PER_FRAME; }
 
-  // Golpe de ruido filtrado: en un reloj el transitorio ES el tic, no hay cuerpo que sostener.
-  // Ataque instantáneo y decaída exponencial. `t0` es un offset en segundos sobre AC.currentTime,
-  // porque el scheduler del modo suave programa golpes a futuro.
+  // A filtered noise hit: in a clock the transient IS the tick, there is no body to sustain.
+  // Instant attack and exponential decay. `t0` is an offset in seconds over AC.currentTime,
+  // because the sweep mode's scheduler schedules hits into the future.
   function hit(freq, q, dur, vol, t0) {
     const a = AC; if (!a || !noiseBuf) return;
     sndThisFrame++;
     const t = a.currentTime + (t0 || 0);
     const src = a.createBufferSource(); src.buffer = noiseBuf;
     const bp = a.createBiquadFilter(); bp.type = 'bandpass';
-    bp.frequency.setValueAtTime(freq, t);     // setValueAtTime y no .value: así queda en el log del QA
+    bp.frequency.setValueAtTime(freq, t);     // setValueAtTime and not .value: that way it shows up in the QA log
     bp.Q.setValueAtTime(q, t);
     const g = a.createGain();
     g.gain.setValueAtTime(Math.max(0.0001, vol), t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);   // NUNCA a 0: la spec lo prohíbe
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);   // NEVER 0: the spec forbids it
     src.connect(bp); bp.connect(g); g.connect(masterGain);
     src.start(t, Math.random() * (0.24 - dur), dur + 0.01);
     src.stop(t + dur + 0.02);
   }
 
-  // Voz tonal. `atk` en segundos: 0 = nota seca (los pings de interfaz), > 0 = campana — una campana
-  // no clickea, necesita unos milisegundos de ataque o el golpe se come al parcial.
+  // Tonal voice. `atk` in seconds: 0 = a dry note (the interface pings), > 0 = a bell — a bell
+  // does not click, it needs a few milliseconds of attack or the hit swallows the partial.
   function note(f0, f1, t0, dur, type, vol, atk) {
     const a = AC; if (!a) return;
     sndThisFrame++;
@@ -386,38 +386,38 @@
   }
 
   const sfx = {
-    // Tic de cuarzo. La alternancia par/impar es real: en los segundos impares el filtro baja a
-    // 2700 Hz, el golpe dura 1 ms más y el ping afina un 6 % abajo. Sin eso se oye "tic-tic".
+    // Quartz tick. The even/odd alternation is real: on odd seconds the filter drops to
+    // 2700 Hz, the hit lasts 1 ms longer and the ping tunes 6 % lower. Without that you hear "tick-tick".
     tic(par, t0) {
       hit(par ? 3400 : 2700, 2.5, par ? 0.008 : 0.009, 0.030, t0);
       note(tickPitch * (par ? 1 : 0.94), 0, t0, 0.030, 'sine', 0.012, 0);
     },
-    // Barrido mecánico: un golpe cada 125 ms, sin ping tonal y en el rango de ambiente. No es un
-    // evento, es una textura; si se lo oye como evento el modo suave deja de ser suave.
+    // Mechanical sweep: one hit every 125 ms, with no tonal ping and in the ambience range. It is not an
+    // event, it is a texture; if you hear it as an event, sweep mode stops being smooth.
     whir(t0) { hit(5000, 4, 0.004, 0.008, t0); },
-    // Salto de la aguja de minutos: más grave, más largo y más fuerte que el tic. Es lo que te deja
-    // contar minutos sin mirar la pantalla. Sin parcial tonal: lo tonal queda reservado para la hora.
+    // The minute hand's jump: lower, longer and louder than the tick. It is what lets you
+    // count minutes without looking at the screen. No tonal partial: the tonal is reserved for the hour.
     minuto() { hit(900, 1.6, 0.014, 0.040, 0); },
-    // Campanada de la hora: campana de VIDRIO, no de latón — tres parciales inarmónicos en
-    // 1 : 2,76 : 5,40 (la serie de una placa circular) sobre la cuarta baja de la altura de la
-    // paleta. UNA sola, nunca doce: doce golpes son ocho segundos de sonido que nadie pidió.
+    // Hour chime: a GLASS bell, not brass — three inharmonic partials at
+    // 1 : 2.76 : 5.40 (the series of a circular plate) over the palette's pitch a fourth
+    // down. ONE only, never twelve: twelve strikes is eight seconds of sound nobody asked for.
     hora() {
       const f = tickPitch / 4;
       note(f,        0, 0, 1.40, 'sine', 0.050, 0.003);
       note(f * 2.76, 0, 0, 0.60, 'sine', 0.020, 0.003);
       note(f * 5.40, 0, 0, 0.30, 'sine', 0.012, 0.003);
     },
-    // Tirar de la corona: el detente seco más dos notas que dicen para DÓNDE fue el cambio
-    // (a suave sube, a tic-tac baja). El botón y el toque al reloj comparten esta voz.
+    // Pulling the crown: the dry detent plus two notes that say WHICH WAY the change went
+    // (to sweep it rises, to ticking it falls). The button and the tap on the clock share this voice.
     modo(dir) {
       hit(1600, 3, 0.012, 0.028, 0);
       note(dir ? 900 : 1350, 0, 0,     0.045, 'triangle', 0.022, 0);
       note(dir ? 1350 : 900, 0, 0.045, 0.045, 'triangle', 0.022, 0);
     },
-    // Ping de color: suena la altura NUEVA de la paleta. Acá la nota no es adorno sino información:
-    // anuncia con qué afinación va a tictaquear el reloj a partir de ahora.
+    // Colour ping: it sounds the palette's NEW pitch. Here the note is not decoration but information:
+    // it announces the tuning the clock will tick at from now on.
     color() { note(tickPitch, 0, 0, 0.070, 'sine', 0.025, 0); },
-    // Auto-color: sube al prender, baja al apagar. Arranca un proceso que sigue solo, conviene oírlo.
+    // Auto-colour: rises on switching on, falls on switching off. It starts a process that runs on its own, worth hearing.
     auto(on) {
       note(on ? 1100 : 1650, 0, 0,     0.055, 'triangle', 0.022, 0);
       note(on ? 1650 : 1100, 0, 0.055, 0.055, 'triangle', 0.022, 0);
@@ -431,73 +431,73 @@
     voiceLast[name] = now; fn();
   }
 
-  // ── EL RELOJ COMO INSTRUMENTO ──
-  // Se llama una vez por frame desde draw(), con los MISMOS cuatro campos de tiempo que se van a
-  // dibujar: así el tic sale en el mismo frame que el salto de la aguja (desfase ≤ 16,7 ms).
+  // ── THE CLOCK AS AN INSTRUMENT ──
+  // It is called once per frame from draw(), with the SAME four time fields that are about to be
+  // drawn: that way the tick comes out in the same frame as the hand's jump (offset ≤ 16.7 ms).
   let lastSec = -1, lastMin = -1, lastHour = -1, lastFrameMs = 0;
-  let nextBeat = 0;                           // próximo golpe de barrido, en tiempo de AC
+  let nextBeat = 0;                           // next sweep hit, in AC time
 
   function clockAudio(h, m, s, us) {
     const nowMs = performance.now();
     const gap = nowMs - lastFrameMs;
     lastFrameMs = nowMs;
-    // Resincronía SIN sonar. El primer frame, y la vuelta de una pestaña que estuvo horas al fondo,
-    // ven saltar la hora entera de golpe: sin esta guarda eso dispara una campanada falsa más un
-    // clic de minuto que nadie vio.
+    // Resync WITHOUT sounding. The first frame, and coming back to a tab that spent hours in the background,
+    // see the whole hour jump at once: without this guard that fires a false chime plus a
+    // minute click nobody saw.
     if (gap > 1500) { lastSec = s; lastMin = m; lastHour = h; nextBeat = 0; return; }
-    // Todavía sin gesto de usuario (o techo de frame alcanzado): igual hay que seguir el tiempo,
-    // o al desbloquear el audio sale toda la ráfaga acumulada de una.
+    // Still no user gesture (or the frame ceiling was reached): the time still has to be followed,
+    // or unlocking the audio lets out the whole accumulated burst at once.
     if (!ac()) { lastSec = s; lastMin = m; lastHour = h; return; }
 
     if (segundero === 0) {
       if (s !== lastSec) sfx.tic(s % 2 === 0);
     } else {
-      // Scheduler con lookahead de 200 ms sobre AC.currentTime, NO un golpe por frame: a 60 fps el
-      // jitter de ±16,7 ms sobre un período de 125 ms se oye como un zumbido cojo. El techo de 4
-      // iteraciones evita que un frame largo encole medio segundo de golpes de una sentada.
+      // A scheduler with a 200 ms lookahead over AC.currentTime, NOT one hit per frame: at 60 fps the
+      // ±16.7 ms jitter over a 125 ms period sounds like a limping hum. The ceiling of 4
+      // iterations keeps a long frame from queueing half a second of hits in one go.
       const t = AC.currentTime;
-      if (nextBeat < t) nextBeat = t + 0.005;           // arranque, o resincronía tras un atraso
+      if (nextBeat < t) nextBeat = t + 0.005;           // startup, or a resync after falling behind
       let n = 0;
       while (nextBeat < t + 0.2 && n < 4) { sfx.whir(nextBeat - t); nextBeat += 0.125; n++; }
     }
-    // Minuto y hora suenan en LOS DOS modos: son la estructura del reloj, no del segundero.
+    // Minute and hour sound in BOTH modes: they are the structure of the clock, not of the second hand.
     if (m !== lastMin && lastMin >= 0) sfx.minuto();
     if (h !== lastHour && lastHour >= 0) sfx.hora();
     lastSec = s; lastMin = m; lastHour = h;
   }
 
   function draw() {
-    sndThisFrame = 0;                          // OBLIGATORIO y acá, no en el rAF del HUD de FPS:
-                                               // sin esto ac() se cierra para siempre a las 10 voces
+    sndThisFrame = 0;                          // MANDATORY and here, not in the FPS HUD's rAF:
+                                               // without this ac() closes forever at 10 voices
     const now = new Date();
     const ca_h  = now.getHours();
     const ca_m  = now.getMinutes();
     const ca_s  = now.getSeconds();
-    const ca_ms = now.getMilliseconds() * 1000;   // µs equivalentes (Date sólo da ms)
+    const ca_ms = now.getMilliseconds() * 1000;   // equivalent µs (Date only gives ms)
 
-    clockAudio(ca_h, ca_m, ca_s, ca_ms);          // antes de dibujar: mismo frame que el salto visual
+    clockAudio(ca_h, ca_m, ca_s, ca_ms);          // before drawing: the same frame as the visual jump
 
     const fecha = `${DIAS[now.getDay()]}, ${dos(now.getDate())} ${MESES[now.getMonth()]} ${now.getFullYear()}`;
     const hora  = `${dos(ca_h)}:${dos(ca_m)}:${dos(ca_s)}`;
 
-    // fondo con viñeta (verde muy oscuro al centro → negro en los bordes)
+    // background with a vignette (very dark green at the centre → black at the edges)
     const vg = ctx.createRadialGradient(centroX, centroY, radio * 0.1, centroX, centroY, Math.max(W, H) * 0.75);
     vg.addColorStop(0, T.bg0); vg.addColorStop(0.6, T.bg1); vg.addColorStop(1, '#000000');
     ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
 
-    // cara del dial (vidrio oscuro con highlight arriba-izquierda)
+    // dial face (dark glass with a highlight at the top left)
     const fg = ctx.createRadialGradient(centroX - radio * 0.3, centroY - radio * 0.3, radio * 0.05, centroX, centroY, radio);
     fg.addColorStop(0, T.face0); fg.addColorStop(0.7, T.face1); fg.addColorStop(1, 'rgba(0,0,0,0.1)');
     ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(centroX, centroY, radio * 0.92, 0, TAU); ctx.fill();
 
-    // anillos exteriores: uno principal con glow fuerte + dos finos decorativos
+    // outer rings: one main one with a strong glow + two thin decorative ones
     setGlow(T.bright, 18);
     circulo(T.dark, centroX, centroY, radio, 6);
     clearGlow();
     circulo(T.ringMid, centroX, centroY, radio * 0.955, 2);
     circulo(T.ringOut, centroX, centroY, radio * 1.025, 1);
 
-    // marcas de minutos (60) — finas, glow suave
+    // minute marks (60) — thin, soft glow
     setGlow(T.dark, 5);
     for (let i = 1; i <= 60; i++) {
       const a = TAU * i / 60;
@@ -506,7 +506,7 @@
         centroX + Math.cos(a) * radio * 0.85, centroY + Math.sin(a) * radio * 0.85, 2);
     }
     clearGlow();
-    // marcas de horas (12) — gruesas, brillantes, con punta redondeada
+    // hour marks (12) — thick, bright, with a rounded tip
     setGlow(T.bright, 12);
     for (let i = 1; i <= 12; i++) {
       const a = TAU * i / 12;
@@ -516,20 +516,20 @@
     }
     clearGlow();
 
-    // fecha + hora, espejadas arriba y abajo del centro — texto chico, con leve glow
+    // date + time, mirrored above and below the centre — small text, with a slight glow
     const offY = S * 5 / 16;
     crearTexto(hora,  T.bright, centroX, centroY + offY,         17, 8, FONT_TIME, 600);
     crearTexto(fecha, T.dark,   centroX, centroY + offY * 0.875, 13, 5, FONT_DATE, 500);
     crearTexto(hora,  T.bright, centroX, centroY - offY,         17, 8, FONT_TIME, 600);
     crearTexto(fecha, T.dark,   centroX, centroY - offY * 0.875, 13, 5, FONT_DATE, 500);
 
-    // agujas cónicas — hora más corta y robusta, minutos más larga y fina
+    // conical hands — the hour one shorter and sturdier, the minute one longer and finer
     const am = ca_m * TAU / 60 - Math.PI / 2;
     const ah = (ca_h * 60 + ca_m) * TAU / 720 - Math.PI / 2;
     drawHand(ah, radio * 0.50, 20, 5, radio * 0.09, T.dark, 10);
     drawHand(am, radio * 0.72, 13, 3, radio * 0.11, T.accent, 12);
 
-    // segundero — ángulo según el modo (tic-tac vs suave)
+    // second hand — angle according to the mode (ticking vs sweeping)
     let as;
     if (segundero === 0) as = ca_s * TAU / 60 - Math.PI / 2;
     else                 as = (ca_ms + ca_s * 999999) * TAU / (60 * 999999) - Math.PI / 2;
@@ -538,10 +538,10 @@
     setGlow(T.bright, 14);
     linea(T.bright, pivX, pivY, centroX - cos * radio * 0.15, centroY - sin * radio * 0.15, 5, 'round');   // contrapeso
     linea(T.bright, pivX, pivY, centroX + cos * radio * 0.75, centroY + sin * radio * 0.75, 3, 'round');   // aguja larga
-    circulo(T.bright, centroX + cos * radio * 0.62, centroY + sin * radio * 0.62, radio * 0.018, 0);        // perlita en la aguja
+    circulo(T.bright, centroX + cos * radio * 0.62, centroY + sin * radio * 0.62, radio * 0.018, 0);        // a little pearl on the hand
     clearGlow();
 
-    // perno central — hub con degradé + pinhole oscuro
+    // centre pin — a hub with a gradient + a dark pinhole
     setGlow(T.bright, 12);
     const hub = ctx.createRadialGradient(centroX - radio * 0.02, centroY - radio * 0.02, 1, centroX, centroY, radio * 0.06);
     hub.addColorStop(0, T.hubHi); hub.addColorStop(1, T.dark);
@@ -553,12 +553,12 @@
   }
 
   // ── TOGGLE SEGUNDERO ──
-  // Igual que el WALL_ICONS de BallsWeb: un SVG por estado. 0 = tic-tac (reloj con segundero recto),
-  // 1 = suave (reloj con flecha de barrido continuo). El botón se ilumina (.on) en modo suave.
+  // The same as BallsWeb's WALL_ICONS: one SVG per state. 0 = ticking (a clock with a straight second hand),
+  // 1 = sweeping (a clock with a continuous sweep arrow). The button lights up (.on) in sweep mode.
   const SEC_ICONS = {
-    // tic-tac: reloj con aguja vertical (salta de marca en marca)
+    // ticking: a clock with a vertical hand (it jumps from mark to mark)
     0: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 12V6"/></svg>',
-    // suave: reloj con flecha de barrido (movimiento continuo)
+    // sweeping: a clock with a sweep arrow (continuous movement)
     1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 12l4-2"/><path d="M18.5 8.5a7 7 0 1 1-2.4-3.1"/><path d="M17 3.6v2.4h-2.4"/></svg>',
   };
   const btnSec = document.getElementById('btnSec');
@@ -566,20 +566,20 @@
     btnSec.innerHTML = SEC_ICONS[segundero];
     btnSec.classList.toggle('on', segundero === 1);
   }
-  // El sonido va ACÁ dentro y no en cada handler: el botón y el toque al reloj son el mismo evento y
-  // tienen que tener una sola voz. El cooldown de 120 ms es por el canvas, que cubre toda el área
-  // sobre la barra: un dedo insistente dispara ~10 toggles por segundo y sin cooldown es una
-  // metralleta de detentes.
+  // The sound goes IN HERE and not in each handler: the button and the tap on the clock are the same event and
+  // have to have one single voice. The 120 ms cooldown is because of the canvas, which covers the whole area
+  // above the bar: an insistent finger fires ~10 toggles per second and without a cooldown that is a
+  // machine gun of detents.
   function toggleSegundero() { segundero = segundero === 0 ? 1 : 0; refreshSecBtn(); save(); voice('mode', 120, () => sfx.modo(segundero)); }
 
-  // pointerdown (no click): responde aunque haya otro toque activo, igual que los botones de BallsWeb.
+  // pointerdown (not click): it responds even with another touch active, just like BallsWeb's buttons.
   btnSec.addEventListener('pointerdown', e => { e.preventDefault(); toggleSegundero(); });
-  // tocar el reloj también alterna (comportamiento original de Clock.py)
+  // tapping the clock also toggles (Clock.py's original behaviour)
   canvas.addEventListener('pointerdown', toggleSegundero);
 
-  // ── BOTÓN DE COLOR ──
-  // Cicla PALETTES y reconstruye el tema T. Además publica el color en las variables CSS --accent /
-  // --accent-dark, así la barra y los botones se tiñen del mismo color que el reloj.
+  // ── COLOUR BUTTON ──
+  // It cycles PALETTES and rebuilds the theme T. It also publishes the colour in the CSS variables --accent /
+  // --accent-dark, so the bar and the buttons take on the same colour as the clock.
   const btnColor = document.getElementById('btnColor');
   function applyTheme() {
     const p = PALETTES[themeIndex];
@@ -588,34 +588,34 @@
     root.setProperty('--accent', p.base.join(','));
     root.setProperty('--accent-dark', p.base.map(c => Math.round(c * 0.706)).join(','));
     btnColor.title = 'Color: ' + p.name;
-    tickPitch = p.pitch;                                                          // la paleta afina el reloj
+    tickPitch = p.pitch;                                                          // the palette tunes the clock
   }
   function cycleColor() { themeIndex = (themeIndex + 1) % PALETTES.length; applyTheme(); save(); }
-  // El ping va en el HANDLER, no dentro de cycleColor(), porque cycleColor() también lo llama el
-  // timer del auto-color cada 2 s: sonarlo ahí sería un metrónomo de chirridos para siempre. Y va
-  // DESPUÉS de cycleColor() para que tickPitch ya sea el de la paleta nueva.
+  // The ping goes in the HANDLER and not inside cycleColor(), because cycleColor() is also called by the
+  // auto-colour timer every 2 s: sounding it there would be a metronome of chirps forever. And it goes
+  // AFTER cycleColor() so that tickPitch is already the new palette's.
   btnColor.addEventListener('pointerdown', e => { e.preventDefault(); cycleColor(); voice('color', 60, sfx.color); });
 
-  // ── AUTO-COLOR (cicla solo cada 2 s) ──
+  // ── AUTO-COLOUR (cycles on its own every 2 s) ──
   const btnAuto = document.getElementById('btnAuto');
   let autoTimer = null;
-  let autoOn = false;                                                             // estado restaurado por load()
+  let autoOn = false;                                                             // state restored by load()
   function setAuto(on, instant) {
     if (on && !autoTimer) {
-      if (instant) cycleColor();                                                  // feedback inmediato: salta un color al toque, no espera los 2 s
+      if (instant) cycleColor();                                                  // immediate feedback: it jumps a colour on the tap, it does not wait the 2 s
       autoTimer = setInterval(cycleColor, 2000);
     } else if (!on && autoTimer) { clearInterval(autoTimer); autoTimer = null; }
     btnAuto.classList.toggle('on', !!autoTimer);
     save();
   }
   function toggleAuto() { setAuto(!autoTimer, true); }
-  // setAuto(on, true) llama a cycleColor() para el feedback visual instantáneo; el ping de color NO
-  // suena ahí (está en el handler de btnColor), alcanza con la voz del toggle.
+  // setAuto(on, true) calls cycleColor() for instant visual feedback; the colour ping does NOT
+  // sound there (it is in btnColor's handler), the toggle's voice is enough.
   btnAuto.addEventListener('pointerdown', e => { e.preventDefault(); toggleAuto(); voice('auto', 120, () => sfx.auto(!!autoTimer)); });
 
-  // ── PERSISTENCIA (color + modo del segundero + auto) ──
-  // El mute viaja en el MISMO JSON que ya existía, no en una clave nueva: una sola entrada de
-  // localStorage para todo el estado del reloj.
+  // ── PERSISTENCE (colour + second-hand mode + auto) ──
+  // The mute travels in the SAME JSON that already existed, not in a new key: one single
+  // localStorage entry for the clock's whole state.
   const STORE_KEY = 'clockweb';
   function save() {
     try { localStorage.setItem(STORE_KEY, JSON.stringify({ themeIndex, segundero, auto: !!autoTimer, muted })); } catch {}
@@ -633,18 +633,18 @@
   load();
   refreshSecBtn();
   applyTheme();
-  if (autoOn) setAuto(true);                                                      // re-arranca el ciclado si estaba activo
+  if (autoOn) setAuto(true);                                                      // restarts the cycling if it was active
   resize();
   draw();
 
-  // ── CABLEADO DEL AUDIO ──
-  // Desbloqueo en el PRIMER gesto, a nivel window y en fase de captura: así también cuentan los
-  // botones ✕/⛶/ⓘ de la shell. Consecuencia medida y aceptada: el primer toque NO suena, porque
-  // resume() es asíncrono y ac() todavía ve 'suspended'; el reloj arranca en el tic siguiente.
+  // ── AUDIO WIRING ──
+  // Unlock on the FIRST gesture, at window level and in the capture phase: that way the shell's
+  // ✕/⛶/ⓘ buttons count too. Measured and accepted consequence: the first tap does NOT sound, because
+  // resume() is asynchronous and ac() still sees 'suspended'; the clock starts on the next tick.
   window.addEventListener('pointerdown', audioResume, true);
-  // No hay drones que apagar, pero sí hasta 200 ms de golpes de barrido ya programados y tres
-  // contadores que resincronizar. lastFrameMs = 0 fuerza la rama de resincronía muda del próximo
-  // frame; sin eso, volver después de una hora se come una campanada falsa.
+  // There are no drones to switch off, but there are up to 200 ms of already-scheduled sweep hits and three
+  // counters to resync. lastFrameMs = 0 forces the next frame's silent resync branch;
+  // without it, coming back after an hour swallows a false chime.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { if (AC) AC.suspend().catch(() => {}); }
     else { audioResume(); lastFrameMs = 0; nextBeat = 0; }
@@ -656,14 +656,14 @@
     btnMute.addEventListener('pointerdown', e => {
       e.preventDefault();
       muted = !muted;
-      // cancelScheduledValues no es adorno: si quedara una rampa pendiente sobre el master, poner
-      // .value a mano no haría nada.
+      // cancelScheduledValues is not decoration: if a ramp were left pending on the master, setting
+      // .value by hand would do nothing.
       if (masterGain && AC) { masterGain.gain.cancelScheduledValues(AC.currentTime); masterGain.gain.value = muted ? 0 : 1; }
       btnMute.classList.toggle('muted', muted);
       save();
-      audioResume();                                                              // el toque también sirve de gesto
-      // Al desmutear no hay confirmación posible hasta el próximo tic: hasta un segundo de espera
-      // preguntándose si anduvo. Un tic inmediato lo contesta. Al mutear, obviamente, silencio.
+      audioResume();                                                              // the tap also counts as the gesture
+      // On unmuting there is no possible confirmation until the next tick: up to a second of waiting
+      // wondering whether it worked. An immediate tick answers that. On muting, obviously, silence.
       if (!muted) voice('mute', 120, () => sfx.tic(true));
     });
   }
@@ -695,9 +695,9 @@
       const btn = document.getElementById('btnInfo');
       btn.addEventListener('pointerdown', e => {
         e.preventDefault();
-        // El overlay arranca con display:none POR CSS — el style inline está vacío "", así que
-        // comparamos con === 'block' (estado visible explícito) en vez de !== 'none' (que daba true
-        // al inicio y se comía el primer tap).
+        // The overlay starts at display:none FROM CSS — the inline style is empty "", so we
+        // compare against === 'block' (an explicitly visible state) instead of !== 'none' (which was true
+        // at startup and swallowed the first tap).
         const showing = overlay.style.display === 'block';
         overlay.style.display = showing ? 'none' : 'block';
         btn.classList.toggle('on', !showing);
@@ -725,9 +725,9 @@ An analogue clock in phosphor on black glass. It shows the device's time — the
 </div>
 
 <script>
-// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
-// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
-// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+// The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
+// game already had keeps switching it on and off with the same tap: no listener is removed and
+// no existing behaviour is changed. If the game had no meter, nothing happens.
 (function () {
   function armar() {
     var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
@@ -735,31 +735,31 @@ An analogue clock in phosphor on black glass. It shows the device's time — the
     if (!btn || !panel) return;
     var fps = document.getElementById('fpsOverlay');
     if (fps && fps.parentNode !== panel) panel.appendChild(fps);
-    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
-    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
-    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    // The bar is MEASURED, not assumed. Several games do not declare `--bar-height` and others
+    // change it with the orientation: with a fixed value the panel ended up covering the buttons
+    // (Hangman) or running off the top in landscape (Tron). Measured live it works in all twenty.
     var bar = document.getElementById('bar');
-    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
-    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
-    // salio de aca", que es lo que hace el de Loop.
-    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
-    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
-    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
-    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
-    // lo mueven segun la orientacion.
+    // The panel is anchored TO THE BUTTON THAT OPENS IT, not to the centre of the screen. Centred
+    // it floated in the middle of the game with no relation to anything; hanging off the button it
+    // reads as "this came from here", which is what Loop's does.
+    //   · the same margin as the button (right if the button is on the right, left otherwise);
+    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //     in games with a bottom bar the panel still ends up over the bar.
+    // It is measured live and not done in CSS because each game puts the button somewhere
+    // different, and several move it with the orientation.
     function ubicar() {
       var vw = window.innerWidth, vh = window.innerHeight, m = 10;
       var rb = btn.getBoundingClientRect();
-      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
-      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
-      // encima de la parte alta de la barra.
+      // If the button lives INSIDE the bar, the vertical reference is the whole bar and not the
+      // button: the buttons align to the foot of the bar, so anchoring to the button left the panel
+      // over the top part of the bar.
       var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
       panel.style.transform = 'none';
       var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
       if ((rb.left + rb.width / 2) > vw / 2) {
-        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
-        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
-        // colgado de un boton a media pantalla arrancaba en x = -199.
+        // Flush with the button's right margin, BUT without running off to the left: if the panel is
+        // wider than the gap, it slides to the edge. Without this cap, a 700 px panel hanging off a
+        // button at mid-screen started at x = -199.
         var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
         panel.style.left = 'auto'; panel.style.right = der + 'px';
       } else {
@@ -770,14 +770,14 @@ An analogue clock in phosphor on black glass. It shows the device's time — the
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
-      } else {                                          // boton abajo -> panel por encima
+      } else {                                          // button at the bottom -> panel above it
         panel.style.top = 'auto';
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
-      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
-      // conmutador, asi que si queda tapado el panel no se puede cerrar.
+      // The tight case (Hangman in landscape: the keyboard and the bar eat 319 of 380 px). The panel
+      // stretches to the opposite edge, but WITHOUT covering the button that opened it: the ⓘ is the
+      // only toggle, so if it gets covered the panel cannot be closed.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
         if ((rb.top + rb.height / 2) < vh / 2) {
           panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
@@ -796,17 +796,17 @@ An analogue clock in phosphor on black glass. It shows the device's time — the
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
-      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
+      if (abrir) ubicar();                          // measure with the panel ALREADY visible: hidden, offsetWidth is 0
     });
-    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    // Keyboard: the button is a <button>, so Enter/Space fire `click` and not `pointerdown`.
     btn.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      if (e.detail !== 0) return;                 // detail 0 = it came from the keyboard, not the mouse
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
       if (abrir) ubicar();
     });
-    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    // Close with Escape: the panel covers the game and must be dismissable without hunting for the button.
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && panel.classList.contains('show')) {
         panel.classList.remove('show'); btn.classList.remove('on');

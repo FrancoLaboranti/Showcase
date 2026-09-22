@@ -14,11 +14,11 @@ Departs slightly from the repo-wide convention: uses `screen` instead of `window
 See [../CLAUDE.md](../CLAUDE.md) for shared conventions (most of which this file ignores).
 
 
-## AUDIO — correccion (2026-09-22)
+## AUDIO — fix (2026-09-22)
 
-`audioOn()` creaba el `AudioContext` **sin `try/catch`** y es la primera sentencia de los cinco
-handlers de `pointerdown` del juego. Sin esa guarda, un contexto que no se puede crear no dejaba el
-juego mudo: dejaba el tablero **sin responder a un solo toque**.
+`audioOn()` created the `AudioContext` **without `try/catch`** and it is the first statement in all
+five of the game's `pointerdown` handlers. Without that guard, a context that cannot be created did
+not leave the game mute: it left the board **not responding to a single tap**.
 
-Pendiente: `sndBoom` suma 0.95 de amplitud de pico directo al destino (no hay `masterGain`), unas
-8 veces por encima de la mezcla del propio juego.
+Pending: `sndBoom` adds 0.95 of peak amplitude straight to the destination (there is no
+`masterGain`), some 8× above the game's own mix.

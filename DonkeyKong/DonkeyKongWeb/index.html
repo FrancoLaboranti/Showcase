@@ -165,54 +165,54 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  DONKEY KONG — homenaje web al arcade de 1981, con el shell mobile de
-  //  TronWeb (v1) en PORTRAIT. Sin .py original: este es un juego nuevo.
+  //  DONKEY KONG — a web homage to the 1981 arcade game, with TronWeb (v1)'s
+  //  mobile shell in PORTRAIT. No original .py: this is a new game.
   //
-  //  · Nivel clásico de vigas inclinadas + escaleras (algunas rotas).
-  //  · DK tira barriles que ruedan, caen por los bordes y a veces bajan
-  //    por las escaleras. Saltarlos da puntos; tocarlos mata.
-  //  · Martillos para romper barriles, bolas de fuego desde el tambor de
-  //    aceite, BONUS que baja con el tiempo, vidas y récord (localStorage).
-  //  · Todo el arte son sprites pixel-art definidos como strings y
+  //  · The classic level of sloped girders + ladders (some broken).
+  //  · DK throws barrels that roll, fall off the edges and sometimes come down
+  //    the ladders. Jumping them scores; touching them kills.
+  //  · Hammers to smash barrels, fireballs from the oil drum,
+  //    a BONUS that counts down, lives and a high score (localStorage).
+  //  · All the art is pixel-art sprites defined as strings and
   //    horneados en canvas offscreen (imageSmoothing off = look arcade).
-  //  · TODA la geometría va en FRACCIONES del playfield (PF) — el análogo
-  //    de xper/yper de los .py — así el resize en pleno juego no rompe nada.
+  //  · ALL the geometry is in FRACTIONS of the playfield (PF) — the analogue
+  //    of the .py's xper/yper — so a resize mid-game breaks nothing.
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
   const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
   const rnd = (a, b) => a + Math.random() * (b - a);
 
   // ── TUNING ──
-  const ASPECT      = 0.58;     // relación de aspecto del playfield (portrait, ~9:15.5)
-  const WALK        = 0.158;    // velocidad MÁXIMA de Mario (PF.w / s)
-  // ── movimiento moderno: acelera al apretar y conserva inercia al soltar (glide), no es on/off ──
-  const RUN_ACCEL   = 1.9;      // aceleración al caminar (PF.w/s²) → llega al máx en ~0.08 s
-  const RUN_DECEL   = 0.85;     // fricción al soltar → se desliza ~0.19 s antes de frenar (guarda velocidad)
-  const AIR_ACCEL   = 0.9;      // control aéreo (menor que en piso, pero existe)
-  const TURN_BOOST  = 2.4;      // × aceleración al cambiar de dirección (giro snappy, plataformero moderno)
+  const ASPECT      = 0.58;     // the playfield's aspect ratio (portrait, ~9:15.5)
+  const WALK        = 0.158;    // Mario's MAXIMUM speed (PF.w / s)
+  // ── modern movement: it accelerates on press and keeps inertia on release (a glide), it is not on/off ──
+  const RUN_ACCEL   = 1.9;      // walking acceleration (PF.w/s²) → it reaches the max in ~0.08 s
+  const RUN_DECEL   = 0.85;     // friction on release → it slides for ~0.19 s before stopping (it keeps its speed)
+  const AIR_ACCEL   = 0.9;      // air control (less than on the ground, but it exists)
+  const TURN_BOOST  = 2.4;      // × acceleration when changing direction (a snappy turn, modern platformer)
   const CLIMB       = 0.085;    // velocidad trepando (PF.h / s)
   const GRAV        = 0.85;     // gravedad (PF.h / s²)
-  const JUMP_V      = 0.26;     // impulso de salto (PF.h / s) → ápice ≈ 0.04 PF.h
-  const FALL_DEATH  = 0.075;    // caída (desde el pico) mayor a esto = MUERTE (PF.h) — como el original: el salto
-                                //   propio (ápice ~0.04) se sobrevive, pero CAERSE de una viga (~0.11+) te mata.
-  const BARREL_SPD  = 0.19;     // velocidad base de barriles (PF.w / s)
+  const JUMP_V      = 0.26;     // jump impulse (PF.h / s) → apex ≈ 0.04 PF.h
+  const FALL_DEATH  = 0.075;    // a fall (from the peak) greater than this = DEATH (PF.h) — as in the original: your own
+                                //   jump (apex ~0.04) is survivable, but FALLING off a girder (~0.11+) kills you.
+  const BARREL_SPD  = 0.19;     // base speed of the barrels (PF.w / s)
   const BARREL_DESC = 0.16;     // barril bajando escalera (PF.h / s)
-  const FIRE_SPD    = 0.055;    // bola de fuego (PF.w / s)
-  const HAMMER_TIME = 8;        // s de martillo
-  const HAMMER_HOVER= 0.082;    // a cuánto flota el martillo sobre la viga (PF.h) — sólo se agarra saltando
-  const BONUS_TICK  = 2.0;      // s entre descuentos de bonus
+  const FIRE_SPD    = 0.055;    // fireball (PF.w / s)
+  const HAMMER_TIME = 8;        // s of hammer
+  const HAMMER_HOVER= 0.082;    // how far the hammer floats above the girder (PF.h) — you can only grab it by jumping
+  const BONUS_TICK  = 2.0;      // s between bonus decrements
   const MAX_BARRELS = 12;
-  const MAX_PIES    = 3;        // #9 tope de tortas en pantalla
-  const BELT_SPD    = 0.18;     // #9 deriva de la cinta como fracción de WALK (siempre out-walkable)
+  const MAX_PIES    = 3;        // #9 cap on cakes on screen
+  const BELT_SPD    = 0.18;     // #9 the conveyor's drift as a fraction of WALK (always out-walkable)
 
   const canvas = document.getElementById('c');
   const ctx = canvas.getContext('2d');
 
   let W = 0, H = 0, dpr = 1;
-  let bgGrad = null, pfGrad = null, vigGrad = null;   // gradientes de fondo (se construyen una vez por resize)
-  // Playfield: rect portrait centrado dentro del canvas (en desktop quedan bandas laterales tipo arcade).
+  let bgGrad = null, pfGrad = null, vigGrad = null;   // background gradients (built once per resize)
+  // Playfield: a portrait rect centred inside the canvas (on desktop it leaves arcade-style side bands).
   const PF = { x: 0, y: 0, w: 1, h: 1 };
-  const ppx = f => PF.x + f * PF.w;     // fracción → px (los análogos de xper/yper)
+  const ppx = f => PF.x + f * PF.w;     // fraction → px (the analogues of xper/yper)
   const ppy = f => PF.y + f * PF.h;
 
   const FONT = '"Press Start 2P", monospace';
@@ -222,30 +222,30 @@
     ctx.fillText(txt, ppx(fx), ppy(fy));
   }
   const pad = (n, d) => String(Math.max(0, n | 0)).padStart(d, '0');
-  // path de rectángulo redondeado (HUD / paneles) sobre cualquier contexto
+  // rounded-rectangle path (HUD / panels) over any context
   function roundRectPath(c, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
     c.beginPath();
     c.moveTo(x + r, y); c.arcTo(x + w, y, x + w, y + h, r); c.arcTo(x + w, y + h, x, y + h, r);
     c.arcTo(x, y + h, x, y, r); c.arcTo(x, y, x + w, y, r); c.closePath();
   }
-  // sombra elíptica de contacto (barata, SIN shadowBlur por frame) para dar volumen a los sprites
+  // elliptical contact shadow (cheap, NO shadowBlur per frame) to give the sprites volume
   function shadowAt(px, syPx, halfW) {
     ctx.fillStyle = 'rgba(0,0,0,0.30)';
     ctx.beginPath(); ctx.ellipse(px, syPx, halfW, halfW * 0.32, 0, 0, TAU); ctx.fill();
   }
 
-  // ════════════════ NIVEL (fracciones del playfield) ════════════════
-  // Vigas: superficie lineal de (x0,yL) a (x1,yR). Los barriles ruedan hacia el extremo MÁS BAJO
-  // (y mayor) y caen por el borde abierto. Índice 0 = viga de abajo; 6 = plataforma de Pauline.
+  // ════════════════ LEVEL (fractions of the playfield) ════════════════
+  // Girders: a linear surface from (x0,yL) to (x1,yR). The barrels roll towards the LOWER end
+  // (greater y) and fall off the open edge. Index 0 = the bottom girder; 6 = Pauline's platform.
   const GIRDERS = [
-    { x0: 0.00, x1: 1.00, yL: 0.893, yR: 0.867 },   // 0 · piso: cae hacia el tambor de aceite (izq)
-    { x0: 0.00, x1: 0.93, yL: 0.732, yR: 0.758 },   // 1 · baja a la derecha
-    { x0: 0.07, x1: 1.00, yL: 0.623, yR: 0.597 },   // 2 · baja a la izquierda
-    { x0: 0.00, x1: 0.93, yL: 0.462, yR: 0.488 },   // 3 · baja a la derecha
-    { x0: 0.07, x1: 1.00, yL: 0.353, yR: 0.327 },   // 4 · baja a la izquierda
-    { x0: 0.00, x1: 0.93, yL: 0.195, yR: 0.218 },   // 5 · viga de DK: los barriles arrancan acá
-    { x0: 0.30, x1: 0.62, yL: 0.115, yR: 0.115 },   // 6 · plataforma de Pauline (llegar = ganar)
+    { x0: 0.00, x1: 1.00, yL: 0.893, yR: 0.867 },   // 0 · floor: it falls towards the oil drum (left)
+    { x0: 0.00, x1: 0.93, yL: 0.732, yR: 0.758 },   // 1 · slopes down to the right
+    { x0: 0.07, x1: 1.00, yL: 0.623, yR: 0.597 },   // 2 · slopes down to the left
+    { x0: 0.00, x1: 0.93, yL: 0.462, yR: 0.488 },   // 3 · slopes down to the right
+    { x0: 0.07, x1: 1.00, yL: 0.353, yR: 0.327 },   // 4 · slopes down to the left
+    { x0: 0.00, x1: 0.93, yL: 0.195, yR: 0.218 },   // 5 · DK's girder: the barrels start here
+    { x0: 0.30, x1: 0.62, yL: 0.115, yR: 0.115 },   // 6 · Pauline's platform (reaching it = winning)
   ];
   const PAULINE_G = 6;
   function surfY(gi, fx) {
@@ -253,9 +253,9 @@
     const t = clamp((fx - g.x0) / (g.x1 - g.x0), 0, 1);
     return g.yL + (g.yR - g.yL) * t;
   }
-  function rollDir(gi) { const g = GIRDERS[gi]; return g.yR > g.yL ? 1 : -1; }   // rueda hacia el lado bajo
+  function rollDir(gi) { const g = GIRDERS[gi]; return g.yR > g.yL ? 1 : -1; }   // it rolls towards the low side
 
-  // Escaleras: {x, lo, hi, broken}. Las rotas no las puede usar Mario (los barriles sí bajan).
+  // Ladders: {x, lo, hi, broken}. Mario cannot use the broken ones (the barrels do come down them).
   const LADDERS = [
     { x: 0.60, lo: 0, hi: 1, broken: false },
     { x: 0.84, lo: 0, hi: 1, broken: false },
@@ -276,15 +276,15 @@
     { x: 0.56, lo: 5, hi: 6, broken: false },
   ];
 
-  const OIL_X = 0.06;                                       // tambor de aceite (viga 0)
-  const DK_X = 0.13;                                        // DK parado en la viga 5
+  const OIL_X = 0.06;                                       // oil drum (girder 0)
+  const DK_X = 0.13;                                        // DK standing on girder 5
   const PAULINE_X = 0.46;
   const MARIO_START = 0.18;
   const HAMMER_SPOTS = [ { g: 4, x: 0.40 }, { g: 1, x: 0.38 } ];
 
-  // ════════════════ SEMILLA / VARIEDAD DE TABLERO (foundation) ════════════════
-  // PRNG determinista (mulberry32): un mismo seed → misma secuencia. Lo usan el reroll de escaleras
-  // rotas, el jitter de pendiente, la posición de martillos, los coleccionables y el modo Diario.
+  // ════════════════ SEED / BOARD VARIETY (foundation) ════════════════
+  // A deterministic PRNG (mulberry32): the same seed → the same sequence. It is used by the broken-ladder
+  // reroll, the slope jitter, the hammer positions, the collectibles and Daily mode.
   function mulberry32(a) {
     return function () {
       a |= 0; a = a + 0x6D2B79F5 | 0;
@@ -293,12 +293,12 @@
       return ((t ^ t >>> 14) >>> 0) / 4294967296;
     };
   }
-  // Snapshot del tablero hand-authored ANTES de cualquier mutación: fallback si un seed diera algo
-  // inválido, y base sobre la que se aplica el jitter cada nivel (no se acumula).
+  // A snapshot of the hand-authored board BEFORE any mutation: a fallback if a seed produced something
+  // invalid, and the base the jitter is applied to each level (it does not accumulate).
   const GIRDERS_ORIG = GIRDERS.map(g => ({ yL: g.yL, yR: g.yR }));
   const LADDERS_ORIG_BROKEN = LADDERS.map(l => l.broken);
-  // Índices de escaleras agrupados por tramo (lo) y cuántas rotas tiene cada tramo en el original.
-  // Reproducir esa MISMA cuenta por tramo mantiene la dificultad: sólo cambia CUÁL escalera está rota.
+  // Ladder indices grouped by tier (lo) and how many broken ones each tier has in the original.
+  // Reproducing that SAME count per tier keeps the difficulty: only WHICH ladder is broken changes.
   const TIERS = [];                                         // TIERS[lo] = [idx, idx, ...]
   LADDERS.forEach((l, i) => { (TIERS[l.lo] = TIERS[l.lo] || []).push(i); });
   const BROKEN_PER_TIER = TIERS.map(idxs => idxs.filter(i => LADDERS_ORIG_BROKEN[i]).length);
@@ -306,8 +306,8 @@
   function dateSeed() { const d = new Date(); return (d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate()) >>> 0; }
 
   // ════════════════ SPRITES pixel-art ════════════════
-  // makeSprite hornea un mapa de strings a un canvas offscreen 1px-por-celda; se dibuja escalado
-  // con imageSmoothing apagado (pixeles duros = look arcade). '.' = transparente.
+  // makeSprite bakes a map of strings to an offscreen canvas, 1px per cell; it is drawn scaled
+  // with imageSmoothing off (hard pixels = the arcade look). '.' = transparent.
   function makeSprite(rows, pal) {
     const h = rows.length, w = Math.max(...rows.map(r => r.length));
     const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
@@ -320,7 +320,7 @@
     });
     return { cv, w, h };
   }
-  // dibuja centrado en (px,py) con alto ph (px); flip espeja horizontal; rot en radianes.
+  // draws centred at (px,py) with height ph (px); flip mirrors horizontally; rot in radians.
   function drawSpr(s, px, py, ph, flip = false, rot = 0, alpha = 1) {
     const pw = ph * s.w / s.h;
     ctx.save();
@@ -334,7 +334,7 @@
   }
 
   const MPAL = { R:'#e83b2a', H:'#7a3b12', S:'#ffc69b', W:'#ffffff', B:'#2456e6', X:'#26140a' };
-  // #7 filas factorizadas: las skins re-hornean estos mismos mapas con otra paleta (mismo tamaño/hitbox).
+  // #7 factored-out rows: the skins re-bake these same maps with a different palette (same size/hitbox).
   const M_IDLE_ROWS = [
     '...RRRRR....', '..RRRRRRRRR.', '..HHHSSWS...', '.HSHHSSWSS..', '.HSHHSSSSS..',
     '.HHSSSSSS...', '...SSSSSS...', '..BBRRRRBB..', '.BBBRRRRBBB.', 'BBBBRRRRBBBB',
@@ -366,8 +366,8 @@
     M_JUMP = makeSprite(M_JUMP_ROWS, pal); M_CLIMB = makeSprite(M_CLIMB_ROWS, pal);
     M_DEAD = makeSprite(M_DEAD_ROWS, pal);
   }
-  // #7 SKINS: recolores de MPAL desbloqueados por puntos de POR VIDA (dk_total). 100% cosmético —
-  // no toca hitbox (MH / razón 12/15) ni físicas → imposible alterar el balance.
+  // #7 SKINS: recolours of MPAL unlocked by LIFETIME points (dk_total). 100% cosmetic —
+  // it does not touch the hitbox (MH / the 12/15 ratio) or the physics → it cannot alter the balance.
   const SKINS = [
     { id:'classic', name:'CLASICO', unlock:0,      pal: MPAL },
     { id:'verde',   name:'VERDE',   unlock:8000,   pal: { ...MPAL, R:'#2fb24a' } },
@@ -375,7 +375,7 @@
     { id:'fuego',   name:'FUEGO',   unlock:60000,  pal: { ...MPAL, R:'#ff8c1a', B:'#b3232c' } },
     { id:'oro',     name:'ORO',     unlock:120000, pal: { ...MPAL, R:'#f6c945', H:'#8a5a2b', B:'#7a5a12' } },
   ];
-  bakeMario(MPAL);                                   // default seguro; el init re-hornea con la skin guardada
+  bakeMario(MPAL);                                   // a safe default; init re-bakes with the saved skin
 
   const DKPAL = { B:'#8a5a2b', D:'#5e3413', F:'#d9a066', W:'#ffffff', K:'#1c0e04', R:'#b3232c' };
   const DK_UP = makeSprite([
@@ -453,7 +453,7 @@
     '..S...S...',
   ], PPAL);
 
-  // Barriles: lados generados por código con las duelas desplazadas (4 fases = animación de rodado).
+  // Barrels: sides generated in code with the staves offset (4 phases = the rolling animation).
   const BPAL = { O:'#d97f2e', o:'#7a3c10', Y:'#f4b35e' };
   function barrelMap(phase) {
     const w = 12, h = 9, rows = [];
@@ -486,12 +486,12 @@
     '...oooo...',
   ];
   const BARREL_END = makeSprite(BARREL_END_ROWS, BPAL);
-  // #2 BARRIL SALVAJE: misma forma, paleta azul (rodado + tapa). El frame `air` también va azul porque
-  // el salvaje pasa casi todo el tiempo cayendo de borde en borde — si no, parpadearía naranja.
+  // #2 WILD BARREL: the same shape, a blue palette (roll + cap). The `air` frame is blue too because
+  // the wild one spends almost all its time falling from edge to edge — otherwise it would flicker orange.
   const BBPAL = { O:'#3a7fe0', o:'#16306e', Y:'#7fb0ee' };
   const BARREL_FR_WILD = [0, 1, 2, 3].map(p => makeSprite(barrelMap(p), BBPAL));
   const BARREL_END_WILD = makeSprite(BARREL_END_ROWS, BBPAL);
-  // #9 torta de la cinta-fábrica
+  // #9 factory-conveyor cake
   const PIE_SPR = makeSprite([
     '..CCCC..',
     '.CCCCCC.',
@@ -585,7 +585,7 @@
     '...RR...',
   ], { R:'#ff3b57' });
 
-  // #4 remache (bolt cyan) · #6 coleccionables de Pauline (sombrero / cartera / paraguas)
+  // #4 rivet (cyan bolt) · #6 Pauline's collectibles (hat / handbag / umbrella)
   const RIVET_SPR = makeSprite([
     '.CCCC.',
     'CCCCCC',
@@ -617,16 +617,16 @@
     '...WWC..',
   ], { C:'#7fd4ff', W:'#ffffff' });
 
-  // Tamaños (alto en fracciones de PF.h)
+  // Sizes (height in fractions of PF.h)
   const MH = 0.052, BH = 0.030, DKH = 0.105, PAUH = 0.052, FBH = 0.034, OILH = 0.045, HAMH = 0.034;
 
-  // ════════════════ SONIDO (WebAudio mínimo, sin archivos) ════════════════
+  // ════════════════ SOUND (minimal WebAudio, no files) ════════════════
   let AC = null;
   function ac() {
     if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { AC = null; } }
-    // Sin el `.catch()`, un resume rechazado es un `unhandledrejection` — y este archivo tiene un
-    // handler que ante eso pinta un panel rojo FIJO en el centro de la pantalla. Como el div no
-    // lleva `pointer-events: none`, se come el tap del centro, que en este juego ES el salto.
+    // Without the `.catch()`, a rejected resume is an `unhandledrejection` — and this file has a
+    // handler that on one paints a FIXED red panel in the middle of the screen. Since the div does not
+    // carry `pointer-events: none`, it swallows the tap in the centre, which in this game IS the jump.
     if (AC && AC.state === 'suspended') AC.resume().catch(() => {});
     return AC;
   }
@@ -648,8 +648,8 @@
     death()  { if (ac()) note(420, 55, 0, 0.7, 'sawtooth', 0.07); },
     win()    { if (ac()) { note(523, 0, 0, 0.10, 'square', 0.05); note(659, 0, 0.11, 0.10, 'square', 0.05); note(784, 0, 0.22, 0.10, 'square', 0.05); note(1047, 0, 0.33, 0.25, 'square', 0.06); } },
     throw_() { if (ac()) note(95, 60, 0, 0.12, 'triangle', 0.06); },
-    throwWild() { if (ac()) note(150, 95, 0, 0.12, 'triangle', 0.06); },     // #2 barril salvaje (tono más agudo)
-    warn()   { if (ac()) { note(330, 0, 0, 0.10, 'square', 0.05); note(440, 0, 0.12, 0.10, 'square', 0.05); note(620, 0, 0.24, 0.14, 'square', 0.06); } }, // #5 aviso de furia
+    throwWild() { if (ac()) note(150, 95, 0, 0.12, 'triangle', 0.06); },     // #2 wild barrel (a higher tone)
+    warn()   { if (ac()) { note(330, 0, 0, 0.10, 'square', 0.05); note(440, 0, 0.12, 0.10, 'square', 0.05); note(620, 0, 0.24, 0.14, 'square', 0.06); } }, // #5 rage warning
   };
 
   // ════════════════ ESTADO ════════════════
@@ -657,33 +657,33 @@
     screen: 'menu',           // 'menu' | 'game'
     phase: 'play',            // 'intro' | 'play' | 'dying' | 'win' | 'over'
     mode: 'classic',          // 'classic' | 'daily'
-    daily: false,             // ¿la run actual es el Desafío Diario? (score va a clave aparte)
-    seed: 1,                  // semilla de la RUN (random en classic, fecha en daily)
+    daily: false,             // is the current run the Daily Challenge? (the score goes to a separate key)
+    seed: 1,                  // the RUN's seed (random in classic, the date in daily)
     level: 1, score: 0, lives: 3,
     hi: parseInt(localStorage.getItem('dk_hiscore') || '0', 10) || 0,
-    total: parseInt(localStorage.getItem('dk_total') || '0', 10) || 0,   // puntos de POR VIDA (desbloqueo de skins)
+    total: parseInt(localStorage.getItem('dk_total') || '0', 10) || 0,   // LIFETIME points (skin unlocking)
     skin: 'classic',          // #7 skin equipada (id)
     bonus: 5000, bonusT: 0,
-    phaseT: 0,                // tiempo dentro de la fase (intro/dying/win/over)
+    phaseT: 0,                // time within the phase (intro/dying/win/over)
     newHi: false,
-    comboN: 0, comboT: 0,     // #1 combo de saltos encadenados
+    comboN: 0, comboT: 0,     // #1 combo of chained jumps
     frenzy: false, frenzyWarn: false, frenzyT: 0, frenzyAt: 99, frenzyDone: false,   // #5 furia
-    hazard: null, hazardChoices: null,   // #8 draft "elegí tu veneno"
-    rivetWarp: false,         // #4 ¿se completó el barrido de remaches este nivel?
-    pickupLevel: 0, rivetsPopped: [], itemsTaken: [],   // #4/#6 estado de pickups PERSISTIDO por nivel (no re-farmear muriendo)
+    hazard: null, hazardChoices: null,   // #8 the "pick your poison" draft
+    rivetWarp: false,         // #4 was the rivet sweep completed this level?
+    pickupLevel: 0, rivetsPopped: [], itemsTaken: [],   // #4/#6 pickup state PERSISTED per level (no re-farming by dying)
   };
   let barrels = [], fireballs = [], popups = [], pies = [];
   let hammers = [];           // pickups {g, x, taken}
-  let rivets = [], items = []; // #4 remaches · #6 coleccionables de Pauline
-  let belt = { g: -1, dir: 0 };// #9 viga-cinta activa este nivel
-  let pieT = 0;               // #9 timer de spawn de tortas
-  let hammerSpots = HAMMER_SPOTS;   // spots vigentes (se re-siembran por nivel en #3)
+  let rivets = [], items = []; // #4 rivets · #6 Pauline's collectibles
+  let belt = { g: -1, dir: 0 };// #9 the conveyor girder active this level
+  let pieT = 0;               // #9 cake spawn timer
+  let hammerSpots = HAMMER_SPOTS;   // the spots in force (they are re-sown per level in #3)
   let oilLit = false, oilT = 0;
-  const isRivetLevel = () => gh.level >= 3 && gh.level % 4 === 0;   // #4: cada 4 niveles, etapa de remaches
+  const isRivetLevel = () => gh.level >= 3 && gh.level % 4 === 0;   // #4: every 4 levels, a rivet stage
 
-  // #8 HAZARDS (draft "elegí tu veneno"): multiplicadores ACOTADOS sobre las perillas ya clampeadas +
-  // un multiplicador de score acorde. Todos se aplican DENTRO de los clamps existentes, así el peor caso
-  // = dificultad de nivel-alto ya alcanzable, nunca más allá. CALMA x1 siempre disponible.
+  // #8 HAZARDS (the "pick your poison" draft): BOUNDED multipliers over the already-clamped knobs +
+  // a matching score multiplier. They are all applied INSIDE the existing clamps, so the worst case
+  // = a high-level difficulty already reachable, never beyond. CALM x1 is always available.
   const HAZARDS = [
     { id:'calma',    name:'CALMA',            spd:1.00, gap:1.0, desc:0.00, fb:0, mult:1.0  },
     { id:'veloz',    name:'BARRILES VELOCES', spd:1.15, gap:1.0, desc:0.00, fb:0, mult:1.25 },
@@ -692,7 +692,7 @@
     { id:'infernal', name:'INFERNAL',         spd:1.08, gap:0.9, desc:0.00, fb:1, mult:1.45 },
   ];
   const CALMA = HAZARDS[0];
-  const FRENZY_SPD = 1.25, FRENZY_GAP = 0.55;               // #5 furia: bump de velocidad/cadencia (clampeado)
+  const FRENZY_SPD = 1.25, FRENZY_GAP = 0.55;               // #5 rage: a bump in speed/cadence (clamped)
   const hazSpd  = () => gh.hazard ? gh.hazard.spd  : 1;
   const hazGap  = () => gh.hazard ? gh.hazard.gap  : 1;
   const hazDesc = () => gh.hazard ? gh.hazard.desc : 0;
@@ -705,25 +705,25 @@
     return Math.max(gh.frenzy ? 0.9 : 1.3, g) + rnd(0, gh.frenzy ? 0.4 : 0.9);
   };
   const descProb  = () => { const base = Math.min(0.5, 0.22 + 0.04 * gh.level + hazDesc()); return mario.g < curBarrelG ? Math.min(0.65, base + 0.18) : base; };
-  let curBarrelG = 5;         // hack: girder del barril que está decidiendo (para descProb)
+  let curBarrelG = 5;         // hack: the girder of the barrel currently deciding (for descProb)
 
   function addScore(n, fx, fy, color) {
     gh.score += n;
-    gh.total += n; localStorage.setItem('dk_total', String(gh.total));    // #7 puntos de por vida
+    gh.total += n; localStorage.setItem('dk_total', String(gh.total));    // #7 lifetime points
     if (gh.score > gh.hi) {
       gh.hi = gh.score; gh.newHi = true;
-      localStorage.setItem(gh.daily ? dailyKey() : 'dk_hiscore', String(gh.hi));   // #3 daily va a clave aparte
+      localStorage.setItem(gh.daily ? dailyKey() : 'dk_hiscore', String(gh.hi));   // #3 daily goes to a separate key
     }
     popups.push({ text: String(n), fx, fy, t: 0, color: color || '#ffd23f' });
   }
-  // puntos de JUGADA (saltar/martillar): los escala el multiplicador del hazard. El bonus de nivel,
-  // remaches y coleccionables NO se escalan (van por addScore directo).
+  // PLAY points (jumping/hammering): the hazard's multiplier scales them. The level bonus,
+  // rivets and collectibles are NOT scaled (they go through addScore directly).
   function gpScore(n, fx, fy, color) { addScore(Math.round(n * hazMult()), fx, fy, color); }
 
   // ════════════════ INPUT ════════════════
   const keys = {};                                  // e.code → bool (teclado)
-  const vk = { left: false, right: false, up: false, down: false };   // botones de la barra
-  let jumpBuf = 0;                                  // buffer de salto (s) — toque o Space
+  const vk = { left: false, right: false, up: false, down: false };   // bar buttons
+  let jumpBuf = 0;                                  // jump buffer (s) — a touch or Space
 
   function input() {
     return {
@@ -738,7 +738,7 @@
   const mario = {
     fx: 0, fy: 0, g: 0, dir: 1,
     state: 'ground',          // 'ground' | 'air' | 'climb'
-    vx: 0, vy: 0, airVx: 0, peakY: 0,   // vx = velocidad horizontal (con inercia)
+    vx: 0, vy: 0, airVx: 0, peakY: 0,   // vx = horizontal velocity (with inertia)
     onLadder: null, hammerT: 0, hamSwing: 0,
     animT: 0, deadT: 0,
 
@@ -756,38 +756,38 @@
         const mv = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);
         if (mv !== 0) {
           this.dir = mv;
-          const turning = mv * this.vx < 0;                                 // cambio de dirección → giro más ágil
+          const turning = mv * this.vx < 0;                                 // change of direction → a nimbler turn
           this.vx += mv * RUN_ACCEL * (turning ? TURN_BOOST : 1) * dt;
           this.vx = clamp(this.vx, -WALK, WALK);
           this.animT += dt;
         } else {
-          // fricción: conserva inercia y se DESLIZA hasta frenar (no corta de golpe)
+          // friction: it keeps inertia and SLIDES to a stop (it does not cut out abruptly)
           const dec = RUN_DECEL * dt;
           if (this.vx > 0) this.vx = Math.max(0, this.vx - dec);
           else if (this.vx < 0) this.vx = Math.min(0, this.vx + dec);
           if (Math.abs(this.vx) > 0.003) this.animT += dt; else this.animT = 0;
         }
         this.fx += this.vx * dt;
-        if (this.g === belt.g) this.fx += belt.dir * WALK * BELT_SPD * dt;   // #9 deriva de cinta (hacia el extremo seguro)
+        if (this.g === belt.g) this.fx += belt.dir * WALK * BELT_SPD * dt;   // #9 conveyor drift (towards the safe end)
 
         const g = GIRDERS[this.g];
         if (this.g === PAULINE_G) {
-          this.fx = clamp(this.fx, g.x0 + 0.02, g.x1 - 0.02);     // de la plataforma de Pauline no se cae
+          this.fx = clamp(this.fx, g.x0 + 0.02, g.x1 - 0.02);     // you cannot fall off Pauline's platform
           this.fy = surfY(this.g, this.fx); this.vx = 0;
         } else if (this.fx < g.x0 + 0.004 || this.fx > g.x1 - 0.004) {
-          this.state = 'air'; this.vy = 0; this.airVx = this.vx; this.peakY = this.fy;   // se cayó del borde (lleva su inercia) → caída mortal
+          this.state = 'air'; this.vy = 0; this.airVx = this.vx; this.peakY = this.fy;   // fell off the edge (carrying its inertia) → a fatal fall
         } else {
           this.fx = clamp(this.fx, 0.012, 0.988);
           this.fy = surfY(this.g, this.fx);
         }
 
-        // saltar (toque en pantalla o Space) — lleva el momentum horizontal actual; con martillo no se salta
+        // jump (a touch on the screen or Space) — it carries the current horizontal momentum; with a hammer you cannot jump
         if (this.state === 'ground' && jumpBuf > 0 && this.hammerT <= 0) {
           jumpBuf = 0;
           this.state = 'air'; this.vy = -JUMP_V; this.airVx = this.vx; this.peakY = this.fy;
           sfx.jump();
         }
-        // trepar — sin martillo
+        // climb — without a hammer
         else if (this.state === 'ground' && this.hammerT <= 0) {
           if (inp.up) {
             const l = this.ladderFrom('up');
@@ -799,7 +799,7 @@
         }
       }
       else if (this.state === 'air') {
-        const mv = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);                 // control aéreo suave
+        const mv = (inp.right ? 1 : 0) - (inp.left ? 1 : 0);                 // gentle air control
         if (mv !== 0) { this.dir = mv; this.airVx = clamp(this.airVx + mv * AIR_ACCEL * dt, -WALK, WALK); }
         const prevY = this.fy;
         this.fy += this.vy * dt; this.vy += GRAV * dt;
@@ -807,7 +807,7 @@
         this.fx = clamp(this.fx, 0.012, 0.988);
         if (this.fy < this.peakY) this.peakY = this.fy;
         if (this.vy > 0) {
-          // aterrizar: cruzar la superficie de alguna viga (de arriba hacia abajo, x dentro del tramo)
+          // land: crossing the surface of some girder (from above downwards, x within the span)
           let landG = -1, landY = 10;
           for (let gi = 0; gi < GIRDERS.length; gi++) {
             const g = GIRDERS[gi];
@@ -817,11 +817,11 @@
           }
           if (landG >= 0) {
             const fall = landY - this.peakY;
-            this.g = landG; this.fy = landY; this.state = 'ground'; this.vy = 0; this.vx = this.airVx;   // retoma el momentum
-            if (fall > FALL_DEATH) { die(); return; }              // caerse más de tu propio salto = perdés la ronda
+            this.g = landG; this.fy = landY; this.state = 'ground'; this.vy = 0; this.vx = this.airVx;   // it picks the momentum back up
+            if (fall > FALL_DEATH) { die(); return; }              // falling further than your own jump = you lose the round
           }
         }
-        if (this.fy > 1.05) { die(); return; }                     // se fue del playfield
+        if (this.fy > 1.05) { die(); return; }                     // it left the playfield
       }
       else if (this.state === 'climb') {
         const dy = (inp.down ? 1 : 0) - (inp.up ? 1 : 0);
@@ -834,7 +834,7 @@
         }
       }
 
-      // martillo: agarrar el pickup saltando hasta él
+      // hammer: grab the pickup by jumping up to it
       for (const hm of hammers) {
         if (hm.taken) continue;
         const hx = ppx(hm.x), hy = ppy(surfY(hm.g, hm.x) - HAMMER_HOVER);
@@ -844,7 +844,7 @@
         }
       }
 
-      // #4 remaches: caminarlos (en piso) los saca; completar los 8 abre el WARP (bonus al llegar a Pauline)
+      // #4 rivets: walking over them (on the floor) removes them; completing all 8 opens the WARP (a bonus on reaching Pauline)
       if (rivets.length && this.state === 'ground') {
         for (const rv of rivets) {
           if (rv.popped || rv.g !== this.g) continue;
@@ -854,7 +854,7 @@
           }
         }
       }
-      // #6 coleccionables: tocarlos (piso o aire) suma; juntar los 3 da bonus de set (+2000)
+      // #6 collectibles: touching them (floor or air) scores; collecting all 3 gives a set bonus (+2000)
       for (const it of items) {
         if (it.taken || it.g !== this.g) continue;
         if (Math.abs(this.fx - it.x) < 0.03) {
@@ -882,7 +882,7 @@
       this.vx = 0; this.animT = 0;
     },
 
-    // hitbox del martillo (px) — alterna arriba / al frente
+    // hammer hitbox (px) — it alternates above / in front
     hammerBox() {
       if (this.hammerT <= 0) return null;
       const up = (Math.floor(this.hamSwing / 0.16) % 2) === 0;
@@ -898,7 +898,7 @@
       const px = ppx(this.fx), py = ppy(this.fy) - mh / 2;
       if (gh.phase !== 'dying' && this.state !== 'climb') shadowAt(px, ppy(surfY(this.g, this.fx)), mh * 0.36);
       if (gh.phase === 'dying') {
-        // animación de muerte: congelado → giro → tendido
+        // death animation: frozen → spin → laid out
         if (this.deadT < 0.4) drawSpr(M_IDLE, px, py, mh, this.dir < 0);
         else if (this.deadT < 1.3) drawSpr(M_DEAD, px, py, mh, false, (this.deadT - 0.4) * 14);
         else drawSpr(M_DEAD, px, py + mh * 0.18, mh, false, Math.PI / 2);
@@ -912,7 +912,7 @@
       } else if (this.animT > 0) {
         spr = (Math.floor(this.animT / 0.12) % 2) === 0 ? M_RUN : M_IDLE;
       }
-      // parpadeo cuando el martillo está por terminar
+      // a blink when the hammer is about to run out
       const flash = this.hammerT > 0 && this.hammerT < 2 && (Math.floor(this.hammerT / 0.12) % 2) === 0;
       drawSpr(spr, px, py, mh, flip, 0, flash ? 0.45 : 1);
       // martillo en mano
@@ -925,7 +925,7 @@
     },
   };
 
-  // colisión genérica Mario vs entidad (centros y semi-tamaños en px, con achique para perdonar)
+  // generic Mario-vs-entity collision (centres and half-sizes in px, shrunk to be forgiving)
   function hitsMario(efx, efy, eh, ewRatio) {
     const mh = MH * PF.h, mw = mh * (12 / 15);
     const eph = eh * PF.h, epw = eph * ewRatio;
@@ -940,8 +940,8 @@
       this.g = 5; this.fx = DK_X + 0.10; this.fy = surfY(5, this.fx);
       this.wild = wild;                                                      // #2 barril salvaje
       this.dir = rollDir(5);
-      // velocidad: nivel × hazard, ×1.5 si salvaje, ×1.25 en furia — pero clampeada a 1.9× la base para que
-      // el pico nunca sea inesquivable (gotcha de balance del review).
+      // speed: level × hazard, ×1.5 if wild, ×1.25 in rage — but clamped to 1.9× the base so that
+      // the peak is never unavoidable (a balance gotcha from the review).
       this.spd = Math.min(BARREL_SPD * 1.9, BARREL_SPD * lvlSpeed() * (wild ? 1.5 : 1) * (gh.frenzy ? FRENZY_SPD : 1));
       this.state = 'roll';    // 'roll' | 'ladder' | 'air'
       this.vy = 0; this.vx = 0; this.rotT = 0; this.scored = false; this.dead = false;
@@ -953,8 +953,8 @@
         this.fx += this.dir * this.spd * dt;
         this.rotT += dt;
         this.fy = surfY(this.g, this.fx);
-        // ¿bajar por una escalera? (sólo al cruzarla; más probable si Mario está abajo). El SALVAJE nunca
-        // baja escaleras: siempre rueda hasta el borde y cae viga por viga.
+        // come down a ladder? (only on crossing it; more likely if Mario is below). The WILD one never
+        // comes down ladders: it always rolls to the edge and falls girder by girder.
         curBarrelG = this.g;
         if (!this.wild) {
           for (const l of LADDERS) {
@@ -968,9 +968,9 @@
         if (this.state === 'roll') {
           const g = GIRDERS[this.g];
           if ((this.dir > 0 && this.fx > g.x1 + 0.004) || (this.dir < 0 && this.fx < g.x0 - 0.004)) {
-            this.state = 'air'; this.vy = 0; this.vx = this.dir * 0.04;    // cae por el borde
+            this.state = 'air'; this.vy = 0; this.vx = this.dir * 0.04;    // it falls off the edge
           }
-          // llegó al tambor de aceite → desaparece (y quizás sale una bola de fuego)
+          // it reached the oil drum → it disappears (and a fireball may come out)
           if (this.g === 0 && this.fx < OIL_X + 0.025) {
             this.dead = true; oilLit = true;
             const maxFb = Math.min(3, (gh.level >= 3 ? 2 : 1) + (gh.hazard ? gh.hazard.fb : 0));   // #8 INFERNAL +1
@@ -1001,14 +1001,14 @@
         if (this.fy > 1.1) this.dead = true;
       }
 
-      // puntos por saltarlo: Mario en el aire, bien arriba del barril. #1 combo: encadenar saltos de
-      // barriles DISTINTOS dentro de la ventana sube el multiplicador (tope x5 / +500 pre-hazard).
+      // points for jumping it: Mario in the air, well above the barrel. #1 combo: chaining jumps over
+      // DIFFERENT barrels within the window raises the multiplier (cap x5 / +500 pre-hazard).
       if (!this.scored && mario.state === 'air' &&
           Math.abs(mario.fx - this.fx) < 0.045 &&
           (this.fy - mario.fy) > 0.012 && (this.fy - mario.fy) < 0.11) {
         this.scored = true;
         gh.comboT = 0.85; gh.comboN = Math.min(5, gh.comboN + 1);
-        const base = this.wild ? 150 : 100;                                 // #2 el salvaje vale más
+        const base = this.wild ? 150 : 100;                                 // #2 the wild one is worth more
         gpScore(Math.min(500, base * gh.comboN), this.fx, this.fy - 0.05, gh.comboN >= 3 ? '#ff8c1a' : '#ffd23f');
         if (gh.comboN >= 2) popups.push({ text: 'COMBO x' + gh.comboN, fx: this.fx, fy: this.fy - 0.10, t: 0, color: '#7fd4ff' });
         sfx.score();
@@ -1037,7 +1037,7 @@
     }
   }
 
-  // ════════════════ BOLA DE FUEGO ════════════════
+  // ════════════════ FIREBALL ════════════════
   class Fireball {
     constructor() {
       this.g = 0; this.fx = OIL_X; this.fy = surfY(0, this.fx);
@@ -1059,7 +1059,7 @@
         const g = GIRDERS[this.g];
         if (this.fx < g.x0 + 0.01 || this.fx > g.x1 - 0.01) { this.fx = clamp(this.fx, g.x0 + 0.01, g.x1 - 0.01); this.dir *= -1; }
         this.fy = surfY(this.g, this.fx);
-        // trepar escaleras (también las rotas) buscando la viga de Mario
+        // climbs ladders (the broken ones too) looking for Mario's girder
         for (const l of LADDERS) {
           const fromHere = (l.lo === this.g && mario.g > this.g) ? 'up' : (l.hi === this.g && mario.g < this.g) ? 'down' : null;
           if (!fromHere) continue;
@@ -1094,14 +1094,14 @@
     }
   }
 
-  // ════════════════ #9 TORTA (rueda por la cinta-fábrica) ════════════════
+  // ════════════════ #9 CAKE (it rolls along the factory conveyor) ════════════════
   class Pie {
     constructor() {
       this.g = belt.g;
-      const open = rollDir(this.g);                  // hacia el borde abierto (bajo)
+      const open = rollDir(this.g);                  // towards the open (low) edge
       this.dir = open;
       const gg = GIRDERS[this.g];
-      this.fx = open > 0 ? gg.x0 + 0.04 : gg.x1 - 0.04;   // arranca del extremo seguro
+      this.fx = open > 0 ? gg.x0 + 0.04 : gg.x1 - 0.04;   // it starts from the safe end
       this.fy = surfY(this.g, this.fx);
       this.spd = BARREL_SPD * 0.8 * lvlSpeed();
       this.rotT = 0; this.scored = false; this.dead = false;
@@ -1111,8 +1111,8 @@
       this.rotT += dt;
       const gg = GIRDERS[this.g];
       this.fy = surfY(this.g, this.fx);
-      if (this.fx < gg.x0 - 0.01 || this.fx > gg.x1 + 0.01) { this.dead = true; return; }   // se cae del borde → fin
-      // saltarla = +100 (alimenta el combo) · martillazo = +300 (mismo score que un barril, sin tier nuevo)
+      if (this.fx < gg.x0 - 0.01 || this.fx > gg.x1 + 0.01) { this.dead = true; return; }   // it falls off the edge → the end
+      // jumping it = +100 (it feeds the combo) · a hammer blow = +300 (the same score as a barrel, no new tier)
       if (!this.scored && mario.state === 'air' && Math.abs(mario.fx - this.fx) < 0.045 &&
           (this.fy - mario.fy) > 0.012 && (this.fy - mario.fy) < 0.11) {
         this.scored = true;
@@ -1136,9 +1136,9 @@
       drawSpr(PIE_SPR, ppx(this.fx), ppy(this.fy) - bh / 2, bh * 1.1, this.dir < 0);
     }
   }
-  // viga-cinta del nivel (sembrada por run, no parity predecible). Deriva hacia el extremo CLAMP-seguro
-  // (-rollDir): en vigas 2/3 el extremo opuesto al de caída está protegido por el clamp → un Mario quieto
-  // choca la pared, nunca se cae.
+  // the level's conveyor girder (sown per run, not predictable parity). It drifts towards the CLAMP-safe end
+  // (-rollDir): on girders 2/3 the end opposite the fall is protected by the clamp → a Mario standing still
+  // bumps into the wall, he never falls.
   function beltFor(level) {
     if (level < 2) return { g: -1, dir: 0 };
     const rng = mulberry32((gh.seed ^ Math.imul(level, 0x27D4EB2F)) >>> 0);
@@ -1169,7 +1169,7 @@
     ctx.restore();
   }
 
-  // ════════════════ DONKEY KONG (el que tira barriles) ════════════════
+  // ════════════════ DONKEY KONG (the one throwing barrels) ════════════════
   const dk = {
     t: 0, phase: 'beat', nextThrow: 1.2, thrown: false,
     reset() { this.t = 0; this.phase = 'beat'; this.nextThrow = 1.2; this.thrown = false; },
@@ -1181,7 +1181,7 @@
         if (this.t >= 0.45) { this.phase = 'throw'; this.t = 0; }
       } else { // throw
         if (!this.thrown && this.t >= 0.18 && barrels.length < MAX_BARRELS) {
-          const wild = gh.level >= 3 && Math.random() < Math.min(0.32, 0.08 * (gh.level - 2));   // #2 barril salvaje (spike tardío)
+          const wild = gh.level >= 3 && Math.random() < Math.min(0.32, 0.08 * (gh.level - 2));   // #2 wild barrel (a late spike)
           barrels.push(new Barrel(wild)); this.thrown = true;
           (wild ? sfx.throwWild : sfx.throw_)();
         }
@@ -1197,7 +1197,7 @@
         drawSpr(fr === 0 ? DK_UP : DK_CHEST, px, py, h);
       } else if (this.phase === 'grab') {
         drawSpr(DK_CHEST, px, py, h);
-        drawSpr(BARREL_FR[0], px + h * 0.42, py + h * 0.18, BH * PF.h);     // barril en las manos
+        drawSpr(BARREL_FR[0], px + h * 0.42, py + h * 0.18, BH * PF.h);     // barrel in his hands
       } else {
         drawSpr(DK_UP, px, py, h);
         drawSpr(BARREL_FR[1], px + h * 0.55, py - h * 0.05, BH * PF.h);
@@ -1214,14 +1214,14 @@
       const px = ppx(PAULINE_X), py = ppy(surfY(PAULINE_G, PAULINE_X)) - h / 2;
       const fr = (Math.floor(this.t / 0.55) % 2) === 0 ? PAU_1 : PAU_2;
       drawSpr(fr, px, py, h, mario.fx > PAULINE_X);
-      // grito de auxilio intermitente
+      // intermittent cry for help
       if ((this.t % 4) < 1.4 && gh.phase === 'play') {
         ptext('HELP!', PAULINE_X, surfY(PAULINE_G, PAULINE_X) - PAUH - 0.022, 0.013, '#ffffff');
       }
     },
   };
 
-  // ════════════════ FLUJO DE PARTIDA ════════════════
+  // ════════════════ GAME FLOW ════════════════
   function startGame(mode) {
     gh.mode = mode || 'classic';
     gh.daily = gh.mode === 'daily';
@@ -1235,25 +1235,25 @@
     barrels = []; fireballs = []; popups = []; pies = [];
     applyLevelLayout();                                      // #3 reroll escaleras/jitter/martillos sembrados + bakeLevel
     hammers = hammerSpots.map(s => ({ g: s.g, x: s.x, taken: false }));
-    setupRivetsItems();                                     // #4 remaches / #6 coleccionables (según nivel)
-    belt = beltFor(gh.level); pieT = 1.5;                   // #9 viga-cinta + delay inicial de torta
+    setupRivetsItems();                                     // #4 rivets / #6 collectibles (depending on the level)
+    belt = beltFor(gh.level); pieT = 1.5;                   // #9 conveyor girder + the initial cake delay
     oilLit = false; oilT = 0;
     dk.reset(); mario.reset();
     gh.bonus = Math.min(8000, 5000 + 500 * (gh.level - 1)); gh.bonusT = 0;
     gh.comboN = 0; gh.comboT = 0;                           // #1
     gh.frenzy = false; gh.frenzyWarn = false; gh.frenzyDone = false; gh.frenzyT = 0;   // #5
     gh.frenzyAt = Math.max(7, 15 - gh.level);
-    gh.rivetWarp = rivets.length > 0 && rivets.every(r => r.popped);   // #4 (restaura el warp si ya barriste todo y reapareciste)
-    gh.hazard = CALMA; gh.hazardChoices = pickHazardChoices();   // #8 (CALMA por defecto hasta elegir)
+    gh.rivetWarp = rivets.length > 0 && rivets.every(r => r.popped);   // #4 (it restores the warp if you already swept everything and respawned)
+    gh.hazard = CALMA; gh.hazardChoices = pickHazardChoices();   // #8 (CALM by default until you choose)
     gh.phase = 'intro'; gh.phaseT = 0;
     jumpBuf = 0;
   }
-  function respawn() { startLevel(); }                       // como el arcade: el nivel se reinicia limpio
+  function respawn() { startLevel(); }                       // like the arcade: the level restarts clean
   function die() {
     if (gh.phase !== 'play') return;
     gh.phase = 'dying'; gh.phaseT = 0; mario.deadT = 0;
-    gh.comboN = 0; gh.comboT = 0;                           // #1: el combo no sobrevive la muerte
-    gh.frenzy = false; gh.frenzyWarn = false;              // #5: la furia no se dibuja sobre la animación de muerte
+    gh.comboN = 0; gh.comboT = 0;                           // #1: the combo does not survive death
+    gh.frenzy = false; gh.frenzyWarn = false;              // #5: the rage is not drawn over the death animation
     sfx.death();
   }
   function winLevel() {
@@ -1264,17 +1264,17 @@
     sfx.win();
   }
   function backToMenu() {
-    restoreOriginalLayout(); bakeLevel();                   // que el menú muestre el tablero canónico de fondo
+    restoreOriginalLayout(); bakeLevel();                   // so the menu shows the canonical board in the background
     gh.screen = 'menu';
   }
 
-  // ════════════════ #3 VARIEDAD DE TABLERO (sembrada) ════════════════
+  // ════════════════ #3 BOARD VARIETY (seeded) ════════════════
   function restoreOriginalLayout() {
     for (let i = 0; i < LADDERS.length; i++) LADDERS[i].broken = LADDERS_ORIG_BROKEN[i];
     for (let i = 0; i < GIRDERS.length; i++) { GIRDERS[i].yL = GIRDERS_ORIG[i].yL; GIRDERS[i].yR = GIRDERS_ORIG[i].yR; }
     hammerSpots = HAMMER_SPOTS.map(s => ({ g: s.g, x: s.x }));
   }
-  // ¿existe una cadena de escaleras SANAS 0→6, cada una con x dentro de AMBAS vigas? (invariante de ganabilidad).
+  // does a chain of SOUND ladders 0→6 exist, each with an x inside BOTH girders? (the winnability invariant).
   function layoutWinnable() {
     const reach = new Set([0]);
     let changed = true;
@@ -1290,33 +1290,33 @@
   }
   function applyLevelLayout() {
     restoreOriginalLayout();
-    // Nivel 1 en classic = tablero hand-authored (intro estable). Daily + niveles 2+ = sembrado por nivel.
+    // Level 1 in classic = the hand-authored board (a stable intro). Daily + levels 2+ = seeded per level.
     if (gh.level === 1 && !gh.daily) { bakeLevel(); return; }
     const rng = mulberry32((gh.seed ^ Math.imul(gh.level, 0x9E3779B1)) >>> 0);
     const shuffle = arr => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = arr[i]; arr[i] = arr[j]; arr[j] = t; } return arr; };
-    // 1) Reroll de rotas: MISMA cuenta por tramo que el original → sólo cambia CUÁL está rota, no la dificultad.
+    // 1) Broken reroll: the SAME count per tier as the original → only WHICH one is broken changes, not the difficulty.
     TIERS.forEach((idxs, lo) => {
       const order = shuffle(idxs.slice()), nB = BROKEN_PER_TIER[lo] || 0;
       order.forEach((idx, k) => { LADDERS[idx].broken = k < nB; });
     });
-    // 2) Jitter sutil de pendiente en vigas 1..4 (no toca x-extents ni topología; nunca invierte la pendiente
-    //    ni convierte una caída de 1 viga en una de 2 → FALL_DEATH intacto).
+    // 2) Subtle slope jitter on girders 1..4 (it does not touch the x-extents or the topology; it never inverts the slope
+    //    or turns a 1-girder fall into a 2-girder one → FALL_DEATH intact).
     for (let gi = 1; gi <= 4; gi++) {
       const o = GIRDERS_ORIG[gi], d = (rng() * 2 - 1) * 0.012;
       GIRDERS[gi].yL = o.yL + d; GIRDERS[gi].yR = o.yR - d * 0.6;
     }
-    // 3) Re-sembrar 2 martillos en vigas 1..4 (excluye 0=aceite/fuego y 5=DK), con margen al borde para el salto.
+    // 3) Re-sow 2 hammers on girders 1..4 (excluding 0=oil/fire and 5=DK), with a margin to the edge for the jump.
     const hgs = shuffle([1, 2, 3, 4]).slice(0, 2);
     hammerSpots = hgs.map(g => ({ g, x: GIRDERS[g].x0 + 0.10 + rng() * (GIRDERS[g].x1 - GIRDERS[g].x0 - 0.20) }));
-    // 4) Red de seguridad: si un seed diera algo no ganable (no debería, la cuenta por tramo lo garantiza),
-    //    volver al tablero canónico.
+    // 4) Safety net: if a seed produced something unwinnable (it should not, the per-tier count guarantees it),
+    //    fall back to the canonical board.
     if (!layoutWinnable()) restoreOriginalLayout();
     bakeLevel();
   }
 
   // ════════════════ #4 REMACHES / #6 COLECCIONABLES ════════════════
-  // Para no saturar el tablero, ALTERNAN por nivel: niveles de remache (cada 4) muestran 8 remaches a
-  // barrer; el resto, 3 coleccionables de Pauline sembrados. Ambos son score puro y opcional.
+  // So as not to clutter the board, they ALTERNATE per level: rivet levels (every 4) show 8 rivets to
+  // sweep; the rest, 3 of Pauline's collectibles sown around. Both are pure, optional score.
   const ITEM_SPOTS = [
     { g:1, x:0.30 }, { g:1, x:0.66 }, { g:2, x:0.24 }, { g:2, x:0.80 },
     { g:3, x:0.34 }, { g:3, x:0.70 }, { g:4, x:0.28 }, { g:4, x:0.78 },
@@ -1328,8 +1328,8 @@
   ];
   function setupRivetsItems() {
     rivets = []; items = [];
-    // El estado tomado/popped persiste DENTRO de una vida: un respawn en el MISMO nivel no re-otorga score.
-    // Se limpia sólo cuando el nivel realmente avanza (gh.level cambia).
+    // The taken/popped state persists WITHIN a life: a respawn on the SAME level does not re-award score.
+    // It is only cleared when the level really advances (gh.level changes).
     if (gh.pickupLevel !== gh.level) { gh.pickupLevel = gh.level; gh.rivetsPopped = []; gh.itemsTaken = []; }
     if (isRivetLevel()) {
       let ri = 0;
@@ -1347,8 +1347,8 @@
   }
 
   // ════════════════ #5 FURIA (pacing intra-nivel) ════════════════
-  // Una vez por nivel: avisa 1.5 s antes (cartel + sonido), después 6 s de cadencia/velocidad spikeada
-  // (clampeadas en spawnGap()/Barrel). La velocidad NO sube durante el aviso → telegrafía honesta.
+  // Once per level: it warns 1.5 s ahead (a card + a sound), then 6 s of spiked cadence/speed
+  // (clamped in spawnGap()/Barrel). The speed does NOT rise during the warning → honest telegraphing.
   function updateFrenzy(dt) {
     if (gh.frenzyDone) return;
     gh.frenzyT += dt;
@@ -1369,9 +1369,9 @@
     }
   }
 
-  // ════════════════ #8 DRAFT DE HAZARD ════════════════
-  const HAZ_PILL_Y = [0.56, 0.66];     // y (fracción) de los dos pills del draft (y zona de tap)
-  function pickHazardChoices() {        // izq = CALMA (seguro x1), der = un hazard picante (más riesgo, más score)
+  // ════════════════ #8 HAZARD DRAFT ════════════════
+  const HAZ_PILL_Y = [0.56, 0.66];     // y (fraction) of the draft's two pills (and the tap zone)
+  function pickHazardChoices() {        // left = CALM (safe x1), right = a spicy hazard (more risk, more score)
     const spicy = HAZARDS.slice(1);
     const rng = mulberry32((gh.seed ^ Math.imul(gh.level, 0xC2B2AE35) ^ 0x9) >>> 0);
     return [CALMA, spicy[Math.floor(rng() * spicy.length)]];
@@ -1380,8 +1380,8 @@
     if (gh.phase !== 'intro') return;
     gh.hazard = (gh.hazardChoices && gh.hazardChoices[i]) || CALMA;
     gh.phase = 'play'; gh.phaseT = 0;
-    jumpBuf = 0;                        // que el tap/tecla de elegir NO bufferee un salto al arrancar
-    keys.ArrowUp = keys.ArrowDown = keys.ArrowLeft = keys.ArrowRight = false;   // ni mueva a Mario con la flecha de elegir
+    jumpBuf = 0;                        // so the choosing tap/key does NOT buffer a jump on starting
+    keys.ArrowUp = keys.ArrowDown = keys.ArrowLeft = keys.ArrowRight = false;   // or move Mario with the choosing arrow
   }
   function drawHazardPill(hz, fy) {
     const fp = Math.round(0.016 * PF.h);
@@ -1399,7 +1399,7 @@
     ctx.fillStyle = '#fff'; ctx.fillText(label, ppx(0.5), ppy(fy));
   }
 
-  // ════════════════ HORNEADO DEL NIVEL (vigas + escaleras + tambor) ════════════════
+  // ════════════════ LEVEL BAKING (girders + ladders + drum) ════════════════
   let levelCv = null, lctx = null;
   function bakeLevel() {
     levelCv = levelCv || document.createElement('canvas');
@@ -1408,7 +1408,7 @@
     lctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     lctx.clearRect(0, 0, W, H);
 
-    // escaleras primero (las vigas tapan la unión). Horneado → el glow (shadowBlur) es gratis.
+    // ladders first (the girders cover the join). Baked → the glow (shadowBlur) is free.
     for (const l of LADDERS) {
       const x = ppx(l.x);
       const top = ppy(surfY(l.hi, l.x)), foot = ppy(surfY(l.lo, l.x));
@@ -1433,8 +1433,8 @@
       }
     }
 
-    // vigas estilo DK modernizadas: relleno con gradiente vertical (volumen) + entramado tenue + rim
-    // superior brillante con glow horneado + remaches.
+    // modernised DK-style girders: a fill with a vertical gradient (volume) + a faint lattice + a bright
+    // top rim with a baked glow + rivets.
     const th = PF.h * 0.020;
     for (const g of GIRDERS) {
       const x0 = ppx(g.x0), x1 = ppx(g.x1), y0 = ppy(g.yL), y1 = ppy(g.yR);
@@ -1454,7 +1454,7 @@
         lctx.beginPath(); lctx.moveTo(x, yy + th); lctx.lineTo(x + th, yy); lctx.stroke();
       }
       lctx.restore();
-      // rim superior brillante con glow (horneado → shadowBlur gratis)
+      // bright top rim with glow (baked → shadowBlur for free)
       lctx.save();
       lctx.shadowColor = 'rgba(255,93,146,0.9)'; lctx.shadowBlur = Math.max(4, PF.h * 0.010);
       lctx.strokeStyle = '#ff7da8'; lctx.lineWidth = Math.max(1.5, PF.h * 0.0045);
@@ -1462,7 +1462,7 @@
       lctx.restore();
       lctx.strokeStyle = 'rgba(120,20,55,0.9)'; lctx.lineWidth = 1;
       lctx.beginPath(); lctx.moveTo(x0, y0 + th); lctx.lineTo(x1, y1 + th); lctx.stroke();
-      // remaches a lo largo del rim
+      // rivets along the rim
       lctx.fillStyle = 'rgba(255,185,210,0.5)';
       const rstep = PF.w * 0.06, rr = Math.max(1, PF.w * 0.004);
       for (let x = x0 + rstep * 0.5; x < x1; x += rstep) {
@@ -1472,7 +1472,7 @@
       }
     }
 
-    // tambor de aceite (cuerpo; la llama va animada encima)
+    // oil drum (the body; the flame is animated on top)
     const oh = OILH * PF.h;
     const ox = ppx(OIL_X), oy = ppy(surfY(0, OIL_X)) - oh / 2;
     lctx.imageSmoothingEnabled = false;
@@ -1495,8 +1495,8 @@
     const pw = Math.min(W, H * ASPECT);
     PF.w = pw; PF.h = pw / ASPECT;
     PF.x = (W - PF.w) / 2; PF.y = (H - PF.h) / 2;
-    // gradientes de fondo (screen-space, una sola vez por resize): gabinete + atmósfera del playfield +
-    // viñeta para profundidad (patrón TankWARS/CrazyTanks; nada de shadowBlur por frame).
+    // background gradients (screen-space, once per resize): the cabinet + the playfield's atmosphere +
+    // a vignette for depth (the TankWARS/CrazyTanks pattern; no per-frame shadowBlur).
     bgGrad = ctx.createLinearGradient(0, 0, 0, H);
     bgGrad.addColorStop(0, '#16131d'); bgGrad.addColorStop(1, '#070709');
     pfGrad = ctx.createLinearGradient(0, PF.y, 0, PF.y + PF.h);
@@ -1504,7 +1504,7 @@
     vigGrad = ctx.createRadialGradient(PF.x + PF.w / 2, PF.y + PF.h * 0.42, PF.h * 0.22, PF.x + PF.w / 2, PF.y + PF.h * 0.5, PF.h * 0.72);
     vigGrad.addColorStop(0, 'rgba(0,0,0,0)'); vigGrad.addColorStop(1, 'rgba(0,0,0,0.55)');
     bakeLevel();
-    // Las posiciones viven en fracciones del playfield → el juego sigue donde estaba, sin reset.
+    // The positions live in fractions of the playfield → the game carries on where it was, with no reset.
   }
   window.addEventListener('resize', resize);
 
@@ -1515,7 +1515,7 @@
     ctx.fillStyle = pfGrad || '#000';
     ctx.fillRect(PF.x, PF.y, PF.w, PF.h);
     if (vigGrad) { ctx.fillStyle = vigGrad; ctx.fillRect(PF.x, PF.y, PF.w, PF.h); }
-    // marco neón: glow ancho translúcido + línea fina encima (glow barato, sin shadowBlur por frame)
+    // neon frame: a wide translucent glow + a thin line on top (cheap glow, no per-frame shadowBlur)
     ctx.strokeStyle = 'rgba(255,93,146,0.12)'; ctx.lineWidth = 6;
     ctx.strokeRect(PF.x + 3, PF.y + 3, PF.w - 6, PF.h - 6);
     ctx.strokeStyle = 'rgba(255,93,146,0.5)'; ctx.lineWidth = 1.5;
@@ -1523,7 +1523,7 @@
   }
 
   function drawHUD() {
-    // panel translúcido detrás de la fila de score (legibilidad + look moderno)
+    // translucent panel behind the score row (legibility + a modern look)
     ctx.save();
     roundRectPath(ctx, PF.x + PF.w * 0.02, PF.y + PF.h * 0.006, PF.w * 0.96, PF.h * 0.064, PF.h * 0.012);
     ctx.fillStyle = 'rgba(8,6,14,0.55)'; ctx.fill();
@@ -1531,14 +1531,14 @@
     ctx.restore();
     ptext('PUNTOS', 0.035, 0.022, 0.014, '#ff3b30', 'left');
     ptext(pad(gh.score, 6), 0.035, 0.047, 0.015, '#ffffff', 'left');
-    ptext(gh.daily ? 'DIARIO' : 'RECORD', 0.5, 0.022, 0.014, '#ff3b30');   // #3 daily: récord aparte
+    ptext(gh.daily ? 'DIARIO' : 'RECORD', 0.5, 0.022, 0.014, '#ff3b30');   // #3 daily: a separate high score
     ptext(pad(gh.hi, 6), 0.5, 0.047, 0.015, gh.newHi ? '#ffd23f' : '#ffffff');
     ptext('NIVEL ' + pad(gh.level, 2), 0.965, 0.022, 0.014, '#7fd4ff', 'right');
     ptext('BONUS ' + pad(gh.bonus, 4), 0.965, 0.047, 0.013, '#ffd23f', 'right');
     // vidas en reserva (izq)
     const ih = 0.020 * PF.h;
     for (let i = 0; i < gh.lives - 1; i++) drawSpr(M_IDLE, ppx(0.045 + i * 0.05), ppy(0.078), ih);
-    // tercera línea: combo (centro) · remaches (centro-bajo) · hazard activo (der)
+    // third line: combo (centre) · rivets (centre-bottom) · active hazard (right)
     if (gh.comboN >= 2) ptext('COMBO x' + gh.comboN, 0.5, 0.072, 0.013, '#7fd4ff');           // #1
     if (rivets.length) ptext('REMACHES ' + rivets.filter(r => r.popped).length + '/8', 0.5, 0.095, 0.012, '#7fd4ff');  // #4
     if (gh.hazard && gh.hazard !== CALMA) ptext(gh.hazard.name, 0.965, 0.072, 0.011, '#ffb3c1', 'right');  // #8
@@ -1585,7 +1585,7 @@
     drawBezel();
     ctx.drawImage(levelCv, 0, 0, W, H);
     drawOilFlame();
-    drawBelt();              // #9 chevrons animados de la cinta
+    drawBelt();              // #9 animated conveyor chevrons
     drawRivets();            // #4
     drawItems();             // #6
     drawHammers();
@@ -1619,16 +1619,16 @@
       ptext(gh.daily ? 'FIN — DIARIO' : 'GAME OVER', 0.5, 0.42, 0.024, '#ff3b30');
       ptext(pad(gh.score, 6) + ' PUNTOS', 0.5, 0.50, 0.016, '#ffffff');
       if (gh.newHi) ptext('NEW RECORD!', 0.5, 0.555, 0.015, '#ffd23f');
-      const next = SKINS.find(s => gh.total < s.unlock);                    // #7 feedback "una run más"
+      const next = SKINS.find(s => gh.total < s.unlock);                    // #7 "one more run" feedback
       if (next) ptext('SIG. SKIN ' + next.name + ': ' + pad(Math.max(0, next.unlock - gh.total), 6), 0.5, 0.59, 0.0105, '#9aa3b2');
       if (gh.phaseT % 1 < 0.6) ptext('TAP TO CONTINUE', 0.5, 0.64, 0.013, '#7fd4ff');
     }
   }
 
-  // ════════════════ MENÚ ════════════════
+  // ════════════════ MENU ════════════════
   const SKIN_CAR_Y = 0.55, MENU_PLAY_Y = 0.65, MENU_DAILY_Y = 0.745;
   let menuBarrelT = 0;
-  // píldora pulsante reutilizable (JUGAR / DESAFÍO DIARIO). baseCol = "r,g,b".
+  // a reusable pulsing pill (PLAY / DAILY CHALLENGE). baseCol = "r,g,b".
   function drawPill(label, fy, baseCol) {
     const pulse = 0.6 + 0.4 * Math.sin(perfT * 4);
     const fp = Math.round(0.022 * PF.h);
@@ -1661,7 +1661,7 @@
   function drawMenu(dt) {
     drawBezel();
     ctx.save(); ctx.globalAlpha = 0.14;
-    ctx.drawImage(levelCv, 0, 0, W, H);             // el nivel de fondo, bien tenue
+    ctx.drawImage(levelCv, 0, 0, W, H);             // the level in the background, very faint
     ctx.restore();
 
     const t = perfT, ts = 0.050, shake = Math.sin(t * 1.8) * 0.002;
@@ -1688,7 +1688,7 @@
     if (t % 1.2 < 0.7) ptext('INSERT COIN', 0.5, 0.91, 0.012, '#ffd23f');
   }
   function menuTap(lx, ly) {
-    // #7 swatches de skin (X+Y, antes que los pills para no robarles el tap)
+    // #7 skin swatches (X+Y, before the pills so they do not steal their tap)
     if (Math.abs(ly - ppy(SKIN_CAR_Y)) < PF.h * 0.028) {
       const n = SKINS.length;
       for (let i = 0; i < n; i++) {
@@ -1708,7 +1708,7 @@
   window.addEventListener('keydown', e => {
     keys[e.code] = true;
     const draftIntro = gh.screen === 'game' && gh.phase === 'intro' && gh.hazardChoices && gh.level >= 2;
-    if (draftIntro) {                                          // #8: elegir hazard con teclado (no bufferea salto)
+    if (draftIntro) {                                          // #8: choose a hazard with the keyboard (it does not buffer a jump)
       if (e.code === 'ArrowUp' || e.code === 'ArrowLeft') chooseHazard(0);
       else if (e.code === 'ArrowDown' || e.code === 'ArrowRight') chooseHazard(1);
       else if (e.code === 'Enter' || e.code === 'Space') chooseHazard(0);
@@ -1724,10 +1724,10 @@
   });
   window.addEventListener('keyup', e => { keys[e.code] = false; });
 
-  // Soltar TODO el input al perder foco: si alt-tabeás (o llega una notificación / gesto del SO) con
-  // una tecla apretada, el keyup nunca llega y Mario seguiría caminando solo al volver. NO se llama en
-  // startLevel(): ahí borraría una tecla genuinamente sostenida en el respawn (los botones de la barra
-  // ya se sueltan solos vía lostpointercapture; lo que no tenía red era el mapa `keys` del teclado).
+  // Release ALL input on losing focus: if you alt-tab (or a notification / OS gesture arrives) with
+  // a key held down, the keyup never arrives and Mario would keep walking by himself on returning. It is NOT called in
+  // startLevel(): there it would erase a genuinely held key on respawn (the bar's buttons
+  // already release themselves via lostpointercapture; what had no safety net was the keyboard's `keys` map).
   const clearInput = () => {
     for (const k in keys) keys[k] = false;
     vk.left = vk.right = vk.up = vk.down = false;
@@ -1738,20 +1738,20 @@
   document.addEventListener('visibilitychange', () => { if (document.hidden) clearInput(); });
 
   canvas.addEventListener('pointerdown', e => {
-    ac();                                            // despierta el audio con el primer gesto
+    ac();                                            // wakes the audio with the first gesture
     const r = canvas.getBoundingClientRect();
     const lx = e.clientX - r.left, ly = e.clientY - r.top;
     if (gh.screen === 'menu') { menuTap(lx, ly); return; }
     if (gh.phase === 'over') { backToMenu(); return; }
-    if (gh.phase === 'intro' && gh.hazardChoices && gh.level >= 2) {        // #8 elegir hazard tocando un pill
+    if (gh.phase === 'intro' && gh.hazardChoices && gh.level >= 2) {        // #8 choose a hazard by tapping a pill
       for (let i = 0; i < 2; i++) if (Math.abs(ly - ppy(HAZ_PILL_Y[i])) < PF.h * 0.035) { chooseHazard(i); return; }
       return;
     }
-    jumpBuf = 0.12;                                  // en juego: tocar la pantalla = saltar
+    jumpBuf = 0.12;                                  // in game: touching the screen = jump
   });
 
-  // Botones de la barra con HOLD: pointer capture para no perder el release (gotcha de nipplejs:
-  // los botones sueltos con capture aguantan multitouch sin colgarse).
+  // Bar buttons with HOLD: pointer capture so the release is not lost (the nipplejs gotcha:
+  // hand-rolled buttons with capture survive multitouch without getting stuck).
   function holdable(el, prop) {
     el.addEventListener('pointerdown', e => {
       e.preventDefault();
@@ -1770,10 +1770,10 @@
   holdable(document.getElementById('btnDown'),  'down');
 
   // ════════════════ LOOP ════════════════
-  // OJO mobile: medir SIEMPRE contra el mismo reloj (el now de rAF) y clampear dt — en algunos
-  // WebView performance.now() y el timestamp de rAF tienen épocas distintas (gotcha de TronWeb).
+  // CAREFUL on mobile: ALWAYS measure against the same clock (rAF's now) and clamp dt — in some
+  // WebViews performance.now() and the rAF timestamp have different epochs (the TronWeb gotcha).
   let lastT = null;
-  let perfT = 0;                                     // tiempo acumulado para pulsos de menú
+  let perfT = 0;                                     // accumulated time for the menu's pulses
   function loop(now) {
     if (typeof now !== 'number') now = performance.now();
     if (lastT === null) lastT = now;
@@ -1788,25 +1788,25 @@
     } else {
       if (gh.phase === 'intro') {
         gh.phaseT += dt;
-        // #8 draft de hazard desde nivel 2: NO auto-avanza, espera que elijas un pill (con safety a los 8 s).
+        // #8 hazard draft from level 2: it does NOT auto-advance, it waits for you to choose a pill (with a safety at 8 s).
         const draft = gh.hazardChoices && gh.level >= 2;
         if (!draft) { if (gh.phaseT > 1.3) { gh.phase = 'play'; gh.phaseT = 0; jumpBuf = 0; } }
         else if (gh.phaseT > 8) chooseHazard(0);
       } else if (gh.phase === 'play') {
-        updateFrenzy(dt);                                   // #5 furia (telegrafía + ventana)
+        updateFrenzy(dt);                                   // #5 rage (telegraph + window)
         dk.process(dt);
         pauline.process(dt);
         oilT += dt;
         for (const b of barrels) { b.process(dt); if (gh.phase !== 'play') break; }
         barrels = barrels.filter(b => !b.dead);
-        if (gh.phase === 'play') updatePies(dt);            // #9 cinta: spawn + proceso de tortas
+        if (gh.phase === 'play') updatePies(dt);            // #9 conveyor: spawning + processing cakes
         if (gh.phase === 'play') {
           for (const f of fireballs) { f.process(dt); if (gh.phase !== 'play') break; }
           fireballs = fireballs.filter(f => !f.dead);
         }
         if (gh.phase === 'play') mario.process(dt);
-        if (gh.comboT > 0) { gh.comboT -= dt; if (gh.comboT <= 0) gh.comboN = 0; }   // #1 ventana del combo
-        // bonus que baja — llegar a 0 mata (se acabó el tiempo)
+        if (gh.comboT > 0) { gh.comboT -= dt; if (gh.comboT <= 0) gh.comboN = 0; }   // #1 combo window
+        // the bonus counting down — reaching 0 kills (out of time)
         if (gh.phase === 'play') {
           gh.bonusT += dt;
           if (gh.bonusT >= BONUS_TICK) {
@@ -1835,7 +1835,7 @@
 
   // ── INIT ──
   if (document.fonts && document.fonts.load) document.fonts.load('12px "Press Start 2P"');
-  // #7 resolver skin guardada (defensivo: si el id no existe o no está desbloqueada → classic; nunca crashea)
+  // #7 resolve the saved skin (defensive: if the id does not exist or is not unlocked → classic; it never crashes)
   {
     const saved = SKINS.find(s => s.id === (localStorage.getItem('dk_skin') || 'classic'));
     const sk = (saved && gh.total >= saved.unlock) ? saved : SKINS[0];
@@ -1871,8 +1871,8 @@
       const btn = document.getElementById('btnInfo');
       btn.addEventListener('pointerdown', e => {
         e.preventDefault();
-        // El overlay arranca con display:none POR CSS — comparamos con === 'block' (estado visible
-        // explícito) en vez de !== 'none' para no comerse el primer tap (gotcha de TronWeb).
+        // The overlay starts at display:none FROM CSS — we compare against === 'block' (an explicitly
+        // visible state) instead of !== 'none' so it does not swallow the first tap (the TronWeb gotcha).
         const showing = overlay.style.display === 'block';
         overlay.style.display = showing ? 'none' : 'block';
         btn.classList.toggle('on', !showing);
@@ -1897,9 +1897,9 @@ close pass is worth more than a wide one. Some ladders are broken and cannot be 
 </div>
 
 <script>
-// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
-// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
-// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+// The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
+// game already had keeps switching it on and off with the same tap: no listener is removed and
+// no existing behaviour is changed. If the game had no meter, nothing happens.
 (function () {
   function armar() {
     var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
@@ -1907,31 +1907,31 @@ close pass is worth more than a wide one. Some ladders are broken and cannot be 
     if (!btn || !panel) return;
     var fps = document.getElementById('fpsOverlay');
     if (fps && fps.parentNode !== panel) panel.appendChild(fps);
-    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
-    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
-    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    // The bar is MEASURED, not assumed. Several games do not declare `--bar-height` and others
+    // change it with the orientation: with a fixed value the panel ended up covering the buttons
+    // (Hangman) or running off the top in landscape (Tron). Measured live it works in all twenty.
     var bar = document.getElementById('bar');
-    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
-    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
-    // salio de aca", que es lo que hace el de Loop.
-    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
-    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
-    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
-    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
-    // lo mueven segun la orientacion.
+    // The panel is anchored TO THE BUTTON THAT OPENS IT, not to the centre of the screen. Centred
+    // it floated in the middle of the game with no relation to anything; hanging off the button it
+    // reads as "this came from here", which is what Loop's does.
+    //   · the same margin as the button (right if the button is on the right, left otherwise);
+    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //     in games with a bottom bar the panel still ends up over the bar.
+    // It is measured live and not done in CSS because each game puts the button somewhere
+    // different, and several move it with the orientation.
     function ubicar() {
       var vw = window.innerWidth, vh = window.innerHeight, m = 10;
       var rb = btn.getBoundingClientRect();
-      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
-      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
-      // encima de la parte alta de la barra.
+      // If the button lives INSIDE the bar, the vertical reference is the whole bar and not the
+      // button: the buttons align to the foot of the bar, so anchoring to the button left the panel
+      // over the top part of the bar.
       var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
       panel.style.transform = 'none';
       var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
       if ((rb.left + rb.width / 2) > vw / 2) {
-        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
-        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
-        // colgado de un boton a media pantalla arrancaba en x = -199.
+        // Flush with the button's right margin, BUT without running off to the left: if the panel is
+        // wider than the gap, it slides to the edge. Without this cap, a 700 px panel hanging off a
+        // button at mid-screen started at x = -199.
         var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
         panel.style.left = 'auto'; panel.style.right = der + 'px';
       } else {
@@ -1942,14 +1942,14 @@ close pass is worth more than a wide one. Some ladders are broken and cannot be 
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
-      } else {                                          // boton abajo -> panel por encima
+      } else {                                          // button at the bottom -> panel above it
         panel.style.top = 'auto';
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
-      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
-      // conmutador, asi que si queda tapado el panel no se puede cerrar.
+      // The tight case (Hangman in landscape: the keyboard and the bar eat 319 of 380 px). The panel
+      // stretches to the opposite edge, but WITHOUT covering the button that opened it: the ⓘ is the
+      // only toggle, so if it gets covered the panel cannot be closed.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
         if ((rb.top + rb.height / 2) < vh / 2) {
           panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
@@ -1968,17 +1968,17 @@ close pass is worth more than a wide one. Some ladders are broken and cannot be 
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
-      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
+      if (abrir) ubicar();                          // measure with the panel ALREADY visible: hidden, offsetWidth is 0
     });
-    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    // Keyboard: the button is a <button>, so Enter/Space fire `click` and not `pointerdown`.
     btn.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      if (e.detail !== 0) return;                 // detail 0 = it came from the keyboard, not the mouse
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
       if (abrir) ubicar();
     });
-    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    // Close with Escape: the panel covers the game and must be dismissable without hunting for the button.
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && panel.classList.contains('show')) {
         panel.classList.remove('show'); btn.classList.remove('on');

@@ -120,9 +120,9 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  SIMON — port web del Pygame SimonSays.py, mismo formato que BallsWeb.
-  //  El Pygame usaba 4 buffers PCM pre-grabados; acá los 4 tonos se
-  //  sintetizan con WebAudio (suena como el Simon clásico, sin assets).
+  // SIMON — web port of the Pygame SimonSays.py, same format as BallsWeb.
+  // The Pygame version used 4 pre-recorded PCM buffers; here the 4 tones are
+  // synthesised with WebAudio (it sounds like the classic Simon, with no assets).
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
 
@@ -134,14 +134,14 @@
   // 4 pads en disco. ang = [inicio, fin] en radianes (0=derecha, +=horario/abajo).
   //  id0 rojo  → TL (arriba-izq)   id1 verde → TR (arriba-der)
   //  id2 azul  → BR (abajo-der)    id3 amarillo → BL (abajo-izq)
-  // Tonos auténticos del Simon: verde 415, rojo 310, azul 209.7, amarillo 252.
+  // Authentic Simon tones: green 415, red 310, blue 209.7, yellow 252.
   const PADS = [
     { base:[235, 50, 55],  tone:310.07, ang:[Math.PI,        1.5*Math.PI] },  // 0 rojo  TL
     { base:[45, 205, 95],  tone:415.30, ang:[1.5*Math.PI,    TAU] },          // 1 verde TR
     { base:[60, 120, 255], tone:209.70, ang:[0,              0.5*Math.PI] },  // 2 azul  BR
     { base:[248, 216, 45], tone:252.00, ang:[0.5*Math.PI,    Math.PI] },      // 3 amar  BL
   ];
-  const PAD_GAP = 0.05;   // gap angular entre pads (rad)
+  const PAD_GAP = 0.05;   // angular gap between pads (rad)
 
   // ── STATE ──
   const canvas = document.getElementById('c');
@@ -156,26 +156,26 @@
   let score = 0, mistakes = 0;
 
   let litPad = -1;         // pad iluminado (showing/input)
-  let pressedPad = -1;     // pad que el dedo mantiene apretado
-  let activePointer = null;// pointerId del dedo que está apretando un pad (anti multi-touch)
-  let showIdx = 0;         // índice en la secuencia que se está mostrando
-  let showSub = 'gap';     // 'gap' (todo apagado) → 'lit' (pad encendido)
-  let inputPos = 0;        // progreso del jugador dentro de la secuencia
-  let timer = 0;           // contador de la fase actual (seg)
+  let pressedPad = -1;     // pad the finger is holding down
+  let activePointer = null;// pointerId of the finger holding a pad (anti multi-touch)
+  let showIdx = 0;         // index in the sequence being shown
+  let showSub = 'gap';     // 'gap' (all off) → 'lit' (pad on)
+  let inputPos = 0;        // the player's progress through the sequence
+  let timer = 0;           // counter for the current phase (s)
   let menuPad = 0, menuTimer = 0;
 
   // visuales
-  let clock = 0;                  // reloj acumulado (seg) para animaciones
-  let padGlow = [0, 0, 0, 0];     // brillo suavizado por pad (0..1) — da trails al on/off
-  let nicePulse = 0;              // anillo expansivo al acertar (1→0)
+  let clock = 0;                  // accumulated clock (s) for animations
+  let padGlow = [0, 0, 0, 0];     // smoothed brightness per pad (0..1) — gives trails on the on/off
+  let nicePulse = 0;              // expanding ring on a correct tap (1→0)
   let best = 0;                   // mejor score (persistido)
-  let newRecord = false;          // si el último game over batió el récord
+  let newRecord = false;          // whether the last game over beat the record
   try { best = parseInt(localStorage.getItem('simon_best') || '0', 10) || 0; } catch (_) {}
 
   let soundOn = true;
   let showInfo = false;
 
-  // ── TIMINGS (del original: dependen del score) ──
+  // ── TIMINGS (from the original: they depend on the score) ──
   const gapDur = () => Math.max(0.4 - score * 0.01, 0.05);
   const litDur = () => Math.max(0.6 - score * 0.01, 0.20);
   const MENU_STEP = 0.18;
@@ -185,9 +185,9 @@
   let actx = null;
   let heldOsc = null, heldGain = null;
   function audioResume() {
-    // `playTone()` se llama desde `update()`, que corre dentro de `loop()` — y el
-    // `requestAnimationFrame` esta al final. Si la creacion del contexto tira, Simon no queda
-    // mudo: queda CONGELADO para siempre.
+    // `playTone()` is called from `update()`, which runs inside `loop()` — and the
+    // `requestAnimationFrame` is at the end. If creating the context throws, Simon is not left
+    // mute: it is left FROZEN forever.
     if (!actx) {
       try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
       catch (e) { actx = null; return; }
@@ -197,7 +197,7 @@
   function playTone(freq, dur) {
     if (!soundOn) return;
     audioResume();
-    if (!actx || actx.state !== 'running') return;   // un contexto interrumpido tira al crear el nodo
+    if (!actx || actx.state !== 'running') return;   // an interrupted context throws when the node is created
     const t = actx.currentTime;
     const osc = actx.createOscillator(), g = actx.createGain();
     osc.type = 'sine'; osc.frequency.value = freq;
@@ -208,7 +208,7 @@
     osc.connect(g).connect(actx.destination);
     osc.start(t); osc.stop(t + dur + 0.03);
   }
-  function startTone(freq) {            // tono sostenido mientras el dedo aprieta
+  function startTone(freq) {            // tone held while the finger presses
     if (!soundOn) return;
     audioResume();
     if (!actx) return;
@@ -232,7 +232,7 @@
     } catch (_) {}
     heldOsc = null; heldGain = null;
   }
-  function playCorrect() {              // acierto: arpegio ascendente alegre, misma escala que los pads
+  function playCorrect() {              // correct: a cheerful rising arpeggio, same scale as the pads
     if (!soundOn) return;
     audioResume();
     if (!actx) return;
@@ -249,7 +249,7 @@
       osc.start(t); osc.stop(t + dur + 0.03);
     }
   }
-  function playWrong() {                // derrota suave: arpegio descendente del acorde del Simon
+  function playWrong() {                // gentle defeat: a descending arpeggio of the Simon chord
     if (!soundOn) return;               // (G#4→D#4→B3→G#3) + glissando final hacia abajo
     audioResume();
     if (!actx) return;
@@ -270,7 +270,7 @@
     }
   }
 
-  // ── LÓGICA ──
+  // ── LOGIC ──
   function startGame() {
     sequence = []; score = 0; mistakes = 0;
     addLevel();
@@ -288,13 +288,13 @@
     stopTone();
   }
 
-  // tap del jugador sobre un pad (presión)
+  // the player taps a pad (press)
   function pressPad(id) {
     if (phase !== 'input') return;
     pressedPad = id; litPad = id;
     startTone(PADS[id].tone);
   }
-  // soltar → evaluar contra la secuencia
+  // release → check against the sequence
   function releasePad() {
     if (phase !== 'input' || pressedPad < 0) return;
     const id = pressedPad;
@@ -304,14 +304,14 @@
     const expected = sequence[inputPos];
     if (id !== expected) {
       mistakes++;
-      if (mistakes >= 3) {                          // game over: guardar récord
+      if (mistakes >= 3) {                          // game over: save the record
         newRecord = score > best;
         if (newRecord) { best = score; try { localStorage.setItem('simon_best', String(best)); } catch (_) {} }
         playWrong();
         phase = 'gameover';
       } else {
         playWrong();
-        phase = 'wrong'; timer = WRONG_T;            // flashea todo y re-muestra
+        phase = 'wrong'; timer = WRONG_T;            // flash everything and show it again
       }
       return;
     }
@@ -350,8 +350,8 @@
       return;
     }
     if (typeof hit === 'number') {
-      if (phase !== 'input') return;               // los pads sólo responden en tu turno
-      if (activePointer !== null) return;          // ya hay un dedo apretando un pad → ignorar 2do
+      if (phase !== 'input') return;               // the pads only respond on your turn
+      if (activePointer !== null) return;          // a finger is already holding a pad → ignore the 2nd
       activePointer = e.pointerId;
       try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
       pressPad(hit);
@@ -365,7 +365,7 @@
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
 
-  // tap simple en pointerdown (helper de BallsWeb)
+  // simple tap on pointerdown (BallsWeb helper)
   function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
 
   const btnReset = document.getElementById('btnReset');
@@ -393,7 +393,7 @@
     layout();
   }
   function layout() {
-    const topReserved = H * 0.18;   // espacio para el header (título/estado + vidas)
+    const topReserved = H * 0.18;   // room for the header (title/state + lives)
     const usableH = H - topReserved - H * 0.05;
     R = Math.min(W * 0.86, usableH) / 2;
     holeR = R * 0.34;
@@ -412,7 +412,7 @@
   function lerpCol(a, b, t) { return [lerp(a[0],b[0],t), lerp(a[1],b[1],t), lerp(a[2],b[2],t)]; }
   function font(weight, size) { return `${weight} ${Math.round(size)}px 'Segoe UI', system-ui, sans-serif`; }
 
-  // Pad como sector anular, con gradiente de profundidad + bloom según `glow` (0..1).
+  // A pad as an annular sector, with a depth gradient + bloom driven by `glow` (0..1).
   function drawPad(id, glow) {
     const p = PADS[id];
     const [a0, a1] = p.ang;
@@ -428,7 +428,7 @@
     ctx.save();
     ctx.clip();
 
-    // gradiente radial desde el borde externo → da sensación de domo/iluminación
+    // radial gradient from the outer edge — gives a sense of a lit dome
     const ox = cx + Math.cos(mid) * R * 0.74, oy = cy + Math.sin(mid) * R * 0.74;
     const grad = ctx.createRadialGradient(ox, oy, R*0.04, ox, oy, R*0.98);
     grad.addColorStop(0, rgbStr(clampCol(lerpCol(col, [255,255,255], 0.10 + 0.22*glow))));
@@ -437,7 +437,7 @@
     ctx.fillStyle = grad;
     ctx.fillRect(cx - R, cy - R, R*2, R*2);
 
-    // bloom cuando está encendido
+    // bloom when it is on
     if (glow > 0.01) {
       const gx = cx + Math.cos(mid) * (R + holeR)/2, gy = cy + Math.sin(mid) * (R + holeR)/2;
       const gg = ctx.createRadialGradient(gx, gy, R*0.02, gx, gy, R*0.66);
@@ -448,7 +448,7 @@
     }
     ctx.restore();
 
-    // rim externo: brilla cuando glow alto, oscuro cuando apagado (define el sector)
+    // outer rim: bright when glow is high, dark when off (it defines the sector)
     ctx.lineWidth = Math.max(1.5, R*0.014);
     ctx.strokeStyle = glow > 0.02
       ? rgbStr(clampCol(scaleCol(p.base, 1.7)), 0.35 + 0.55*glow)
@@ -459,7 +459,7 @@
   }
 
   function drawDisk() {
-    // sombra + backplate (los gaps entre pads y el agujero muestran este plato oscuro)
+    // shadow + backplate (the gaps between pads and the hole show this dark plate)
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,0.55)';
     ctx.shadowBlur = R * 0.14;
@@ -468,7 +468,7 @@
     ctx.fillStyle = '#0b0d13'; ctx.fill();
     ctx.restore();
 
-    // aro exterior con bisel
+    // outer ring with a bevel
     ctx.beginPath(); ctx.arc(cx, cy, R * 1.045, 0, TAU);
     const rg = ctx.createLinearGradient(cx, cy - R, cx, cy + R);
     rg.addColorStop(0, 'rgba(255,255,255,0.12)');
@@ -482,7 +482,7 @@
   }
 
   function drawHub() {
-    // anillo de pulso al acertar
+    // pulse ring on a correct tap
     if (nicePulse > 0) {
       const t = 1 - nicePulse;
       const rr = hubR + t * (R - holeR) * 0.95;
@@ -492,7 +492,7 @@
       ctx.stroke();
     }
 
-    // "breathing" sutil en el menú
+    // subtle "breathing" in the menu
     const scale = phase === 'menu' ? 1 + 0.045 * Math.sin(clock * 3) : 1;
     const r = hubR * scale;
 
@@ -563,7 +563,7 @@
         ctx.fillText(`SCORE ${score}    ·    MEJOR ${best}`, W/2, subY);
       }
     } else {
-      // 3 vidas (puntos con glow)
+      // 3 lives (dots with glow)
       const lives = 3 - mistakes;
       const dr = Math.min(6, H * 0.008);
       const gap = dr * 3.4;
@@ -583,12 +583,12 @@
   }
 
   function drawInfoOverlay() {
-    // El panel de informacion pasa a ser el `#infoPanel` del DOM, que es el mismo de todo el
-    // Arcade: se desplaza, tiene su ✕ y se lee igual en apaisado. Este overlay dibujaba LO MISMO
-    // sobre el lienzo, asi que con los dos prendidos se veian dos paneles encimados diciendo
-    // exactamente lo mismo.
-    // `showInfo` NO se elimina y el handler tampoco: sigue marcando "el panel esta abierto", que
-    // es lo que evita que el tap caiga en el disco. Lo unico que se corta es el dibujo.
+    // The info panel becomes the DOM's `#infoPanel`, the same one the whole Arcade uses: it
+    // scrolls and reads the same in landscape. This overlay drew THE SAME THING on the canvas,
+    // so with both switched on you saw two stacked panels saying exactly the same thing.
+    //
+    // `showInfo` is NOT removed and neither is the handler: it still marks "the panel is open",
+    // which is what keeps the tap from landing on the disc. The only thing cut is the drawing.
     return;
     /* eslint-disable no-unreachable */
     if (!showInfo) return;
@@ -661,7 +661,7 @@
     }
     if (phase === 'wrong') {
       timer -= dt;
-      if (timer <= 0) {                       // re-muestra la MISMA secuencia
+      if (timer <= 0) {                       // show the SAME sequence again
         showIdx = 0; showSub = 'gap'; timer = gapDur();
         litPad = -1; inputPos = 0; phase = 'showing';
       }
@@ -674,15 +674,15 @@
     }
   }
 
-  // ── VISUALES (independiente de la lógica de juego) ──
+  // ── VISUALS (independent of the game logic) ──
   function updateVisuals(dt) {
     clock += dt;
-    // brillo objetivo por pad según la fase
+    // target brightness per pad according to the phase
     const tg = [0, 0, 0, 0];
     if (phase === 'menu') tg[menuPad] = 1;
     else if (phase === 'showing' || phase === 'input') { if (litPad >= 0) tg[litPad] = 1; }
     else if (phase === 'wrong') { const v = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(clock * 22)); tg[0]=tg[1]=tg[2]=tg[3]=v; }
-    // sube rápido (snap on), baja con un trail corto — nítido entre flashes pero suave
+    // rises fast (snap on), falls with a short trail — crisp between flashes but smooth
     for (let i = 0; i < 4; i++) {
       const rate = tg[i] > padGlow[i] ? 34 : 16;
       padGlow[i] += (tg[i] - padGlow[i]) * Math.min(1, dt * rate);
@@ -699,7 +699,7 @@
     update(dt);
     updateVisuals(dt);
 
-    // fondo con gradiente radial centrado en el disco
+    // background with a radial gradient centred on the disc
     const bg = ctx.createRadialGradient(cx, cy, R * 0.1, cx, cy, Math.max(W, H) * 0.8);
     bg.addColorStop(0, '#141823');
     bg.addColorStop(1, '#07080c');
@@ -709,7 +709,7 @@
     drawHeader();
     drawDisk();
 
-    // vignette rojo pulsante al equivocarse
+    // pulsing red vignette on a mistake
     if (phase === 'wrong') {
       const a = 0.08 + 0.12 * (0.5 + 0.5 * Math.sin(clock * 22));
       const vg = ctx.createRadialGradient(cx, cy, R * 0.6, cx, cy, Math.max(W, H) * 0.7);
@@ -750,9 +750,9 @@ the sequence can be remembered by ear as well as by sight — that is how the re
 </div>
 
 <script>
-// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
-// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
-// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+// The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
+// game already had keeps switching it on and off with the same tap: no listener is removed and
+// no existing behaviour is changed. If the game had no meter, nothing happens.
 (function () {
   function armar() {
     var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
@@ -760,31 +760,31 @@ the sequence can be remembered by ear as well as by sight — that is how the re
     if (!btn || !panel) return;
     var fps = document.getElementById('fpsOverlay');
     if (fps && fps.parentNode !== panel) panel.appendChild(fps);
-    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
-    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
-    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    // The bar is MEASURED, not assumed. Several games do not declare `--bar-height` and others
+    // change it with the orientation: with a fixed value the panel ended up covering the buttons
+    // (Hangman) or running off the top in landscape (Tron). Measured live it works in all twenty.
     var bar = document.getElementById('bar');
-    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
-    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
-    // salio de aca", que es lo que hace el de Loop.
-    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
-    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
-    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
-    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
-    // lo mueven segun la orientacion.
+    // The panel is anchored TO THE BUTTON THAT OPENS IT, not to the centre of the screen. Centred
+    // it floated in the middle of the game with no relation to anything; hanging off the button it
+    // reads as "this came from here", which is what Loop's does.
+    //   · the same margin as the button (right if the button is on the right, left otherwise);
+    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //     in games with a bottom bar the panel still ends up over the bar.
+    // It is measured live and not done in CSS because each game puts the button somewhere
+    // different, and several move it with the orientation.
     function ubicar() {
       var vw = window.innerWidth, vh = window.innerHeight, m = 10;
       var rb = btn.getBoundingClientRect();
-      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
-      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
-      // encima de la parte alta de la barra.
+      // If the button lives INSIDE the bar, the vertical reference is the whole bar and not the
+      // button: the buttons align to the foot of the bar, so anchoring to the button left the panel
+      // over the top part of the bar.
       var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
       panel.style.transform = 'none';
       var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
       if ((rb.left + rb.width / 2) > vw / 2) {
-        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
-        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
-        // colgado de un boton a media pantalla arrancaba en x = -199.
+        // Flush with the button's right margin, BUT without running off to the left: if the panel is
+        // wider than the gap, it slides to the edge. Without this cap, a 700 px panel hanging off a
+        // button at mid-screen started at x = -199.
         var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
         panel.style.left = 'auto'; panel.style.right = der + 'px';
       } else {
@@ -795,14 +795,14 @@ the sequence can be remembered by ear as well as by sight — that is how the re
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
-      } else {                                          // boton abajo -> panel por encima
+      } else {                                          // button at the bottom -> panel above it
         panel.style.top = 'auto';
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
-      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
-      // conmutador, asi que si queda tapado el panel no se puede cerrar.
+      // The tight case (Hangman in landscape: the keyboard and the bar eat 319 of 380 px). The panel
+      // stretches to the opposite edge, but WITHOUT covering the button that opened it: the ⓘ is the
+      // only toggle, so if it gets covered the panel cannot be closed.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
         if ((rb.top + rb.height / 2) < vh / 2) {
           panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
@@ -821,17 +821,17 @@ the sequence can be remembered by ear as well as by sight — that is how the re
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
-      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
+      if (abrir) ubicar();                          // measure with the panel ALREADY visible: hidden, offsetWidth is 0
     });
-    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    // Keyboard: the button is a <button>, so Enter/Space fire `click` and not `pointerdown`.
     btn.addEventListener('click', function (e) {
-      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      if (e.detail !== 0) return;                 // detail 0 = it came from the keyboard, not the mouse
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
       if (abrir) ubicar();
     });
-    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    // Close with Escape: the panel covers the game and has to be dismissable without hunting for the button.
     window.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && panel.classList.contains('show')) {
         panel.classList.remove('show'); btn.classList.remove('on');

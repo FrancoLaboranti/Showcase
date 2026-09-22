@@ -22,33 +22,33 @@ See [../CLAUDE.md](../CLAUDE.md) for the shared sprite/main-loop pattern.
 
 ## AUDIO (2026-09-22)
 
-**Motos de luz.** Un motor continuo por sesion — dos sierras desafinadas 7 cents mas una tercera a
-media frecuencia que representa al ENJAMBRE de IAs vivas, todo por un lowpass resonante.
+**Light cycles.** One continuous engine per session — two sawtooths detuned by 7 cents plus a third
+at half frequency standing for the SWARM of living AIs, all through a resonant lowpass.
 
-**El motor convierte en sonido un dato que el juego YA calcula para la IA**: `clearDist`, cuanto
-espacio libre hay adelante. Cuanto menos queda, mas agudo y mas abierto el filtro. **Pasar raspando
-una estela deja de ser solo visual.** Y una capa de enjambre por cada IA viva: medido, ganancia
-0.012 con 3 cycles en pista, 0 cuando queda uno.
+**The engine turns into sound a number the game ALREADY computes for the AI**: `clearDist`, how much
+free space there is ahead. The less there is, the higher and the more open the filter. **Shaving past
+a trail stops being purely visual.** And one swarm layer per living AI: measured, gain 0.012 with 3
+cycles on the grid, 0 when one is left.
 
-El motor **baja a 0, nunca para**: un oscilador detenido no se puede volver a arrancar, y cortar en
-seco clickea.
+The engine **drops to 0, it never stops**: a stopped oscillator cannot be started again, and cutting
+it dead clicks.
 
-Una ronda es un parcial y el set es el desenlace real: si el set termino suena **solo** `setEnd`.
-Apilar los dos convierte el final en un choque de dos jingles y no se entiende ninguno.
+A round is a partial and the set is the real outcome: if the set is over, **only** `setEnd` plays.
+Stacking the two turns the ending into a collision of two jingles and neither reads.
 
-### El bug que tenia
+### The bug it had
 
-`audioResume()` estaba **definida y nunca se llamaba**. Ningun gesto la enganchaba, asi que el
-`AudioContext` no se creaba jamas y el juego era mudo pase lo que pase — medido con el arnes: cero
-contextos. Y como `buildEngine()` vive adentro de `audioResume`, el motor entero
-(`buildEngine`/`engineUpdate`/`engineOff`) era codigo muerto: ninguna de las tres se llamaba.
-Faltaban ademas el reseteo del techo por frame, los tres sitios de llamada de ronda/set, el handler
-del boton de mute y el `visibilitychange`.
+`audioResume()` was **defined and never called**. No gesture hooked it, so the `AudioContext` was
+never created and the game was mute no matter what — measured with the harness: zero contexts. And
+since `buildEngine()` lives inside `audioResume`, the entire engine
+(`buildEngine`/`engineUpdate`/`engineOff`) was dead code: none of the three was ever called. Also
+missing were the per-frame ceiling reset, the three round/set call sites, the mute button handler and
+`visibilitychange`.
 
-> Patron comun a todo el repo: sintesis WebAudio sin archivos, `AudioContext` creado con
-> `try/catch` en el primer gesto, techo de voces por frame **con su reseteo al tope del `loop()`**,
-> cooldown por voz, boton de mute con persistencia en `localStorage`, y `visibilitychange` para que
-> nada continuo siga sonando con la pestana al fondo. Si el audio falla, el juego sigue andando.
-> Verificado con un arnes headless que envuelve el `AudioContext` y anota cada nodo y cada rampa.
-> **El arnes no escucha**: comprueba que suene lo que se diseno, cuando se diseno y con que
-> parametros. La evaluacion auditiva queda pendiente.
+> Pattern shared across the repo: WebAudio synthesis with no files, an `AudioContext` created
+> inside `try/catch` on the first gesture, a per-frame voice ceiling **with its reset at the top of
+> `loop()`**, a per-voice cooldown, a mute button persisted in `localStorage`, and
+> `visibilitychange` so nothing continuous keeps playing with the tab in the background. If audio
+> fails, the game keeps running. Verified with a headless harness that wraps the `AudioContext` and
+> logs every node and every ramp. **The harness does not listen**: it checks that what was designed
+> plays, when it was designed to, with which parameters. Judging it by ear is still pending.

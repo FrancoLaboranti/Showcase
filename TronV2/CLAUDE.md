@@ -18,30 +18,29 @@ See [../Tron/CLAUDE.md](../Tron/CLAUDE.md) for control details and [../CLAUDE.md
 
 ## AUDIO (2026-09-22)
 
-**No hay materia, hay programas.** No hay masa, ni roce, ni impacto, ni gravedad: es una grilla de
-ocupacion de bytes donde cuatro programas de colores fijos avanzan a velocidad constante y solo
-pueden girar 90 grados. Vocabulario puramente electronico: `square` y `sawtooth`, alturas
-cuantizadas, envolventes rectas, cero jitter en las voces del jugador — el giro es determinista, no
-un choque.
+**There is no matter, there are programs.** No mass, no friction, no impact, no gravity: it is a grid
+of byte occupancy where four fixed-colour programs advance at constant speed and can only turn 90
+degrees. A purely electronic vocabulary: `square` and `sawtooth`, quantised pitches, straight
+envelopes, zero jitter in the player's voices — the turn is deterministic, not a collision.
 
-**Cada programa tiene una ALTURA fija, igual que tiene un color fijo.** Medido: el de-rez de la IA
-1 suena a 277 Hz, el de la 2 a 330, el de la 3 a 392. Se sabe cual cayo sin mirar el minimapa.
+**Each program has a fixed PITCH, the same way it has a fixed colour.** Measured: AI 1's de-rez plays
+at 277 Hz, AI 2's at 330, AI 3's at 392. You know which one fell without looking at the minimap.
 
-**El ruido blanco aparece en UN solo lugar de todo el juego: el de-rez**, porque desintegrarse es
-lo unico de aca que se rompe. Por eso se destaca tanto — no compite con nada de su familia.
+**White noise appears in ONE place in the whole game: the de-rez**, because disintegrating is the only
+thing here that breaks. That is why it stands out so much — it competes with nothing in its family.
 
-**El giro no lleva voz propia**: el motor continuo SALTA de nota al escalon de la nueva direccion
-(0 / +2 / +4 / +5 semitonos). Lo unico que se agrega es un click de rele muy al fondo, para que el
-gesto tenga un borde. El motor se abre ademas con la proximidad a una pared, usando el mismo
-escaneo hacia adelante que el juego ya hace.
+**The turn has no voice of its own**: the continuous engine JUMPS to the note for the new direction's
+step (0 / +2 / +4 / +5 semitones). All that is added is a relay click well at the back, so the gesture
+has an edge. The engine also opens up with proximity to a wall, using the same forward scan the game
+already does.
 
-En el menu, el VALOR suena a su altura (se oye que subio) y el RENGLON es sordo y fijo: dos clases
-distintas de gesto no pueden sonar igual.
+In the menu, the VALUE sounds at its own pitch (you hear it go up) and the ROW is dull and fixed: two
+different classes of gesture cannot sound the same.
 
-> Patron comun a todo el repo: sintesis WebAudio sin archivos, `AudioContext` creado con
-> `try/catch` en el primer gesto, techo de voces por frame **con su reseteo al tope del `loop()`**,
-> cooldown por voz, boton de mute con persistencia en `localStorage`, y `visibilitychange` para que
-> nada continuo siga sonando con la pestana al fondo. Si el audio falla, el juego sigue andando.
-> Verificado con un arnes headless que envuelve el `AudioContext` y anota cada nodo y cada rampa.
-> **El arnes no escucha**: comprueba que suene lo que se diseno, cuando se diseno y con que
-> parametros. La evaluacion auditiva queda pendiente.
+> Pattern shared across the repo: WebAudio synthesis with no files, an `AudioContext` created
+> inside `try/catch` on the first gesture, a per-frame voice ceiling **with its reset at the top of
+> `loop()`**, a per-voice cooldown, a mute button persisted in `localStorage`, and
+> `visibilitychange` so nothing continuous keeps playing with the tab in the background. If audio
+> fails, the game keeps running. Verified with a headless harness that wraps the `AudioContext` and
+> logs every node and every ramp. **The harness does not listen**: it checks that what was designed
+> plays, when it was designed to, with which parameters. Judging it by ear is still pending.
