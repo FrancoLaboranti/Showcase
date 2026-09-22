@@ -12,6 +12,45 @@ todo lo que quedó encerrado. Los enemigos son piezas de ajedrez que telegrafía
 la aguja del reloj marca las oleadas, y cada hora elegís **una sola cosa, alternando**:
 una **regla** para la arena o una **carta** (las 5 equipadas forman una mano de póker).
 
+## La barrida de la flecha ahora construye tambien la PUNTA (2026-09-22)
+
+Franco: *"la punta de la flecha aparece completa desde el principio"*. Era cierto, y estaba puesto
+a proposito — el comentario del codigo lo defendia con un argumento que tambien era cierto:
+
+> en un carril largo la cabeza mide un 8% del largo, asi que atarla al avance del cuerpo la
+> dejaria casi apagada durante el 92% del aviso, justo cuando lo unico que importa es HACIA DONDE.
+
+Las dos cosas no se resuelven eligiendo una. Se resuelven **separando forma de relleno**:
+
+- **La FORMA esta entera desde el frame 0**, como un fantasma a alpha 0.055 — cuerpo y punta. La
+  direccion se lee siempre, que era el motivo del diseno viejo.
+- **El RELLENO es UN solo recorte que avanza** sobre la silueta completa. No hay dos rellenos ni
+  dos alfas: el mismo corte revela el cuerpo y despues la punta, de corrido. Una sola animacion.
+- **El FILO del frente es la misma silueta** recortada a una franja angosta, no un rectangulo: asi
+  adentro de la cabeza se angosta solo hasta el vertice. Antes era una barra de alto fijo que no
+  sabia que forma tenia la flecha.
+
+Medido con capturas a `u` congelado (`dbgFreeze` + dos `loop(t)` con el MISMO `t`, que da dt = 0 y
+dibuja sin avanzar): a 0.12 y 0.70 la punta es solo contorno; a 0.97 esta construida entera. A
+`u = 1` la flecha ya no esta, porque la pieza ejecuta el movimiento — eso es el juego, no un bug.
+
+### El acabado
+
+Cuerpo 16% mas grueso (`r*1.12` -> `r*1.30`) y cabeza proporcionalmente mas larga.
+
+**Las esquinas se redondean estirando el contorno**, no con curvas: se rellena Y se contornea la
+MISMA ruta con `lineJoin`/`lineCap` redondos y un trazo de `pad*2`. Eso redondea todos los
+vertices de una — la punta y los dos hombros donde el cuerpo se ensancha, que es la union que se
+veia dura.
+
+**Por eso la silueta se construye hasta `L - pad` y no hasta `L`.** El trazo redondo sobresale
+`pad`, asi que el BORDE EXTERNO sigue cayendo exacto en el destino. Sin esa correccion la flecha
+apuntaria un poco mas alla de la casilla a la que la pieza va — un error de un par de pixeles que
+en un juego donde la telegrafia ES la mecanica se paga caro.
+
+No se toco la logica de movimiento ni las reglas de telegrafia: `u`, `e.dur`, `e.tx/ty` y el carril
+del caballo quedaron igual. Los 8 escenarios de `qa.py` pasan sin cambios.
+
 ## AUDIO: el techo de voces tenia una inversion de prioridad (2026-09-21)
 
 **Te morias en silencio.** No es una forma de hablar: esta trazado frame a frame.

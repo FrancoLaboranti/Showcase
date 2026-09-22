@@ -4311,7 +4311,7 @@ function drawTelegraphs() {
     // Carril más angosto y más afinado: la dirección se lee igual con menos tinta encima del
     // tablero. Cada pieza del dibujo se bajó por separado (ancho, afinado, contorno, filo,
     // punta y alfas) en vez de escalar todo junto, que habría borrado la punta.
-    const wpx = r * 1.12;
+    const wpx = r * 1.30;                            // un toque mas grueso: se lee mejor de reojo
     ctx.save();
     if (e.kind === 'caballo') {                      // el caballo no barre: marca el destino
       ctx.strokeStyle = rgba(col, 0.24 + 0.34 * u);
@@ -4327,52 +4327,60 @@ function drawTelegraphs() {
       const L = hyp(sx(e.tx) - x, sy(e.ty) - y);
       // Carril AHUSADO hacia el destino + punta de flecha: la forma dice HACIA DÓNDE aun
       // congelando el frame. Un rectángulo gris plano no comunicaba dirección.
-      const w0 = wpx, w1 = wpx * 0.44;
-      // ── UNA SOLA SILUETA ──
-      // Antes eran DOS figuras: un cuadrilátero ahusado con su propio contorno cerrado, y encima
-      // un triángulo suelto. El cuadrilátero terminaba en un corte recto contorneado - una tapa
-      // dura justo donde debería haber una punta -, el triángulo era apenas más ancho que el
-      // carril (1.05·w1 contra w1) así que se leía como un bulto y no como una punta, y la
-      // costura entre las dos alfas quedaba a la vista. Eso era lo tosco.
-      // Ahora el contorno recorre cuerpo y punta de corrido: no hay corte ni costura, y la
-      // cabeza mide casi el doble del ancho del cuerpo, que es lo que la hace leerse como punta.
-      const hl = Math.min(w1 * 2.0, L * 0.42);          // largo de la cabeza, sin comerse carriles cortos
-      const hw = w1 * 1.85;                             // medio ancho de la cabeza
-      const cuerpo = (len, wA, wB) => {                 // sólo el cuerpo, para el relleno de avance
-        ctx.beginPath();
-        ctx.moveTo(0, -wA); ctx.lineTo(len, -wB); ctx.lineTo(len, wB); ctx.lineTo(0, wA);
-        ctx.closePath();
-      };
+      const w0 = wpx, w1 = wpx * 0.50;
+      // ── UNA SOLA SILUETA, Y UNA SOLA BARRIDA ──
+      // Antes eran DOS figuras y DOS rellenos: el cuerpo se llenaba con `u` y la cabeza se
+      // encendia por alpha, aparte. O sea que la punta estaba entera desde el primer frame.
+      // El comentario que lo defendia tenia razon en el diagnostico — en un carril largo la
+      // cabeza mide un 8% del largo, asi que atarla al avance del cuerpo la dejaba apagada
+      // durante el 92% del aviso, justo cuando lo unico que importa es HACIA DONDE — pero la
+      // salida era otra: separar FORMA de RELLENO.
+      //   · la forma (el fantasma) esta entera desde el frame 0, tenue. La direccion se lee siempre.
+      //   · el relleno es UN recorte que avanza sobre la silueta completa, asi que el mismo corte
+      //     revela el cuerpo y despues la punta, de corrido. Una sola animacion.
+      //
+      // `pad` es el radio de redondeo: se dibuja la MISMA ruta rellena y contorneada con un trazo
+      // de `pad*2` y uniones redondas, y eso redondea todos los vertices — la punta y los dos
+      // hombros donde el cuerpo se ensancha, que es la union que se veia dura.
+      // Por eso la silueta llega hasta `L - pad` y no hasta `L`: el trazo redondo sobresale `pad`,
+      // asi que el BORDE EXTERNO sigue cayendo exacto en el destino. Sin esta correccion la
+      // flecha apuntaria un poco mas alla de la casilla a la que la pieza va.
+      const pad = Math.max(1.1, r * 0.085);
+      const Lp = Math.max(w1 * 1.2, L - pad);
+      const hl = Math.min(w1 * 2.3, Lp * 0.44);         // largo de la cabeza, sin comerse carriles cortos
+      const hw = w1 * 1.95;                             // medio ancho de la cabeza
       const flecha = () => {                            // cuerpo + cabeza, cerrada
         ctx.beginPath();
         ctx.moveTo(0, -w0);
-        ctx.lineTo(L - hl, -w1);
-        ctx.lineTo(L - hl, -hw);
-        ctx.lineTo(L, 0);                               // el vértice cae EXACTO en el destino
-        ctx.lineTo(L - hl, hw);
-        ctx.lineTo(L - hl, w1);
+        ctx.lineTo(Lp - hl, -w1);
+        ctx.lineTo(Lp - hl, -hw);
+        ctx.lineTo(Lp, 0);
+        ctx.lineTo(Lp - hl, hw);
+        ctx.lineTo(Lp - hl, w1);
         ctx.lineTo(0, w0);
         ctx.closePath();
       };
-      ctx.lineJoin = 'round'; ctx.lineCap = 'round';    // a este tamaño se ve más fino que en pico
-      ctx.fillStyle = rgba(col, 0.042);
-      flecha(); ctx.fill();
-      ctx.fillStyle = rgba(col, 0.12 + 0.12 * u);       // la barra se LLENA: cuándo, no sólo dónde
-      cuerpo(Math.min(L * u, L - hl), w0, lerp(w0, w1, clamp(u, 0, 1))); ctx.fill();
-      // LA CABEZA SE ENCIENDE con el progreso. Probé atarla a que el relleno del cuerpo LLEGARA
-      // hasta ella, que sonaba más fino, y estaba mal: en un carril largo la cabeza mide un 8%
-      // del largo, así que se quedaba casi apagada durante el 92% del aviso - justo cuando lo
-      // único que importa es hacia dónde. La cabeza es la que dice la DIRECCIÓN: tiene que verse
-      // desde el primer frame y ganar peso hacia el final.
-      ctx.beginPath();
-      ctx.moveTo(L - hl, -hw); ctx.lineTo(L, 0); ctx.lineTo(L - hl, hw); ctx.closePath();
-      ctx.fillStyle = rgba(col, 0.26 + 0.46 * u);
-      ctx.fill();
-      ctx.fillStyle = rgba(col, 0.46 + 0.34 * u);       // filo brillante que avanza
-      const wFilo = lerp(w0, w1, clamp(u, 0, 1));
-      ctx.fillRect(Math.min(L * u, L - hl) - Math.max(1, r * 0.05), -wFilo, Math.max(1.2, r * 0.10), wFilo * 2);
-      ctx.strokeStyle = rgba(col, 0.24 + 0.28 * u); ctx.lineWidth = Math.max(1, r * 0.05);
-      flecha(); ctx.stroke();
+      // Rellenar Y contornear la misma ruta con el trazo gordo es lo que redondea las esquinas.
+      const pintar = (a) => {
+        ctx.fillStyle = rgba(col, a); ctx.strokeStyle = rgba(col, a);
+        ctx.lineWidth = pad * 2;
+        flecha(); ctx.fill(); ctx.stroke();
+      };
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      pintar(0.055);                                    // FANTASMA: la flecha entera, desde el frame 0
+      // LA BARRIDA. Un solo recorte que avanza: revela cuerpo y punta con el mismo corte.
+      const frente = L * u;
+      const alto = (w0 + pad) * 2 + hw;                 // de sobra: el recorte solo limita en X
+      ctx.save();
+      ctx.beginPath(); ctx.rect(-pad * 2, -alto, frente + pad * 2, alto * 2); ctx.clip();
+      pintar(0.17 + 0.20 * u);
+      // El FILO del frente es la MISMA silueta recortada a una franja angosta, no un rectangulo:
+      // asi dentro de la cabeza se angosta solo hasta el vertice, en vez de ser una barra de alto
+      // fijo que no sabe que forma tiene la flecha.
+      const filoW = Math.max(1.6, r * 0.13);
+      ctx.beginPath(); ctx.rect(frente - filoW, -alto, filoW, alto * 2); ctx.clip();
+      pintar(0.52 + 0.34 * u);
+      ctx.restore();
     }
     ctx.restore();
   }

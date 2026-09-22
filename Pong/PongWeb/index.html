@@ -109,6 +109,89 @@
   #rotate p { font-size: 18px; letter-spacing: 0.05em; line-height: 1.6; }
   @keyframes rotatehint { 0%, 55%, 100% { transform: rotate(0deg); } 25%, 40% { transform: rotate(-90deg); } }
 
+
+  /* ── Panel de informacion (mismo criterio que el de Loop) ──
+     `touch-action: pan-y` + `overscroll-behavior: contain` NO son decorativos: este juego pone
+     `touch-action: none` mas arriba y el navegador resuelve el gesto permitido como la
+     INTERSECCION con todos los ancestros, asi que sin esta linea el panel no se desplaza con el
+     dedo por mas overflow que tenga. */
+  #infoPanel {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    z-index: 60; width: min(400px, 92vw); max-height: 70vh; overflow-y: auto;
+    touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+    padding: 14px 16px; border-radius: 14px;
+    background: rgba(10,13,20,0.975); border: 1px solid rgba(125,235,255,0.62);
+    box-shadow: 0 10px 34px rgba(0,0,0,0.6);
+    font-size: 12.5px; line-height: 1.6; color: #c7d2e2; font-weight: 300;
+    display: none;
+  }
+  #infoPanel.show { display: block; }
+  #infoPanel h4 { margin: 0 0 7px; font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
+                  text-transform: uppercase; color: rgba(255,255,255,0.92); }
+  #infoPanel b { color: #8fe9ff; font-weight: 700; }
+  #infoPanel .k { display: inline-block; padding: 0 5px; margin: 0 1px; border-radius: 4px;
+                  border: 1px solid rgba(255,255,255,0.17); background: rgba(255,255,255,0.06);
+                  color: rgba(255,255,255,0.92); font-size: 11px; font-weight: 600; line-height: 17px; }
+  #infoPanel ul { margin: 5px 0 0; padding-left: 17px; }
+  #infoPanel li { margin: 2px 0; }
+  #infoPanel hr { border: 0; border-top: 1px solid rgba(255,255,255,0.11); margin: 9px 0; }
+  #infoPanel .dim { color: rgba(255,255,255,0.42); }
+  @media (orientation: landscape) and (max-height: 560px) {
+    #infoPanel { width: min(700px, 95vw); max-height: 84vh; font-size: 11.5px; line-height: 1.5; padding: 11px 14px; }
+    #infoPanel hr { margin: 7px 0; }
+    #infoPanel h4 { font-size: 12px; margin-bottom: 5px; }
+  }
+
+
+/* Cierre del panel. Arriba a la derecha, dentro de la tarjeta: es la unica salida garantizada
+   cuando el panel se ancla al piso y queda por encima del boton que lo abrio. */
+#infoPanel .infoClose {
+  position: absolute; top: 8px; right: 9px; width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.6); font: 600 15px/1 system-ui, sans-serif;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0; touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+#infoPanel .infoClose:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
+#infoPanel .infoClose:active { transform: scale(0.9); background: rgba(255,255,255,0.16); }
+#infoPanel h4 { padding-right: 30px; }
+
+
+  /* El boton de mute nacio en la pasada de audio y quedo SIN TAMANO: `arcade-shell.css` solo
+     estiliza ✕ / ⛶ / ⓘ, y en este juego el mute cae fuera de las reglas de la barra. Se veia como
+     una tira fina de un pixel. Se le da el mismo cuerpo que a los tres del shell — no se agrega al
+     shell para no pisar a los nueve juegos que ya le dan estilo propio. */
+  #btnMute {
+    width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
+    align-self: flex-end; margin-bottom: 6px;
+    border: 1px solid rgba(255,255,255,0.17); background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.48);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0; position: relative;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.09);
+    transition: border-color 0.1s, color 0.1s, background 0.1s, transform 0.08s;
+  }
+  #btnMute svg { display: block; width: 15px; height: 15px; pointer-events: none; }
+  #btnMute::after { content: ''; position: absolute; inset: -7px -2px; border-radius: 50%; }
+  #btnMute:hover { border-color: rgba(255,255,255,0.34); color: rgba(255,255,255,0.92); }
+  #btnMute:active {
+    background: var(--shell-accent-soft, rgba(120,200,255,0.26));
+    border-color: var(--shell-accent, rgba(120,200,255,0.62));
+    color: rgba(255,255,255,0.92); transform: scale(0.9);
+  }
+  #btnMute:focus-visible { outline: none; border-color: var(--shell-accent, rgba(120,200,255,0.62));
+    box-shadow: 0 1px 6px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.09),
+                0 0 0 3px var(--shell-accent-soft, rgba(120,200,255,0.26)); }
+
+
+  /* AREA TACTIL: el cuerpo de estos botones mide 30 px y un pulgar necesita ~44. El
+     pseudo-elemento agranda el OBJETIVO sin agrandar el dibujo. Solo en vertical: los botones de
+     la esquina estan a 38 px de paso con cuerpos de 30, asi que ampliar a los costados haria que
+     dos areas se toquen y el tap caiga en el vecino. */
+  #btnExit, #btnInfo, #btnFull, #btnMute, #btnBack, #btnPause { position: absolute; }
+  #btnExit::after, #btnInfo::after, #btnFull::after, #btnMute::after, #btnBack::after, #btnPause::after { content: ''; position: absolute; inset: -7px 0; border-radius: 50%; }
 </style>
 </head>
 <body>
@@ -2365,5 +2448,87 @@
       location.href = '../../Arcade/';   // menú de la app (no el índice raíz "sin app")
     });
   </script>
+<div id="infoPanel"><h4>Sleepy Pong</h4>
+Pong. La pelota va y viene, y el que no la devuelve regala el punto. Se juega en
+<b>horizontal</b>.
+<hr>
+<b>Controles</b>
+<ul>
+  <li><b>Movil</b>: deslizar el dedo arriba y abajo sobre tu mitad de la pantalla.</li>
+  <li><b>Escritorio</b>: <span class="k">↑</span> <span class="k">↓</span> ·
+      en dos jugadores, <span class="k">W</span> <span class="k">S</span> para el de la izquierda.</li>
+  <li><span class="k">II</span> pausa · <span class="k">←</span> vuelve al menu.</li>
+</ul>
+<hr>
+<span class="dim">El peloteo sube de tono con cada devolucion: cuanto mas agudo suena, mas largo
+es el punto que estas jugando.</span></div>
+
+<script>
+// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
+// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
+// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+(function () {
+  function armar() {
+    var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
+    var panel = document.getElementById('infoPanel');
+    if (!btn || !panel) return;
+    var fps = document.getElementById('fpsOverlay');
+    if (fps && fps.parentNode !== panel) panel.appendChild(fps);
+    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
+    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
+    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    var bar = document.getElementById('bar');
+    function ubicar() {
+      // Se mide la distancia de la barra al BORDE INFERIOR, no su alto: en Hangman la barra flota
+      // encima del teclado en pantalla, asi que con el alto solo el panel le caia justo arriba.
+      var h = bar ? Math.round(window.innerHeight - bar.getBoundingClientRect().top) : 56;
+      // Si arriba de la barra no queda lugar usable, el panel se ancla al piso y TAPA lo que haya.
+      // Es lo correcto: en Hangman apaisado el teclado y la barra se comen 319 de 380 px, y de
+      // todos modos no se escribe mientras se leen las instrucciones.
+      var libre = window.innerHeight - h;
+      if (libre < 150) { h = 0; }
+      panel.style.bottom = (h + 10) + 'px';
+      panel.style.maxHeight = Math.max(110, window.innerHeight - h - 30) + 'px';
+    }
+    ubicar();
+    window.addEventListener('resize', ubicar);
+    window.addEventListener('orientationchange', ubicar);
+    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
+    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
+    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
+    // Escape.
+    var cerrar = document.createElement('button');
+    cerrar.className = 'infoClose'; cerrar.type = 'button';
+    cerrar.setAttribute('aria-label', 'cerrar');
+    cerrar.textContent = '×';
+    cerrar.addEventListener('pointerdown', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      panel.classList.remove('show'); btn.classList.remove('on');
+    });
+    panel.insertBefore(cerrar, panel.firstChild);
+    btn.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      var abrir = !panel.classList.contains('show');
+      panel.classList.toggle('show', abrir);
+      btn.classList.toggle('on', abrir);
+    });
+    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    btn.addEventListener('click', function (e) {
+      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      var abrir = !panel.classList.contains('show');
+      panel.classList.toggle('show', abrir);
+      btn.classList.toggle('on', abrir);
+    });
+    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && panel.classList.contains('show')) {
+        panel.classList.remove('show'); btn.classList.remove('on');
+      }
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', armar);
+  else armar();
+})();
+</script>
 </body>
 </html>

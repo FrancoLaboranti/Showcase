@@ -9,7 +9,36 @@
      agrega gap). Si el juego no tiene bar (Snake/TankWARS con flotantes), las
      reglas de bar se ignoran y los botones se posicionan con CSS específico.
    · Los botones #btnExit, #btnFs y #btnInfo en el orden ✕ · #ui · ⛶ · ⓘ.
+
+   ── EL CUERPO DEL BOTÓN ──
+   Tomado de Loop, que es donde los botones se sienten parte del juego. No es una
+   paleta: son tres capas que dan volumen sin dibujar un marco.
+     · una SUPERFICIE de panel, apenas más clara que el fondo;
+     · un FILO DE LUZ arriba (`inset 0 1px 0`), que es lo que hace que el botón se
+       lea como una pieza física y no como un rectángulo pintado;
+     · una BASE OSCURA corta (`0 1px 6px`) — una sombra corta, NO un blur grande:
+       cuesta lo mismo y se lee igual.
+   El estado activo no cambia el tamaño del cuerpo, lo ENCOGE (scale .9) y prende
+   el acento. Un botón que crece al tocarlo tapa lo que está al lado justo cuando
+   el dedo ya está encima.
+
+   ── EL ACENTO ES UNA VARIABLE, NO UN COLOR ──
+   `--shell-accent` lo redefine cada juego en su propio :root con el color que ya
+   usa. Así la colección se siente una sola y ningún juego queda con el celeste de
+   Loop encima de su paleta. El default es el celeste del Arcade.
    ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --shell-accent:      rgba(120,200,255,0.62);   /* el color del juego: se redefine por juego */
+  --shell-accent-soft: rgba(120,200,255,0.26);
+  --shell-face:        rgba(255,255,255,0.05);
+  --shell-line:        rgba(255,255,255,0.17);
+  --shell-line-hi:     rgba(255,255,255,0.34);
+  --shell-ink:         rgba(255,255,255,0.48);
+  --shell-ink-hi:      rgba(255,255,255,0.92);
+  --shell-danger:      rgba(240,90,95,0.62);
+  --shell-danger-soft: rgba(240,90,95,0.26);
+}
 
 /* Bar centralizada: TODO en una fila — ✕ · botones del juego · ⛶ · ⓘ. */
 #bar { gap: 8px; }
@@ -19,32 +48,122 @@
    juego define su propio #hint con la misma especificidad y la cascada lo gana sin el flag. */
 #hint { display: none !important; }
 
-/* Botones secundarios (Info + Fullscreen): tenue, 30 px, pegados al borde inferior del bar */
-#btnInfo, #btnFs {
-  width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; align-self: flex-end; margin-bottom: 6px;
-  border: 1px solid rgba(255,255,255,0.16);
-  background: rgba(255,255,255,0.04);
-  color: rgba(255,255,255,0.45);
+/* Los tres botones del shell comparten cuerpo. */
+#btnInfo, #btnFs, #btnExit {
+  position: relative;                            /* para el área táctil ampliada de abajo */
+  width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
+  align-self: flex-end; margin-bottom: 6px;
+  border: 1px solid var(--shell-line);
+  background: var(--shell-face);
+  color: var(--shell-ink);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer; touch-action: none; padding: 0;
-  transition: background 0.1s, transform 0.08s;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.09);
+  transition: border-color 0.1s, color 0.1s, background 0.1s, transform 0.08s;
 }
-#btnInfo svg, #btnFs svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-#btnInfo:active, #btnFs:active { background: rgba(255,255,255,0.22); transform: scale(0.9); }
-#btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
+#btnInfo svg, #btnFs svg, #btnExit svg { display: block; width: 15px; height: 15px; pointer-events: none; }
+
+/* ÁREA TÁCTIL: el cuerpo mide 32 px porque más grande tapa juego, pero un pulgar necesita ~44.
+   El pseudo-elemento agranda el objetivo SIN agrandar el dibujo. La expansión lateral es de sólo
+   2 px a propósito: con `gap: 8px` entre botones, dos áreas de ±4 se tocarían y el tap caería en
+   el vecino. Vertical hay lugar de sobra. */
+#btnInfo::after, #btnFs::after, #btnExit::after { content: ''; position: absolute; inset: -7px -2px; border-radius: 50%; }
+
+#btnInfo:hover, #btnFs:hover, #btnExit:hover { border-color: var(--shell-line-hi); color: var(--shell-ink-hi); }
+
+/* Teclado: un anillo propio. Sin esto el botón enfocado con Tab no se distingue de uno cualquiera.
+   `:focus-visible` y no `:focus` para que el anillo NO aparezca al tocar con el dedo. */
+#btnInfo:focus-visible, #btnFs:focus-visible, #btnExit:focus-visible {
+  outline: none; border-color: var(--shell-accent); color: var(--shell-ink-hi);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.09), 0 0 0 3px var(--shell-accent-soft);
+}
+
+#btnInfo:active, #btnFs:active {
+  background: var(--shell-accent-soft); border-color: var(--shell-accent);
+  color: var(--shell-ink-hi); transform: scale(0.9);
+}
+/* Panel abierto: el botón queda PRENDIDO. Es el único estado persistente del shell y tiene que
+   leerse sin comparar con los otros dos. */
+#btnInfo.on {
+  background: var(--shell-accent-soft); border-color: var(--shell-accent); color: var(--shell-ink-hi);
+}
 #btnFs .ic-exit { display: none; }
 body.fs-on #btnFs .ic-enter { display: none; }
 body.fs-on #btnFs .ic-exit  { display: block; }
 
-/* Exit (✕): mismo brillo tenue que ⛶/ⓘ, rojo en activo */
-#btnExit {
-  width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; align-self: flex-end; margin-bottom: 6px;
-  border: 1px solid rgba(255,255,255,0.16);
-  background: rgba(255,255,255,0.04);
-  color: rgba(255,255,255,0.45);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; touch-action: none; padding: 0;
-  transition: background 0.1s, transform 0.08s;
+/* Exit (✕): mismo cuerpo, pero el borde ya avisa en reposo y el activo es rojo pleno. El color
+   ES la advertencia — es el único botón del shell que te saca del juego. */
+#btnExit { border-color: var(--shell-danger-soft); }
+#btnExit:hover { border-color: var(--shell-danger); color: var(--shell-ink-hi); }
+#btnExit:active {
+  background: var(--shell-danger-soft); border-color: var(--shell-danger);
+  color: var(--shell-ink-hi); transform: scale(0.9);
 }
-#btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
-#btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
+
+/* ════════════════════════════════════════════════════════════════════
+   PANEL DE INFORMACIÓN — `#infoPanel`
+   Mismo criterio que el de Loop: una tarjeta anclada bajo el botón, con el ancho
+   limitado por el viewport, scroll propio y contención del overscroll.
+
+   Dos cosas que NO son decorativas:
+   · `touch-action: pan-y` + `overscroll-behavior: contain`. Varios juegos ponen
+     `touch-action: none` en el body, y el navegador resuelve el gesto permitido
+     como la INTERSECCIÓN con todos los ancestros: sin esta línea el panel no se
+     desplaza con el dedo por más que tenga overflow.
+   · La media query de APAISADO. En un teléfono acostado lo escaso es el ALTO: una
+     columna de 380 px son varias pantallas de scroll con aire al costado. El doble
+     de ancho corta los renglones a la mitad.
+   ════════════════════════════════════════════════════════════════════ */
+#infoPanel {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--bar-height, 58px) + 10px + env(safe-area-inset-bottom));
+  z-index: 60; width: min(400px, 92vw); max-height: 70vh; overflow-y: auto;
+  touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  padding: 14px 16px; border-radius: 14px;
+  background: rgba(10,13,20,0.975);
+  border: 1px solid var(--shell-accent);
+  box-shadow: 0 10px 34px rgba(0,0,0,0.6);
+  font-size: 12.5px; line-height: 1.6; color: #c7d2e2; font-weight: 300;
+  display: none;
+}
+#infoPanel.show { display: block; }
+#infoPanel h4 {
+  margin: 0 0 7px; font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--shell-ink-hi);
+}
+#infoPanel b { color: var(--shell-accent-text, #9fe0ff); font-weight: 700; }
+#infoPanel .k {                                   /* una tecla o un botón, para que se lea como objeto */
+  display: inline-block; padding: 0 5px; margin: 0 1px; border-radius: 4px;
+  border: 1px solid var(--shell-line); background: rgba(255,255,255,0.06);
+  color: var(--shell-ink-hi); font-size: 11px; font-weight: 600; line-height: 17px;
+}
+#infoPanel ul { margin: 5px 0 0; padding-left: 17px; }
+#infoPanel li { margin: 2px 0; }
+#infoPanel hr { border: 0; border-top: 1px solid rgba(255,255,255,0.11); margin: 9px 0; }
+#infoPanel .fps { color: #8ee36b; font-weight: 700; }
+#infoPanel .dim { color: rgba(255,255,255,0.42); }
+
+@media (orientation: landscape) and (max-height: 560px) {
+  #infoPanel {
+    width: min(700px, 95vw); max-height: 84vh;
+    font-size: 11.5px; line-height: 1.5; padding: 11px 14px;
+    bottom: calc(var(--bar-height, 46px) + 6px + env(safe-area-inset-bottom));
+  }
+  #infoPanel hr { margin: 7px 0; }
+  #infoPanel h4 { font-size: 12px; margin-bottom: 5px; }
+}
+
+/* Cierre del panel. Arriba a la derecha, dentro de la tarjeta: es la unica salida garantizada
+   cuando el panel se ancla al piso y queda por encima del boton que lo abrio. */
+#infoPanel { position: fixed; }
+#infoPanel .infoClose {
+  position: absolute; top: 8px; right: 9px; width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.6); font: 600 15px/1 system-ui, sans-serif;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0; touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+#infoPanel .infoClose:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
+#infoPanel .infoClose:active { transform: scale(0.9); background: rgba(255,255,255,0.16); }
+#infoPanel h4 { padding-right: 30px; }

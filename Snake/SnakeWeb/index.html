@@ -154,6 +154,61 @@
               background: rgba(40,90,120,0.5); border: 1px solid rgba(120,200,255,0.5); }
   #luReroll.disabled { opacity: 0.4; pointer-events: none; }
 
+
+  /* ── Panel de informacion (mismo criterio que el de Loop) ──
+     `touch-action: pan-y` + `overscroll-behavior: contain` NO son decorativos: este juego pone
+     `touch-action: none` mas arriba y el navegador resuelve el gesto permitido como la
+     INTERSECCION con todos los ancestros, asi que sin esta linea el panel no se desplaza con el
+     dedo por mas overflow que tenga. */
+  #infoPanel {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: calc(12px + env(safe-area-inset-bottom));
+    z-index: 60; width: min(400px, 92vw); max-height: 70vh; overflow-y: auto;
+    touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+    padding: 14px 16px; border-radius: 14px;
+    background: rgba(10,13,20,0.975); border: 1px solid rgba(110,225,200,0.62);
+    box-shadow: 0 10px 34px rgba(0,0,0,0.6);
+    font-size: 12.5px; line-height: 1.6; color: #c7d2e2; font-weight: 300;
+    display: none;
+  }
+  #infoPanel.show { display: block; }
+  #infoPanel h4 { margin: 0 0 7px; font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
+                  text-transform: uppercase; color: rgba(255,255,255,0.92); }
+  #infoPanel b { color: #7fe8cf; font-weight: 700; }
+  #infoPanel .k { display: inline-block; padding: 0 5px; margin: 0 1px; border-radius: 4px;
+                  border: 1px solid rgba(255,255,255,0.17); background: rgba(255,255,255,0.06);
+                  color: rgba(255,255,255,0.92); font-size: 11px; font-weight: 600; line-height: 17px; }
+  #infoPanel ul { margin: 5px 0 0; padding-left: 17px; }
+  #infoPanel li { margin: 2px 0; }
+  #infoPanel hr { border: 0; border-top: 1px solid rgba(255,255,255,0.11); margin: 9px 0; }
+  #infoPanel .dim { color: rgba(255,255,255,0.42); }
+  @media (orientation: landscape) and (max-height: 560px) {
+    #infoPanel { width: min(700px, 95vw); max-height: 84vh; font-size: 11.5px; line-height: 1.5; padding: 11px 14px; }
+    #infoPanel hr { margin: 7px 0; }
+    #infoPanel h4 { font-size: 12px; margin-bottom: 5px; }
+  }
+
+
+/* Cierre del panel. Arriba a la derecha, dentro de la tarjeta: es la unica salida garantizada
+   cuando el panel se ancla al piso y queda por encima del boton que lo abrio. */
+#infoPanel .infoClose {
+  position: absolute; top: 8px; right: 9px; width: 26px; height: 26px; border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.6); font: 600 15px/1 system-ui, sans-serif;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0; touch-action: none; -webkit-tap-highlight-color: transparent;
+}
+#infoPanel .infoClose:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
+#infoPanel .infoClose:active { transform: scale(0.9); background: rgba(255,255,255,0.16); }
+#infoPanel h4 { padding-right: 30px; }
+
+
+  /* AREA TACTIL: el cuerpo de estos botones mide 30 px y un pulgar necesita ~44. El
+     pseudo-elemento agranda el OBJETIVO sin agrandar el dibujo. Solo en vertical: los botones de
+     la esquina estan a 38 px de paso con cuerpos de 30, asi que ampliar a los costados haria que
+     dos areas se toquen y el tap caiga en el vecino. */
+  #btnDebug, #btnPause, #btnReset { position: absolute; }
+  #btnDebug::after, #btnPause::after, #btnReset::after { content: ''; position: absolute; inset: -7px 0; border-radius: 50%; }
 </style>
 </head>
 <body>
@@ -3396,5 +3451,95 @@
     })();
   </script>
 
+<div id="infoPanel"><h4>Snake</h4>
+Una serpiente de mar en un arrecife oscuro. Comé estrellas para crecer y subir de nivel; cada
+nivel te deja elegir una <b>mejora</b>. Si te quedas sin vida, se termina.
+<hr>
+<b>Controles</b>
+<ul>
+  <li><b>Palanca</b> abajo a la izquierda para dirigir.</li>
+  <li><span class="k">⚡</span> (mantener) acelera. Gasta turbo, que se recarga al soltar.</li>
+  <li><span class="k">II</span> pausa · <span class="k">↻</span> reinicia.</li>
+</ul>
+<hr>
+<b>Qué hay en el agua</b>
+<ul>
+  <li><b>Estrellas</b>: te hacen crecer y dan experiencia. Las mas raras valen mas.</li>
+  <li><b>Medusa</b>: escudo por unos segundos.</li>
+  <li><b>Caballito de mar</b>: velocidad extra un rato.</li>
+  <li><b>Minas</b>: pegan fuerte y te arrancan un pedazo.</li>
+  <li><b>Serpientes enemigas</b>: embestilas para morderlas.</li>
+  <li><b>Jefes</b>: aparecen cada varios niveles. Cada uno tiene una ventana en la que se le puede
+      pegar de verdad; fuera de esa ventana la armadura absorbe casi todo.</li>
+</ul>
+<span class="dim">No salgas del lago: afuera perdes vida de forma continua.</span></div>
+
+<script>
+// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
+// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
+// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+(function () {
+  function armar() {
+    var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
+    var panel = document.getElementById('infoPanel');
+    if (!btn || !panel) return;
+    var fps = document.getElementById('fpsOverlay');
+    if (fps && fps.parentNode !== panel) panel.appendChild(fps);
+    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
+    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
+    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    var bar = document.getElementById('bar');
+    function ubicar() {
+      // Se mide la distancia de la barra al BORDE INFERIOR, no su alto: en Hangman la barra flota
+      // encima del teclado en pantalla, asi que con el alto solo el panel le caia justo arriba.
+      var h = bar ? Math.round(window.innerHeight - bar.getBoundingClientRect().top) : 56;
+      // Si arriba de la barra no queda lugar usable, el panel se ancla al piso y TAPA lo que haya.
+      // Es lo correcto: en Hangman apaisado el teclado y la barra se comen 319 de 380 px, y de
+      // todos modos no se escribe mientras se leen las instrucciones.
+      var libre = window.innerHeight - h;
+      if (libre < 150) { h = 0; }
+      panel.style.bottom = (h + 10) + 'px';
+      panel.style.maxHeight = Math.max(110, window.innerHeight - h - 30) + 'px';
+    }
+    ubicar();
+    window.addEventListener('resize', ubicar);
+    window.addEventListener('orientationchange', ubicar);
+    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
+    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
+    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
+    // Escape.
+    var cerrar = document.createElement('button');
+    cerrar.className = 'infoClose'; cerrar.type = 'button';
+    cerrar.setAttribute('aria-label', 'cerrar');
+    cerrar.textContent = '×';
+    cerrar.addEventListener('pointerdown', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      panel.classList.remove('show'); btn.classList.remove('on');
+    });
+    panel.insertBefore(cerrar, panel.firstChild);
+    btn.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      var abrir = !panel.classList.contains('show');
+      panel.classList.toggle('show', abrir);
+      btn.classList.toggle('on', abrir);
+    });
+    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    btn.addEventListener('click', function (e) {
+      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      var abrir = !panel.classList.contains('show');
+      panel.classList.toggle('show', abrir);
+      btn.classList.toggle('on', abrir);
+    });
+    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && panel.classList.contains('show')) {
+        panel.classList.remove('show'); btn.classList.remove('on');
+      }
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', armar);
+  else armar();
+})();
+</script>
 </body>
 </html>

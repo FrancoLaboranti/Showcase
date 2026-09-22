@@ -133,8 +133,19 @@
     background: rgba(244,235,221,0.97); border: 2px solid rgba(34,30,27,0.65);
     font-size: 12px; line-height: 1.65; color: #3a322c;
     display: none; box-shadow: 0 8px 24px rgba(60,45,35,0.35);
+    /* El panel medía 468 px de alto y en apaisado la pantalla tiene 380: se salia por abajo y la
+       mitad del texto no se podia leer ni alcanzar. Ahora tiene techo y scroll propio.
+       `touch-action: pan-y` hace falta porque el body declara `touch-action: none` y el navegador
+       resuelve el gesto permitido como la INTERSECCION con todos los ancestros. */
+    max-height: calc(100vh - 64px - env(safe-area-inset-top)); overflow-y: auto;
+    touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   }
   #infoPanel.show { display: block; }
+  @media (orientation: landscape) and (max-height: 560px) {
+    #infoPanel { top: calc(44px + env(safe-area-inset-top)); width: min(520px, 92vw);
+                 font-size: 11px; line-height: 1.5; padding: 11px 13px;
+                 max-height: calc(100vh - 54px - env(safe-area-inset-top)); }
+  }
   #infoPanel b { color: #b06010; }
   #infoPanel .fps { color: #2e7d32; font-weight: 700; }
 
@@ -148,6 +159,13 @@
   #tunePanel label { display: block; margin-top: 6px; color: rgba(190,215,235,0.85); }
   #tunePanel input[type=range] { width: 100%; }
   #tunePanel .val { color: #a3e635; float: right; }
+
+  /* AREA TACTIL: el cuerpo de estos botones mide 30 px y un pulgar necesita ~44. El
+     pseudo-elemento agranda el OBJETIVO sin agrandar el dibujo. Solo en vertical: los botones de
+     la esquina estan a 38 px de paso con cuerpos de 30, asi que ampliar a los costados haria que
+     dos areas se toquen y el tap caiga en el vecino. */
+  #btnInfo, #btnPause, #btnMute, #btnReset { position: absolute; }
+  #btnInfo::after, #btnPause::after, #btnMute::after, #btnReset::after { content: ''; position: absolute; inset: -7px 0; border-radius: 50%; }
 </style>
 </head>
 <body>

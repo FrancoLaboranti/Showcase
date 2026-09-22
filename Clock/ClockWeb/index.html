@@ -106,6 +106,16 @@
   #btnMute.muted .ic-on { display: none; }
   #btnMute.muted .ic-off { display: block; }
 
+  :root { --shell-accent: rgba(120,230,255,0.62); --shell-accent-soft: rgba(120,230,255,0.26); --shell-accent-text: #7fe6ff; }
+
+  #infoPanel #fpsOverlay {
+    position: static !important; inset: auto !important; margin: 9px 0 0 !important;
+    padding: 0 !important; background: none !important; border: 0 !important;
+    box-shadow: none !important; border-radius: 0 !important;
+    font: inherit !important; color: #8ee36b !important; text-align: left !important;
+    width: auto !important; max-width: none !important; opacity: 1 !important;
+  }
+
 </style>
 </head>
 <body>
@@ -689,5 +699,83 @@
   </script>
 
 
+<div id="infoPanel"><h4>Reloj</h4>
+Un reloj analogico de fosforo sobre vidrio. Marca la hora del dispositivo: no hay nada que ganar
+ni que perder.
+<hr>
+<ul>
+  <li><b>Tocar el reloj</b> o <span class="k">segundero</span>: alterna el segundero entre
+      <b>tic-tac</b> (salta una vez por segundo) y <b>suave</b> (barre continuo).</li>
+  <li><span class="k">color</span> cambia la paleta. Hay siete.</li>
+  <li><span class="k">auto</span> las va cambiando solas cada dos segundos.</li>
+</ul></div>
+
+<script>
+// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
+// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
+// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+(function () {
+  function armar() {
+    var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
+    var panel = document.getElementById('infoPanel');
+    if (!btn || !panel) return;
+    var fps = document.getElementById('fpsOverlay');
+    if (fps && fps.parentNode !== panel) panel.appendChild(fps);
+    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
+    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
+    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    var bar = document.getElementById('bar');
+    function ubicar() {
+      // Se mide la distancia de la barra al BORDE INFERIOR, no su alto: en Hangman la barra flota
+      // encima del teclado en pantalla, asi que con el alto solo el panel le caia justo arriba.
+      var h = bar ? Math.round(window.innerHeight - bar.getBoundingClientRect().top) : 56;
+      // Si arriba de la barra no queda lugar usable, el panel se ancla al piso y TAPA lo que haya.
+      // Es lo correcto: en Hangman apaisado el teclado y la barra se comen 319 de 380 px, y de
+      // todos modos no se escribe mientras se leen las instrucciones.
+      var libre = window.innerHeight - h;
+      if (libre < 150) { h = 0; }
+      panel.style.bottom = (h + 10) + 'px';
+      panel.style.maxHeight = Math.max(110, window.innerHeight - h - 30) + 'px';
+    }
+    ubicar();
+    window.addEventListener('resize', ubicar);
+    window.addEventListener('orientationchange', ubicar);
+    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
+    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
+    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
+    // Escape.
+    var cerrar = document.createElement('button');
+    cerrar.className = 'infoClose'; cerrar.type = 'button';
+    cerrar.setAttribute('aria-label', 'cerrar');
+    cerrar.textContent = '×';
+    cerrar.addEventListener('pointerdown', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      panel.classList.remove('show'); btn.classList.remove('on');
+    });
+    panel.insertBefore(cerrar, panel.firstChild);
+    btn.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      var abrir = !panel.classList.contains('show');
+      panel.classList.toggle('show', abrir);
+      btn.classList.toggle('on', abrir);
+    });
+    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    btn.addEventListener('click', function (e) {
+      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      var abrir = !panel.classList.contains('show');
+      panel.classList.toggle('show', abrir);
+      btn.classList.toggle('on', abrir);
+    });
+    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && panel.classList.contains('show')) {
+        panel.classList.remove('show'); btn.classList.remove('on');
+      }
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', armar);
+  else armar();
+})();
+</script>
 </body>
 </html>

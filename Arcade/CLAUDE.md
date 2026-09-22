@@ -98,6 +98,59 @@ cache buster instead.
 - The PWA icons in `manifest.json` are still PNG and should stay that way: install prompts are
   fussier about formats than `<img>` is.
 
+
+## El botón ⓘ y el panel de información (2026-09-22)
+
+**Antes, en 18 de los 22 juegos el botón ⓘ mostraba un contador de FPS.** Sólo Loop y StickFight
+explicaban cómo se juega. Y `arcade-shell.css` oculta el `#hint` de *todos* los juegos con el
+argumento de que "los controles ya están en el botón ⓘ" — que era falso: la única explicación que
+el jugador tenía estaba apagada, y lo que veía en su lugar eran cuadros por segundo.
+
+Ahora los 22 tienen un `#infoPanel` con reglas reales, sacadas de los controles del port web (no
+del `CLAUDE.md` de la carpeta, que describe sobre todo la versión de Pygame). Los `#hint` fueron la
+mejor fuente: son la descripción de controles del propio autor.
+
+**El FPS no se quitó: se mudó.** El `#fpsOverlay` pasa a ser un hijo del panel, así que el handler
+que cada juego ya tenía lo sigue prendiendo y apagando — sólo que ahora es una línea adentro de la
+tarjeta. No se clona el botón ni se sacan listeners: los dos handlers escuchan el mismo
+`pointerdown` y parten del mismo estado, así que quedan sincronizados solos.
+
+Tres cosas del panel que no son decorativas:
+
+- **`touch-action: pan-y` + `overscroll-behavior: contain`.** Varios juegos declaran
+  `touch-action: none` en el `body`, y el navegador resuelve el gesto permitido como la
+  **intersección** con todos los ancestros: sin esa línea el panel no se desplaza con el dedo por
+  más overflow que tenga. Es la misma trampa que Loop ya había pisado.
+- **La barra se MIDE, no se asume.** Se usa `innerHeight − bar.top`, no `--bar-height`: varios
+  juegos no declaran esa variable, y en Hangman la barra flota **encima del teclado en pantalla**,
+  así que con el alto solo el panel le caía justo arriba.
+- **Si arriba de la barra no queda lugar usable, el panel se ancla al piso y tapa lo que haya.**
+  En Hangman apaisado el teclado y la barra se comen 319 de 380 px. Por eso el panel tiene un **✕
+  propio**: cuando se ancla al piso puede quedar por encima del botón que lo abrió, y sin una
+  salida adentro el jugador queda atrapado leyendo las instrucciones.
+
+## El acento es una variable, no un color
+
+`arcade-shell.css` define `--shell-accent` y **cada juego la redefine con un color de su propia
+paleta**. Es lo que permite que la colección se sienta una sola sin que ningún juego quede con el
+celeste de Loop encima: el buscaminas es verde pasto, Simón es dorado, Tron celeste, los fuegos
+naranjas.
+
+El cuerpo del botón viene de Loop y son tres capas: superficie de panel, **filo de luz arriba**
+(`inset 0 1px 0` — es lo que hace que se lea como pieza física y no como rectángulo pintado) y una
+base oscura corta. El estado activo **encoge** (`scale(.9)`): un botón que crece al tocarlo tapa lo
+que está al lado justo cuando el dedo ya está encima.
+
+**El área táctil se agranda con un `::after`, no con el cuerpo.** El dibujo mide 32 px porque más
+grande tapa juego, pero un pulgar necesita ~44. La expansión lateral es de sólo 2 px a propósito:
+con `gap: 8px` dos áreas de ±4 se tocarían y el tap caería en el vecino. En los cinco juegos con
+barra propia (CrazyTanks, Pong, Snake, StickFight, TankWARS) los botones están a 38 px de paso con
+cuerpos de 30, así que ahí la ampliación es **sólo vertical**.
+
+**Cinco juegos no incluyen el shell y así queda**: tienen la barra hecha a mano por razones
+propias (botones flotantes, no una fila). A ésos el CSS del panel les va en línea. Duplicación
+deliberada: meterles el shell entero les cambiaría los botones.
+
 ## Gotchas
 
 - **A blanket `.png` → `.webp` replace in `index.html` is safe only because the icons live in

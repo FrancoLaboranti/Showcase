@@ -72,6 +72,36 @@
   #btnMute.muted .ic-off { display: block; }
 
   /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css (incluido en <head>). */
+  :root { --shell-accent: rgba(255,255,255,0.5); --shell-accent-soft: rgba(255,255,255,0.26); --shell-accent-text: #e8eef7; }
+
+
+  /* El boton de mute nacio en la pasada de audio y quedo SIN TAMANO: `arcade-shell.css` solo
+     estiliza ✕ / ⛶ / ⓘ, y en este juego el mute cae fuera de las reglas de la barra. Se veia como
+     una tira fina de un pixel. Se le da el mismo cuerpo que a los tres del shell — no se agrega al
+     shell para no pisar a los nueve juegos que ya le dan estilo propio. */
+  #btnMute {
+    width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
+    align-self: flex-end; margin-bottom: 6px;
+    border: 1px solid rgba(255,255,255,0.17); background: rgba(255,255,255,0.05);
+    color: rgba(255,255,255,0.48);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: none; padding: 0; position: relative;
+    -webkit-tap-highlight-color: transparent;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.09);
+    transition: border-color 0.1s, color 0.1s, background 0.1s, transform 0.08s;
+  }
+  #btnMute svg { display: block; width: 15px; height: 15px; pointer-events: none; }
+  #btnMute::after { content: ''; position: absolute; inset: -7px -2px; border-radius: 50%; }
+  #btnMute:hover { border-color: rgba(255,255,255,0.34); color: rgba(255,255,255,0.92); }
+  #btnMute:active {
+    background: var(--shell-accent-soft, rgba(120,200,255,0.26));
+    border-color: var(--shell-accent, rgba(120,200,255,0.62));
+    color: rgba(255,255,255,0.92); transform: scale(0.9);
+  }
+  #btnMute:focus-visible { outline: none; border-color: var(--shell-accent, rgba(120,200,255,0.62));
+    box-shadow: 0 1px 6px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.09),
+                0 0 0 3px var(--shell-accent-soft, rgba(120,200,255,0.26)); }
+
 </style>
 </head>
 <body>
@@ -841,6 +871,14 @@
   }
 
   function drawInfoOverlay() {
+    // El panel de informacion pasa a ser el `#infoPanel` del DOM, que es el mismo de todo el
+    // Arcade: se desplaza, tiene su ✕ y se lee igual en apaisado. Este overlay dibujaba LO MISMO
+    // sobre el lienzo, asi que con los dos prendidos se veian dos paneles encimados diciendo
+    // exactamente lo mismo.
+    // `showInfo` NO se elimina y el handler tampoco: sigue marcando "el panel esta abierto", que
+    // es lo que pausa a la CPU y evita que el tap caiga en el tablero. Lo unico que se corta es el dibujo.
+    return;
+    /* eslint-disable no-unreachable */
     if (!showInfo) return;
     // backdrop oscurece todo el juego — refuerza el hint "tocá afuera para cerrar"
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
@@ -952,5 +990,87 @@
 
   <!-- Shell del Arcade (exit + fullscreen + lock de orientación). data-orient: landscape/portrait/any. -->
   <script src="../../Arcade/arcade-shell.js" data-orient="any"></script>
+<div id="infoPanel"><h4>Ta-Te-Ti</h4>
+Tres en linea sobre un tablero de 3x3. Gana el primero que alinee tres marcas propias en fila,
+columna o diagonal; si se llena sin linea, es empate.
+<hr>
+<ul>
+  <li><b>Tocar una celda</b> para poner tu marca.</li>
+  <li><span class="k">modo</span> cicla entre <b>2 jugadores</b>, <b>vos X contra la CPU</b> y
+      <b>vos O contra la CPU</b>.</li>
+  <li><span class="k">otra</span> arranca una ronda nueva; <span class="k">marcador</span> borra
+      el acumulado de X / O / empates.</li>
+</ul>
+<hr>
+<span class="dim">La CPU juega con busqueda completa: en 3x3 eso significa que no se le puede
+ganar. Contra ella lo mejor posible es empatar. Quien abre alterna en cada ronda.</span></div>
+
+<script>
+// El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
+// tenia el juego lo sigue prendiendo y apagando con el mismo toque: no se saca ningun listener ni
+// se cambia ningun comportamiento que existiera. Si el juego no tenia medidor, no pasa nada.
+(function () {
+  function armar() {
+    var btn = document.getElementById('btnInfo') || document.getElementById('btnDebug');
+    var panel = document.getElementById('infoPanel');
+    if (!btn || !panel) return;
+    var fps = document.getElementById('fpsOverlay');
+    if (fps && fps.parentNode !== panel) panel.appendChild(fps);
+    // La barra se MIDE, no se asume. Varios juegos no declaran `--bar-height` y otros la cambian
+    // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
+    // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
+    var bar = document.getElementById('bar');
+    function ubicar() {
+      // Se mide la distancia de la barra al BORDE INFERIOR, no su alto: en Hangman la barra flota
+      // encima del teclado en pantalla, asi que con el alto solo el panel le caia justo arriba.
+      var h = bar ? Math.round(window.innerHeight - bar.getBoundingClientRect().top) : 56;
+      // Si arriba de la barra no queda lugar usable, el panel se ancla al piso y TAPA lo que haya.
+      // Es lo correcto: en Hangman apaisado el teclado y la barra se comen 319 de 380 px, y de
+      // todos modos no se escribe mientras se leen las instrucciones.
+      var libre = window.innerHeight - h;
+      if (libre < 150) { h = 0; }
+      panel.style.bottom = (h + 10) + 'px';
+      panel.style.maxHeight = Math.max(110, window.innerHeight - h - 30) + 'px';
+    }
+    ubicar();
+    window.addEventListener('resize', ubicar);
+    window.addEventListener('orientationchange', ubicar);
+    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
+    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
+    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
+    // Escape.
+    var cerrar = document.createElement('button');
+    cerrar.className = 'infoClose'; cerrar.type = 'button';
+    cerrar.setAttribute('aria-label', 'cerrar');
+    cerrar.textContent = '×';
+    cerrar.addEventListener('pointerdown', function (e) {
+      e.preventDefault(); e.stopPropagation();
+      panel.classList.remove('show'); btn.classList.remove('on');
+    });
+    panel.insertBefore(cerrar, panel.firstChild);
+    btn.addEventListener('pointerdown', function (e) {
+      e.preventDefault();
+      var abrir = !panel.classList.contains('show');
+      panel.classList.toggle('show', abrir);
+      btn.classList.toggle('on', abrir);
+    });
+    // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
+    btn.addEventListener('click', function (e) {
+      if (e.detail !== 0) return;                 // detail 0 = vino del teclado, no del mouse
+      var abrir = !panel.classList.contains('show');
+      panel.classList.toggle('show', abrir);
+      btn.classList.toggle('on', abrir);
+    });
+    // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
+    window.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && panel.classList.contains('show')) {
+        panel.classList.remove('show'); btn.classList.remove('on');
+      }
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', armar);
+  else armar();
+})();
+</script>
 </body>
 </html>
