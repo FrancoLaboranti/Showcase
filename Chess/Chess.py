@@ -723,9 +723,9 @@ class Game(Sprite):
             ('pvp', pygame.Rect(int(cx - bw/2), int(by + 0*(bh+gap)), int(bw), int(bh)),
              '2 Jugadores'),
             ('w', pygame.Rect(int(cx - bw/2), int(by + 1*(bh+gap)), int(bw), int(bh)),
-             'Jugar con Blancas  (vs IA)'),
+             'Play as White  (vs AI)'),
             ('b', pygame.Rect(int(cx - bw/2), int(by + 2*(bh+gap)), int(bw), int(bh)),
-             'Jugar con Negras  (vs IA)'),
+             'Play as Black  (vs AI)'),
             ('aiva', pygame.Rect(int(cx - bw/2), int(by + 3*(bh+gap)), int(bw), int(bh)),
              'IA vs IA  (espectador)'),
         ]
@@ -1010,7 +1010,7 @@ class Game(Sprite):
     def draw_menu(self):
         createText(int(sper(0.06)), 'AJEDREZ', 'center',
                    (240, 240, 240), screenX/2, yper(0.16))
-        createText(int(sper(0.020)), 'Elegí cómo jugar', 'center',
+        createText(int(sper(0.020)), 'Choose how to play', 'center',
                    (180, 180, 180), screenX/2, yper(0.26))
         for btn in self.menu_buttons():
             rect, label = btn[1], btn[2]
@@ -1022,10 +1022,10 @@ class Game(Sprite):
             createText(int(sper(0.020)), label, 'center',
                        (240, 240, 240), rect.centerx, rect.centery)
         if _stockfish_engine is not None:
-            engine_line = 'Motor: Stockfish  ·  ' + str(AI_TIME_BUDGET_S) + 's por jugada'
+            engine_line = 'Motor: Stockfish  ·  ' + str(AI_TIME_BUDGET_S) + 's per move'
             engine_color = (140, 200, 140)
         else:
-            engine_line = 'Motor: Interno (Stockfish no disponible)'
+            engine_line = 'Engine: Internal (Stockfish unavailable)'
             engine_color = (200, 160, 100)
         createText(int(sper(0.014)), engine_line,
                    'center', engine_color, screenX/2, yper(0.90))
@@ -1213,10 +1213,10 @@ class Game(Sprite):
         if viewing:
             idx = self.history_index
             if idx == 0:
-                label = 'Posición inicial  ·  END = volver al presente'
+                label = 'Starting position  ·  END = back to the present'
             else:
                 total_plies = len(self.history) - 1
-                label = 'Viendo movida ' + str(idx) + ' de ' + str(total_plies) + '  ·  ←→ navegar  ·  END = al presente'
+                label = 'Viendo movida ' + str(idx) + ' de ' + str(total_plies) + '  ·  ←→ navigate  ·  END = to the present'
             createText(int(sper(0.020)), label, 'center',
                        (230, 220, 130), screenX/2, yper(0.04))
         elif view_status == 'checkmate':
@@ -1227,10 +1227,10 @@ class Game(Sprite):
             createText(int(sper(0.030)), 'AHOGADO — Tablas',
                        'center', (230, 220, 100), screenX/2, yper(0.04))
         elif view_status == 'repetition':
-            createText(int(sper(0.030)), 'TABLAS POR REPETICIÓN',
+            createText(int(sper(0.030)), 'DRAW BY REPETITION',
                        'center', (230, 220, 100), screenX/2, yper(0.04))
         elif view_status == 'insufficient':
-            createText(int(sper(0.030)), 'TABLAS POR FALTA DE MATERIAL',
+            createText(int(sper(0.030)), 'DRAW BY INSUFFICIENT MATERIAL',
                        'center', (230, 220, 100), screenX/2, yper(0.04))
         else:
             turn_txt = 'Turno: Blancas' if view_turn == 'w' else 'Turno: Negras'
@@ -1249,7 +1249,7 @@ class Game(Sprite):
         if not viewing and not self.ai_thinking and self.ai_last_depth > 0 and not self.game_over:
             name = self.ai_engine_name or 'IA'
             createText(int(sper(0.013)),
-                       'Última jugada de ' + name + ': profundidad ' + str(self.ai_last_depth),
+                       'Last move by ' + name + ': profundidad ' + str(self.ai_last_depth),
                        'center', (140, 160, 180), screenX/2, yper(0.073))
 
         if self.ai_both:
@@ -1258,7 +1258,7 @@ class Game(Sprite):
             mode_txt = 'Modo: 2 Jugadores'
         else:
             who = 'Blancas' if self.human_color == 'w' else 'Negras'
-            mode_txt = 'Modo: vs IA  ·  vos jugás ' + who
+            mode_txt = 'Mode: vs AI  ·  you play ' + who
         createText(int(sper(0.014)), mode_txt, 'topright',
                    (180, 180, 180), screenX - xper(0.02), yper(0.02))
 
@@ -1266,7 +1266,7 @@ class Game(Sprite):
             createText(int(sper(0.012)), 'Stockfish OK', 'topleft',
                        (140, 200, 140), xper(0.02), yper(0.02))
         else:
-            createText(int(sper(0.012)), 'Stockfish no cargado', 'topleft',
+            createText(int(sper(0.012)), 'Stockfish not loaded', 'topleft',
                        (200, 160, 100), xper(0.02), yper(0.02))
 
         createText(int(sper(0.013)),

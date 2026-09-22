@@ -295,7 +295,7 @@ class Manager(Sprite):
 
     def drawMenu(self):
         createText(int(sper(0.06)), 'TATETI', 'center', (235, 235, 245), xper(0.5), yper(0.22))
-        createText(int(sper(0.018)), 'elegí modo', 'center', (140, 145, 160), xper(0.5), yper(0.33))
+        createText(int(sper(0.018)), 'choose a mode', 'center', (140, 145, 160), xper(0.5), yper(0.33))
 
         labels = [
             ('2 JUGADORES', (235,235,245)),
@@ -311,7 +311,7 @@ class Manager(Sprite):
                 pygame.draw.rect(windowSurface, col, (xper(0.5) - xper(0.2), y - yper(0.035), xper(0.4), yper(0.07)), max(2, int(sper(0.003))), border_radius=int(sper(0.012)))
             createText(size, label, 'center', col if selected else modifyColorPerc(col, 0.55), xper(0.5), y)
 
-        createText(int(sper(0.014)), '↑ ↓  PARA ELEGIR    ENTER PARA JUGAR    ESC PARA SALIR', 'center', (110, 115, 130), xper(0.5), yper(0.92))
+        createText(int(sper(0.014)), '↑ ↓  TO CHOOSE    ENTER TO PLAY    ESC TO QUIT', 'center', (110, 115, 130), xper(0.5), yper(0.92))
 
     def drawHUD(self):
         b = board[0]
@@ -321,7 +321,7 @@ class Manager(Sprite):
 
         if self.state == 'play':
             mark = b.turn
-            label = 'TURNO DE  ' if self.mode == 'pvp' else ('TU TURNO' if mark != self.cpuMark else 'PENSANDO...')
+            label = 'TO MOVE:  ' if self.mode == 'pvp' else ('YOUR TURN' if mark != self.cpuMark else 'PENSANDO...')
             createText(int(sper(0.022)), label, 'midright' if self.mode == 'pvp' else 'center', (200, 205, 220),
                        xper(0.5) - (sper(0.02) if self.mode == 'pvp' else 0), topY)
             if self.mode == 'pvp':
@@ -332,7 +332,7 @@ class Manager(Sprite):
             if b.winner == 1 or b.winner == 2:
                 if self.mode == 'cpu':
                     won = (b.winner != self.cpuMark)
-                    txt = '¡GANASTE!' if won else 'GANA LA CPU'
+                    txt = 'YOU WIN!' if won else 'CPU WINS'
                     col = colorForMark(b.winner)
                 else:
                     txt = 'GANA X' if b.winner == 1 else 'GANA O'
@@ -372,7 +372,7 @@ class Manager(Sprite):
             col = tuple(int(120 + 100*blink) for _ in range(3))
             createText(int(sper(0.018)), 'CLICK PARA OTRA PARTIDA    R PARA RESETEAR MARCADOR    ESC PARA EL MENÚ', 'center', col, xper(0.5), yper(0.95))
         else:
-            createText(int(sper(0.014)), 'ESC PARA EL MENÚ', 'center', (110, 115, 130), xper(0.5), yper(0.95))
+            createText(int(sper(0.014)), 'ESC FOR THE MENU', 'center', (110, 115, 130), xper(0.5), yper(0.95))
 
     def drawTopMark(self, mark, cx, cy, r, col):
         thick = max(2, int(sper(0.006)))

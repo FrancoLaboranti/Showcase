@@ -930,14 +930,14 @@ class AuxiliaryHandler(Sprite):
 
             if not self.tournament:
                 for tank in tanks:
-                    if tank.rank == 1: create_text(B_font,'¡%s Wins!' % ('Red' if tank.id == 0 else 'Blue' if tank.id == 1 else 'Purple' if tank.id == 2 else 'Yellow'),modify_color(tank.color,75),None,xper(0.5),yper(0.35))
+                    if tank.rank == 1: create_text(B_font,'%s Wins!' % ('Red' if tank.id == 0 else 'Blue' if tank.id == 1 else 'Purple' if tank.id == 2 else 'Yellow'),modify_color(tank.color,75),None,xper(0.5),yper(0.35))
                 create_text(M_font,'Rematch',(255,255,255) if self.post_race_option == 0 else (150,150,150),None,xper(0.5),yper(0.55))
                 create_text(M_font,'Back to Menu',(255,255,255) if self.post_race_option == 1 else (150,150,150),None,xper(0.5),yper(0.65))
 
             else:
                 if self.table_cooldown < self.table_timer:
                     for tank in tanks:
-                        if tank.rank == 1: create_text(B_font,'¡%s Wins!' % ('Red' if tank.id == 0 else 'Blue' if tank.id == 1 else 'Purple' if tank.id == 2 else 'Yellow'),modify_color(tank.color,75),None,xper(0.5),yper(0.5))
+                        if tank.rank == 1: create_text(B_font,'%s Wins!' % ('Red' if tank.id == 0 else 'Blue' if tank.id == 1 else 'Purple' if tank.id == 2 else 'Yellow'),modify_color(tank.color,75),None,xper(0.5),yper(0.5))
 
                 else:
                     pygame.draw.rect(windowSurface, (0,0,0), pygame.Rect(xper(0.25), yper(0.25), xper(0.5), yper(0.4)))
@@ -966,7 +966,7 @@ class AuxiliaryHandler(Sprite):
 
                         create_text(M_font,'%s°'%(tourneyrank),modify_color(tank.color,75) if self.pointsaccounted else (255,255,255),None,xper(0.3),pos_in_table)
                         create_text(M_font,'%s pts.'%(points),modify_color(tank.color,75),None,xper(0.675),pos_in_table)
-                        if self.pointsaccounted and self.tournamentfinished and tourneyrank == 1: create_text(B_font,'¡%s is the Champion!' % ('Red' if tank.id == 0 else 'Blue' if tank.id == 1 else 'Purple' if tank.id == 2 else 'Yellow'),randcolor_gray(55,255),None,xper(0.5),yper(0.15))
+                        if self.pointsaccounted and self.tournamentfinished and tourneyrank == 1: create_text(B_font,'%s is the Champion!' % ('Red' if tank.id == 0 else 'Blue' if tank.id == 1 else 'Purple' if tank.id == 2 else 'Yellow'),randcolor_gray(55,255),None,xper(0.5),yper(0.15))
                         if not self.pointsaccounted: create_text(RS_font if SCREEN_X < 1000 else S_font,'%s'%("1st!" if tank.rank == 1 else "2nd!" if tank.rank == 2 else "3rd" if tank.rank == 3 else "4th"),modify_color(tank.color,75),None,xper(0.375),pos_in_table)
 
                         lines = 17

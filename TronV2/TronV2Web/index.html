@@ -75,29 +75,36 @@
     width: auto !important; max-width: none !important; opacity: 1 !important;
   }
 
+
+  #infoPanel h5 {
+    margin: 10px 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.55);
+  }
+  #infoPanel h5:first-of-type { margin-top: 8px; }
+
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">en juego: tocá la mitad izq/der de la pantalla para doblar · la cámara te sigue</div>
+  <div id="hint">in a round: tap the left or right half of the screen to turn · the camera follows you</div>
   <!-- Orden como Pong: ⏸ pausa · ⌫ menu · ⛶ pantalla · ⓘ info · ✕ salir -->
   <div id="corner">
-    <button id="btnMute" aria-label="sonido" title="Sonido">
+    <button id="btnMute" aria-label="sound" title="Sound">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
     </button>
-    <button id="btnPause" aria-label="pausa" title="Pausa">
+    <button id="btnPause" aria-label="pause" title="Pause">
       <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
     </button>
-    <button id="btnMenu" aria-label="volver al menú" title="Volver al menú">
+    <button id="btnMenu" aria-label="back to menu" title="Back to menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg>
     </button>
-    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <button id="btnFs" aria-label="fullscreen" title="Fullscreen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
-    <button id="btnInfo" aria-label="info" title="Info / FPS">
+    <button id="btnInfo" aria-label="info" title="Info">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
-    <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+    <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
   </div>
@@ -838,7 +845,7 @@
     }
     if (!keys.ArrowLeft && !keys.ArrowRight && !keys.ArrowUp && !keys.ArrowDown) gh.keypressed = false;
   }
-  function bestOfLabel() { const bo = BEST_OF[gh.bestOfIdx]; return bo === 1 ? 'Partida única' : 'Best of ' + bo; }
+  function bestOfLabel() { const bo = BEST_OF[gh.bestOfIdx]; return bo === 1 ? 'Single round' : 'Best of ' + bo; }
 
   function drawMenuBg() {
     ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
@@ -964,12 +971,12 @@
     const youCol = PLAYER_COLORS[0], youW = gh.lastWinner === 'you';
     if (gh.targetWins > 1) drawScoreboard(0.28, 1.05);
     if (setOver()) {                                                               // fin del set
-      createText(90, youW ? '¡GANASTE!' : 'CPU GANA', youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 22, 'rgba(0,0,0,0.55)');
-      createText(36, 'tocá o Enter para revancha', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
+      createText(90, youW ? 'YOU WIN!' : 'CPU GANA', youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 22, 'rgba(0,0,0,0.55)');
+      createText(36, 'tap or press Enter for a rematch', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
     } else {                                                                       // ronda dentro del set
-      const msg = youW ? '¡Ronda tuya!' : ('Ronda para ' + (gh.lastWinnerName || 'CPU'));
+      const msg = youW ? 'Round to you!' : ('Round to ' + (gh.lastWinnerName || 'CPU'));
       createText(72, msg, youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 18, 'rgba(0,0,0,0.55)');
-      createText(36, 'tocá o Enter: siguiente ronda', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
+      createText(36, 'tap or press Enter: next round', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
     }
   }
 
@@ -1085,7 +1092,7 @@
         if (gh.targetWins > 1) drawScoreboard(0.06, 0.8);                          // marcador chico arriba durante la ronda
         if (gh.paused) {
           createText(80, 'PAUSA', 'rgb(235,235,235)', 0.5, 0.45, 20, 'rgba(0,0,0,0.5)');
-          createText(34, 'tocá ⏸ para seguir', 'rgb(200,200,200)', 0.5, 0.56, 0, 'rgba(0,0,0,0.5)');
+          createText(34, 'tap ⏸ to continue', 'rgb(200,200,200)', 0.5, 0.56, 0, 'rgba(0,0,0,0.5)');
         }
       }
     }
@@ -1125,19 +1132,21 @@
     })();
   </script>
 <div id="infoPanel"><h4>Tron V2</h4>
-Lo mismo que Tron pero en un <b>mundo grande con obstaculos</b> y camara que te sigue. Choca
-contra una estela, un muro o vos mismo y te desintegras. Gana el ultimo que queda.
+Tron in a large world with walls and a camera that follows you. Hit a trail, a wall or yourself and
+you are de-rezzed. <b>Your engine rises in pitch as a wall gets closer ahead</b> — if you hear it
+open up, you are about to clip something. The minimap shows where everyone is.
 <hr>
-<b>Controles</b>
+<h5>Desktop</h5>
 <ul>
-  <li><b>Tocar la mitad izquierda o derecha</b> de la pantalla dobla hacia ese lado.</li>
-  <li>Teclado: <span class="k">←</span> <span class="k">↓</span> doblan.
-      <span class="k">Esc</span> vuelve al menu.</li>
-  <li><span class="k">II</span> pausa. El <b>minimapa</b> muestra donde esta cada uno.</li>
+  <li><b>←</b> and <b>↓</b> turn. <b>Esc</b> goes back to the menu.</li>
+  <li>In the menu, <b>↑ ↓</b> pick the row and <b>← →</b> change the value.</li>
 </ul>
-<hr>
-<span class="dim">El motor de tu moto sube de tono cuando tenes una pared cerca adelante: si lo
-escuchas abrirse, estas por raspar algo.</span></div>
+<h5>Mobile</h5>
+<ul>
+  <li><b>Tap the left or right half of the screen</b> to turn that way.</li>
+  <li><b>Pause</b> and <b>Back to menu</b> sit in the top-right cluster.</li>
+</ul>
+</div>
 
 <script>
 // El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
@@ -1190,30 +1199,22 @@ escuchas abrirse, estas por raspar algo.</span></div>
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado: si arriba del boton no entra nada usable (Hangman apaisado, donde el
-      // teclado y la barra se comen 319 de 380 px), el panel se ancla al borde y tapa lo que haya.
-      // Para eso tiene su propio ✕.
+      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
+      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
+      // conmutador, asi que si queda tapado el panel no se puede cerrar.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
-        panel.style.top = m + 'px'; panel.style.bottom = 'auto';
-        panel.style.maxHeight = (vh - 2 * m) + 'px';
+        if ((rb.top + rb.height / 2) < vh / 2) {
+          panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, vh - rb.bottom - 6 - m) + 'px';
+        } else {
+          panel.style.top = m + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, rb.top - 6 - m) + 'px';
+        }
       }
     }
     ubicar();
     window.addEventListener('resize', ubicar);
     window.addEventListener('orientationchange', ubicar);
-    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
-    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
-    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
-    // Escape.
-    var cerrar = document.createElement('button');
-    cerrar.className = 'infoClose'; cerrar.type = 'button';
-    cerrar.setAttribute('aria-label', 'cerrar');
-    cerrar.textContent = '×';
-    cerrar.addEventListener('pointerdown', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      panel.classList.remove('show'); btn.classList.remove('on');
-    });
-    panel.insertBefore(cerrar, panel.firstChild);
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       var abrir = !panel.classList.contains('show');

@@ -169,6 +169,13 @@
      la esquina estan a 38 px de paso con cuerpos de 30, asi que ampliar a los costados haria que
      dos areas se toquen y el tap caiga en el vecino. */
   #btnInfo::after, #btnPause::after, #btnMute::after, #btnReset::after { content: ''; position: absolute; inset: -7px 0; border-radius: 50%; }
+
+  #infoPanel h5 {
+    margin: 10px 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.55);
+  }
+  #infoPanel h5:first-of-type { margin-top: 8px; }
+
 </style>
 </head>
 <body>
@@ -178,53 +185,66 @@
 
 <!-- ═══ TODO el DOM del juego ANTES del script principal (gotcha de TankWARSWeb:
      referenciar nodos declarados después = null crash → pantalla negra) ═══ -->
-<div id="jMove" aria-label="mover"></div>
+<div id="jMove" aria-label="move"></div>
 <div id="aimSafe"></div>
 <div id="actBtns">
-  <button class="abtn" id="btnJump" aria-label="salto">SALTO</button>
-  <button class="abtn" id="btnPunch" aria-label="puño">PUÑO</button>
-  <button class="abtn" id="btnKick" aria-label="patada">PATADA</button>
+  <button class="abtn" id="btnJump" aria-label="jump">SALTO</button>
+  <button class="abtn" id="btnPunch" aria-label="punch">PUÑO</button>
+  <button class="abtn" id="btnKick" aria-label="kick">PATADA</button>
 </div>
 
 <div id="padMenu">
-  <button class="btn" id="btnPause" aria-label="pausa" title="Pausa (P)"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg></button>
-  <button class="btn" id="btnReset" aria-label="menú" title="Volver al menú"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></button>
-  <button class="btn" id="btnMute" aria-label="sonido" title="Sonido"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg></button>
-  <button class="btn" id="btnFs" aria-label="pantalla completa" title="Pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
-  <button class="btn" id="btnInfo" aria-label="info" title="Info / FPS"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg></button>
-  <button class="btn" id="btnExit" aria-label="salir" title="Salir al Arcade"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+  <button class="btn" id="btnPause" aria-label="pause" title="Pause (P)"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg></button>
+  <button class="btn" id="btnReset" aria-label="menu" title="Back to menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></button>
+  <button class="btn" id="btnMute" aria-label="sound" title="Sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg></button>
+  <button class="btn" id="btnFs" aria-label="fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
+  <button class="btn" id="btnInfo" aria-label="info" title="Info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg></button>
+  <button class="btn" id="btnExit" aria-label="exit" title="Exit to Arcade"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
 </div>
 
 <div id="menu">
   <h1>STICK<span class="vs">FIGHT</span></h1>
-  <div class="sub">SANDBOX DE PIÑAS Y PLATAFORMAS</div>
+  <div class="sub">A BRAWLING PLATFORM SANDBOX</div>
   <div class="selRow" id="rowDiff">
-    <button class="opt" data-d="0">FÁCIL</button>
+    <button class="opt" data-d="0">EASY</button>
     <button class="opt sel" data-d="1">NORMAL</button>
-    <button class="opt" data-d="2">DIFÍCIL</button>
+    <button class="opt" data-d="2">HARD</button>
   </div>
   <button id="btnPlay">PELEAR</button>
   <div id="menuVer">v1.0</div>
 </div>
 
-<div id="infoPanel">
-  <b>STICK FIGHT</b> — recorré el nivel, bajá enemigos a piñas y llegá a la SALIDA.<br>
-  <b>Táctil:</b> palanca (mitad izquierda) para moverte · doble-tap de palanca = dash ·
-  SALTO / PUÑO / PATADA · abajo = agacharte.<br>
-  <b>Teclado:</b> A/D o flechas · S agacharte · W o ESPACIO saltar · J puño · K patada · SHIFT dash.<br>
-  <b>Bloqueo:</b> sostené la dirección CONTRARIA al enemigo (abajo+atrás bloquea barridas).<br>
-  <b>Combos:</b> PUÑO×3 = jab–cross–uppercut (lanza) · PUÑO,PUÑO,PATADA = remate con vuelta ·
-  dash+PUÑO = piña con embalada · carrera+PATADA = patada voladora.<br>
-  <b>Trepar:</b> saltá hacia un borde de plataforma para colgarte; hacia adentro o SALTO = subir ·
-  contra una pared deslizás y podés saltar.<br>
-  <b>Si te agarran:</b> mientras volás, tocá SALTO/PUÑO/PATADA para <b>recuperarte en el aire</b> ·
-  al caer, sostené una dirección y aterrizás <b>rodando</b> en vez de quedar tirado ·
-  en el piso, cualquier botón o dirección te <b>levanta antes</b>.<br>
-  <span class="fps" id="fpsInfo">FPS: --</span><br>
-  <span style="opacity:0.55">© 2026 Franco Laboranti</span>
+<div id="infoPanel"><h4>Stick Fight</h4>
+A brawling sandbox. Clear the stage and reach the <b>EXIT</b> on the right to move on.
+<b>Blocking is holding the direction AWAY from the enemy</b> — down-and-back blocks sweeps.
+<hr>
+<h5>Desktop</h5>
+<ul>
+  <li><b>A D</b> or <b>← →</b> move, <b>S</b> crouches, <b>W</b> or <b>Space</b> jumps.</li>
+  <li><b>J</b> punches, <b>K</b> kicks, <b>Shift</b> dashes. <b>P</b> pauses.</li>
+</ul>
+<h5>Mobile</h5>
+<ul>
+  <li><b>Joystick</b> on the left half moves; pull down to crouch.</li>
+  <li><b>Jump</b>, <b>Punch</b> and <b>Kick</b> are the action buttons.</li>
+  <li><b>Double-tap the joystick</b> sideways to dash.</li>
+</ul>
+<hr>
+<b>Combos</b>
+<ul>
+  <li><b>Punch x3</b>: jab, cross, uppercut — the last one launches.</li>
+  <li><b>Punch, punch, kick</b>: spinning finisher.</li>
+  <li><b>Dash + punch</b>: a running hook. <b>Run + kick</b>: flying kick.</li>
+</ul>
+<b>Climbing and recovery</b>
+<ul>
+  <li>Jump at a platform edge to hang; push in or jump to pull up. Against a wall you slide and can
+      jump off it.</li>
+  <li><b>While you are flying, press jump, punch or kick to recover in mid-air.</b> Landing while
+      holding a direction rolls instead of dropping you flat; on the ground any button gets you up
+      sooner.</li>
+</ul>
 </div>
-
-<div id="tunePanel"></div>
 <script>
 'use strict';
 // ════════════════════════════════════════════════════════════════════════════
@@ -3640,7 +3660,7 @@ function startMatch(semilla) {
   game.nivel = 1; game.runT = 0;
   armarNivel(semilla);
   P1.hp = CFG.fight.hp; hud.chip = hud.hpPrev = CFG.fight.hp;
-  setBanner('¡DALE!', 0.9, '#e2781e', 'etapa ' + ARENA.etapa.n);
+  setBanner('GO!', 0.9, '#e2781e', 'etapa ' + ARENA.etapa.n);
   document.getElementById('menu').classList.add('hidden');
   document.body.classList.remove('inMenu');
 }
@@ -3659,12 +3679,12 @@ function siguienteNivel() {
 function onKO(att, def) {
   if (def === P1) {
     game.state = 'dead'; game.t = 0;
-    setBanner('TE BAJARON…', 1.6, '#c0392b', '', sfx.ko);   // el cartel de la muerte NO celebra
+    setBanner('YOU WENT DOWN…', 1.6, '#c0392b', '', sfx.ko);   // el cartel de la muerte NO celebra
   } else {
     def.dead = true;
     game.kos++;
     addTrauma(0.25);
-    if (game.kos === game.totalEnem) setBanner('¡LIMPIO!', 1.4, '#e2781e', 'andá a la SALIDA →');
+    if (game.kos === game.totalEnem) setBanner('CLEARED!', 1.4, '#e2781e', 'head for the EXIT →');
   }
 }
 function stepGameFlow(dt) {
@@ -3683,7 +3703,7 @@ function stepGameFlow(dt) {
       if (P1.grounded && Math.abs(P1.x - ARENA.exit.x) < 70 && Math.abs(ARENA.exit.y - P1.y - STAND) < 60) {
         game.state = 'win'; game.t = 0;
         const secs = Math.round(game.levelT);
-        setBanner('¡NIVEL ' + game.nivel + ' LIMPIO!', 2.8, '#2e7d32',
+        setBanner('LEVEL ' + game.nivel + ' LIMPIO!', 2.8, '#2e7d32',
           'K.O. ' + game.kos + '/' + game.totalEnem + ' · ' + secs + ' s · sigue ' + etapaDe(game.nivel + 1).n);
         sfx.win();
       }
@@ -3738,9 +3758,9 @@ document.getElementById('btnReset').addEventListener('pointerdown', e => { e.pre
 // Percepción honesta: lee un snapshot del jugador de hace reactionMs (jamás el estado actual).
 const ARCHS = [
   { name: 'PELEADOR', pref: 1.05, aggr: 0.55, reactMul: 1.0, blockP: 0.55, comboDrop: 0.30, kickBias: 0.42, jumpy: 0.3, feint: 0.15 },
-  { name: 'MATÓN', pref: 0.8, aggr: 0.82, reactMul: 1.15, blockP: 0.30, comboDrop: 0.24, kickBias: 0.62, jumpy: 0.18, feint: 0.07 },
-  { name: 'TÉCNICO', pref: 1.35, aggr: 0.42, reactMul: 0.9, blockP: 0.80, comboDrop: 0.18, kickBias: 0.36, jumpy: 0.25, feint: 0.25 },
-  { name: 'ACRÓBATA', pref: 1.1, aggr: 0.6, reactMul: 1.0, blockP: 0.45, comboDrop: 0.34, kickBias: 0.55, jumpy: 0.85, feint: 0.12 },
+  { name: 'BRUISER', pref: 0.8, aggr: 0.82, reactMul: 1.15, blockP: 0.30, comboDrop: 0.24, kickBias: 0.62, jumpy: 0.18, feint: 0.07 },
+  { name: 'TECHNICIAN', pref: 1.35, aggr: 0.42, reactMul: 0.9, blockP: 0.80, comboDrop: 0.18, kickBias: 0.36, jumpy: 0.25, feint: 0.25 },
+  { name: 'ACROBAT', pref: 1.1, aggr: 0.6, reactMul: 1.0, blockP: 0.45, comboDrop: 0.34, kickBias: 0.55, jumpy: 0.85, feint: 0.12 },
 ];
 function newBrain() {
   return {
@@ -4138,7 +4158,7 @@ document.body.classList.add('inMenu');
 window.SF = { P1, enemies, CFG, game, cam, MOVES, POSES, ST, simT: 0, get inP1() { return inP1; } };
 
 document.getElementById('hint').textContent = IS_TOUCH
-  ? 'palanca = moverte · doble-tap = dash · bajá enemigos a piñas y llegá a la SALIDA →'
+  ? 'stick = move · double-tap = dash · knock the enemies down and reach the EXIT →'
   : 'A/D mover · W saltar · S agacharte · J puño · K patada · SHIFT dash · llegá a la SALIDA →';
 setTimeout(() => document.getElementById('hint').classList.add('off'), 5000);
 

@@ -221,18 +221,6 @@
   }
 
 
-/* Cierre del panel. Arriba a la derecha, dentro de la tarjeta: es la unica salida garantizada
-   cuando el panel se ancla al piso y queda por encima del boton que lo abrio. */
-#infoPanel .infoClose {
-  position: absolute; top: 8px; right: 9px; width: 26px; height: 26px; border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.6); font: 600 15px/1 system-ui, sans-serif;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; padding: 0; touch-action: none; -webkit-tap-highlight-color: transparent;
-}
-#infoPanel .infoClose:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
-#infoPanel .infoClose:active { transform: scale(0.9); background: rgba(255,255,255,0.16); }
-#infoPanel h4 { padding-right: 30px; }
 
 
   /* Estos botones son `static`, asi que el `::after` de abajo se posicionaria contra otro
@@ -244,6 +232,13 @@
      la esquina estan a 38 px de paso con cuerpos de 30, asi que ampliar a los costados haria que
      dos areas se toquen y el tap caiga en el vecino. */
   #btnInfo::after, #btnPause::after, #btnMute::after, #btnBack::after { content: ''; position: absolute; inset: -7px 0; border-radius: 50%; }
+
+  #infoPanel h5 {
+    margin: 10px 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.55);
+  }
+  #infoPanel h5:first-of-type { margin-top: 8px; }
+
 </style>
 </head>
 <body>
@@ -252,7 +247,7 @@
 
   <!-- Zona de movimiento: joystick ÚNICO y DINÁMICO. Tocá en cualquier punto del lado izquierdo y la
        palanca aparece ahí. El vector marca el rumbo del tanque. -->
-  <div id="jMove" aria-label="mover"></div>
+  <div id="jMove" aria-label="move"></div>
 
   <!-- Botones de acción (abajo-derecha): nitro (llama, celeste) arriba, disparo (BOMBA, rojo) abajo.
        Íconos propios de CrazyTanks (no los de TankWARS: ni misil ni rayo). -->
@@ -262,7 +257,7 @@
       <svg class="nflame nfLight" viewBox="0 0 54 54" fill="currentColor" stroke="none"><path transform="translate(10 11.5) scale(1.4)" d="M12.5 2c.6 3-1.4 4-1.4 6.3 0 1 .7 1.7 1.6 1.7 1.2 0 1.7-1 1.6-2.2 1.7 1.3 2.7 3.4 2.7 5.5a5.5 5.5 0 0 1-11 0c0-2.7 1.7-4.6 3-6.1C10.9 5.3 11.8 3.7 12.5 2z"/></svg>
       <svg class="nflame nfDark" viewBox="0 0 54 54" fill="currentColor" stroke="none"><path transform="translate(10 11.5) scale(1.4)" d="M12.5 2c.6 3-1.4 4-1.4 6.3 0 1 .7 1.7 1.6 1.7 1.2 0 1.7-1 1.6-2.2 1.7 1.3 2.7 3.4 2.7 5.5a5.5 5.5 0 0 1-11 0c0-2.7 1.7-4.6 3-6.1C10.9 5.3 11.8 3.7 12.5 2z"/></svg>
     </button>
-    <button class="btn fireBtn" id="btnFire" aria-label="disparar" title="Disparar">
+    <button class="btn fireBtn" id="btnFire" aria-label="fire" title="Fire">
       <span id="fireFill"></span>
       <svg class="fbomb fbLight" viewBox="0 0 54 54" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(8.8 10.9) scale(1.4)"><circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" stroke="none"/><path d="M15 9.5 18 6.5" stroke-width="2"/><circle cx="18.8" cy="5.6" r="1.7" fill="currentColor" stroke="none"/><path d="M20.5 3.6 21.7 2.6M20.2 6.4 21.6 6.7M17.6 3.3 17.2 1.9" stroke-width="1.4"/></g></svg>
       <svg class="fbomb fbDark" viewBox="0 0 54 54" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(8.8 10.9) scale(1.4)"><circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" stroke="none"/><path d="M15 9.5 18 6.5" stroke-width="2"/><circle cx="18.8" cy="5.6" r="1.7" fill="currentColor" stroke="none"/><path d="M20.5 3.6 21.7 2.6M20.2 6.4 21.6 6.7M17.6 3.3 17.2 1.9" stroke-width="1.4"/></g></svg>
@@ -273,14 +268,14 @@
   <!-- Aviso: girá el teléfono a horizontal -->
   <div id="rotate">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="10.5" y1="19" x2="13.5" y2="19" stroke-width="2"/></svg>
-    <p>Girá el teléfono<br>CrazyTanks se juega en horizontal</p>
+    <p>Rotate your phone<br>CrazyTanks is played in landscape</p>
   </div>
 
   <!-- Botones de esquina (orden Pong, de afuera hacia adentro): salir · info · PANTALLA · ATRÁS · pausa.
        Posicionados individualmente (no agrupados) para igualar tamaño y espaciado al cluster de Pong. -->
-  <button class="btn" id="btnMute" aria-label="sonido" title="Sonido"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg></button>
-  <button class="btn" id="btnFs" aria-label="pantalla completa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
-  <button class="btn" id="btnBack" data-k="ESCAPE" aria-label="atrás"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg></button>
+  <button class="btn" id="btnMute" aria-label="sound" title="Sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg></button>
+  <button class="btn" id="btnFs" aria-label="fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
+  <button class="btn" id="btnBack" data-k="ESCAPE" aria-label="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg></button>
 
 <script src="matter.min.js"></script>
 <script>
@@ -1777,8 +1772,8 @@ const BIG_TRACKS = [
   { name:'Parque GP',      theme:0, w:2800, h:1700, half:150, bands:26, base:[[500,360],[2000,360],[2300,360],[2500,560],[2500,1140],[2300,1340],[1750,1340],[1600,1120],[1400,1120],[1250,1340],[700,1340],[500,1140],[420,800],[500,560]] },        // estadio + chicane abajo
   { name:'Desierto L',     theme:1, w:2900, h:2000, half:150, bands:30, base:[[450,320],[2450,320],[2600,520],[2600,1480],[2400,1680],[1450,1680],[1300,1480],[1300,1080],[1120,920],[450,920],[280,620]] },                                          // forma de L (recodo)
   { name:'Glaciar',        theme:2, w:2900, h:1900, half:150, bands:30, base:[[520,240],[1500,240],[1650,460],[2380,460],[2580,660],[2580,1460],[2380,1660],[1400,1660],[1250,1440],[520,1440],[320,1240],[320,440]] },                          // crank en Z (centrado vertical: márgenes 240/240)
-  { name:'Neón Slalom',    theme:3, w:2800, h:1700, half:145, bands:26, base:[[520,380],[900,380],[1050,200],[1250,200],[1400,380],[2300,380],[2500,580],[2500,1120],[2300,1320],[1400,1320],[1250,1500],[1050,1500],[900,1320],[520,1320],[340,950],[340,580]] },  // chicanes arriba y abajo
-  { name:'Volcán Hairpin', theme:4, w:2900, h:2050, half:145, bands:32, base:[[520,1710],[2380,1710],[2580,1510],[2580,490],[2380,290],[2080,290],[1900,490],[1900,1210],[1740,1360],[1320,1360],[1160,1210],[1160,490],[980,290],[520,290],[320,490],[320,1510]] },  // herradura con hairpin (invertida: viene de abajo)
+  { name:'Neon Slalom',    theme:3, w:2800, h:1700, half:145, bands:26, base:[[520,380],[900,380],[1050,200],[1250,200],[1400,380],[2300,380],[2500,580],[2500,1120],[2300,1320],[1400,1320],[1250,1500],[1050,1500],[900,1320],[520,1320],[340,950],[340,580]] },  // chicanes arriba y abajo
+  { name:'Volcano Hairpin', theme:4, w:2900, h:2050, half:145, bands:32, base:[[520,1710],[2380,1710],[2580,1510],[2580,490],[2380,290],[2080,290],[1900,490],[1900,1210],[1740,1360],[1320,1360],[1160,1210],[1160,490],[980,290],[520,290],[320,490],[320,1510]] },  // herradura con hairpin (invertida: viene de abajo)
 ];
 for (const cfg of BIG_TRACKS) {
   const idx = TRACK_NAMES.length, cx = cfg.w/2, cy = cfg.h/2, base = cfg.base;
@@ -2830,17 +2825,17 @@ function drawPosCard(rank, total, color, laps, racelength, livery = null) {
   ctx.lineWidth = 2; ctx.strokeStyle = rgb(modifyColor(color, 40));
   ctx.shadowColor = rgb(color); ctx.shadowBlur = 10; ctx.stroke(); ctx.shadowBlur = 0;
 
-  // divisor entre POSICIÓN y VUELTA
+  // divisor entre POSITION y VUELTA
   const midx = x + w * 0.54;
   ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(midx, y + h * 0.24); ctx.lineTo(midx, y + h * 0.70); ctx.stroke();   // hasta 0.70 → deja libre la fila inferior para nombre + mini-tanque
 
   ctx.textAlign = 'left';
-  // ── POSICIÓN ──
+  // ── POSITION ──
   ctx.fillStyle = 'rgba(200,206,220,0.6)';
   ctx.letterSpacing = '2px';
   ctx.font = `700 ${Math.round(h * 0.15)}px 'Rajdhani', sans-serif`;
-  ctx.fillText('POSICIÓN', x + w * 0.08, y + h * 0.28);
+  ctx.fillText('POSITION', x + w * 0.08, y + h * 0.28);
   ctx.letterSpacing = '0px';
 
   const numStr = String(rank), numX = x + w * 0.07;
@@ -4339,11 +4334,11 @@ window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true 
       location.href = '../../Arcade/';
     });
   </script>
-  <button id="btnInfo" aria-label="info" title="Info / FPS">
+  <button id="btnInfo" aria-label="info" title="Info">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
   </button>
   <div id="fpsOverlay">FPS: --</div>
-  <button id="btnPause" aria-label="pausa" title="Pausa">
+  <button id="btnPause" aria-label="pause" title="Pause">
     <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
   </button>
   <script>
@@ -4388,22 +4383,25 @@ window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true 
   </script>
 
 <div id="infoPanel"><h4>Crazy Tanks</h4>
-A race between tanks on a track that is generated fresh every time. Finish the laps before the
-others. You can also shoot them.
+A race between tanks on a track generated fresh every time. Finish the laps first — and you can
+shoot the others. <b>A hit sends the other tank into a spin.</b>
 <hr>
-<b>Controls</b>
+<h5>Desktop</h5>
 <ul>
-  <li><b>Joystick</b> on the left to drive.</li>
-  <li><span class="k">bomb</span> fires a shell. A hit sends the other tank into a spin.</li>
-  <li><span class="k">nitro</span> is a speed boost. It runs out — pick up the cyan orbs on the
-      track to refill it.</li>
-  <li>Keyboard: arrows to drive, <span class="k">Space</span> to fire,
-      <span class="k">Shift</span> for nitro.</li>
-  <li><span class="k">II</span> pauses.</li>
+  <li><b>Arrow keys</b> drive. <b>Space</b> fires a shell, same as <b>Fire</b>.
+      <b>Shift</b> uses nitro, same as <b>Nitro</b>.</li>
+  <li><b>Enter</b> confirms in the menu; <b>Esc</b> goes back. <b>Pause</b> in the corner.</li>
+</ul>
+<h5>Mobile</h5>
+<ul>
+  <li><b>Joystick</b> on the left drives.</li>
+  <li><b>Fire</b> (the red bomb) and <b>Nitro</b> (the cyan flame) are the buttons on the right.</li>
 </ul>
 <hr>
-<span class="dim">Each biome has its own grip: on snow the tank slides and on tarmac it bites.
-You can hear it — the track rattle changes with the surface before you feel the slide.</span></div>
+<b>Nitro runs out</b> — pick up the cyan orbs on the track to refill it.
+<span class="dim">Each biome has its own grip: on snow the tank slides, on tarmac it bites. The
+track rattle changes with the surface before you feel the slide.</span>
+</div>
 
 <script>
 // El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
@@ -4456,30 +4454,22 @@ You can hear it — the track rattle changes with the surface before you feel th
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado: si arriba del boton no entra nada usable (Hangman apaisado, donde el
-      // teclado y la barra se comen 319 de 380 px), el panel se ancla al borde y tapa lo que haya.
-      // Para eso tiene su propio ✕.
+      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
+      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
+      // conmutador, asi que si queda tapado el panel no se puede cerrar.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
-        panel.style.top = m + 'px'; panel.style.bottom = 'auto';
-        panel.style.maxHeight = (vh - 2 * m) + 'px';
+        if ((rb.top + rb.height / 2) < vh / 2) {
+          panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, vh - rb.bottom - 6 - m) + 'px';
+        } else {
+          panel.style.top = m + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, rb.top - 6 - m) + 'px';
+        }
       }
     }
     ubicar();
     window.addEventListener('resize', ubicar);
     window.addEventListener('orientationchange', ubicar);
-    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
-    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
-    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
-    // Escape.
-    var cerrar = document.createElement('button');
-    cerrar.className = 'infoClose'; cerrar.type = 'button';
-    cerrar.setAttribute('aria-label', 'cerrar');
-    cerrar.textContent = '×';
-    cerrar.addEventListener('pointerdown', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      panel.classList.remove('show'); btn.classList.remove('on');
-    });
-    panel.insertBefore(cerrar, panel.firstChild);
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       var abrir = !panel.classList.contains('show');

@@ -69,37 +69,54 @@
   /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
   :root { --shell-accent: rgba(255,190,90,0.62); --shell-accent-soft: rgba(255,190,90,0.26); --shell-accent-text: #ffc978; }
 
+
+  /* Diagnostico DENTRO del panel: antes era una tarjeta aparte sobre el lienzo. Monoespaciada y
+     `pre-line` para que las columnas queden alineadas como estaban. */
+  #infoPanel #fpsOverlay {
+    margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,0.11);
+    font: 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
+    color: #8ee36b; white-space: pre-line;
+  }
+  #infoPanel #fpsOverlay:empty { display: none; }
+
+
+  #infoPanel h5 {
+    margin: 10px 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.55);
+  }
+  #infoPanel h5:first-of-type { margin-top: 8px; }
+
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">arrastrá una bola para tirarla · varios dedos lanzan varias a la vez · +/− agrega o quita</div>
+  <div id="hint">drag a marble to throw it · several fingers throw several · + and − add or remove</div>
   <div id="bar">
-  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+  <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
 <div id="ui">
-      <button id="btnJump"  aria-label="saltar"  title="Saltar">
+      <button id="btnJump"  aria-label="jump"  title="Jump">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 11l6-6 6 6"/></svg>
       </button>
-      <button id="btnPin"   aria-label="fijar"   title="Fijar (chinche)">
+      <button id="btnPin"   aria-label="pin"   title="Pin">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 3h8v1.5h-1.5v5l2.5 3.5v1h-5v6.5l-1 1-1-1v-6.5h-5v-1l2.5-3.5v-5H8z"/></svg>
       </button>
-      <button id="btnWall"  aria-label="modo"    title="Modo de pared"></button>
-      <button id="btnMinus" aria-label="quitar"  title="Quitar bola">
+      <button id="btnWall"  aria-label="mode"    title="Wall mode"></button>
+      <button id="btnMinus" aria-label="remove"  title="Remove a ball">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 12h12"/></svg>
       </button>
-      <button id="btnPlus"  aria-label="agregar" title="Agregar bola">
+      <button id="btnPlus"  aria-label="add" title="Add a ball">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg>
       </button>
-      <button id="btnReset" aria-label="reiniciar" title="Reiniciar">
+      <button id="btnReset" aria-label="restart" title="Restart">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
       </button>
     </div>
-    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <button id="btnFs" aria-label="fullscreen" title="Fullscreen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
-    <button id="btnInfo" aria-label="info" title="Info / debug">
+    <button id="btnInfo" aria-label="info" title="Info">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
   </div>
@@ -929,17 +946,43 @@
 
     ctx.clearRect(0, 0, W, H);
     for (const e of balls) drawBall(e);
+    showDebug = infoAbierto();
+    updateStats();
     if (showDebug) drawDebugHUD();
     requestAnimationFrame(loop);
   }
 
+
+  // ── Diagnostico: vive DENTRO del panel de informacion ──
+  // Antes era una tarjeta monoespaciada dibujada sobre el lienzo, aparte del panel. Ahora es una
+  // seccion mas: una sola tarjeta para todo lo informativo. Se escribe SOLO con el panel abierto —
+  // tocar el DOM en cada frame con el panel cerrado es trabajo tirado.
+  // El nodo se busca PEREZOSAMENTE, no al parsear. El script principal corre ANTES de que exista
+  // el `#infoPanel` (esta mas abajo en el documento), asi que un `getElementById` en la linea de
+  // arriba devolvia null para siempre: ni estadisticas ni grafico. Es el mismo gotcha de orden del
+  // DOM que ya habia mordido en TankWARS.
+  let fpsEl = null;
+  function statsEl() {
+    if (!fpsEl) fpsEl = document.getElementById('fpsOverlay');
+    return fpsEl;
+  }
+  function infoAbierto() {
+    const e = statsEl();
+    return !!(e && e.parentNode && e.parentNode.classList.contains('show'));
+  }
+  function updateStats() {
+    if (!infoAbierto()) return;
+    statsEl().textContent = [
+      'FPS: ' + Math.round(1/Math.max(1e-3, dtSmoothed)),
+      'Balls: ' + balls.filter(e => e.state === 'live').length + ' / ' + MAX_BALLS,
+      'Pinned: ' + pinnedBodies.size,
+    ].join('\n');
+  }
+
+  // Igual que Balls: el grafico de velocidades se queda en el lienzo.
   function drawDebugHUD() {
     const liveBalls = balls.filter(e => e.state === 'live');
-    const lines = [
-      'FPS: ' + Math.round(1/Math.max(1e-3, dtSmoothed)),
-      'Balls: ' + liveBalls.length + ' / ' + MAX_BALLS,
-      'Pinned: ' + pinnedBodies.size,
-    ];
+    const lines = [];
     const lh = 18, padX = 8, padY = 8;
     const statsW = 130;
 
@@ -1000,17 +1043,24 @@
 
   <!-- Shell del Arcade (exit + fullscreen + lock de orientación). data-orient: landscape/portrait/any. -->
   <script src="../../Arcade/arcade-shell.js" data-orient="portrait"></script>
-<div id="infoPanel"><h4>Mini Canicas</h4>
-Lo mismo que Canicas pero con <b>muchisimas</b> y chiquitas: el juguete deja de ser una canica y
-pasa a ser un enjambre. Tampoco hay objetivo.
+<div id="infoPanel"><h4>Mini Marbles</h4>
+Marbles again, but by the hundred and tiny: the toy stops being one marble and becomes a swarm.
+<b>Several fingers throw several at once.</b>
 <hr>
+<h5>Desktop</h5>
 <ul>
-  <li><b>Arrastrar y soltar</b> para tirar una. <b>Varios dedos lanzan varias a la vez.</b></li>
-  <li><span class="k">+</span> <span class="k">−</span> agregan o quitan; <span class="k">↑</span>
-      o <span class="k">Espacio</span> las hace saltar a todas.</li>
-  <li><span class="k">chinche</span> fija una en el aire, <span class="k">modo</span> cambia las
-      paredes, <span class="k">↻</span> reinicia.</li>
-</ul></div>
+  <li><b>Drag a marble</b> and let go to throw it.</li>
+  <li><b>Q</b> pins the one you are holding, same as <b>Pin</b>. <b>Space</b> makes them all jump,
+      same as <b>Jump</b>.</li>
+  <li><b>Add a ball</b> / <b>Remove a ball</b>, <b>Wall mode</b> and <b>Restart</b> in the bar.</li>
+</ul>
+<h5>Mobile</h5>
+<ul>
+  <li><b>Drag and release</b> to throw. <b>Several fingers at once</b> throw several marbles.</li>
+  <li>The bar buttons behave the same as on desktop.</li>
+</ul>
+<div id="fpsOverlay" class="stats"></div>
+</div>
 
 <script>
 // El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
@@ -1063,30 +1113,22 @@ pasa a ser un enjambre. Tampoco hay objetivo.
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado: si arriba del boton no entra nada usable (Hangman apaisado, donde el
-      // teclado y la barra se comen 319 de 380 px), el panel se ancla al borde y tapa lo que haya.
-      // Para eso tiene su propio ✕.
+      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
+      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
+      // conmutador, asi que si queda tapado el panel no se puede cerrar.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
-        panel.style.top = m + 'px'; panel.style.bottom = 'auto';
-        panel.style.maxHeight = (vh - 2 * m) + 'px';
+        if ((rb.top + rb.height / 2) < vh / 2) {
+          panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, vh - rb.bottom - 6 - m) + 'px';
+        } else {
+          panel.style.top = m + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, rb.top - 6 - m) + 'px';
+        }
       }
     }
     ubicar();
     window.addEventListener('resize', ubicar);
     window.addEventListener('orientationchange', ubicar);
-    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
-    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
-    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
-    // Escape.
-    var cerrar = document.createElement('button');
-    cerrar.className = 'infoClose'; cerrar.type = 'button';
-    cerrar.setAttribute('aria-label', 'cerrar');
-    cerrar.textContent = '×';
-    cerrar.addEventListener('pointerdown', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      panel.classList.remove('show'); btn.classList.remove('on');
-    });
-    panel.insertBefore(cerrar, panel.firstChild);
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       var abrir = !panel.classList.contains('show');

@@ -16,7 +16,7 @@ BLACK = (0,0,0)
 WHITE = (255,255,255)
 GRAY = (128,128,128)
 
-a_cuantos_puntos = ['A 5 puntos','A 10 puntos','A 20 puntos','A 40 puntos','Práctica']
+a_cuantos_puntos = ['A 5 puntos','A 10 puntos','A 20 puntos','A 40 puntos','Practice']
 puntos_victoria = [5,10,20,40,None]
 opcion_puntos = 1
 opcion_menu = 1
@@ -339,12 +339,12 @@ while True:
 			crear_texto(chico,str(j2score),FIRE if firenet else WHITE,SCREEN_WIDTH/2-30,20)
 
 		if j1score == cond_victoria:
-			crear_texto(grande,'¡GANA JUGADOR 1!',(random.randint(0,255), random.randint(0,255), random.randint(0,255)),SCREEN_WIDTH/2,SCREEN_HEIGHT/2)
+			crear_texto(grande,'PLAYER 1 WINS!',(random.randint(0,255), random.randint(0,255), random.randint(0,255)),SCREEN_WIDTH/2,SCREEN_HEIGHT/2)
 			pelota[0] = SCREEN_WIDTH/2 + 40
 			pelota[1] = 60
 
 		if j2score == cond_victoria:
-			crear_texto(grande,'¡GANA JUGADOR 2!',(random.randint(0,255), random.randint(0,255), random.randint(0,255)),SCREEN_WIDTH/2,SCREEN_HEIGHT/2)
+			crear_texto(grande,'PLAYER 2 WINS!',(random.randint(0,255), random.randint(0,255), random.randint(0,255)),SCREEN_WIDTH/2,SCREEN_HEIGHT/2)
 			pelota[0] = SCREEN_WIDTH/2 - 40
 			pelota[1] = 60
 

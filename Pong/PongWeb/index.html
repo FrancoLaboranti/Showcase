@@ -144,18 +144,6 @@
   }
 
 
-/* Cierre del panel. Arriba a la derecha, dentro de la tarjeta: es la unica salida garantizada
-   cuando el panel se ancla al piso y queda por encima del boton que lo abrio. */
-#infoPanel .infoClose {
-  position: absolute; top: 8px; right: 9px; width: 26px; height: 26px; border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.6); font: 600 15px/1 system-ui, sans-serif;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; padding: 0; touch-action: none; -webkit-tap-highlight-color: transparent;
-}
-#infoPanel .infoClose:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
-#infoPanel .infoClose:active { transform: scale(0.9); background: rgba(255,255,255,0.16); }
-#infoPanel h4 { padding-right: 30px; }
 
 
   /* El boton de mute nacio en la pasada de audio y quedo SIN TAMANO: `arcade-shell.css` solo
@@ -191,47 +179,64 @@
      la esquina estan a 38 px de paso con cuerpos de 30, asi que ampliar a los costados haria que
      dos areas se toquen y el tap caiga en el vecino. */
   #btnExit::after, #btnInfo::after, #btnFull::after, #btnMute::after, #btnBack::after, #btnPause::after { content: ''; position: absolute; inset: -7px 0; border-radius: 50%; }
+
+  /* Diagnostico DENTRO del panel: antes era una tarjeta aparte sobre el lienzo. Monoespaciada y
+     `pre-line` para que las columnas queden alineadas como estaban. */
+  #infoPanel #fpsOverlay {
+    margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,0.11);
+    font: 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
+    color: #8ee36b; white-space: pre-line;
+  }
+  #infoPanel #fpsOverlay:empty { display: none; }
+
+
+  #infoPanel h5 {
+    margin: 10px 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.55);
+  }
+  #infoPanel h5:first-of-type { margin-top: 8px; }
+
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">tocá una opción del menú · en partido: ↑/↓ (W/S en 2P)</div>
+  <div id="hint">tap a menu option · in a match: ↑/↓ (W/S in 2P)</div>
 
   <!-- UI de esquina (estilo CrazyTanks), de afuera hacia adentro: salir · info · pantalla · sonido · atrás · pausa -->
-  <button class="cbtn" id="btnExit" aria-label="salir" title="Salir">
+  <button class="cbtn" id="btnExit" aria-label="exit" title="Exit">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
-  <button class="cbtn" id="btnInfo" aria-label="info" title="Cómo jugar / stats">
+  <button class="cbtn" id="btnInfo" aria-label="info" title="Info">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
   </button>
-  <button class="cbtn" id="btnFull" aria-label="pantalla completa" title="Pantalla completa">
+  <button class="cbtn" id="btnFull" aria-label="fullscreen" title="Fullscreen">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
   </button>
-  <button class="cbtn" id="btnMute" aria-label="sonido" title="Sonido">
+  <button class="cbtn" id="btnMute" aria-label="sound" title="Sound">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
   </button>
-  <button class="cbtn" id="btnBack" aria-label="atrás" title="Atrás / salir al menú">
+  <button class="cbtn" id="btnBack" aria-label="back" title="Back to menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg>
   </button>
-  <button class="cbtn" id="btnPause" aria-label="pausa" title="Pausa">
+  <button class="cbtn" id="btnPause" aria-label="pause" title="Pause">
     <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
   </button>
 
   <!-- Controles de movimiento (mobile, sólo en partido). izq sube · der baja.
        padR = jugador 1 (derecha) · padL = jugador 2 (izquierda, sólo 2P). -->
   <div class="pad" id="padL" aria-label="control jugador 2">
-    <button class="ctl" data-side="L" data-dir="up" aria-label="subir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg></button>
-    <button class="ctl" data-side="L" data-dir="dn" aria-label="bajar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg></button>
+    <button class="ctl" data-side="L" data-dir="up" aria-label="up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg></button>
+    <button class="ctl" data-side="L" data-dir="dn" aria-label="climb down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg></button>
   </div>
-  <div class="pad" id="padR" aria-label="control jugador 1">
-    <button class="ctl" data-side="R" data-dir="up" aria-label="subir"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg></button>
-    <button class="ctl" data-side="R" data-dir="dn" aria-label="bajar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg></button>
+  <div class="pad" id="padR" aria-label="player 1 control">
+    <button class="ctl" data-side="R" data-dir="up" aria-label="up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg></button>
+    <button class="ctl" data-side="R" data-dir="dn" aria-label="climb down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg></button>
   </div>
 
   <!-- Aviso: girá el teléfono a horizontal -->
   <div id="rotate">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="10.5" y1="19" x2="13.5" y2="19" stroke-width="2"/></svg>
-    <p>Girá el teléfono<br>Pong se juega en horizontal</p>
+    <p>Rotate your phone<br>Pong is played in landscape</p>
   </div>
 
   <script>
@@ -369,10 +374,10 @@
   // DESAFÍO: jugás 1 game (a 10) contra cada rival en orden fácil → difícil. Ganás → siguiente; perdés → fin.
   let challenge = false, challengeIdx = 0;
   const CHALLENGE_ORDER = [3, 4, 0, 1, 2];   // Amarillo → Celeste → Magenta → Verde → Negro
-  // Modificadores por PELDAÑO del Desafío — keyed por id de RIVAL (no por slot), así reordenar
+  // Modificadores por PELDAÑO del Challenge — keyed por id de RIVAL (no por slot), así reordenar
   // CHALLENGE_ORDER no re-empareja mal. Peldaños tempranos (Amarillo/Celeste) no tienen entrada = sin mod.
   const CHALLENGE_MODS = {
-    0: { serveMult: 1.06, label: 'SAQUE RÁPIDO' },                   // Magenta (peldaño 3)
+    0: { serveMult: 1.06, label: 'FAST SERVE' },                   // Magenta (peldaño 3)
     1: { forceFire: true, label: 'FUEGO FORZADO' },                  // Verde (peldaño 4)
     2: { forceFire: true, serveMult: 1.12, label: 'FUEGO + SAQUE' }, // Negro (peldaño 5)
   };
@@ -385,7 +390,7 @@
   let menulevel = 0;               // 0 = elegir modo · 1 = setup (rival/puntos/fuego)
   let menuOption = 0;              // fila seleccionada dentro del nivel actual
   let pendingBricks = false;       // true = el setup (nivel 1) está configurando el modo ladrillos
-  let confirmQuit = false;         // overlay "¿salir al menú?" durante el partido
+  let confirmQuit = false;         // overlay "exit to menu?" durante el partido
   let winner = 0;                  // 1 = jug.1 (der), 2 = jug.2 (izq)
   let j1score = 0, j2score = 0;
   let j1racha = 0, j2racha = 0;
@@ -480,7 +485,7 @@
     serve(Math.random() < 0.5 ? -1 : 1);
   }
   function updateFireStates() {
-    const fireOn = fireEnabled || (challenge && cmod.forceFire);   // un peldaño del Desafío puede forzar el fuego
+    const fireOn = fireEnabled || (challenge && cmod.forceFire);   // un peldaño del Challenge puede forzar el fuego
     right.onFire = fireOn && j1racha >= FIRE_STREAK;
     // el rival FIREPROOF (Negro) no se prende en 1P; en 2P la izquierda es humana y se prende normal
     left.onFire  = fireOn && (twoPlayers || !A.FIREPROOF) && j2racha >= FIRE_STREAK;
@@ -502,7 +507,7 @@
     }
   }
 
-  // ── RÉCORDS POR RIVAL (persisten en localStorage; sólo 1P/Desafío — en 2P no hay rival fijo) ──
+  // ── RÉCORDS POR RIVAL (persisten en localStorage; sólo 1P/Challenge — en 2P no hay rival fijo) ──
   function loadRecords() { try { return JSON.parse(localStorage.getItem('pong.records')) || {}; } catch (e) { return {}; } }
   function saveRecords() { try { localStorage.setItem('pong.records', JSON.stringify(records)); } catch (e) {} }
   function recordMatch(scorer) {
@@ -1167,7 +1172,7 @@
     keys.add(k);
     if (['arrowup','arrowdown','arrowleft','arrowright',' '].includes(k)) e.preventDefault();
     if (state === 'menu') { if (!e.repeat) handleMenuKey(k); return; }   // navegación del menú
-    if (k === 'escape') { onBack(); return; }                           // ESC: abre/cierra "¿salir?"
+    if (k === 'escape') { onBack(); return; }                           // ESC: abre/cierra "exit?"
     if (confirmQuit) { if (k === 'enter' || k === ' ') backToMenu(); return; }  // confirmar salida
     if (k === 'p') togglePause();
     if ((k === 'enter' || k === ' ') && state === 'over') overAdvance();
@@ -1242,7 +1247,7 @@
     return [
       { key: '1p',        label: 'Un Jugador',    y: 0.44 },
       { key: '2p',        label: 'Dos Jugadores', y: 0.54 },
-      { key: 'challenge', label: 'Desafío',       y: 0.64 },
+      { key: 'challenge', label: 'Challenge',       y: 0.64 },
       { key: 'bricks',    label: 'Ladrillos',     y: 0.74 },
     ];
   }
@@ -1257,7 +1262,7 @@
   const PLAY_BTN_Y = 0.85;
   function setupRowLabel(key) {
     if (key === 'rival')  return 'Rival: ' + OPPONENTS[oppIdx].name;
-    if (key === 'puntos') return 'Puntos: ' + (WIN_POINTS[ptsIdx] == null ? 'Práctica' : SCORE_LABELS[ptsIdx]);
+    if (key === 'puntos') return 'Puntos: ' + (WIN_POINTS[ptsIdx] == null ? 'Practice' : SCORE_LABELS[ptsIdx]);
     if (key === 'modo')   return 'Modo: ' + (bricksModeIdx === 0 ? 'Defensa' : 'Contrarreloj');
     return 'Fuego: ' + (fireEnabled ? 'Sí' : 'No');
   }
@@ -1349,7 +1354,7 @@
       return;
     }
     if (state === 'over') { backToMenu(); return; }
-    confirmQuit = !confirmQuit;                         // en partido: abre/cierra "¿salir al menú?"
+    confirmQuit = !confirmQuit;                         // en partido: abre/cierra "exit to menu?"
   }
   // clases del body que prenden/apagan botones de esquina y pads
   function syncUI() {
@@ -1478,7 +1483,7 @@
     // reubicar paletas/pelota proporcionalmente al alto nuevo
     const f = H / oldH;
     right.cy *= f; left.cy *= f; by *= f;
-    // Pong se juega en horizontal: si la pantalla está vertical, mostrar el aviso de rotar.
+    // Pong is played in landscape: si la pantalla está vertical, mostrar el aviso de rotar.
     // Embebido: la shell del Arcade rota el iframe por CSS → el cartel NUNCA se muestra (evita
     // que se quede trabado si resize() ve cssH>cssW por un instante durante transiciones de FS).
     portrait = !EMBEDDED && window.innerHeight > window.innerWidth;
@@ -1851,9 +1856,9 @@
   function drawOver() {
     ctx.fillStyle = 'rgba(6,8,14,0.58)';
     ctx.fillRect(0, 0, W, H);
-    let big, sub = 'tocá: revancha   ·   atrás: menú';
+    let big, sub = 'tap: rematch   ·   back: menu';
     if (bricksMode) {
-      big = winner === 1 ? '¡GANASTE!' : 'GANA ' + OPPONENTS[oppIdx].name.toUpperCase();
+      big = winner === 1 ? 'YOU WIN!' : 'GANA ' + OPPONENTS[oppIdx].name.toUpperCase();
       sub = brickAttack
         ? `ladrillos ${j1brick} - ${j2brick}  ·  tocá: revancha  ·  atrás: menú`
         : `puntos ${j1score} - ${j2score}  ·  tocá: revancha  ·  atrás: menú`;
@@ -1861,13 +1866,13 @@
       const total = CHALLENGE_ORDER.length;
       const oppName = OPPONENTS[CHALLENGE_ORDER[challengeIdx]].name;
       if (winner === 1) {
-        if (challengeIdx >= total - 1) { big = '¡DESAFÍO SUPERADO!'; sub = `venciste a los ${total} · tocá: menú`; }
-        else { big = 'VENCISTE A ' + oppName.toUpperCase(); sub = 'siguiente: ' + OPPONENTS[CHALLENGE_ORDER[challengeIdx + 1]].name + ' · tocá para seguir'; }
+        if (challengeIdx >= total - 1) { big = 'CHALLENGE CLEARED!'; sub = `venciste a los ${total} · tocá: menú`; }
+        else { big = 'VENCISTE A ' + oppName.toUpperCase(); sub = 'siguiente: ' + OPPONENTS[CHALLENGE_ORDER[challengeIdx + 1]].name + ' · tap to continue'; }
       } else {
         big = 'GANA ' + oppName.toUpperCase(); sub = `rivales vencidos: ${challengeIdx}/${total} · tocá: menú`;
       }
     } else if (twoPlayers) big = winner === 1 ? 'GANA JUGADOR 1' : 'GANA JUGADOR 2';
-    else                   big = winner === 1 ? '¡GANASTE!' : 'GANA ' + OPPONENTS[oppIdx].name.toUpperCase();
+    else                   big = winner === 1 ? 'YOU WIN!' : 'GANA ' + OPPONENTS[oppIdx].name.toUpperCase();
     const s = Math.min(W, H);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     // glow según gane por fuego o no
@@ -1886,11 +1891,11 @@
     ctx.letterSpacing = '0.16em';
     ctx.fillText(sub, W / 2, H / 2 + bs * 0.7);
     ctx.letterSpacing = '0px';
-    // línea de récord (1P/Desafío): "¡NUEVO RÉCORD!" si lo batiste, sino tu mejor peloteo vs este rival
+    // línea de récord (1P/Challenge): "NEW RECORD!" si lo batiste, sino tu mejor peloteo vs este rival
     if (!twoPlayers && !bricksMode) {
       const yLine = H / 2 + bs * 0.7 + ss * 2.0;
       if (newRecordFlag) {
-        mtext('¡NUEVO RÉCORD!', Math.round(Math.min(18, s * 0.034)), OPPONENTS[oppIdx].glow, W / 2, yLine, s * 0.02, 1, 900);
+        mtext('NEW RECORD!', Math.round(Math.min(18, s * 0.034)), OPPONENTS[oppIdx].glow, W / 2, yLine, s * 0.02, 1, 900);
       } else {
         const rec = records[OPPONENTS[oppIdx].name];
         if (rec) mtext(`mejor peloteo: ${rec.rally || 0}`, Math.round(Math.min(14, s * 0.026)), [180, 190, 210], W / 2, yLine, 0, 0.65, 500);
@@ -1953,38 +1958,39 @@
   function drawConfirm() {
     ctx.fillStyle = 'rgba(6,8,14,0.74)'; ctx.fillRect(0, 0, W, H);
     const s = Math.min(W, H);
-    mtext('¿SALIR AL MENÚ?', Math.min(42, s * 0.062), [255, 255, 255], W / 2, H * 0.4, s * 0.04, 1, 900);
+    mtext('EXIT TO MENU?', Math.min(42, s * 0.062), [255, 255, 255], W / 2, H * 0.4, s * 0.04, 1, 900);
     mtext('SÍ', Math.min(34, s * 0.052), [255, 120, 120], W * 0.4, H * 0.6, s * 0.03, 1, 900);
     mtext('NO', Math.min(34, s * 0.052), NEON_P1,         W * 0.6, H * 0.6, s * 0.03, 1, 900);
-    mtext('se pierde el partido', Math.min(13, s * 0.022), [180, 190, 210], W / 2, H * 0.72, 0, 0.65, 500);
+    mtext('the match is lost', Math.min(13, s * 0.022), [180, 190, 210], W / 2, H * 0.72, 0, 0.65, 500);
   }
 
   // Overlay del botón de info: tarjeta CÓMO JUGAR (hace legible la gracia del juego) + stats en vivo.
-  function drawDebugHUD() {
-    if (!showDebug) return;
-    const help = [
-      'CÓMO JUGAR',
-      '· Tu paleta: ↑/↓  ·  jug.2: W/S  ·  P: pausa',
-      '· 2 puntos seguidos → te prendés fuego',
-      '· La CPU se duerme (Zzz): aprovechá la siesta',
-    ];
-    const stats = [
-      'FPS: ' + Math.round(1 / Math.max(1e-3, dtSmoothed)),
-      'Bola: ' + Math.round(Math.hypot(bvx, bvy)) + ' px/s',
-      'Peloteo más largo: ' + bestRally,
-    ];
-    const all = help.concat([''], stats);
-    const lh = 18, padX = 8, padY = 8, boxW = 326;
-    ctx.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx.fillRect(padX, padY, boxW, lh * all.length + 10);
-    ctx.font = '13px ui-monospace, Menlo, Consolas, monospace';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'top';
-    all.forEach((str, i) => {
-      ctx.fillStyle = i === 0 ? 'rgba(120,210,255,0.95)' : 'rgba(255,255,255,0.88)';
-      ctx.fillText(str, padX + 7, padY + 5 + i * lh);
-    });
+  // ── Diagnostico: vive DENTRO del panel de informacion ──
+  // Antes era una tarjeta monoespaciada dibujada sobre el lienzo, aparte del panel. Ahora es una
+  // seccion mas: una sola tarjeta para todo lo informativo. Se escribe SOLO con el panel abierto —
+  // tocar el DOM en cada frame con el panel cerrado es trabajo tirado.
+  // El nodo se busca PEREZOSAMENTE, no al parsear. El script principal corre ANTES de que exista
+  // el `#infoPanel` (esta mas abajo en el documento), asi que un `getElementById` en la linea de
+  // arriba devolvia null para siempre: ni estadisticas ni grafico. Es el mismo gotcha de orden del
+  // DOM que ya habia mordido en TankWARS.
+  let fpsEl = null;
+  function statsEl() {
+    if (!fpsEl) fpsEl = document.getElementById('fpsOverlay');
+    return fpsEl;
   }
+  function infoAbierto() {
+    const e = statsEl();
+    return !!(e && e.parentNode && e.parentNode.classList.contains('show'));
+  }
+  function updateStats() {
+    if (!infoAbierto()) return;
+    statsEl().textContent = [
+      'FPS: ' + Math.round(1 / Math.max(1e-3, dtSmoothed)),
+      'Ball: ' + Math.round(Math.hypot(bvx, bvy)) + ' px/s',
+      'Longest rally: ' + bestRally,
+    ].join('\n');
+  }
+
 
   // "Zzz" sobre la paleta de la CPU mientras duerme (sólo en 1 jugador).
   function drawAISleep() {
@@ -2138,7 +2144,7 @@
   }
 
   // La voz del rival: en 2P la izquierda es humana y va cinco semitonos abajo (otra persona, no otro
-  // personaje); en 1P/Desafío/Ladrillos toma el `tone` del contrincante elegido.
+  // personaje); en 1P/Challenge/Ladrillos toma el `tone` del contrincante elegido.
   const leftTone   = () => twoPlayers ? -5 : (OPPONENTS[oppIdx].tone || 0);
   const leftJitter = () => twoPlayers ? 0.08 : (OPPONENTS[oppIdx].jitter || 0.08);
 
@@ -2209,7 +2215,7 @@
         note(2349, 2349, d + 0.65, 0.20, 'sine', 0.030, 0);
       }
     },
-    // Peldaño del Desafío: un mecanismo que avanza un diente. `last` = venciste a los cinco.
+    // Peldaño del Challenge: un mecanismo que avanza un diente. `last` = venciste a los cinco.
     advance(last) {
       if (!ac()) return;
       const m = last ? 2 : 1;                           // la vuelta completa, una octava arriba
@@ -2419,7 +2425,7 @@
       if (state === 'over') drawOver();
       if (confirmQuit) drawConfirm();
     }
-    drawDebugHUD();
+    updateStats();
 
     requestAnimationFrame(loop);
   }
@@ -2448,19 +2454,25 @@
     });
   </script>
 <div id="infoPanel"><h4>Sleepy Pong</h4>
-Pong. La pelota va y viene, y el que no la devuelve regala el punto. Se juega en
-<b>horizontal</b>.
+Pong, played in <b>landscape</b>. Two things are not standard: <b>two points in a row set your
+paddle on fire</b>, and <b>the CPU falls asleep</b> — when you see the Zzz, that is the window.
 <hr>
-<b>Controles</b>
+<h5>Desktop</h5>
 <ul>
-  <li><b>Movil</b>: deslizar el dedo arriba y abajo sobre tu mitad de la pantalla.</li>
-  <li><b>Escritorio</b>: <span class="k">↑</span> <span class="k">↓</span> ·
-      en dos jugadores, <span class="k">W</span> <span class="k">S</span> para el de la izquierda.</li>
-  <li><span class="k">II</span> pausa · <span class="k">←</span> vuelve al menu.</li>
+  <li><b>↑ ↓</b> move your paddle. In two-player, <b>W S</b> drive the left one.</li>
+  <li><b>P</b> or <b>Pause</b> pauses; <b>Back to menu</b> leaves the match.</li>
+  <li>In the menu, <b>↑ ↓</b> pick and <b>Enter</b> confirms.</li>
+</ul>
+<h5>Mobile</h5>
+<ul>
+  <li><b>Slide your finger up and down</b> on your half of the screen.</li>
+  <li><b>Tap a menu option</b> to choose it.</li>
 </ul>
 <hr>
-<span class="dim">El peloteo sube de tono con cada devolucion: cuanto mas agudo suena, mas largo
-es el punto que estas jugando.</span></div>
+<span class="dim">The rally climbs in pitch with every return: the higher it sounds, the longer the
+point you are in.</span>
+<div id="fpsOverlay" class="stats"></div>
+</div>
 
 <script>
 // El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
@@ -2513,30 +2525,22 @@ es el punto que estas jugando.</span></div>
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado: si arriba del boton no entra nada usable (Hangman apaisado, donde el
-      // teclado y la barra se comen 319 de 380 px), el panel se ancla al borde y tapa lo que haya.
-      // Para eso tiene su propio ✕.
+      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
+      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
+      // conmutador, asi que si queda tapado el panel no se puede cerrar.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
-        panel.style.top = m + 'px'; panel.style.bottom = 'auto';
-        panel.style.maxHeight = (vh - 2 * m) + 'px';
+        if ((rb.top + rb.height / 2) < vh / 2) {
+          panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, vh - rb.bottom - 6 - m) + 'px';
+        } else {
+          panel.style.top = m + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, rb.top - 6 - m) + 'px';
+        }
       }
     }
     ubicar();
     window.addEventListener('resize', ubicar);
     window.addEventListener('orientationchange', ubicar);
-    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
-    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
-    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
-    // Escape.
-    var cerrar = document.createElement('button');
-    cerrar.className = 'infoClose'; cerrar.type = 'button';
-    cerrar.setAttribute('aria-label', 'cerrar');
-    cerrar.textContent = '×';
-    cerrar.addEventListener('pointerdown', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      panel.classList.remove('show'); btn.classList.remove('on');
-    });
-    panel.insertBefore(cerrar, panel.firstChild);
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       var abrir = !panel.classList.contains('show');

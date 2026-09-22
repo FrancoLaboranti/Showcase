@@ -189,18 +189,6 @@
   }
 
 
-/* Cierre del panel. Arriba a la derecha, dentro de la tarjeta: es la unica salida garantizada
-   cuando el panel se ancla al piso y queda por encima del boton que lo abrio. */
-#infoPanel .infoClose {
-  position: absolute; top: 8px; right: 9px; width: 26px; height: 26px; border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.6); font: 600 15px/1 system-ui, sans-serif;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; padding: 0; touch-action: none; -webkit-tap-highlight-color: transparent;
-}
-#infoPanel .infoClose:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
-#infoPanel .infoClose:active { transform: scale(0.9); background: rgba(255,255,255,0.16); }
-#infoPanel h4 { padding-right: 30px; }
 
 
   /* Estos botones son `static`, asi que el `::after` de abajo se posicionaria contra otro
@@ -212,42 +200,59 @@
      la esquina estan a 38 px de paso con cuerpos de 30, asi que ampliar a los costados haria que
      dos areas se toquen y el tap caiga en el vecino. */
   #btnDebug::after, #btnPause::after, #btnReset::after { content: ''; position: absolute; inset: -7px 0; border-radius: 50%; }
+
+  /* Diagnostico DENTRO del panel: antes era una tarjeta aparte sobre el lienzo. Monoespaciada y
+     `pre-line` para que las columnas queden alineadas como estaban. */
+  #infoPanel #fpsOverlay {
+    margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,0.11);
+    font: 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
+    color: #8ee36b; white-space: pre-line;
+  }
+  #infoPanel #fpsOverlay:empty { display: none; }
+
+
+  #infoPanel h5 {
+    margin: 10px 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.55);
+  }
+  #infoPanel h5:first-of-type { margin-top: 8px; }
+
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">dirigí con la palanca · ⚡ para acelerar · comé estrellas, esquivá minas y no te muerdas la cola</div>
+  <div id="hint">steer with the stick · ⚡ to sprint · eat stars, dodge mines, do not bite your own tail</div>
   <div id="levelup" aria-hidden="true">
-    <div id="luTitle">¡NIVEL <span id="luLvl">2</span>!</div>
-    <div id="luSub">elegí una mejora</div>
+    <div id="luTitle">LEVEL <span id="luLvl">2</span>!</div>
+    <div id="luSub">pick an upgrade</div>
     <div id="luCards"></div>
     <button id="luReroll" type="button">↻ Rebarajar (1)</button>
   </div>
   <div id="padMenu">
-    <button id="btnPause" aria-label="pausa" title="Pausa">
+    <button id="btnPause" aria-label="pause" title="Pause">
       <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
     </button>
-    <button id="btnReset" aria-label="reiniciar" title="Reiniciar">
+    <button id="btnReset" aria-label="restart" title="Restart">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
     </button>
-    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <button id="btnFs" aria-label="fullscreen" title="Fullscreen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
-    <button id="btnDebug" aria-label="debug" title="Info / debug">
+    <button id="btnDebug" aria-label="debug" title="Info">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
-    <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+    <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
   </div>
 
   <!-- Palanca de dirección (touch): zona invisible full-screen; la palanca aparece donde tocás (semi).
        Su dirección fija el rumbo de la cabeza. Mismo esquema dinámico que TankWARS. -->
-  <div id="jMove" aria-label="dirección"></div>
+  <div id="jMove" aria-label="direction"></div>
   <div id="jMoveRest" class="joyRest"></div>
 
   <!-- Boost: botón de acción grande y flotante (abajo-derecha, arriba del de info), simétrico al joystick -->
-  <button id="btnSprint" aria-label="acelerar" title="Acelerar (mantener)">
+  <button id="btnSprint" aria-label="sprint" title="Sprint (hold)">
     <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
   </button>
 
@@ -286,12 +291,12 @@
   // Por tier: color (hue/sat/light para estrella+partículas, col/glow para cartas), ESTRELLA (points + peso sw),
   // MEJORA (RF = multiplicador del efecto sobre el baseline + peso uw). Común = blanca/clarita (casi sin color).
   const RARITY = [
-    { id:'comun',      label:'COMÚN',      hue:205, sat:18,  light:82, col:'#e6edf2', glow:'rgba(225,236,242,0.55)', points:50,   sw:45, RF:1,    uw:60   },
+    { id:'comun',      label:'COMMON',      hue:205, sat:18,  light:82, col:'#e6edf2', glow:'rgba(225,236,242,0.55)', points:50,   sw:45, RF:1,    uw:60   },
     { id:'especial',   label:'ESPECIAL',   hue:146, sat:90,  light:47, col:'#0ce469', glow:'rgba(12,228,105,0.62)', points:200,  sw:25, RF:1.25, uw:25   },
     { id:'raro',       label:'RARO',       hue:208, sat:92,  light:60, col:'#48b4ff', glow:'rgba(72,180,255,0.7)',   points:400,  sw:15, RF:1.5,  uw:10   },
-    { id:'epico',      label:'ÉPICO',      hue:280, sat:90,  light:62, col:'#c06bff', glow:'rgba(192,107,255,0.72)', points:600,  sw:10, RF:2,    uw:4    },
+    { id:'epico',      label:'EPIC',      hue:280, sat:90,  light:62, col:'#c06bff', glow:'rgba(192,107,255,0.72)', points:600,  sw:10, RF:2,    uw:4    },
     { id:'legendario', label:'LEGENDARIO', hue:48,  sat:100, light:58, col:'#ffd23a', glow:'rgba(255,210,58,0.9)',   points:800,  sw:4,  RF:3,    uw:0.9  },
-    { id:'mitico',     label:'MÍTICO',     hue:0,   sat:92,  light:58, col:'#ff4040', glow:'rgba(255,64,64,0.92)',   points:1000, sw:1,  RF:5,    uw:0.1  },
+    { id:'mitico',     label:'MYTHIC',     hue:0,   sat:92,  light:58, col:'#ff4040', glow:'rgba(255,64,64,0.92)',   points:1000, sw:1,  RF:5,    uw:0.1  },
   ];
   const RAR_BY_ID = {};
   RARITY.forEach((R, i) => { R.tier = i + 1; RAR_BY_ID[R.id] = R; });
@@ -496,6 +501,33 @@
     if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
     voiceLast[name] = now; sndThisFrame++;
     try { fn(); } catch (e) {}
+  }
+
+
+  // ── Diagnostico: vive DENTRO del panel de informacion ──
+  // Antes era una tarjeta monoespaciada dibujada sobre el lienzo, aparte del panel. Ahora es una
+  // seccion mas: una sola tarjeta para todo lo informativo. Se escribe SOLO con el panel abierto —
+  // tocar el DOM en cada frame con el panel cerrado es trabajo tirado.
+  // El nodo se busca PEREZOSAMENTE, no al parsear. El script principal corre ANTES de que exista
+  // el `#infoPanel` (esta mas abajo en el documento), asi que un `getElementById` en la linea de
+  // arriba devolvia null para siempre: ni estadisticas ni grafico. Es el mismo gotcha de orden del
+  // DOM que ya habia mordido en TankWARS.
+  let fpsEl = null;
+  function statsEl() {
+    if (!fpsEl) fpsEl = document.getElementById('fpsOverlay');
+    return fpsEl;
+  }
+  function infoAbierto() {
+    const e = statsEl();
+    return !!(e && e.parentNode && e.parentNode.classList.contains('show'));
+  }
+  function updateStats() {
+    if (!infoAbierto()) return;
+    statsEl().textContent = [
+      'FPS: '    + Math.round(1/Math.max(1e-3,dtSmoothed)),
+      'Length: ' + snake.length,
+      'Mines: '  + hazards.length,
+    ].join('\n');
   }
 
   const sfx = {
@@ -1096,7 +1128,7 @@
           manager.score += f.points;                                             // puntos según el tipo (100/200/300/400)
           manager.fed += amt;                                                    // ENGORDE: el girth escala con la comida ACUMULADA (no con el largo)
           manager.pendingGrow += amt * LEN_GROW_FRAC;                            // largo reducido → deja de amontonarse sin espacio
-          manager.healQueue += amt * manager.healMul;                            // CURA gradual ("Festín" la duplica)
+          manager.healQueue += amt * manager.healMul;                            // CURA gradual ("Feast" la duplica)
           manager.addXP(XP_EAT * f.points / 100);                                // XP escala con el NIVEL de estrella (amarilla 1 … naranja 5)
           this.wave_time = this.wave_time_total;
         }
@@ -2351,7 +2383,7 @@
       // COMBATE del jugador: si ACELERA (boost/sprint) con la cabeza de una enemiga en su cono, lanza la embestida
       // hacia la MÁS CERCANA en cono. El daño no es automático: cae sólo si el dash CONECTA (ver SnakePiece).
       if (this.attackCD > 0) this.attackCD -= deltaT;
-      if (this.venom <= 0) this.hp = Math.min(this.maxHp, this.hp + HP_REGEN*this.regenMul*deltaT); // regen ("Regeneración"): BLOQUEADA mientras el VENENO del pez piedra esté activo
+      if (this.venom <= 0) this.hp = Math.min(this.maxHp, this.hp + HP_REGEN*this.regenMul*deltaT); // regen ("Regeneration"): BLOQUEADA mientras el VENENO del pez piedra esté activo
       const accel = this.boosting || this.speedBoost > 0;
       if (accel && this.attackCD <= 0 && snake[0]) {
         const h = snake[0], range = sper(ATTACK_RANGE_F)*this.atkRangeMul, cos = Math.cos(ATTACK_ANG + this.atkConeBonus);
@@ -2476,9 +2508,9 @@
           const record = this.score >= this.best && this.score > 0;             // esta run igualó/superó el récord
           createText(100, 'GAME OVER',          'center', [255,255,255], xper(0.5), yper(0.42));
           createText(50,  'SCORE: '+this.score, 'center', [120,255,220], xper(0.5), yper(0.54));
-          createText(26,  record ? '★ NUEVO RÉCORD ★' : 'MEJOR: '+this.best, 'center', record ? [255,210,58] : [150,200,210], xper(0.5), yper(0.60));
+          createText(26,  record ? '★ NEW RECORD ★' : 'MEJOR: '+this.best, 'center', record ? [255,210,58] : [150,200,210], xper(0.5), yper(0.60));
           createText(20,  this.kills+' KILLS · NIVEL '+this.level+' · '+Math.floor(this.runTime)+'s', 'center', [140,190,205], xper(0.5), yper(0.65)); // resumen de la run
-          createText(24,  'TOCÁ PARA REINICIAR','center', [255,90,120],  xper(0.5), yper(0.71));
+          createText(24,  'TAP TO RESTART','center', [255,90,120],  xper(0.5), yper(0.71));
           ctx.globalAlpha = 1;
         }
       }
@@ -2487,20 +2519,7 @@
         createText(100, this.pauseBlinkCD > 0.25 ? 'PAUSA' : '', 'center', [255,255,255], xper(0.5), yper(0.5));
         if (this.pauseBlinkCD > 0.5) this.pauseBlinkCD = 0;
       }
-      if (showDebug) {                                                            // HUD estilo Pong: panel monoespaciado arriba a la izquierda.
-        const lines = [
-          'FPS: '   + Math.round(1/Math.max(1e-3,dtSmoothed)),
-          'len: '   + snake.length,
-          'minas: ' + hazards.length,
-        ];
-        const lh = 18, padX = 8, padY = 8, boxW = 132;
-        ctx.fillStyle = 'rgba(0,0,0,0.55)';
-        ctx.fillRect(padX, padY, boxW, lh * lines.length + 8);
-        ctx.fillStyle = 'rgba(255,255,255,0.9)';
-        ctx.font = '13px ui-monospace, Menlo, Consolas, monospace';
-        ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-        lines.forEach((s, i) => ctx.fillText(s, padX + 6, padY + 4 + i * lh));
-      }
+      updateStats();                     // el diagnostico vive en el panel de informacion
     }
     reset() {
       sfx.start();
@@ -3175,7 +3194,7 @@
     { id:'leech',  ico:'🩸', desc:'Curás parte del daño que hacés', passive:true, minTier:2, terse:R=>`Robo ${Math.round(15*R.RF)}%`,    apply:(m,RF)=>{ m.lifesteal = Math.max(m.lifesteal, 0.15*RF); } },
     { id:'thorn',  ico:'🛡️', desc:'Devolvés daño al que te pega',   passive:true, minTier:2, terse:R=>`Espinas ${Math.round(30*R.RF)}%`,  apply:(m,RF)=>{ m.thorns = Math.max(m.thorns, 0.30*RF); } },
     { id:'armor',  ico:'🪖', desc:'Recibís menos daño',             passive:true, minTier:2, terse:R=>`Coraza -${Math.round(15*R.RF)}%`,  apply:(m,RF)=>{ m.armor = Math.min(0.75, Math.max(m.armor, 0.15*RF)); } },
-    { id:'feast',  ico:'🍽️', desc:'Comer cura más',                 passive:true, minTier:2, terse:R=>`Festín +${Math.round(60*R.RF)}%`,  apply:(m,RF)=>{ m.healMul += 0.6*RF; } },
+    { id:'feast',  ico:'🍽️', desc:'Comer cura más',                 passive:true, minTier:2, terse:R=>`Feast +${Math.round(60*R.RF)}%`,  apply:(m,RF)=>{ m.healMul += 0.6*RF; } },
     { id:'magnet', ico:'🧲', desc:'Atraés la comida de lejos',      passive:true, minTier:2, terse:R=>`Imán +${Math.round(60*R.RF)}%`,    apply:(m,RF)=>{ m.magnetMul += 0.6*RF; } },
     // utilitaria: cura clutch (rareza fija, sólo si te falta vida)
     { id:'fullheal', ico:'✨', desc:'Te cura al máximo', fixedRar:'raro', hpLow:true, terse:R=>`CURA TOTAL`, apply:(m)=>{ m.hp = m.maxHp; } },
@@ -3455,27 +3474,33 @@
   </script>
 
 <div id="infoPanel"><h4>Snake</h4>
-Una serpiente de mar en un arrecife oscuro. Comé estrellas para crecer y subir de nivel; cada
-nivel te deja elegir una <b>mejora</b>. Si te quedas sin vida, se termina.
+A sea snake on a dark reef. Eat stars to grow and level up; <b>every level lets you pick an
+upgrade</b>. <b>Leaving the lake drains your health continuously</b> — the edge is not a wall.
 <hr>
-<b>Controles</b>
+<h5>Desktop</h5>
 <ul>
-  <li><b>Palanca</b> abajo a la izquierda para dirigir.</li>
-  <li><span class="k">⚡</span> (mantener) acelera. Gasta turbo, que se recarga al soltar.</li>
-  <li><span class="k">II</span> pausa · <span class="k">↻</span> reinicia.</li>
+  <li><b>Move the mouse</b> — the snake turns toward the pointer.</li>
+  <li><b>Hold any mouse button</b> to sprint. It burns turbo, which refills when you let go.</li>
+  <li><b>Pause</b> and <b>Restart</b> in the top-right cluster.</li>
+</ul>
+<h5>Mobile</h5>
+<ul>
+  <li><b>Joystick</b> at the bottom left steers.</li>
+  <li><b>Sprint (hold)</b> — the ⚡ button at the bottom right — accelerates while held.</li>
+  <li><b>Two fingers anywhere on the canvas also sprint</b>, without reaching for the button.</li>
 </ul>
 <hr>
-<b>Qué hay en el agua</b>
+<b>In the water</b>
 <ul>
-  <li><b>Estrellas</b>: te hacen crecer y dan experiencia. Las mas raras valen mas.</li>
-  <li><b>Medusa</b>: escudo por unos segundos.</li>
-  <li><b>Caballito de mar</b>: velocidad extra un rato.</li>
-  <li><b>Minas</b>: pegan fuerte y te arrancan un pedazo.</li>
-  <li><b>Serpientes enemigas</b>: embestilas para morderlas.</li>
-  <li><b>Jefes</b>: aparecen cada varios niveles. Cada uno tiene una ventana en la que se le puede
-      pegar de verdad; fuera de esa ventana la armadura absorbe casi todo.</li>
+  <li><b>Jellyfish</b>: a shield for a few seconds. <b>Seahorse</b>: extra speed for a while.</li>
+  <li><b>Mines</b> hit hard and tear a piece off you.</li>
+  <li><b>Enemy snakes</b>: lunge at them to bite.</li>
+  <li><b>Bosses</b> every few levels. <b>Each one has a window in which it can actually be hurt</b>;
+      outside it the armour absorbs nearly everything. You can hear the difference: a dull thud
+      means the armour held, a bell means it went in.</li>
 </ul>
-<span class="dim">No salgas del lago: afuera perdes vida de forma continua.</span></div>
+<div id="fpsOverlay" class="stats"></div>
+</div>
 
 <script>
 // El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
@@ -3528,30 +3553,22 @@ nivel te deja elegir una <b>mejora</b>. Si te quedas sin vida, se termina.
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado: si arriba del boton no entra nada usable (Hangman apaisado, donde el
-      // teclado y la barra se comen 319 de 380 px), el panel se ancla al borde y tapa lo que haya.
-      // Para eso tiene su propio ✕.
+      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
+      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
+      // conmutador, asi que si queda tapado el panel no se puede cerrar.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
-        panel.style.top = m + 'px'; panel.style.bottom = 'auto';
-        panel.style.maxHeight = (vh - 2 * m) + 'px';
+        if ((rb.top + rb.height / 2) < vh / 2) {
+          panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, vh - rb.bottom - 6 - m) + 'px';
+        } else {
+          panel.style.top = m + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, rb.top - 6 - m) + 'px';
+        }
       }
     }
     ubicar();
     window.addEventListener('resize', ubicar);
     window.addEventListener('orientationchange', ubicar);
-    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
-    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
-    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
-    // Escape.
-    var cerrar = document.createElement('button');
-    cerrar.className = 'infoClose'; cerrar.type = 'button';
-    cerrar.setAttribute('aria-label', 'cerrar');
-    cerrar.textContent = '×';
-    cerrar.addEventListener('pointerdown', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      panel.classList.remove('show'); btn.classList.remove('on');
-    });
-    panel.insertBefore(cerrar, panel.firstChild);
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       var abrir = !panel.classList.contains('show');

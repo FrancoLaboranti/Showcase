@@ -25,23 +25,23 @@ ALPHABETS = {
 }
 
 LANG_LABELS = {
-    'es': 'ESPAÑOL',
+    'es': 'SPANISH',
     'en': 'ENGLISH',
 }
 
 UI_TEXT = {
     'es': {
         'title':     'AHORCADO',
-        'choose':    'ELEGÍ IDIOMA',
-        'arrows':    '← →  PARA CAMBIAR    ENTER PARA JUGAR',
+        'choose':    'CHOOSE LANGUAGE',
+        'arrows':    '← →  TO CHANGE    ENTER TO PLAY',
         'fails':     'FALLOS',
         'used':      'LETRAS USADAS',
-        'won':       '¡GANASTE!',
+        'won':       'YOU WIN!',
         'lost':      'PERDISTE',
-        'word_was':  'LA PALABRA ERA',
-        'play':      'ENTER PARA OTRA PARTIDA',
-        'menu':      'ESC PARA VOLVER AL MENÚ',
-        'esc_quit':  'ESC PARA SALIR',
+        'word_was':  'THE WORD WAS',
+        'play':      'ENTER FOR ANOTHER ROUND',
+        'menu':      'ESC TO GO BACK TO THE MENU',
+        'esc_quit':  'ESC TO QUIT',
     },
     'en': {
         'title':     'HANGMAN',

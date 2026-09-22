@@ -102,28 +102,35 @@
     box-shadow: 0 1px 6px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.09),
                 0 0 0 3px var(--shell-accent-soft, rgba(120,200,255,0.26)); }
 
+
+  #infoPanel h5 {
+    margin: 10px 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.55);
+  }
+  #infoPanel h5:first-of-type { margin-top: 8px; }
+
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">tocá una celda para jugar · elegí 1P o 2P con el botón del medio</div>
+  <div id="hint">tap a cell to play · pick 1P or 2P with the middle button</div>
   <div id="bar">
-  <button id="btnExit" aria-label="salir al menú" title="Salir al menú">
+  <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
 <div id="ui">
-      <button id="btnMode"  aria-label="modo"     title="Cambiar modo"></button>
-      <button id="btnReset" aria-label="otra"     title="Otra partida">
+      <button id="btnMode"  aria-label="mode"     title="Change mode"></button>
+      <button id="btnReset" aria-label="new round"     title="New round">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
       </button>
-      <button id="btnScores" aria-label="marcador" title="Resetear marcador">
+      <button id="btnScores" aria-label="scoreboard" title="Reset the scoreboard">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M12 20V4M20 20v-7"/></svg>
       </button>
     </div>
-    <button id="btnMute" aria-label="sonido" title="Sonido">
+    <button id="btnMute" aria-label="sound" title="Sound">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
     </button>
-    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <button id="btnFs" aria-label="fullscreen" title="Fullscreen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
     <button id="btnInfo" aria-label="info" title="Info">
@@ -747,18 +754,18 @@
           drawPensando(W/2, topY, col, headerFs);
         } else {
           ctx.fillStyle = rgbStr(col);
-          ctx.fillText('TU TURNO', W/2, topY);
+          ctx.fillText('YOUR TURN', W/2, topY);
         }
       } else {
         ctx.fillStyle = rgbStr(col);
-        ctx.fillText(turn === 1 ? 'TURNO DE  X' : 'TURNO DE  O', W/2, topY);
+        ctx.fillText(turn === 1 ? 'X TO MOVE' : 'O TO MOVE', W/2, topY);
       }
     } else {
       const cpu = cpuMark();
       let label, col;
       if (winner === -1) { label = 'EMPATE'; col = COL_DRAW; }
       else if (cpu) {
-        label = (winner === cpu) ? 'GANA LA CPU' : '¡GANASTE!';
+        label = (winner === cpu) ? 'CPU WINS' : 'YOU WIN!';
         col = colorForMark(winner);
       } else {
         label = winner === 1 ? 'GANA X' : 'GANA O';
@@ -867,7 +874,7 @@
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.font = `500 ${fontPx(0.035, 11, 15)}px 'Segoe UI', system-ui, sans-serif`;
-    ctx.fillText('TOCÁ PARA OTRA PARTIDA', W/2, y);
+    ctx.fillText('TAP FOR ANOTHER ROUND', W/2, y);
   }
 
   function drawInfoOverlay() {
@@ -990,20 +997,22 @@
 
   <!-- Shell del Arcade (exit + fullscreen + lock de orientación). data-orient: landscape/portrait/any. -->
   <script src="../../Arcade/arcade-shell.js" data-orient="any"></script>
-<div id="infoPanel"><h4>Ta-Te-Ti</h4>
-Tres en linea sobre un tablero de 3x3. Gana el primero que alinee tres marcas propias en fila,
-columna o diagonal; si se llena sin linea, es empate.
+<div id="infoPanel"><h4>Tic-Tac-Toe</h4>
+Three in a row on a 3x3 board. <b>The CPU searches the whole game tree, so it cannot be beaten</b> —
+against it the best result is a draw. Who opens alternates every round.
 <hr>
+<h5>Desktop</h5>
 <ul>
-  <li><b>Tocar una celda</b> para poner tu marca.</li>
-  <li><span class="k">modo</span> cicla entre <b>2 jugadores</b>, <b>vos X contra la CPU</b> y
-      <b>vos O contra la CPU</b>.</li>
-  <li><span class="k">otra</span> arranca una ronda nueva; <span class="k">marcador</span> borra
-      el acumulado de X / O / empates.</li>
+  <li><b>Click a cell</b> to place your mark.</li>
+  <li><b>Change mode</b> cycles <b>2 players</b>, <b>you as X vs CPU</b> and <b>you as O vs CPU</b>.</li>
+  <li><b>New round</b> clears the board; <b>Reset the scoreboard</b> wipes the X / O / draw tally.</li>
 </ul>
-<hr>
-<span class="dim">La CPU juega con busqueda completa: en 3x3 eso significa que no se le puede
-ganar. Contra ella lo mejor posible es empatar. Quien abre alterna en cada ronda.</span></div>
+<h5>Mobile</h5>
+<ul>
+  <li><b>Tap a cell</b> to place your mark.</li>
+  <li>The bar buttons behave the same as on desktop.</li>
+</ul>
+</div>
 
 <script>
 // El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
@@ -1056,30 +1065,22 @@ ganar. Contra ella lo mejor posible es empatar. Quien abre alterna en cada ronda
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado: si arriba del boton no entra nada usable (Hangman apaisado, donde el
-      // teclado y la barra se comen 319 de 380 px), el panel se ancla al borde y tapa lo que haya.
-      // Para eso tiene su propio ✕.
+      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
+      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
+      // conmutador, asi que si queda tapado el panel no se puede cerrar.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
-        panel.style.top = m + 'px'; panel.style.bottom = 'auto';
-        panel.style.maxHeight = (vh - 2 * m) + 'px';
+        if ((rb.top + rb.height / 2) < vh / 2) {
+          panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, vh - rb.bottom - 6 - m) + 'px';
+        } else {
+          panel.style.top = m + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, rb.top - 6 - m) + 'px';
+        }
       }
     }
     ubicar();
     window.addEventListener('resize', ubicar);
     window.addEventListener('orientationchange', ubicar);
-    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
-    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
-    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
-    // Escape.
-    var cerrar = document.createElement('button');
-    cerrar.className = 'infoClose'; cerrar.type = 'button';
-    cerrar.setAttribute('aria-label', 'cerrar');
-    cerrar.textContent = '×';
-    cerrar.addEventListener('pointerdown', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      panel.classList.remove('show'); btn.classList.remove('on');
-    });
-    panel.insertBefore(cerrar, panel.firstChild);
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       var abrir = !panel.classList.contains('show');

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>Simón</title>
+<title>Simon</title>
 <link rel="stylesheet" href="../../Arcade/arcade-shell.css">
 <style>
   :root { --bar-height: 66px; }
@@ -86,24 +86,31 @@
     box-shadow: 0 1px 6px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.09),
                 0 0 0 3px var(--shell-accent-soft, rgba(120,200,255,0.26)); }
 
+
+  #infoPanel h5 {
+    margin: 10px 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.55);
+  }
+  #infoPanel h5:first-of-type { margin-top: 8px; }
+
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">tocá el centro para empezar · repetí la secuencia sin equivocarte</div>
+  <div id="hint">tap the centre to start · repeat the sequence without a mistake</div>
   <div id="bar">
-  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+  <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
 <div id="ui">
-      <button id="btnReset" aria-label="reiniciar" title="Volver al menú">
+      <button id="btnReset" aria-label="restart" title="Back to menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
       </button>
-      <button id="btnMute" aria-label="sonido" title="Sonido on/off">
+      <button id="btnMute" aria-label="sound" title="Sound on/off">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"/><path d="M16 9a3.5 3.5 0 0 1 0 6"/><path d="M18.5 7a7 7 0 0 1 0 10"/></svg>
       </button>
     </div>
-    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <button id="btnFs" aria-label="fullscreen" title="Fullscreen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
     <button id="btnInfo" aria-label="info" title="Info">
@@ -113,9 +120,9 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  SIMÓN — port web del Pygame SimonSays.py, mismo formato que BallsWeb.
+  //  SIMON — port web del Pygame SimonSays.py, mismo formato que BallsWeb.
   //  El Pygame usaba 4 buffers PCM pre-grabados; acá los 4 tonos se
-  //  sintetizan con WebAudio (suena como el Simón clásico, sin assets).
+  //  sintetizan con WebAudio (suena como el Simon clásico, sin assets).
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
 
@@ -127,7 +134,7 @@
   // 4 pads en disco. ang = [inicio, fin] en radianes (0=derecha, +=horario/abajo).
   //  id0 rojo  → TL (arriba-izq)   id1 verde → TR (arriba-der)
   //  id2 azul  → BR (abajo-der)    id3 amarillo → BL (abajo-izq)
-  // Tonos auténticos del Simón: verde 415, rojo 310, azul 209.7, amarillo 252.
+  // Tonos auténticos del Simon: verde 415, rojo 310, azul 209.7, amarillo 252.
   const PADS = [
     { base:[235, 50, 55],  tone:310.07, ang:[Math.PI,        1.5*Math.PI] },  // 0 rojo  TL
     { base:[45, 205, 95],  tone:415.30, ang:[1.5*Math.PI,    TAU] },          // 1 verde TR
@@ -242,7 +249,7 @@
       osc.start(t); osc.stop(t + dur + 0.03);
     }
   }
-  function playWrong() {                // derrota suave: arpegio descendente del acorde del Simón
+  function playWrong() {                // derrota suave: arpegio descendente del acorde del Simon
     if (!soundOn) return;               // (G#4→D#4→B3→G#3) + glissando final hacia abajo
     audioResume();
     if (!actx) return;
@@ -496,7 +503,7 @@
       label = 'START'; labelCol = '#15171f';
     } else if (phase === 'gameover') {
       grad.addColorStop(0, '#2a2d39'); grad.addColorStop(1, '#15171f');
-      label = 'MENÚ'; labelCol = '#ff6b74';
+      label = 'MENU'; labelCol = '#ff6b74';
     } else {
       grad.addColorStop(0, '#1b1e29'); grad.addColorStop(1, '#0d0f15');
       label = String(score); sub = 'NIVEL'; labelCol = COL_TEXT;
@@ -525,11 +532,11 @@
     const topY = cy - R * 1.06 - H * 0.045;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     let label = '', col = COL_TEXT, big = false;
-    if (phase === 'menu')          { label = 'SIMÓN'; big = true; }
-    else if (phase === 'showing')  { label = 'MIRÁ'; col = COL_DIM; }
-    else if (phase === 'input')    { label = 'TU TURNO'; col = '#7fe3a0'; }
-    else if (phase === 'wrong')    { label = '¡MAL!'; col = '#ff6b74'; }
-    else if (phase === 'nice')     { label = '¡BIEN!'; col = '#7fe39a'; }
+    if (phase === 'menu')          { label = 'SIMON'; big = true; }
+    else if (phase === 'showing')  { label = 'WATCH'; col = COL_DIM; }
+    else if (phase === 'input')    { label = 'YOUR TURN'; col = '#7fe3a0'; }
+    else if (phase === 'wrong')    { label = 'WRONG!'; col = '#ff6b74'; }
+    else if (phase === 'nice')     { label = 'GOOD!'; col = '#7fe39a'; }
     else if (phase === 'gameover') { label = 'GAME OVER'; col = '#ff6b74'; big = true; }
 
     ctx.save();
@@ -544,7 +551,7 @@
     if (phase === 'menu') {
       ctx.fillStyle = COL_DIM;
       ctx.font = font(600, Math.min(15, H * 0.02));
-      ctx.fillText(best > 0 ? `MEJOR  ${best}` : 'memorizá la secuencia', W/2, subY);
+      ctx.fillText(best > 0 ? `MEJOR  ${best}` : 'memorise the sequence', W/2, subY);
     } else if (phase === 'gameover') {
       if (newRecord) {
         ctx.fillStyle = '#ffd54a';
@@ -586,7 +593,7 @@
     /* eslint-disable no-unreachable */
     if (!showInfo) return;
     const lines = [
-      'SIMÓN',
+      'SIMON',
       '',
       'Mirá la secuencia de colores que se',
       'enciende y repetila tocando los pads.',
@@ -725,18 +732,22 @@
 
   <!-- Shell del Arcade (exit + fullscreen + lock de orientación). data-orient: landscape/portrait/any. -->
   <script src="../../Arcade/arcade-shell.js" data-orient="portrait"></script>
-<div id="infoPanel"><h4>Simon Dice</h4>
-El juguete de memoria. El disco toca una secuencia de colores y vos la repetis. Cada ronda
-<b>agrega uno mas</b> al final. Un solo error termina la partida.
+<div id="infoPanel"><h4>Simon Says</h4>
+The memory toy. The disc plays a sequence and you repeat it; each round <b>adds one more at the
+end</b>. One mistake ends the run. <b>Each colour has a fixed note and the four form a chord</b>, so
+the sequence can be remembered by ear as well as by sight — that is how the real toy worked.
 <hr>
+<h5>Desktop</h5>
 <ul>
-  <li><b>Tocar el centro</b> para empezar.</li>
-  <li><b>Tocar los cuartos de color</b> en el mismo orden en que se encendieron.</li>
-  <li><span class="k">↻</span> vuelve al menu.</li>
+  <li><b>Click the centre</b> to start.</li>
+  <li><b>Click the coloured quarters</b> in the order they lit up.</li>
+  <li><b>Back to menu</b> in the bar.</li>
 </ul>
-<hr>
-<span class="dim">Cada color tiene su nota fija, y las cuatro juntas forman un acorde: la
-secuencia se puede recordar de oido, no solo de vista. Es como funcionaba el juguete real.</span></div>
+<h5>Mobile</h5>
+<ul>
+  <li><b>Tap the centre</b> to start, then <b>tap the quarters</b> in order.</li>
+</ul>
+</div>
 
 <script>
 // El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
@@ -789,30 +800,22 @@ secuencia se puede recordar de oido, no solo de vista. Es como funcionaba el jug
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado: si arriba del boton no entra nada usable (Hangman apaisado, donde el
-      // teclado y la barra se comen 319 de 380 px), el panel se ancla al borde y tapa lo que haya.
-      // Para eso tiene su propio ✕.
+      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
+      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
+      // conmutador, asi que si queda tapado el panel no se puede cerrar.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
-        panel.style.top = m + 'px'; panel.style.bottom = 'auto';
-        panel.style.maxHeight = (vh - 2 * m) + 'px';
+        if ((rb.top + rb.height / 2) < vh / 2) {
+          panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, vh - rb.bottom - 6 - m) + 'px';
+        } else {
+          panel.style.top = m + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, rb.top - 6 - m) + 'px';
+        }
       }
     }
     ubicar();
     window.addEventListener('resize', ubicar);
     window.addEventListener('orientationchange', ubicar);
-    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
-    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
-    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
-    // Escape.
-    var cerrar = document.createElement('button');
-    cerrar.className = 'infoClose'; cerrar.type = 'button';
-    cerrar.setAttribute('aria-label', 'cerrar');
-    cerrar.textContent = '×';
-    cerrar.addEventListener('pointerdown', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      panel.classList.remove('show'); btn.classList.remove('on');
-    });
-    panel.insertBefore(cerrar, panel.firstChild);
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       var abrir = !panel.classList.contains('show');

@@ -10,7 +10,7 @@ pygame.mixer.pre_init(frequency=44100, size=-16)
 swidth = 700
 sheight = 700
 winsurface = pygame.display.set_mode((swidth, sheight), 0 , 32)
-pygame.display.set_caption('Simón')
+pygame.display.set_caption('Simon')
 
 fuente = pygame.font.Font(None, 45)
 if (swidth+sheight)/2 <= 550:

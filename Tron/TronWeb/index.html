@@ -108,6 +108,13 @@
     width: auto !important; max-width: none !important; opacity: 1 !important;
   }
 
+
+  #infoPanel h5 {
+    margin: 10px 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.55);
+  }
+  #infoPanel h5:first-of-type { margin-top: 8px; }
+
 </style>
 </head>
 <body>
@@ -137,29 +144,29 @@
   })();
   </script>
   <canvas id="c"></canvas>
-  <div id="hint">tocá las opciones del menú y ▶ JUGAR · en juego: tocá los lados para doblar</div>
+  <div id="hint">tap the menu options and ▶ PLAY · in a round: tap the sides to turn</div>
   <div id="bar">
-  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+  <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
 <div id="ui">
-      <button id="btnLeft"  aria-label="girar izquierda" title="Girar izquierda">
+      <button id="btnLeft"  aria-label="turn left" title="Turn left">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
       </button>
-      <button id="btnRight" aria-label="girar derecha" title="Girar derecha">
+      <button id="btnRight" aria-label="turn right" title="Turn right">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg>
       </button>
-      <button id="btnMenu" aria-label="volver al menú" title="Volver al menú">
+      <button id="btnMenu" aria-label="back to menu" title="Back to menu">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg>
       </button>
     </div>
-    <button id="btnMute" aria-label="sonido" title="Sonido">
+    <button id="btnMute" aria-label="sound" title="Sound">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
     </button>
-    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <button id="btnFs" aria-label="fullscreen" title="Fullscreen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
-    <button id="btnInfo" aria-label="info" title="Info / FPS">
+    <button id="btnInfo" aria-label="info" title="Info">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
   </div>
@@ -860,7 +867,7 @@
     if (gh.option === 0) gh.players = (gh.players + delta + 3) % 3;
     else gh.bestOfIdx = (gh.bestOfIdx + delta + BEST_OF.length) % BEST_OF.length;
   }
-  function bestOfLabel() { const bo = BEST_OF[gh.bestOfIdx]; return bo === 1 ? 'Partida única' : 'Best of ' + bo; }
+  function bestOfLabel() { const bo = BEST_OF[gh.bestOfIdx]; return bo === 1 ? 'Single round' : 'Best of ' + bo; }
   function tapMenu(lx, ly) {                                                       // toque/click sobre el menú (coords del canvas)
     const L = menuLayout(), dir = lx < W * 0.5 ? -1 : 1;                          // mitad izq/der = anterior/siguiente
     if (Math.abs(ly - L.opt1Y) < L.tol)      { gh.option = 0; menuChangeValue(dir); }
@@ -998,12 +1005,12 @@
     const youCol = PLAYER_COLORS[0], youW = gh.lastWinner === 'you';
     if (gh.targetWins > 1) drawScoreboard(0.28, 1.05);
     if (setOver()) {
-      createText(90, youW ? '¡GANASTE!' : 'CPU GANA', youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 22, 'rgba(0,0,0,0.55)');
-      createText(36, 'tocá o Enter para revancha', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
+      createText(90, youW ? 'YOU WIN!' : 'CPU GANA', youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 22, 'rgba(0,0,0,0.55)');
+      createText(36, 'tap or press Enter for a rematch', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
     } else {
-      const msg = youW ? '¡Ronda tuya!' : ('Ronda para ' + (gh.lastWinnerName || 'CPU'));
+      const msg = youW ? 'Round to you!' : ('Round to ' + (gh.lastWinnerName || 'CPU'));
       createText(72, msg, youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 18, 'rgba(0,0,0,0.55)');
-      createText(36, 'tocá o Enter: siguiente ronda', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
+      createText(36, 'tap or press Enter: next round', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
     }
   }
 
@@ -1182,23 +1189,24 @@
 
 
 <div id="infoPanel"><h4>Tron</h4>
-Motos de luz que dejan una estela solida detras. Choca contra cualquier estela —incluida la
-tuya— y te desintegras. <b>Gana el ultimo que queda en pie.</b>
+Light cycles that leave a solid trail. Hit any trail — <b>including your own</b> — and you are
+de-rezzed. <b>The field wraps</b>: leave through one edge and you come back through the opposite
+one, and so do the trails. A round is a leg; the <b>set</b> is the real result.
 <hr>
-<b>Controles</b>
+<h5>Desktop</h5>
 <ul>
-  <li><b>Tocar la mitad izquierda o derecha</b> de la pantalla dobla hacia ese lado, o los
-      botones <span class="k">◄</span> <span class="k">►</span>.</li>
-  <li>Teclado: <span class="k">←</span> <span class="k">↓</span> doblan. Al terminar la ronda,
-      <span class="k">Enter</span> sigue; <span class="k">Esc</span> vuelve al menu.</li>
+  <li><b>←</b> and <b>↓</b> turn. There is no forward or brake — a cycle only turns.</li>
+  <li><b>Enter</b> continues after a round; <b>Esc</b> goes back to the menu.</li>
+  <li>In the menu, <b>↑ ↓</b> pick the row and <b>← →</b> change the value: how many colours race
+      and how many rounds the set is.</li>
 </ul>
-<hr>
-<b>Detalles que no se ven</b>
+<h5>Mobile</h5>
 <ul>
-  <li>El campo hace <b>wrap</b>: salis por un borde y entras por el opuesto. Las estelas tambien.</li>
-  <li>En el menu elegis <b>cuantos colores</b> compiten y <b>al mejor de cuantas</b>.</li>
-  <li>Una ronda es un parcial; el <b>set</b> es el desenlace.</li>
-</ul></div>
+  <li><b>Tap the left or right half of the screen</b> to turn that way.</li>
+  <li><b>Turn left</b> and <b>Turn right</b> in the bar do the same.</li>
+  <li>Tap a menu row to change its value, then <b>PLAY</b>.</li>
+</ul>
+</div>
 
 <script>
 // El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
@@ -1251,30 +1259,22 @@ tuya— y te desintegras. <b>Gana el ultimo que queda en pie.</b>
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado: si arriba del boton no entra nada usable (Hangman apaisado, donde el
-      // teclado y la barra se comen 319 de 380 px), el panel se ancla al borde y tapa lo que haya.
-      // Para eso tiene su propio ✕.
+      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
+      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
+      // conmutador, asi que si queda tapado el panel no se puede cerrar.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
-        panel.style.top = m + 'px'; panel.style.bottom = 'auto';
-        panel.style.maxHeight = (vh - 2 * m) + 'px';
+        if ((rb.top + rb.height / 2) < vh / 2) {
+          panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, vh - rb.bottom - 6 - m) + 'px';
+        } else {
+          panel.style.top = m + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, rb.top - 6 - m) + 'px';
+        }
       }
     }
     ubicar();
     window.addEventListener('resize', ubicar);
     window.addEventListener('orientationchange', ubicar);
-    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
-    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
-    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
-    // Escape.
-    var cerrar = document.createElement('button');
-    cerrar.className = 'infoClose'; cerrar.type = 'button';
-    cerrar.setAttribute('aria-label', 'cerrar');
-    cerrar.textContent = '×';
-    cerrar.addEventListener('pointerdown', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      panel.classList.remove('show'); btn.classList.remove('on');
-    });
-    panel.insertBefore(cerrar, panel.firstChild);
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       var abrir = !panel.classList.contains('show');

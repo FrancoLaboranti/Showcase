@@ -258,18 +258,6 @@
   }
 
 
-/* Cierre del panel. Arriba a la derecha, dentro de la tarjeta: es la unica salida garantizada
-   cuando el panel se ancla al piso y queda por encima del boton que lo abrio. */
-#infoPanel .infoClose {
-  position: absolute; top: 8px; right: 9px; width: 26px; height: 26px; border-radius: 50%;
-  border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06);
-  color: rgba(255,255,255,0.6); font: 600 15px/1 system-ui, sans-serif;
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; padding: 0; touch-action: none; -webkit-tap-highlight-color: transparent;
-}
-#infoPanel .infoClose:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
-#infoPanel .infoClose:active { transform: scale(0.9); background: rgba(255,255,255,0.16); }
-#infoPanel h4 { padding-right: 30px; }
 
 
   /* Estos botones son `static`, asi que el `::after` de abajo se posicionaria contra otro
@@ -281,6 +269,23 @@
      la esquina estan a 38 px de paso con cuerpos de 30, asi que ampliar a los costados haria que
      dos areas se toquen y el tap caiga en el vecino. */
   #btnInfo::after, #btnPause::after, #btnMute::after, #btnReset::after, #btnShop::after { content: ''; position: absolute; inset: -7px 0; border-radius: 50%; }
+
+  /* Diagnostico DENTRO del panel: antes era una tarjeta aparte sobre el lienzo. Monoespaciada y
+     `pre-line` para que las columnas queden alineadas como estaban. */
+  #infoPanel #fpsOverlay {
+    margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,0.11);
+    font: 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
+    color: #8ee36b; white-space: pre-line;
+  }
+  #infoPanel #fpsOverlay:empty { display: none; }
+
+
+  #infoPanel h5 {
+    margin: 10px 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.55);
+  }
+  #infoPanel h5:first-of-type { margin-top: 8px; }
+
 </style>
 </head>
 <body>
@@ -332,7 +337,7 @@
     <button class="btn" id="btnReset" aria-label="restart" title="Back to menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></button>
     <button class="btn" id="btnMute" aria-label="sound" title="Sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg></button>
     <button class="btn" id="btnFs" aria-label="fullscreen" title="Fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
-    <button class="btn" id="btnInfo" aria-label="stats" title="FPS / stats"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg></button>
+    <button class="btn" id="btnInfo" aria-label="stats" title="Info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg></button>
     <button class="btn" id="btnExit" aria-label="exit to menu" title="Exit to menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
   </div>
 
@@ -3975,10 +3980,28 @@
     }
   }
 
-  function drawDebugHUD() {
-    const lines = [
+  // ── Diagnostico: vive DENTRO del panel de informacion ──
+  // Antes era una tarjeta monoespaciada dibujada sobre el lienzo, aparte del panel. Ahora es una
+  // seccion mas: una sola tarjeta para todo lo informativo. Se escribe SOLO con el panel abierto —
+  // tocar el DOM en cada frame con el panel cerrado es trabajo tirado.
+  // El nodo se busca PEREZOSAMENTE, no al parsear. El script principal corre ANTES de que exista
+  // el `#infoPanel` (esta mas abajo en el documento), asi que un `getElementById` en la linea de
+  // arriba devolvia null para siempre: ni estadisticas ni grafico. Es el mismo gotcha de orden del
+  // DOM que ya habia mordido en TankWARS.
+  let fpsEl = null;
+  function statsEl() {
+    if (!fpsEl) fpsEl = document.getElementById('fpsOverlay');
+    return fpsEl;
+  }
+  function infoAbierto() {
+    const e = statsEl();
+    return !!(e && e.parentNode && e.parentNode.classList.contains('show'));
+  }
+  function updateStats() {
+    if (!infoAbierto()) return;
+    statsEl().textContent = [
       'FPS: ' + Math.round(1/Math.max(1e-3, dtSmoothed)),
-      'ms: ' + (dtSmoothed*1000).toFixed(1),   // tiempo de frame: muestra ganancias chicas que el FPS redondeado oculta
+      'ms: ' + (dtSmoothed*1000).toFixed(1),   // frame time: shows small gains the rounded FPS hides
       'Tanks: ' + tanks.length,
       'Enemies: ' + enemies.length,
       'Shots: ' + shots.length,
@@ -3986,9 +4009,7 @@
       'Cam: ' + Math.round(camX) + ',' + Math.round(camY),
       'Wave: ' + manager.waveNumber,
       'WaveT: ' + Math.round(manager.waveTime),
-    ];
-    ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.fillRect(W-130, 8, 122, 18*lines.length+8);
-    lines.forEach((s,i) => text(s, [255,255,255], W-124, 18+i*18, 13));
+    ].join('\n');
   }
 
   // ════════════════ LOOP ════════════════
@@ -4176,7 +4197,7 @@
     // HUD en coords de PANTALLA (sin cámara ni shake)
     ctx.setTransform(scaleX * dpr, 0, 0, scaleY * dpr, 0, 0);
     drawHUD();
-    if (showDebug) drawDebugHUD();
+    updateStats();
 
     requestAnimationFrame(loop);
   }
@@ -4216,25 +4237,35 @@
   </script>
   </div><!-- /#stage -->
 <div id="infoPanel"><h4>Tank WARS</h4>
-Survive waves of enemy tanks. Between waves you spend what you earned in the shop. Played in
+Survive waves of enemy tanks; between waves you spend what you earned in the shop. Played in
 <b>landscape</b>.
 <hr>
-<b>Controls</b>
+<h5>Desktop</h5>
 <ul>
-  <li><b>Left stick</b> moves. <b>Right stick</b> aims and fires at the same time.</li>
-  <li><span class="k">🚀</span> fires a homing missile.</li>
-  <li><span class="k">⚡</span> is a short boost.</li>
-  <li><span class="k">shop</span> opens the upgrades. <span class="k">II</span> or
-      <span class="k">P</span> pauses.</li>
+  <li><b>W A S D</b> or the <b>arrow keys</b> drive. <b>Move the mouse</b> to aim and
+      <b>hold the left button</b> to fire.</li>
+  <li><b>Right mouse button</b> fires a homing missile, same as <b>Missile</b>.</li>
+  <li><b>Shift</b> is a short boost, same as <b>Boost</b>. <b>Q</b> triggers rage.</li>
+  <li><b>Tab</b> opens <b>Shop (upgrades)</b>. <b>P</b> pauses.</li>
+</ul>
+<h5>Mobile</h5>
+<ul>
+  <li><b>Left stick</b> moves. <b>Right stick aims and fires at the same time</b> — you do not hold
+      a separate trigger.</li>
+  <li><b>Missile</b> (🚀) and <b>Boost</b> (⚡) are the buttons on the right.</li>
+  <li><b>Tap the rage bar</b> at the top to trigger rage — there is no separate button for it.</li>
 </ul>
 <hr>
 <b>On the field</b>
 <ul>
-  <li><b>Crates</b> break open. <b>Lootboxes</b> take several hits and drop power-ups, cash or a
-      shower of coins — the ping rises as one gets closer to breaking.</li>
-  <li><b>Mines</b> hit hard. So does your own missile if you stand next to it.</li>
-  <li>The <b>shield</b> absorbs shots until it breaks. You will hear it break.</li>
-</ul></div>
+  <li><b>Crates</b> break open in one hit. <b>Lootboxes</b> take several and drop power-ups, cash or
+      a shower of coins — <b>the ping rises as one gets closer to breaking</b>.</li>
+  <li><b>Mines</b> hit hard. <b>So does your own missile</b> if you are standing next to it.</li>
+  <li>The <b>shield</b> absorbs shots until it breaks, and breaking is the only dissonant sound in
+      the game.</li>
+</ul>
+<div id="fpsOverlay" class="stats"></div>
+</div>
 
 <script>
 // El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
@@ -4287,30 +4318,22 @@ Survive waves of enemy tanks. Between waves you spend what you earned in the sho
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado: si arriba del boton no entra nada usable (Hangman apaisado, donde el
-      // teclado y la barra se comen 319 de 380 px), el panel se ancla al borde y tapa lo que haya.
-      // Para eso tiene su propio ✕.
+      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
+      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
+      // conmutador, asi que si queda tapado el panel no se puede cerrar.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
-        panel.style.top = m + 'px'; panel.style.bottom = 'auto';
-        panel.style.maxHeight = (vh - 2 * m) + 'px';
+        if ((rb.top + rb.height / 2) < vh / 2) {
+          panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, vh - rb.bottom - 6 - m) + 'px';
+        } else {
+          panel.style.top = m + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, rb.top - 6 - m) + 'px';
+        }
       }
     }
     ubicar();
     window.addEventListener('resize', ubicar);
     window.addEventListener('orientationchange', ubicar);
-    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
-    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
-    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
-    // Escape.
-    var cerrar = document.createElement('button');
-    cerrar.className = 'infoClose'; cerrar.type = 'button';
-    cerrar.setAttribute('aria-label', 'cerrar');
-    cerrar.textContent = '×';
-    cerrar.addEventListener('pointerdown', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      panel.classList.remove('show'); btn.classList.remove('on');
-    });
-    panel.insertBefore(cerrar, panel.firstChild);
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       var abrir = !panel.classList.contains('show');

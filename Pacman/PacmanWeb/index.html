@@ -78,27 +78,34 @@
     width: auto !important; max-width: none !important; opacity: 1 !important;
   }
 
+
+  #infoPanel h5 {
+    margin: 10px 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.55);
+  }
+  #infoPanel h5:first-of-type { margin-top: 8px; }
+
 </style>
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">desktop: flechas o WASD · móvil: deslizá hacia una dirección · comete todos los puntos</div>
+  <div id="hint">desktop: arrows or WASD · mobile: swipe in a direction · eat every pellet</div>
   <!-- Barra inferior fina estilo Tron V1 (orden centrado): ✕ salir · ⟳ reiniciar · 🔊 sonido · ⛶ pantalla · ⓘ info.
        Sin botones de movimiento: el control es flechas/WASD (desktop) o swipe sobre el canvas (móvil). -->
   <div id="bar">
-    <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+    <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
-    <button id="btnReset" aria-label="reiniciar" title="Reiniciar partida">
+    <button id="btnReset" aria-label="restart" title="Restart the run">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
     </button>
-    <button id="btnSound" aria-label="sonido" title="Sonido on/off">
+    <button id="btnSound" aria-label="sound" title="Sound on/off">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-on"><path d="M11 5L6 9H3v6h3l5 4V5z" fill="currentColor" stroke="none"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></g><g class="ic-off"><path d="M11 5L6 9H3v6h3l5 4V5z" fill="currentColor" stroke="none"/><path d="M16 9l5 5M21 9l-5 5"/></g></svg>
     </button>
-    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <button id="btnFs" aria-label="fullscreen" title="Fullscreen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
-    <button id="btnInfo" aria-label="info" title="Info / FPS">
+    <button id="btnInfo" aria-label="info" title="Info">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
   </div>
@@ -139,7 +146,7 @@
   let PAC_COL   = '#ffe300';
   const GHOST_PTS   = [200, 400, 800, 1600];
   const FRUIT_PTS   = [100, 300, 500, 700, 1000, 3000, 5000];
-  const FRUIT_NAMES = ['cereza', 'frutilla', 'naranja', 'manzana', 'melón', 'campana', 'llave'];
+  const FRUIT_NAMES = ['cereza', 'frutilla', 'naranja', 'manzana', 'melon', 'campana', 'llave'];
 
   // ── SKINS cosméticos (#6): PURO color, cero efecto mecánico. Se desbloquean por récord histórico. ──
   const SKINS = [
@@ -265,7 +272,7 @@
 
   // Logros (#7): set de ids desbloqueados + toasts.
   const ACH = {
-    firstGhost: 'Cazaste un fantasma', allFour: 'Los 4 de un saque', fruit: 'Fruta jugosa',
+    firstGhost: 'Ate a ghost', allFour: 'All four in one go', fruit: 'Fruta jugosa',
     level5: 'Nivel 5', level10: 'Nivel 10', score10k: '10.000 puntos', score50k: '50.000 puntos',
     perfect: 'Nivel perfecto', bonus: 'Ronda bonus',
   };
@@ -1123,7 +1130,7 @@
       ctx.beginPath(); ctx.moveTo(0, -s * 0.2); ctx.lineTo(s * 0.12, -s * 0.62); ctx.stroke();
       ctx.fillStyle = '#7ddd4f';
       ctx.beginPath(); ctx.ellipse(s * 0.3, -s * 0.5, s * 0.2, s * 0.1, 0.5, 0, TAU); ctx.fill();
-    } else if (kind === 4) {                                                     // melón
+    } else if (kind === 4) {                                                     // melon
       ctx.fillStyle = '#49c24c';
       ctx.beginPath(); ctx.arc(0, s * 0.05, s * 0.62, 0, TAU); ctx.fill();
       ctx.strokeStyle = '#2c8a30'; ctx.lineWidth = s * 0.1;
@@ -1224,7 +1231,7 @@
       const line = (i + 1) + '  ' + s.n + '  ' + String(s.s).padStart(6, ' ') + '  ' + s.m;
       text(W / 2, H * (0.37 + i * 0.055), Math.max(9, 12 * scl), line, i === 0 ? '#ffe300' : (fresh ? '#9effa0' : '#ddd'));
     }
-    text(W / 2, H * 0.80, Math.max(8, 11 * scl), 'tocá o Enter para jugar', '#ccc');
+    text(W / 2, H * 0.80, Math.max(8, 11 * scl), 'tap or press Enter to play', '#ccc');
   }
   // Entrada de iniciales (#5): 3 slots con ▲/▼ tocables + botón OK. También teclado A-Z/Enter.
   let initUI = null;
@@ -1233,7 +1240,7 @@
     const cx = W / 2;
     text(cx, H * 0.20, Math.max(13, 19 * scl), 'NUEVO RECORD!', '#ffe300', 14);
     text(cx, H * 0.28, Math.max(10, 13 * scl), gh.pendingScore + ' PTS', '#fff');
-    text(cx, H * 0.36, Math.max(8, 10 * scl), 'toca flechas o escribi', 'rgba(180,190,205,0.8)');
+    text(cx, H * 0.36, Math.max(8, 10 * scl), 'tap the arrows or type', 'rgba(180,190,205,0.8)');
     const sw = Math.max(38, 46 * scl), gap = sw * 0.45, totalw = sw * 3 + gap * 2, sx0 = cx - totalw / 2;
     const midY = H * 0.52, fp = Math.max(22, 34 * scl);
     const slots = [];
@@ -1340,7 +1347,7 @@
           (i + 1) + '  ' + s.n + '  ' + String(s.s).padStart(6, ' ') + '  ' + s.m, i === 0 ? '#ffe300' : '#cfd6e0');
       }
     } else {
-      text(W / 2, H * 0.745, Math.max(8, 10 * scl), 'todavía no hay', 'rgba(150,160,175,0.7)');
+      text(W / 2, H * 0.745, Math.max(8, 10 * scl), 'none yet', 'rgba(150,160,175,0.7)');
     }
     text(W / 2, H * 0.90, Math.max(8, 9 * scl), 'flechas/WASD o swipe · tocá una fila', 'rgba(150,160,175,0.7)');
   }
@@ -1501,20 +1508,22 @@
     })();
   </script>
 <div id="infoPanel"><h4>Pac-Man</h4>
-Comete todos los puntos del laberinto sin que te agarren los fantasmas. Cuando limpias el
-laberinto, pasas al siguiente.
+Eat every pellet without being caught. <b>The power pellets in the corners</b> turn the ghosts blue
+for a few seconds and you can eat them — <b>each one in a row is worth more than the last</b>.
+Clearing the maze moves you to the next one.
 <hr>
-<b>Controles</b>
+<h5>Desktop</h5>
 <ul>
-  <li><b>Movil</b>: deslizar el dedo hacia la direccion a la que queres ir.</li>
-  <li><b>Escritorio</b>: flechas o <span class="k">WASD</span>.</li>
-  <li><span class="k">↻</span> reinicia la partida.</li>
+  <li><b>Arrow keys</b> or <b>W A S D</b> set the direction. Pac-Man keeps going until the next turn.</li>
+  <li><b>Restart the run</b> in the bar.</li>
+</ul>
+<h5>Mobile</h5>
+<ul>
+  <li><b>Swipe</b> in the direction you want to go — anywhere on the screen.</li>
 </ul>
 <hr>
-<b>Las pastillas grandes</b> de las esquinas dan vuelta la cosa por unos segundos: los fantasmas
-se ponen azules y podes comerlos. Cada uno seguido vale mas que el anterior.
-<hr>
-<span class="dim">La sirena de fondo sube de tono a medida que se vacia el laberinto.</span></div>
+<span class="dim">The background siren rises in pitch as the maze empties.</span>
+</div>
 
 <script>
 // El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
@@ -1567,30 +1576,22 @@ se ponen azules y podes comerlos. Cada uno seguido vale mas que el anterior.
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado: si arriba del boton no entra nada usable (Hangman apaisado, donde el
-      // teclado y la barra se comen 319 de 380 px), el panel se ancla al borde y tapa lo que haya.
-      // Para eso tiene su propio ✕.
+      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
+      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
+      // conmutador, asi que si queda tapado el panel no se puede cerrar.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
-        panel.style.top = m + 'px'; panel.style.bottom = 'auto';
-        panel.style.maxHeight = (vh - 2 * m) + 'px';
+        if ((rb.top + rb.height / 2) < vh / 2) {
+          panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, vh - rb.bottom - 6 - m) + 'px';
+        } else {
+          panel.style.top = m + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, rb.top - 6 - m) + 'px';
+        }
       }
     }
     ubicar();
     window.addEventListener('resize', ubicar);
     window.addEventListener('orientationchange', ubicar);
-    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
-    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
-    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
-    // Escape.
-    var cerrar = document.createElement('button');
-    cerrar.className = 'infoClose'; cerrar.type = 'button';
-    cerrar.setAttribute('aria-label', 'cerrar');
-    cerrar.textContent = '×';
-    cerrar.addEventListener('pointerdown', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      panel.classList.remove('show'); btn.classList.remove('on');
-    });
-    panel.insertBefore(cerrar, panel.firstChild);
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       var abrir = !panel.classList.contains('show');

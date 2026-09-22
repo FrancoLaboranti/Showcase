@@ -92,6 +92,13 @@
     width: auto !important; max-width: none !important; opacity: 1 !important;
   }
 
+
+  #infoPanel h5 {
+    margin: 10px 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.55);
+  }
+  #infoPanel h5:first-of-type { margin-top: 8px; }
+
 </style>
 </head>
 <body>
@@ -103,7 +110,7 @@
     #btnMute.muted .ic-off { display: block; }
   </style>
   <div id="bar">
-  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+  <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
 <button id="btnFold"  class="btn danger">FOLD</button>
@@ -116,13 +123,13 @@
     <button id="btnRaise" class="btn">RAISE</button>
     <button id="btnAllIn" class="btn allin">ALL IN</button>
     <button id="btnDeal"  class="btn primary">DEAL</button>
-    <button id="btnMute" aria-label="sonido" title="Sonido">
+    <button id="btnMute" aria-label="sound" title="Sound">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
     </button>
-    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <button id="btnFs" aria-label="fullscreen" title="Fullscreen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
-    <button id="btnInfo" aria-label="info" title="Info / FPS">
+    <button id="btnInfo" aria-label="info" title="Info">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
   </div>
@@ -1361,22 +1368,24 @@
 
 
 <div id="infoPanel"><h4>Poker</h4>
-Texas Hold'em, mano a mano contra la CPU. Dos cartas tuyas, cinco comunitarias, y gana la mejor
-mano de cinco. Si te quedas sin fichas, <span class="k">REPARTIR</span> te da un stack nuevo.
+Heads-up Texas Hold'em against the CPU. Two cards of yours, five community cards, best five wins.
+<b>The banner at the top says which hand you currently hold</b>, so you never have to work it out.
+If you run out of chips, <b>DEAL</b> gives you a fresh stack.
 <hr>
-<b>Como se juega una mano</b>
+<h5>Desktop</h5>
 <ul>
-  <li><span class="k">REPARTIR</span> reparte y postea las ciegas.</li>
-  <li><span class="k">PASAR</span> sigue sin apostar (solo si nadie apostó);
-      <span class="k">IGUALAR</span> paga lo que apostó el otro.</li>
-  <li><span class="k">SUBIR</span> apuesta de mas — el monto se ajusta con
-      <span class="k">+</span> y <span class="k">−</span>.</li>
-  <li><span class="k">ALL IN</span> tira todo tu stack.</li>
-  <li><span class="k">RETIRARSE</span> abandona la mano y el pozo se lo lleva el otro.</li>
+  <li><b>DEAL</b> deals and posts the blinds.</li>
+  <li><b>CHECK</b> passes without betting (only when nobody has bet); <b>CALL</b> matches the bet.</li>
+  <li><b>RAISE</b> bets more — the amount is set with <b>+</b> and <b>−</b>.</li>
+  <li><b>ALL IN</b> pushes your whole stack. <b>FOLD</b> gives up the hand and the pot.</li>
+</ul>
+<h5>Mobile</h5>
+<ul>
+  <li>The same buttons, tapped. They grey out when the action is not available.</li>
 </ul>
 <hr>
-<span class="dim">El cartel de arriba dice que mano tenes armada en cada momento. Las cartas
-comunitarias salen de a tres (flop), una (turn) y una (river).</span></div>
+<span class="dim">Community cards come out three (flop), one (turn) and one (river).</span>
+</div>
 
 <script>
 // El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
@@ -1429,30 +1438,22 @@ comunitarias salen de a tres (flop), una (turn) y una (river).</span></div>
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado: si arriba del boton no entra nada usable (Hangman apaisado, donde el
-      // teclado y la barra se comen 319 de 380 px), el panel se ancla al borde y tapa lo que haya.
-      // Para eso tiene su propio ✕.
+      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
+      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
+      // conmutador, asi que si queda tapado el panel no se puede cerrar.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
-        panel.style.top = m + 'px'; panel.style.bottom = 'auto';
-        panel.style.maxHeight = (vh - 2 * m) + 'px';
+        if ((rb.top + rb.height / 2) < vh / 2) {
+          panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, vh - rb.bottom - 6 - m) + 'px';
+        } else {
+          panel.style.top = m + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, rb.top - 6 - m) + 'px';
+        }
       }
     }
     ubicar();
     window.addEventListener('resize', ubicar);
     window.addEventListener('orientationchange', ubicar);
-    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
-    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
-    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
-    // Escape.
-    var cerrar = document.createElement('button');
-    cerrar.className = 'infoClose'; cerrar.type = 'button';
-    cerrar.setAttribute('aria-label', 'cerrar');
-    cerrar.textContent = '×';
-    cerrar.addEventListener('pointerdown', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      panel.classList.remove('show'); btn.classList.remove('on');
-    });
-    panel.insertBefore(cerrar, panel.firstChild);
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       var abrir = !panel.classList.contains('show');

@@ -130,6 +130,13 @@
     width: auto !important; max-width: none !important; opacity: 1 !important;
   }
 
+
+  #infoPanel h5 {
+    margin: 10px 0 3px; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: rgba(255,255,255,0.55);
+  }
+  #infoPanel h5:first-of-type { margin-top: 8px; }
+
 </style>
 </head>
 <body>
@@ -142,23 +149,23 @@
     <span id="statusIcon"></span>
     <span id="statusCount">25</span>
   </div>
-  <div id="hint">tocá una casilla para descubrirla · mantené apretado para poner una bandera 🚩</div>
+  <div id="hint">tap a cell to dig it · press and hold to plant a flag 🚩</div>
   <div id="bar">
-  <button id="btnExit" aria-label="salir al menu" title="Salir al menu">
+  <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
 <div id="ui">
-      <button id="btnMode"  aria-label="modo"       title="Modo: Clásico / Fiebre del Oro"></button>
-      <button id="btnDiff"  aria-label="dificultad" title="Dificultad: Fácil / Medio / Difícil"><span id="diffKey">M</span><span id="diffMult"></span></button>
-      <button id="btnSound" aria-label="sonido"     title="Sonido on/off"></button>
-      <button id="btnReset" aria-label="reiniciar"  title="Reiniciar (R)">
+      <button id="btnMode"  aria-label="mode"       title="Mode: Classic / Gold Rush"></button>
+      <button id="btnDiff"  aria-label="difficulty" title="Difficulty: Easy / Medium / Hard"><span id="diffKey">M</span><span id="diffMult"></span></button>
+      <button id="btnSound" aria-label="sound"     title="Sound on/off"></button>
+      <button id="btnReset" aria-label="restart"  title="Restart (R)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
       </button>
     </div>
-    <button id="btnFs" aria-label="pantalla completa" title="Pantalla completa">
+    <button id="btnFs" aria-label="fullscreen" title="Fullscreen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
-    <button id="btnInfo" aria-label="info" title="Info / FPS">
+    <button id="btnInfo" aria-label="info" title="Info">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
   </div>
@@ -179,9 +186,9 @@
 
   // === DIFICULTADES (menos minas que el .py original de 40) ===
   const DIFFS = [
-    { name: 'Fácil',   key: 'F', cols: 9,  rows: 9,  mines: 10, secs: 40,  gold: 10, mult: 1 },  // secs = límite oro · gold = pepitas · mult = puntos por pepita
+    { name: 'Easy',   key: 'F', cols: 9,  rows: 9,  mines: 10, secs: 40,  gold: 10, mult: 1 },  // secs = límite oro · gold = pepitas · mult = puntos por pepita
     { name: 'Medio',   key: 'M', cols: 13, rows: 13, mines: 25, secs: 70,  gold: 20, mult: 2 },
-    { name: 'Difícil', key: 'D', cols: 16, rows: 16, mines: 50, secs: 110, gold: 30, mult: 3 },
+    { name: 'Hard', key: 'D', cols: 16, rows: 16, mines: 50, secs: 110, gold: 30, mult: 3 },
   ];
   let diffIndex = 1;                                                              // arranca en Medio
   let GRID_WIDTH = DIFFS[diffIndex].cols, GRID_HEIGHT = DIFFS[diffIndex].rows, MINES_COUNT = DIFFS[diffIndex].mines;
@@ -411,7 +418,7 @@
     if (score > prev) { isNewRecord = true; lastRecord = score; try { localStorage.setItem(key, String(score)); } catch (_) {} }
     else { isNewRecord = false; lastRecord = prev; }
   }
-  function recordLine() { return isNewRecord ? ('¡Nuevo récord! ' + lastRecord) : ('Récord ' + DIFFS[diffIndex].key + ': ' + lastRecord); }
+  function recordLine() { return isNewRecord ? ('New record! ' + lastRecord) : ('Record ' + DIFFS[diffIndex].key + ': ' + lastRecord); }
 
   function processClick(gx, gy, rightClick) {
     if (gameOver || victory) return;
@@ -641,12 +648,12 @@
     }
 
     if (gameOver) {
-      const goldTitle = endReason === 'time' ? '¡Tiempo!' : '¡Boom!';
-      drawBanner(mode === 'gold' ? goldTitle : '¡Perdiste!', endReason === 'time' ? '#ffb300' : '#e8413a', now,
+      const goldTitle = endReason === 'time' ? 'Time!' : 'Boom!';
+      drawBanner(mode === 'gold' ? goldTitle : 'You lost!', endReason === 'time' ? '#ffb300' : '#e8413a', now,
                  mode === 'gold' ? ('Oro juntado: ' + goldCollected + '/' + GOLD_COUNT) : null,
                  mode === 'gold' ? recordLine() : null);
     } else if (victory) {
-      drawBanner(mode === 'gold' ? '¡Oro!' : '¡Ganaste!', mode === 'gold' ? '#ffcf33' : '#43a047', now,
+      drawBanner(mode === 'gold' ? 'Gold!' : 'You win!', mode === 'gold' ? '#ffcf33' : '#43a047', now,
                  null,
                  mode === 'gold' ? recordLine() : null,
                  mode === 'gold',                                                 // gold-win: línea "Oro {base} ^×mult + bonus" con medallón
@@ -713,7 +720,7 @@
     let x = -(wbase + s.medW + wb + s.coinW) / 2;
     ctx.fillStyle = 'rgba(255,255,255,0.85)';
     ctx.fillText(s.base, x, y); x += wbase;
-    if (s.showMult) { drawMultMedallion(x + s.medW * 0.5, y - f * 0.5, tile * 0.2, '×' + s.mult); x += s.medW; }  // medallón potencia (no en Fácil)
+    if (s.showMult) { drawMultMedallion(x + s.medW * 0.5, y - f * 0.5, tile * 0.2, '×' + s.mult); x += s.medW; }  // medallón potencia (no en Easy)
     ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.font = fSmall;
     ctx.fillText(s.b, x, y); x += wb;
     drawGoldCoin(x + s.coinW * 0.5, y, tile * 0.16, { goldAt: 0 }, 0);            // monedita junto al total
@@ -748,7 +755,7 @@
   function drawBanner(text, color, now, subtitle, extra, goldWin, face) {
     const p = Math.min(1, (now - endAt) / 350);
     const scale = 0.7 + 0.3 * easeOutBack(p);
-    const sub = subtitle || 'tocá ↻ para jugar de nuevo';
+    const sub = subtitle || 'tap ↻ to play again';
     const fTitle = '800 ' + Math.round(tile * 1.0) + "px 'Segoe UI', system-ui, sans-serif";
     const fSmall = '600 ' + Math.round(tile * 0.34) + "px 'Segoe UI', system-ui, sans-serif";
     ctx.save();
@@ -852,7 +859,7 @@
   const sndUnflag = () => { tone(420, 0.05, 'square', 0.07); };
   const sndBoom   = () => { noiseBurst(0.5, 0.5, 1400, 60); tone(150, 0.5, 'sine', 0.45, 38); };
   const sndWin    = () => { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.28, 'triangle', 0.16, null, i * 0.1)); };
-  const sndTime   = () => { tone(440, 0.2, 'sawtooth', 0.18, 240); tone(240, 0.34, 'sawtooth', 0.18, 120, 0.14); };  // "se acabó el tiempo"
+  const sndTime   = () => { tone(440, 0.2, 'sawtooth', 0.18, 240); tone(240, 0.34, 'sawtooth', 0.18, 120, 0.14); };  // "time is up"
   const sndCoin   = (n) => { tone(880, 0.10, 'triangle', 0.14); tone(1320, 0.12, 'triangle', 0.12, null, 0.05); if (n > 2) tone(1760, 0.14, 'triangle', 0.10, null, 0.10); };  // moneda (arpegio si junté varias)
 
   // === INPUT (canvas) ===
@@ -934,9 +941,9 @@
   function refreshMode() {
     btnMode.innerHTML = MODE_ICON[mode];
     btnMode.classList.toggle('on', mode === 'gold');
-    btnMode.title = mode === 'gold' ? 'Modo: Fiebre del Oro' : 'Modo: Clásico';
+    btnMode.title = mode === 'gold' ? 'Mode: Gold Rush' : 'Mode: Classic';
     showHint(mode === 'gold' ? 'Fiebre del oro contrarreloj · cavá donde haya "!" · esquivá las minas'
-                             : 'tocá para descubrir · mantené apretado para poner bandera');
+                             : 'tap to dig · press and hold to plant a flag');
   }
   btnMode.addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); mode = (mode === 'classic') ? 'gold' : 'classic'; refreshMode(); applyDiff(); });
 
@@ -1009,23 +1016,24 @@
   </script>
 
 
-<div id="infoPanel"><h4>Buscaminas</h4>
-Destapa todo el campo sin pisar una mina. El numero de una casilla dice <b>cuantas minas hay en
-las ocho casillas que la rodean</b>.
+<div id="infoPanel"><h4>Minesweeper</h4>
+Clear the field without hitting a mine. A cell's number is <b>how many mines are in the eight cells
+around it</b>.
 <hr>
+<h5>Desktop</h5>
 <ul>
-  <li><b>Tocar</b> una casilla para cavarla.</li>
-  <li><b>Mantener apretado</b> para poner o sacar una <b>bandera</b> 🚩 donde creas que hay mina.</li>
-  <li><span class="k">R</span> o <span class="k">↻</span> reinician.</li>
+  <li><b>Left click</b> digs a cell. <b>Right click</b> plants or removes a <b>flag</b>.</li>
+  <li><b>R</b> restarts, same as <b>Restart (R)</b>.</li>
+  <li><b>Mode: Classic / Gold Rush</b> and <b>Difficulty: Easy / Medium / Hard</b> in the bar.</li>
+</ul>
+<h5>Mobile</h5>
+<ul>
+  <li><b>Tap</b> a cell to dig it. <b>Press and hold</b> to plant or remove a flag.</li>
 </ul>
 <hr>
-<b>Dos modos</b>
-<ul>
-  <li><b>Clasico</b>: destapar todo lo que no sea mina.</li>
-  <li><b>Fiebre del oro</b>: ademas hay oro enterrado, y <b>no se auto-destapa</b> — hay que
-      cavarlo.</li>
-</ul>
-<span class="dim">La dificultad cambia el tamano del campo y cuantas minas tiene.</span></div>
+<b>Gold Rush</b> adds buried gold, and <b>it does not auto-clear</b> — you have to dig it out.
+Difficulty changes the field size and how many mines it holds.
+</div>
 
 <script>
 // El boton ⓘ abre el panel. El medidor de FPS quedo ADENTRO del panel, asi que el handler que ya
@@ -1078,30 +1086,22 @@ las ocho casillas que la rodean</b>.
         panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
         panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
       }
-      // Caso apretado: si arriba del boton no entra nada usable (Hangman apaisado, donde el
-      // teclado y la barra se comen 319 de 380 px), el panel se ancla al borde y tapa lo que haya.
-      // Para eso tiene su propio ✕.
+      // Caso apretado (Hangman apaisado: el teclado y la barra se comen 319 de 380 px). El panel
+      // se estira hasta el borde opuesto, pero SIN pisar el boton que lo abrio: el ⓘ es el unico
+      // conmutador, asi que si queda tapado el panel no se puede cerrar.
       if (parseInt(panel.style.maxHeight, 10) <= 140) {
-        panel.style.top = m + 'px'; panel.style.bottom = 'auto';
-        panel.style.maxHeight = (vh - 2 * m) + 'px';
+        if ((rb.top + rb.height / 2) < vh / 2) {
+          panel.style.top = Math.round(rb.bottom + 6) + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, vh - rb.bottom - 6 - m) + 'px';
+        } else {
+          panel.style.top = m + 'px'; panel.style.bottom = 'auto';
+          panel.style.maxHeight = Math.max(90, rb.top - 6 - m) + 'px';
+        }
       }
     }
     ubicar();
     window.addEventListener('resize', ubicar);
     window.addEventListener('orientationchange', ubicar);
-    // Cierre PROPIO del panel. No es un adorno: en una pantalla apaisada apretada el panel se
-    // ancla al piso y puede quedar por encima del boton ⓘ — sin una salida adentro, el jugador
-    // queda atrapado mirando las instrucciones. Escape tambien cierra, pero en un telefono no hay
-    // Escape.
-    var cerrar = document.createElement('button');
-    cerrar.className = 'infoClose'; cerrar.type = 'button';
-    cerrar.setAttribute('aria-label', 'cerrar');
-    cerrar.textContent = '×';
-    cerrar.addEventListener('pointerdown', function (e) {
-      e.preventDefault(); e.stopPropagation();
-      panel.classList.remove('show'); btn.classList.remove('on');
-    });
-    panel.insertBefore(cerrar, panel.firstChild);
     btn.addEventListener('pointerdown', function (e) {
       e.preventDefault();
       var abrir = !panel.classList.contains('show');
