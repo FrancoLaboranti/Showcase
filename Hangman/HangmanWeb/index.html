@@ -2044,17 +2044,49 @@ palabra viene con su categoria a la vista.</span></div>
     // segun la orientacion: con un valor fijo el panel terminaba tapando los botones (Hangman) o
     // saliendose por arriba en apaisado (Tron). Medido en vivo funciona en los veinte.
     var bar = document.getElementById('bar');
+    // El panel se ancla AL BOTON QUE LO ABRE, no al centro de la pantalla. Centrado quedaba
+    // flotando en el medio del juego sin relacion con nada; colgado del boton se lee como "esto
+    // salio de aca", que es lo que hace el de Loop.
+    //   · mismo margen que el boton (derecho si el boton esta a la derecha, izquierdo si no);
+    //   · debajo del boton si esta en la mitad de arriba, encima si esta en la de abajo — o sea
+    //     que en los juegos con barra inferior el panel sigue quedando sobre la barra.
+    // Se mide en vivo y no por CSS porque cada juego pone el boton en un lugar distinto, y varios
+    // lo mueven segun la orientacion.
     function ubicar() {
-      // Se mide la distancia de la barra al BORDE INFERIOR, no su alto: en Hangman la barra flota
-      // encima del teclado en pantalla, asi que con el alto solo el panel le caia justo arriba.
-      var h = bar ? Math.round(window.innerHeight - bar.getBoundingClientRect().top) : 56;
-      // Si arriba de la barra no queda lugar usable, el panel se ancla al piso y TAPA lo que haya.
-      // Es lo correcto: en Hangman apaisado el teclado y la barra se comen 319 de 380 px, y de
-      // todos modos no se escribe mientras se leen las instrucciones.
-      var libre = window.innerHeight - h;
-      if (libre < 150) { h = 0; }
-      panel.style.bottom = (h + 10) + 'px';
-      panel.style.maxHeight = Math.max(110, window.innerHeight - h - 30) + 'px';
+      var vw = window.innerWidth, vh = window.innerHeight, m = 10;
+      var rb = btn.getBoundingClientRect();
+      // Si el boton vive DENTRO de la barra, la referencia vertical es la barra entera y no el
+      // boton: los botones se alinean al pie de la barra, asi que anclar al boton dejaba el panel
+      // encima de la parte alta de la barra.
+      var ref = (bar && bar.contains(btn)) ? bar.getBoundingClientRect() : rb;
+      panel.style.transform = 'none';
+      var ancho = panel.offsetWidth || Math.min(400, vw - 2 * m);
+      if ((rb.left + rb.width / 2) > vw / 2) {
+        // Pegado al margen derecho del boton, PERO sin salirse por la izquierda: si el panel es
+        // mas ancho que el hueco, se corre hasta el borde. Sin este tope, un panel de 700 px
+        // colgado de un boton a media pantalla arrancaba en x = -199.
+        var der = Math.max(m, Math.min(Math.round(vw - rb.right), vw - ancho - m));
+        panel.style.left = 'auto'; panel.style.right = der + 'px';
+      } else {
+        var izq = Math.max(m, Math.min(Math.round(rb.left), vw - ancho - m));
+        panel.style.right = 'auto'; panel.style.left = izq + 'px';
+      }
+      if ((rb.top + rb.height / 2) < vh / 2) {          // boton arriba -> panel colgando debajo
+        panel.style.top = Math.round(ref.bottom + 8) + 'px';
+        panel.style.bottom = 'auto';
+        panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';
+      } else {                                          // boton abajo -> panel por encima
+        panel.style.top = 'auto';
+        panel.style.bottom = Math.round(vh - ref.top + 8) + 'px';
+        panel.style.maxHeight = Math.max(110, ref.top - 8 - m) + 'px';
+      }
+      // Caso apretado: si arriba del boton no entra nada usable (Hangman apaisado, donde el
+      // teclado y la barra se comen 319 de 380 px), el panel se ancla al borde y tapa lo que haya.
+      // Para eso tiene su propio ✕.
+      if (parseInt(panel.style.maxHeight, 10) <= 140) {
+        panel.style.top = m + 'px'; panel.style.bottom = 'auto';
+        panel.style.maxHeight = (vh - 2 * m) + 'px';
+      }
     }
     ubicar();
     window.addEventListener('resize', ubicar);
@@ -2077,6 +2109,7 @@ palabra viene con su categoria a la vista.</span></div>
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
+      if (abrir) ubicar();                          // medir con el panel YA visible: oculto, offsetWidth es 0
     });
     // Teclado: el boton es un <button>, asi que Enter/Espacio disparan `click` y no `pointerdown`.
     btn.addEventListener('click', function (e) {
@@ -2084,6 +2117,7 @@ palabra viene con su categoria a la vista.</span></div>
       var abrir = !panel.classList.contains('show');
       panel.classList.toggle('show', abrir);
       btn.classList.toggle('on', abrir);
+      if (abrir) ubicar();
     });
     // Cerrar con Escape: el panel tapa el juego y tiene que poder sacarse sin buscar el boton.
     window.addEventListener('keydown', function (e) {
