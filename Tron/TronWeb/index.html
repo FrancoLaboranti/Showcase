@@ -160,9 +160,6 @@
   <canvas id="c"></canvas>
   <div id="hint">tap the menu options and ▶ PLAY · in a round: tap the sides to turn</div>
   <div id="bar">
-  <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-  </button>
 <div id="ui">
       <button id="btnLeft"  aria-label="turn left" title="Turn left">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
@@ -183,6 +180,9 @@
     <button id="btnInfo" aria-label="info" title="Info">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
+  <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
   </div>
 
   <script>
@@ -568,6 +568,10 @@
 
   const barEl = document.getElementById('bar');
   function resize() {
+    // What the track is worth BEFORE touching anything: the occupancy grid, the trail and the sizes
+    // it was built for. A resize used to throw the lot away and drop you back in the menu.
+    const W0 = W, H0 = H, gridViejo = grid, trailViejo = trailCv;
+    const enJuego = !gh.menu && players.length > 0 && W0 > 0 && H0 > 0 && gridViejo.length === W0 * H0;
     dpr = Math.min(window.devicePixelRatio || 1, 2);
     const barH = barEl.offsetHeight;
     W = Math.max(1, Math.floor(window.innerWidth));
@@ -581,18 +585,70 @@
     scl = Math.min(W / 1280, H / 720);                                            // keeps the text inside as in the original
     grid = new Uint8Array(W * H);
     // offscreen canvas of the permanent trail (the same size in device px as the visible one)
+    // The trail is REDRAWN scaled instead of being wiped. It has to be copied out first: assigning
+    // width/height to a canvas clears it.
+    const trailPrevio = enJuego && trailViejo ? trailViejo : null;
+    let copia = null;
+    if (trailPrevio) {
+      copia = document.createElement('canvas');
+      copia.width = trailPrevio.width; copia.height = trailPrevio.height;
+      copia.getContext('2d').drawImage(trailPrevio, 0, 0);
+    }
     trailCv = trailCv || document.createElement('canvas');
     trailCv.width = canvas.width; trailCv.height = canvas.height;
     tctx = trailCv.getContext('2d');
     tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    if (copia) tctx.drawImage(copia, 0, 0, W, H);        // the transform is in CSS px, so W/H is the new size
     // glow buffer at HALF resolution: blurring here (1/4 of the area) is ~4× cheaper than blurring the
     // full screen every frame: key to not dropping frames on mobile.
     glowCv = glowCv || document.createElement('canvas');
     glowCv.width = Math.max(1, Math.floor(canvas.width / 2));
     glowCv.height = Math.max(1, Math.floor(canvas.height / 2));
     gctx = glowCv.getContext('2d');
-    // Resizing invalidates the track; we go back to the menu (the old grid is no use).
-    backToMenu();
+    if (!enJuego) {
+      // In the menu (and on the first call) nothing is lost: it behaves as it always did.
+      backToMenu();
+      return;
+    }
+    // ── the track MOVES HOUSE instead of being thrown away ──
+    const kx = W / W0, ky = H / H0;
+    // The OLD grid is what gets walked, not the new one: that way an occupied cell always leaves a
+    // mark, whether it now covers several cells or shares one with its neighbours. Walking the
+    // destination and sampling the source drops walls when shrinking, and a trail with holes in it
+    // is a trail you can drive through.
+    for (let y = 0; y < H0; y++) {
+      const fila = y * W0;
+      const y0 = Math.floor(y * ky), y1 = Math.max(y0, Math.ceil((y + 1) * ky) - 1);
+      for (let x = 0; x < W0; x++) {
+        if (!gridViejo[fila + x]) continue;
+        const x0 = Math.floor(x * kx), x1 = Math.max(x0, Math.ceil((x + 1) * kx) - 1);
+        for (let yy = y0; yy <= y1 && yy < H; yy++) {
+          const destino = yy * W;
+          for (let xx = x0; xx <= x1 && xx < W; xx++) grid[destino + xx] = 1;
+        }
+      }
+    }
+    for (const p of players) {
+      p.x *= kx; p.y *= ky;
+      if (p.lastX !== null && p.lastX !== undefined) { p.lastX *= kx; p.lastY *= ky; }
+      if (p.head) for (const h of p.head) { h.x *= kx; h.y *= ky; }
+    }
+    // Each bike is dug out of its OWN trail. Marking the whole destination rectangle is deliberately
+    // generous, so no wall is lost, and the price is that the trail thickens by a pixel or two. A
+    // bike's head sits right on top of the trail it just laid, so after the migration it woke up
+    // buried in it and died on the spot: measured, the round ended the instant the size changed.
+    // It is standing there, so that is not a wall.
+    for (const p of players) {
+      if (!p.alive) continue;
+      const cx = Math.round(p.x), cy = Math.round(p.y);
+      for (let dy = -3; dy <= 3; dy++) {
+        const yy = cy + dy; if (yy < 0 || yy >= H) continue;
+        for (let dx = -3; dx <= 3; dx++) {
+          const xx = cx + dx; if (xx < 0 || xx >= W) continue;
+          grid[yy * W + xx] = 0;
+        }
+      }
+    }
   }
   window.addEventListener('resize', resize);
 
@@ -841,6 +897,15 @@
     else           sfx.roundEnd(youW);
   }
   function advance() { setOver() ? startGame() : nextRound(); }                    // tap/Enter at the end of a round
+  // QA hook, the same idea as StickFight's window.SF: the harness needs the track's state to
+  // check that a resize (which is what the fullscreen button causes) does NOT throw the game away.
+  window.TR = {
+    get gh() { return gh; },
+    get players() { return players; },
+    get W() { return W; }, get H() { return H; },
+    ocupadas() { let n = 0; for (let i = 0; i < grid.length; i++) if (grid[i]) n++; return n; },
+  };
+
   function backToMenu() {
     engineOff();                                                                  // no cycle in the Grid: the engine cannot keep sounding
     clearField();

@@ -47,7 +47,16 @@
     if (p && p.then) p.then(lockOrient, lockOrient); else lockOrient();
   };
   const exitFs  = () => { unlockOrient(); try { if (_exitFs) _exitFs.call(document); } catch {} };
-  function syncFsIcon() { document.body.classList.toggle('fs-on', isFs() || EMBEDDED); }
+  // Embedded, the state that counts is the PARENT's: the Arcade is the one that goes fullscreen.
+  // This used to be `isFs() || EMBEDDED`, which inside the Arcade pinned `fs-on` on forever, so the
+  // button always drew the "leave fullscreen" glyph whether or not it was in fullscreen. Measured in
+  // an iframe: body="embedded fs-on playing" with the parent NOT in fullscreen. Same origin, so the
+  // real state is readable; if it ever were not, it falls back to the old behaviour.
+  function padreEnFs() {
+    try { const d = window.top.document; return !!(d.fullscreenElement || d.webkitFullscreenElement); }
+    catch (e) { return true; }
+  }
+  function syncFsIcon() { document.body.classList.toggle('fs-on', EMBEDDED ? padreEnFs() : isFs()); }
   document.addEventListener('fullscreenchange', syncFsIcon);
   document.addEventListener('webkitfullscreenchange', syncFsIcon);
   syncFsIcon();
@@ -68,6 +77,13 @@
           const p = req.call(el);
           if (p && p.catch) p.catch(() => {});
         }
+        // The Arcade shows the landscape games WITHOUT turning the phone: it keeps the device in
+        // portrait, locks the orientation and rotates the iframe with `@media (orientation:
+        // portrait)`. Leaving fullscreen releases that lock, and with the phone held sideways the
+        // media query stops matching and the frame un-rotates under your hands. The lock is asked
+        // for again either way.
+        try { const so = window.top.screen.orientation; if (so && so.lock) { const q = so.lock('portrait'); if (q && q.catch) q.catch(() => {}); } } catch (e2) {}
+        setTimeout(syncFsIcon, 60);          // the icon follows the REAL state, after the change settles
       } catch (e) {
         try { window.parent.postMessage({ type: 'arcade:fullscreen' }, '*'); } catch (e2) {}
       }

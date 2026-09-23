@@ -209,7 +209,13 @@
     position: fixed; right: 10px;
     bottom: calc(12px + env(safe-area-inset-bottom));
     z-index: 60; width: min(400px, 92vw); max-height: 70vh; overflow-y: auto;
-    touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  /* `pan-x pan-y`, NOT `pan-y`. The Arcade runs the landscape games WITHOUT turning the phone:
+     the device stays in portrait and the iframe is rotated 90 degrees in CSS. `touch-action`
+     constrains the gesture's axis in the element's LOCAL coordinates, so with the frame rotated the
+     swipe the player makes vertically arrives at the panel as horizontal and `pan-y` refuses it.
+     Standalone it measured fine, which is why the harness said 22/22 while it did not scroll in the
+     hand. Both axes, and still no zoom. */
+    touch-action: pan-x pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
     padding: 14px 16px; border-radius: 14px;
     background: rgba(10,13,20,0.975); border: 1px solid rgba(120,200,255,0.62);
     box-shadow: 0 10px 34px rgba(0,0,0,0.6);
@@ -929,6 +935,8 @@ const SND_PER_FRAME = 6;
 
 // The three continuous layers. ONE graph per session.
 let engOsc = null, engOsc2 = null, engFilt = null, engGain = null;                 // a diesel engine
+// The RIVALS' engines: a second layer of their own, because the one above only ever follows tank 0.
+let rivOsc = null, rivOsc2 = null, rivFilt = null, rivGain = null, rivLastG = 0, rivLastP = 0;
 let trkSrc = null, trkFilt = null, trkGain = null, trkBuf = null;                  // the track
 let nitFilt = null, nitGain = null;                                               // nitro (a third tap on the SAME noise)
 let engLastG = -1, engLastP = -1, trkLastG = -1, trkLastF = -1, nitLastG = -1, engAcc = 0;
@@ -988,8 +996,8 @@ function noiseHit(dur, vol, freq, q, type, t0) {
 const AUDIO_HALO = 0.5;      // the halo, as a fraction of the view's shortest side
 const AUDIO_FLOOR = 0.05;    // under this it is inaudible: better not to spend the voice
 function audible(x, y) {
-  // Sin posicion: GLOBAL. Sin esta guarda, un x/y ausente propaga NaN hasta `setValueAtTime`,
-  // que tira dentro del try/catch de `voice()` y borra el sonido sin aviso.
+  // No position: GLOBAL. Without this guard a missing x/y propagates NaN all the way to
+  // `setValueAtTime`, which throws inside `voice()`'s try/catch and loses the sound with no warning.
   if (!isFinite(x) || !isFinite(y)) return 1;
   const dx = Math.max(camX - x, 0, x - (camX + SCREEN_X));
   const dy = Math.max(camY - y, 0, y - (camY + SCREEN_Y));
@@ -1034,6 +1042,17 @@ function buildContinuous() {
   engOsc.connect(engFilt); engOsc2.connect(engFilt);
   engOsc.start(); engOsc2.start();
 
+  // The rivals' engine. Same diesel, DULLER (a lower cutoff) and detuned a little off the player's,
+  // so that with both running they read as two machines and not as one thicker one.
+  rivFilt = AC.createBiquadFilter(); rivFilt.type = 'lowpass';
+  rivFilt.frequency.value = 180; rivFilt.Q.value = 5;
+  rivGain = AC.createGain(); rivGain.gain.value = 0;
+  rivFilt.connect(rivGain); rivGain.connect(masterGain);
+  rivOsc = AC.createOscillator(); rivOsc.type = 'sawtooth'; rivOsc.frequency.value = 29;
+  rivOsc2 = AC.createOscillator(); rivOsc2.type = 'sawtooth'; rivOsc2.frequency.value = 29.9;
+  rivOsc.connect(rivFilt); rivOsc2.connect(rivFilt);
+  rivOsc.start(); rivOsc2.start();
+
   trkSrc = AC.createBufferSource(); trkSrc.buffer = trkBuf; trkSrc.loop = true;
   trkFilt = AC.createBiquadFilter(); trkFilt.type = 'bandpass';
   trkFilt.frequency.value = 900; trkFilt.Q.value = 1.1;
@@ -1058,6 +1077,7 @@ function continuousOff() {
   engLastG = setT(engGain.gain, 0, engLastG, 0.0005, 0.10);
   trkLastG = setT(trkGain.gain, 0, trkLastG, 0.0005, 0.10);
   nitLastG = setT(nitGain.gain, 0, nitLastG, 0.0005, 0.06);
+  if (rivGain) rivLastG = setT(rivGain.gain, 0, rivLastG, 0.0005, 0.10);
 }
 // It is rewritten at 20 Hz: writing six AudioParams per frame adds nothing audible.
 function continuousUpdate(dt) {
@@ -1076,7 +1096,37 @@ function continuousUpdate(dt) {
   trkLastG = setT(trkGain.gain, sp * (0.010 + 0.022 * gN), trkLastG, 0.0005, 0.07);
   trkLastF = setT(trkFilt.frequency, 520 + 1400 * gN, trkLastF, 8, 0.12);
   nitLastG = setT(nitGain.gain, t.boosting ? 0.030 : 0, nitLastG, 0.0005, 0.05);
+
+  // ── the RIVALS ──
+  // The MAXIMUM, not the sum: adding six tanks up gives back the flat drone this replaces. What is
+  // heard is the one that is closest and moving, and it fades with `audible()`, the same halo the
+  // rest of the game's sounds use, so a rival off screen costs nothing.
+  if (rivGain) {
+    let mejor = 0, velMejor = 0;
+    for (let i = 0; i < tanks.length; i++) {
+      const r = tanks[i];
+      if (!r || r.id === 0 || r.finished || !r.start) continue;
+      const spR = Math.min(1, Math.abs(r.vel || 0) / (TANK_SPEED * 2.2));
+      if (spR < 0.05) continue;                       // stopped: an engine that is not pulling is not heard
+      const g = audible(r.x, r.y) * spR;
+      if (g > mejor) { mejor = g; velMejor = spR; }
+    }
+    rivLastG = setT(rivGain.gain, mejor * 0.026, rivLastG, 0.0005, 0.10);
+    rivLastP = setT(rivOsc.frequency, 29 + 38 * velMejor, rivLastP, 0.4, 0.11);
+    if (rivOsc2) { try { rivOsc2.frequency.setTargetAtTime((29 + 38 * velMejor) * 1.031, AC.currentTime, 0.11); } catch (e) {} }
+  }
 }
+
+// QA hook, like StickFight's `window.SF`: read-only references to nodes that already exist, so the
+// harness can check that the rivals' engine really does rise and fall instead of guessing.
+window.CT = {
+  get engGain() { return engGain; },
+  get rivGain() { return rivGain; },
+  get tanks() { return tanks; },
+  get mgr() { return sprites[0]; },          // the manager: the harness starts a race with mgr.startRace()
+  get camX() { return camX; }, get camY() { return camY; },
+  audible: (x, y) => audible(x, y),
+};
 
 const sfx = {
   // A mortar's COUGH, not a laser: this throws bombs down a short barrel. The air first, the body

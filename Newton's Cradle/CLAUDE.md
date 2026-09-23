@@ -62,3 +62,48 @@ picked by counting them. The five that stayed sit at 41.24, 13.16, 15.86, 22.69 
 master; the new wood2 comes from 24.84 s, far enough from all of them to be a different impact.
 
 The 19.6 MB WAV is still in the repo: it is source material and deleting it is Franco's call.
+
+
+## PHYSICS: the collision, resolved over the whole group (2026-09-23)
+
+Reported: "the balls gradually gain motion until they are all dancing, which is not what the real
+toy does".
+
+Measured first, because "they gain motion" and "the energy grows" are not the same claim. With one
+ball lifted 0.6 rad and sixty seconds of sampling, the total energy **never rises**: 0 increases in
+59 intervals, falling from 5.11 to 0. What grows is the SHARE of what is left that sits in the
+inner balls, which in the real toy barely move at all:
+
+| t | 5 s | 10 s | 15 s | 20 s |
+| - | - | - | - | - |
+| share of the remaining motion in the middle | 3.6% | 15% | 43% | 65% |
+
+The ends damp out and what is still moving is the middle. Sampling every 100 ms showed where it
+came from: the inner balls' energy climbed one step **per impact**, 0.0012 → 0.0034 → 0.0073 →
+0.0131 → 0.0247, and kept going.
+
+`RESIDUAL = 0.005` was only part of it, and setting it to 0 barely helped (the middle still reached
+60%). The leak is the pairwise resolution itself: walking the impulse down the chain one contact at
+a time, with a position correction at each step, leaves the interior balls displaced.
+
+**The collision is now resolved over the whole contact GROUP.** For equal masses in contact, the
+exact result of the chain of elastic collisions is that the velocity profile is REVERSED across the
+group: n in, n out, everything between them left at rest. With two balls it is the swap it always
+was, so nothing changes for the simple case.
+
+```js
+const v = [];
+for (let k = i; k <= j; k++) v.push(balls[k].velocidad);
+for (let k = i; k <= j; k++) balls[k].velocidad = v[j - k] * COLLISION_LOSS;
+```
+
+Guarded by "is the group being compressed?" (`max(v[k+1] - v[k]) > VEL_EPS`), or a row resting in
+contact would reverse its own jitter for ever.
+
+`COLLISION_LOSS` also went 1.0 → 0.995. No real impact is perfectly elastic, and putting 0.5% of
+velocity per hit where it belongs, in the blow, stops the position correction's numerical error
+from building up over thousands of contacts.
+
+After: the inner balls hold **exactly zero** energy in all 60 samples, the total still never rises,
+and the cradle keeps swinging for about 35 s. Two in still gives two out: lifting balls 0 and 1
+sends 3 and 4 out at 0.483 and 0.517 rad with the middle one at 0.000.

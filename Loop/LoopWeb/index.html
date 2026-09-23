@@ -142,7 +142,13 @@
        resolves the allowed gesture as the intersection with ALL the ancestors, so the panel
        could ask for `pan-y` all it liked - the intersection came out empty and it did not scroll.
        "It is not inherited" does not mean "it does not affect it". */
-    touch-action: pan-y; overscroll-behavior: contain;
+  /* `pan-x pan-y`, NOT `pan-y`. The Arcade runs the landscape games WITHOUT turning the phone:
+     the device stays in portrait and the iframe is rotated 90 degrees in CSS. `touch-action`
+     constrains the gesture's axis in the element's LOCAL coordinates, so with the frame rotated the
+     swipe the player makes vertically arrives at the panel as horizontal and `pan-y` refuses it.
+     Standalone it measured fine, which is why the harness said 22/22 while it did not scroll in the
+     hand. Both axes, and still no zoom. */
+    touch-action: pan-x pan-y; overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
     padding: 15px 17px; border-radius: 14px;
     background: rgba(10,16,28,0.97); border: 1px solid rgba(125,249,255,0.3);

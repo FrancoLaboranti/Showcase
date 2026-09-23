@@ -104,6 +104,13 @@
 
   /* Boost: a large floating action button, bottom right, ABOVE the info button. A green orb that
      glows hard while held (.on). Symmetric to the stick on the left. */
+  /* Hidden in the FIRST painted frame. The loop fades them in from `manager.loadT`, but it only
+     runs on its first pass, and until then the browser had already drawn them at full opacity.
+     A state class and not a plain `#btnSprint, #jMoveRest { opacity: 0 }`: the stick's resting
+     placeholder has an `opacity: 0.4` of its own below, and an ID rule would eat it, leaving it
+     fully opaque once the fade ended. The fade's inline style beats this from the first frame,
+     and the loop drops the class when it is over. */
+  body.loading #btnSprint, body.loading #jMoveRest { opacity: 0; }
   #btnSprint {
     position: absolute;
     right: 16px;
@@ -178,7 +185,13 @@
     position: fixed; right: 10px;
     bottom: calc(12px + env(safe-area-inset-bottom));
     z-index: 60; width: min(400px, 92vw); max-height: 70vh; overflow-y: auto;
-    touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  /* `pan-x pan-y`, NOT `pan-y`. The Arcade runs the landscape games WITHOUT turning the phone:
+     the device stays in portrait and the iframe is rotated 90 degrees in CSS. `touch-action`
+     constrains the gesture's axis in the element's LOCAL coordinates, so with the frame rotated the
+     swipe the player makes vertically arrives at the panel as horizontal and `pan-y` refuses it.
+     Standalone it measured fine, which is why the harness said 22/22 while it did not scroll in the
+     hand. Both axes, and still no zoom. */
+    touch-action: pan-x pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
     padding: 14px 16px; border-radius: 14px;
     background: rgba(10,13,20,0.975); border: 1px solid rgba(110,225,200,0.62);
     box-shadow: 0 10px 34px rgba(0,0,0,0.6);
@@ -221,12 +234,17 @@
   /* These buttons are `static`, so the `::after` below would position itself against another
      ancestor and the enlarged area would land in the wrong place. `relative`, NOT `absolute`,
      which takes them out of the flow and stacks them, gives them the containing block without moving them. */
-  #btnDebug, #btnPause, #btnReset { position: relative; }
+  #btnDebug, #btnPause, #btnReset, #btnMute { position: relative; }
   /* TOUCH AREA: these buttons' bodies are 30 px and a thumb needs ~44. The pseudo-element
      enlarges the TARGET without enlarging the drawing. Vertically only: the corner buttons sit at
      a 38 px pitch with 30 px bodies, so widening sideways would make
      two areas touch and the tap land on the neighbour. */
-  #btnDebug::after, #btnPause::after, #btnReset::after { content: ''; position: absolute; inset: -7px 0; border-radius: 50%; }
+  #btnDebug::after, #btnPause::after, #btnReset::after, #btnMute::after { content: ''; position: absolute; inset: -7px 0; border-radius: 50%; }
+  /* Muted, the speaker loses its waves and gets the cross. Same two groups as the rest of the
+     collection, so the icon reads the same in every game. */
+  #btnMute .ic-off { display: none; }
+  #btnMute.muted .ic-on  { display: none; }
+  #btnMute.muted .ic-off { display: block; }
 
   /* Diagnostics INSIDE the panel: it used to be a separate card over the canvas. Monospaced and
      `pre-line` so the columns stay aligned as they were. */
@@ -253,7 +271,7 @@
 #btnPause.on .ic-play { display: block; }
 </style>
 </head>
-<body>
+<body class="loading">
   <canvas id="c"></canvas>
   <div id="hint">steer with the stick · ⚡ to sprint · eat stars, dodge mines, do not bite your own tail</div>
   <div id="levelup" aria-hidden="true">
@@ -268,6 +286,9 @@
     </button>
     <button id="btnReset" aria-label="restart" title="Restart">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
+    </button>
+    <button id="btnMute" aria-label="sound" title="Sound">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
     </button>
     <button id="btnFs" aria-label="fullscreen" title="Fullscreen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
@@ -3199,6 +3220,21 @@
 
   tappable(document.getElementById('btnReset'), () => { manager.reset(); btnPause.classList.remove('on'); });
 
+  // The mute. `muted` and its localStorage key already existed and were applied to the masterGain
+  // when the context is built; what was missing was any way to change it.
+  const btnMute = document.getElementById('btnMute');
+  if (btnMute) {
+    btnMute.classList.toggle('muted', muted);
+    btnMute.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      muted = !muted;
+      if (masterGain && AC) { masterGain.gain.cancelScheduledValues(AC.currentTime); masterGain.gain.value = muted ? 0 : 1; }
+      btnMute.classList.toggle('muted', muted);
+      try { localStorage.setItem('snakeMuted', muted ? '1' : '0'); } catch (e2) {}
+      audioResume();
+    });
+  }
+
   const btnDebug = document.getElementById('btnDebug');
   tappable(btnDebug, () => { showDebug = !showDebug; btnDebug.classList.toggle('on', showDebug); });
 
@@ -3495,7 +3531,10 @@
       const a = Math.min(1, manager.loadT / LOAD_TIME);
       ctx.fillStyle = `rgba(0,0,0,${a})`; ctx.fillRect(0, 0, W, H);
       for (const el of domCtl) if (el) el.style.opacity = String(1 - a);          // the boost + the resting stick blend with the scene
-    } else for (const el of domCtl) { if (el && el.style.opacity !== '' && el.style.opacity !== '1') el.style.opacity = ''; } // on finishing, restore (once only)
+    } else {                                                                      // on finishing, restore (once only): each one back to ITS own CSS opacity
+      for (const el of domCtl) if (el && el.style.opacity !== '' && el.style.opacity !== '1') el.style.opacity = '';
+      if (document.body.classList.contains('loading')) document.body.classList.remove('loading');
+    }
 
     requestAnimationFrame(loop);
   }

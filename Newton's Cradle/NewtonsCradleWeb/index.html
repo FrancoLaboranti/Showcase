@@ -119,9 +119,6 @@
   <canvas id="c"></canvas>
   <div id="hint">lift a ball and let it go to drive the others · +/− changes how many · 👻 ghost · ⏸ pause</div>
   <div id="bar">
-  <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-  </button>
 <div id="ui">
       <button id="btnGhost" aria-label="ghost" title="Ghost mode (they pass through each other)">
         <svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 3a7 7 0 0 0-7 7v9l2-1.6 2 1.6 2-1.6 1 1.6 1-1.6 2 1.6 2-1.6V10a7 7 0 0 0-7-7zm-2.2 6.2a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2zm4.4 0a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"/></svg>
@@ -145,6 +142,9 @@
     <button id="btnInfo" aria-label="info" title="Info">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4"/><circle cx="12" cy="8" r="0.9" fill="currentColor" stroke="none"/></svg>
     </button>
+  <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  </button>
   </div>
 
   <script>
@@ -171,8 +171,16 @@
   const FIXED_DT       = 5;       // ms per physics step (an accumulator → stable and independent of the fps)
   const OMEGA          = 6.1;     // rad/s: the pendulum's natural frequency (a short period ≈ 2π/OMEGA ≈ 1.0 s)
   const DAMP           = 0.15;    // 1/s: air damping (small = it oscillates for a long time)
-  const COLLISION_LOSS = 1.0;     // 1 = a perfectly elastic collision; <1 loses energy on each impact
-  const RESIDUAL       = 0.005;    // the fraction NOT transferred in the collision ⇒ some sway is left in the chain (0 = a perfect swap, a dead row)
+  // No real impact is perfectly elastic. 0.5% of velocity per hit (about 1% of the energy) puts
+  // the loss where it belongs, in the blow, and it also stops the numerical error of the position
+  // correction from building up over thousands of contacts.
+  const COLLISION_LOSS = 0.995;
+  // 0 = a clean swap, which is what an elastic collision between EQUAL masses is. It used to be
+  // 0.005, on purpose, "so the chain keeps a little sway". That sway adds up hit after hit: with a
+  // ball lifted 0.6 rad, the share of the energy sitting in the INNER balls went 3.6% at 5 s, 15%
+  // at 10 s, 43% at 15 s and 65% at 20 s. The end balls die down and what is left moving is the
+  // middle, which is exactly what a Newton's cradle does not do.
+  const RESIDUAL       = 0.0;
   const REST_SNAP_ANG  = 0.004;   // rad: below this (and at low speed) it snaps to rest
   const REST_SNAP_VEL  = 0.012;   // rad/s
   const ANG_EPS        = 0.0015;  // rad, angular penetration below which it is not corrected (anti-jitter at rest)
@@ -334,6 +342,25 @@
   // pen = θ_b − θ_a (>0 = they crossed / overlap). This avoids the bug of the distance test: near the
   // horizontal, if the dragged one lagged it separated VERTICALLY, the distance exceeded 2·radius and it
   // let go before the limit. With angles, dragging to the extreme works the same as at the bottom.
+  // QA hook, the same idea as StickFight's window.SF: the harness needs the balls' state to
+  // measure whether the chain's energy drifts UPWARDS over time, which is what "they all end up
+  // dancing" means. A real cradle can only lose energy.
+  window.NC = {
+    get balls() { return balls; },
+    get OMEGA() { return OMEGA; },
+    get nro() { return nroBalls; },
+    // Specific energy of the chain: kinetic + potential of each pendulum, with phi measured from
+    // the vertical. In a real cradle this can only go DOWN.
+    energia() {
+      let e = 0;
+      for (const b of balls) {
+        const phi = b.angulo - Math.PI / 2;
+        e += 0.5 * b.velocidad * b.velocidad + OMEGA * OMEGA * (1 - Math.cos(phi));
+      }
+      return e;
+    },
+  };
+
   function resolveCollisions(allowSwap) {
     if (ghosted) return;
     for (let iter = 0; iter < nroBalls + 2; iter++) {
@@ -355,18 +382,50 @@
           a.angulo = mid; setPos(a);
           b.angulo = mid; setPos(b);
           changed = true;
-          // a collision of equal masses: an exchange of velocity, only if they are approaching. But IMPERFECT: each
-          // one keeps a RESIDUAL fraction of its own velocity, so the chain retains a little
-          // movement (a gentle sway) instead of going perfectly dead.
-          if (allowSwap && (b.velocidad - a.velocidad) > VEL_EPS) {
-            const va = a.velocidad, vb = b.velocidad;
-            frameImpactV = Math.max(frameImpactV, vb - va);                         // energy of this frame's strongest collision → sound
-            a.velocidad = (vb * (1 - RESIDUAL) + va * RESIDUAL) * COLLISION_LOSS;
-            b.velocidad = (va * (1 - RESIDUAL) + vb * RESIDUAL) * COLLISION_LOSS;
-          }
+          // The velocities are NOT resolved here any more: see `resolveGroups` below.
         }
       }
       if (!changed) break;
+    }
+    if (allowSwap) resolveGroups();
+  }
+
+  // ── THE COLLISION, resolved over the WHOLE GROUP in contact ──
+  // It used to be done pair by pair, iterating so the impulse walked down the chain. The result
+  // looks right for one hit and leaks: measured with a ball lifted 0.6 rad and sampling every
+  // 100 ms, the energy of the INNER balls climbed one step per impact, 0.0012 → 0.0034 → 0.0073 →
+  // 0.0131 → 0.0247, and kept going. Those balls should not move at all: what crosses them in the
+  // real toy is a compression wave, not a swing. With the ends losing amplitude to the air, that
+  // leak ended up being most of the visible movement, which is the row "dancing".
+  //
+  // For EQUAL masses in contact the exact result of the chain of elastic collisions is that the
+  // velocity profile is REVERSED across the group: n balls in, n balls out, and everything in
+  // between is left at rest. With two balls it is the swap of before, so nothing changes for the
+  // simple case; with five it is what the toy does.
+  const CONTACT_ANG = ANG_EPS * 2;      // after the position pass a contact sits at the same angle
+  function resolveGroups() {
+    let i = 0;
+    while (i < balls.length) {
+      // the longest run of neighbours touching each other, with nobody held by the finger: a rigid
+      // ball is handled above and must not be swept into the reversal.
+      let j = i;
+      while (j + 1 < balls.length
+             && !balls[j].grabbed && !balls[j].pushed
+             && !balls[j + 1].grabbed && !balls[j + 1].pushed
+             && Math.abs(balls[j + 1].angulo - balls[j].angulo) <= CONTACT_ANG) j++;
+      if (j > i) {
+        // is the group being COMPRESSED? Resting in contact, the differences are ~0 and nothing is
+        // touched: without this guard a row at rest would keep reversing its own jitter forever.
+        let acerca = 0;
+        for (let k = i; k < j; k++) acerca = Math.max(acerca, balls[k + 1].velocidad - balls[k].velocidad);
+        if (acerca > VEL_EPS) {
+          frameImpactV = Math.max(frameImpactV, acerca);                           // energy of this frame's strongest collision → sound
+          const v = [];
+          for (let k = i; k <= j; k++) v.push(balls[k].velocidad);
+          for (let k = i; k <= j; k++) balls[k].velocidad = v[j - k] * COLLISION_LOSS;
+        }
+      }
+      i = j + 1;
     }
   }
 

@@ -186,7 +186,8 @@
      cyan/magenta. */
   .cbtn {
     position: absolute; top: calc(8px + env(safe-area-inset-top));
-    width: 30px; height: 30px; border-radius: 50%;
+    /* 27 px, not 30, and a 32 px pitch instead of 38: see the ladder below. */
+    width: 27px; height: 27px; border-radius: 50%;
     border: 1px solid rgba(240,225,195,0.22);
     background: rgba(22,18,14,0.55);
     color: rgba(230,220,200,0.60);
@@ -203,28 +204,38 @@
   /* The right offsets are per-id; the colours are normalised to .cbtn's style
      (arcade-shell.css had ID-level rules of its own that overrode my .cbtn, giving the cluster
      two different palettes). */
-  #btnExit, #btnInfo, #btnFs, #btnBack, #btnPause {
+  #btnExit, #btnInfo, #btnFs, #btnMute, #btnBack, #btnPause {
     /* The POSITION goes here too, not only in `.cbtn`: `arcade-shell.css` declares
        `#btnInfo, #btnFs, #btnExit { position: relative }`, and being an ID rule it beats the class.
        With `relative` the offsets stop positioning and start SHIFTING from the flow position, so
        `right: 8px` moved the button 8 px to the LEFT: measured at x = -8, -46, -84, all three off
        screen. */
     position: absolute; top: calc(8px + env(safe-area-inset-top));
-    width: 30px; height: 30px; border-radius: 50%;
+    width: 27px; height: 27px; border-radius: 50%;
     border: 1px solid rgba(240,225,195,0.22);
     background: rgba(22,18,14,0.55);
     color: rgba(230,220,200,0.60);
     align-self: auto; margin-bottom: 0;
   }
-  #btnExit, #btnInfo, #btnFs, #btnBack, #btnPause { display: flex; align-items: center; justify-content: center; }
-  #btnExit  svg, #btnInfo svg, #btnFs svg, #btnBack svg, #btnPause svg {
-    width: 15px; height: 15px;
+  #btnExit, #btnInfo, #btnFs, #btnMute, #btnBack, #btnPause { display: flex; align-items: center; justify-content: center; }
+  #btnExit  svg, #btnInfo svg, #btnFs svg, #btnMute svg, #btnBack svg, #btnPause svg {
+    width: 14px; height: 14px;
+  }
+  /* The TOUCH AREA does not shrink with the body: the pseudo-element gives back vertically what
+     the 27 px body loses, which comes to 45 px. Vertically only, because at a 32 px pitch two
+     horizontal areas would overlap and the tap would land on the neighbour. */
+  #btnExit::after, #btnInfo::after, #btnFs::after, #btnMute::after, #btnBack::after, #btnPause::after {
+    content: ''; position: absolute; inset: -9px 0; border-radius: 50%;
   }
   #btnExit  { right: calc(8px + env(safe-area-inset-right)); }
-  #btnInfo  { right: calc(46px + env(safe-area-inset-right)); }
-  #btnFs    { right: calc(84px + env(safe-area-inset-right)); }
-  #btnBack  { right: calc(122px + env(safe-area-inset-right)); }
-  #btnPause { right: calc(160px + env(safe-area-inset-right)); }
+  #btnInfo  { right: calc(40px + env(safe-area-inset-right)); }
+  #btnFs    { right: calc(72px + env(safe-area-inset-right)); }
+  #btnMute  { right: calc(104px + env(safe-area-inset-right)); }
+  #btnBack  { right: calc(136px + env(safe-area-inset-right)); }
+  #btnPause { right: calc(168px + env(safe-area-inset-right)); }
+  #btnMute .ic-off { display: none; }
+  #btnMute.muted .ic-on  { display: none; }
+  #btnMute.muted .ic-off { display: block; }
   #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; }
   /* back is visible in the difficulty menu and in a game; pause ONLY in a game */
   #btnBack, #btnPause { display: none; }
@@ -317,6 +328,9 @@
   </button>
   <button class="cbtn" id="btnFs" aria-label="fullscreen" title="Fullscreen">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
+  </button>
+  <button class="cbtn" id="btnMute" aria-label="sound" title="Sound">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
   </button>
   <button class="cbtn" id="btnBack" aria-label="back" title="Back to menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
@@ -767,6 +781,10 @@
   const AI_MAX_DEPTH      = 10;       // ceiling for iterative deepening (internal engine only)
   const MOVE_ANIM_MS      = 180;      // slide-animation duration
   const SOUND_VOLUME      = 0.18;     // master gain of the SFX (0 = mute, 1 = full)
+  // The mute is its own state, kept apart from SOUND_VOLUME so silencing and coming back does not
+  // lose the game's mix. It survives a reload, like in the rest of the collection.
+  let muted = false;
+  try { muted = localStorage.getItem('chessMuted') === '1'; } catch (e) {}
   const CLOCK_INITIAL_MS  = 15 * 60 * 1000;   // 15 minutes per player
   // Stockfish.js asm.js single-file: first we try the local file
   // (same origin, it works on iOS Safari and other browsers strict about cross-origin
@@ -917,7 +935,7 @@
     try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
     catch (e) { return; }
     masterGain = actx.createGain();
-    masterGain.gain.value = SOUND_VOLUME;
+    masterGain.gain.value = muted ? 0 : SOUND_VOLUME;
     masterGain.connect(actx.destination);
     buildSounds();
   }
@@ -986,7 +1004,11 @@
     turn: 'w',
     lastMove: null,
     enPassant: null,
-    status: '',             // '' | 'check' | 'checkmate' | 'stalemate' | 'repetition' | 'insufficient'
+    status: '',             // '' | 'check' | 'checkmate' | 'stalemate' | 'repetition' | 'insufficient' | 'fiftymove' | 'deadpos'
+    // Half-moves since the last capture or pawn move: the fifty-move rule's counter. It is the one
+    // measure of "this position is not going anywhere", which is what an AI-vs-AI game needs in
+    // order to stop.
+    halfmove: 0,
     gameOver: false,
     captured: [],           // [{color, kind}, ...]
     positionCounts: new Map(),
@@ -1086,6 +1108,7 @@
     game.gameOver = false;
     game.captured = [];
     game.positionCounts = new Map();
+    game.halfmove = 0;
     game.history = [];
     game.historyIndex = 0;
     game.selected = null;
@@ -1119,6 +1142,10 @@
 
   // startGame(mode, skillW, skillB), the skills are AI_LEVELS ids.
   // For pvp both are null. For vs AI only the AI side is set.
+  // QA hook, the same idea as StickFight's window.SF: the harness needs to reach the game's state
+  // to check that an AI-vs-AI game that is already drawn actually stops.
+  window.CH = { get game() { return game; }, startGame: (m, a2, b2) => startGame(m, a2, b2) };
+
   function startGame(mode, skillW, skillB) {
     game.mode = mode;
     game.aiBoth = (mode === 'aiva');
@@ -1205,6 +1232,11 @@
     game.enPassant = newEp;
     game.turn = (game.turn === 'w') ? 'b' : 'w';
 
+    // A pawn move or a capture makes the position progress and resets the clock; anything else
+    // advances it. En passant is a capture, and a promotion is a pawn move, so both are covered.
+    if (piece.kind === 'P' || wasCapture || extra.en_passant) game.halfmove = 0;
+    else game.halfmove++;
+
     const hasMove = anyLegalMove(game.grid, game.turn, game.enPassant);
     const isCheck = inCheck(game.grid, game.turn);
     const repCount = recordPosition();
@@ -1220,6 +1252,16 @@
       play('end');
     } else if (repCount >= 3) {
       game.status = 'repetition';
+      game.gameOver = true;
+      play('end');
+    } else if (game.halfmove >= 100) {
+      game.status = 'fiftymove';
+      game.gameOver = true;
+      play('end');
+    } else if (game.aiBoth && game.halfmove >= 60) {
+      // Only machine against machine: thirty moves each with no capture and no pawn advance is a
+      // dead position, and there is nobody watching who wants to see the rest of it.
+      game.status = 'deadpos';
       game.gameOver = true;
       play('end');
     } else {
@@ -1917,6 +1959,14 @@
       ctx.fillStyle = '#e8d864';
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
       ctx.fillText('DRAW BY INSUFFICIENT MATERIAL', W / 2, 28 + topInset);
+    } else if (view.status === 'fiftymove') {
+      ctx.fillStyle = '#e8d864';
+      ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
+      ctx.fillText('DRAW BY THE FIFTY-MOVE RULE', W / 2, 28 + topInset);
+    } else if (view.status === 'deadpos') {
+      ctx.fillStyle = '#e8d864';
+      ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
+      ctx.fillText('DRAW: DEAD POSITION', W / 2, 28 + topInset);
     } else if (view.status === 'timeout') {
       // The player who ran out of time is the one whose turn it is (the view freezes them)
       const winner = view.turn === 'w' ? 'Black' : 'White';
@@ -2162,6 +2212,21 @@
     }
   }
   document.getElementById('btnPause').addEventListener('pointerdown', e => { e.preventDefault(); togglePause(); });
+
+  // The mute. `ensureAudio()` first, because on the very first tap there is no context yet and
+  // without it the button would look toggled with nothing behind it.
+  {
+    const btnMute = document.getElementById('btnMute');
+    btnMute.classList.toggle('muted', muted);
+    btnMute.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      ensureAudio();
+      muted = !muted;
+      if (masterGain && actx) { masterGain.gain.cancelScheduledValues(actx.currentTime); masterGain.gain.value = muted ? 0 : SOUND_VOLUME; }
+      btnMute.classList.toggle('muted', muted);
+      try { localStorage.setItem('chessMuted', muted ? '1' : '0'); } catch (e2) {}
+    });
+  }
 
   // btnInfo: toggle FPS overlay
   let showFps = false;

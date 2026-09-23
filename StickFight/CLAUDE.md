@@ -601,3 +601,54 @@ left edge, holding into it and spamming jump for 20 s:
 - `tryWallSlide()` is only called from `ST.JUMP`/`ST.FALL`, the x has to be `ARENA.pad` (not a
   number picked by eye) and you have to arrive FALLING. Missing any of the three measures nothing
   and looks like a pass.
+
+
+## CONTROLS: the phone layout, blocking, and the ledge you could not let go of (2026-09-23)
+
+### Four buttons in two columns, and DASH instead of JUMP
+
+The right-hand column was three buttons of different sizes (58 + 66 + 74 px plus gaps = 224 px
+tall) and it ate the side of the screen. Now four of them, all 54 px, in a 2 x 2 grid:
+
+| | |
+| - | - |
+| DASH | BLOCK |
+| PUNCH | KICK |
+
+The strikes go on the bottom row because that is the corner the thumb reaches without moving the
+hand. Jumping and crouching moved to the **stick**: up jumps (threshold 0.4, the same one the ledge
+already used for "up", so climbing and jumping ask for the same gesture), down crouches.
+
+### Blocking has a button
+
+`guarding()` used to be only "hold away from the enemy **and** the enemy is already striking and
+within 1.6 bodies" (`foeThreat()`). That is why it felt unreliable: the same gesture blocked or
+simply walked backwards depending on what the other one happened to be doing. The button blocks on
+its own, with no enemy and no threat check. Holding back still works, and so does `L` on a
+keyboard: the button ADDS a way in, it does not replace one.
+
+### You could not let go of a ledge with DOWN
+
+The HANG state has handled `i.my > 0.5` since it was written, and it did not work. The release
+leaves `vx = 0` and does not move the body, and `tryLedgeGrab`'s "coming in towards the ledge" test
+is `vx * -L.side > -0.05*S`, which at `vx = 0` is **true**. So the next frame grabbed the same
+ledge again, for ever. Letting go sideways always worked, because that branch adds an outward
+velocity.
+
+Two guards, and both are needed:
+
+- `noGrabT = 0.3` after a deliberate release, which covers the ledge you just let go of;
+- **no grabbing at all while DOWN is held**. The grace period alone was not enough: falling
+  straight down `vx` is 0, so the test is true for EVERY ledge you pass, and with 42 of them in a
+  stage the next one caught you within 300 ms. Measured before and after with a probe that hangs
+  the player, holds S, and samples the state for 1.8 s.
+
+### The player is orange now
+
+The stick's knob is `#e2781e`. The player wears it (`shirt`), with `#7a3f10` trousers. On a phone
+the thing you move and the thing that moves are the same colour, which is how you find yourself
+among five other stick figures.
+
+The enemies carry `angry` permanently, which draws a brow over the eye; the player's face was blank
+always. He now gets the same brow while in `ST.ATTACK` or `ST.HITSTUN`, or while `hitFlash` is up,
+so the effort reads on the face without turning him into another thug.

@@ -44,10 +44,17 @@
      buttons must NOT spawn a joystick (a z sandwich: zone 3 < dead 4 < buttons 5). */
   #aimSafe { position: fixed; right: 0; bottom: 0; width: 34%; height: 60%; z-index: 4; touch-action: none; }
 
-  /* ── Action buttons (a bottom-right column): JUMP on top, PUNCH, KICK at the bottom (the biggest) ── */
+  /* ── Action buttons: TWO COLUMNS in the bottom-right corner ──
+     It used to be a single column of three (58 + 66 + 74 px plus gaps = 224 px tall), which ate the
+     right-hand side of the screen. Four buttons now, all the same size and smaller, laid out
+     2 x 2 = 118 px on each side. The order follows the thumb: what is pressed most, the strikes,
+     goes on the bottom row, which is the corner the thumb reaches without moving the hand.
+         DASH   BLOCK
+         PUNCH  KICK   */
   #actBtns {
     position: fixed; right: calc(14px + env(safe-area-inset-right)); bottom: calc(14px + env(safe-area-inset-bottom));
-    z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 13px;
+    z-index: 5; display: grid; grid-template-columns: repeat(2, auto); gap: 10px;
+    justify-items: center; align-items: center;
   }
   .abtn {
     border-radius: 50%; border: 2.5px solid rgba(34,30,27,0.75);
@@ -59,18 +66,17 @@
     font-family: inherit;
   }
   .abtn:active, .abtn.on { transform: scale(0.92); }
-  #btnJump   { width: 58px; height: 58px; font-size: 10px; }
-  #btnPunch  {
-    width: 66px; height: 66px; font-size: 11px;
-    border-color: #b06010; color: #b06010;
-  }
+  /* One size for the four of them: with two columns, different sizes leave the grid crooked and
+     you stop knowing where each one is by feel. */
+  .abtn { width: 54px; height: 54px; font-size: 10px; }
+  #btnDash   { border-color: #4a6a86; color: #4a6a86; }
+  #btnDash:active,  #btnDash.on  { background: rgba(90,140,180,0.35); }
+  #btnBlock  { border-color: #6a6a5a; color: #6a6a5a; }
+  #btnBlock:active, #btnBlock.on { background: rgba(150,150,120,0.40); }
+  #btnPunch  { border-color: #b06010; color: #b06010; }
   #btnPunch:active, #btnPunch.on { background: rgba(226,120,30,0.4); }
-  #btnKick   {
-    width: 74px; height: 74px; font-size: 11px;
-    border-color: #a03526; color: #a03526;
-  }
+  #btnKick   { border-color: #a03526; color: #a03526; }
   #btnKick:active, #btnKick.on { background: rgba(192,57,43,0.35); }
-  #btnJump:active, #btnJump.on { background: rgba(140,160,190,0.35); }
 
   /* ── Top-right corner cluster: pause / restart / fullscreen / info / exit ── */
   #padMenu {
@@ -150,7 +156,13 @@
        `touch-action: pan-y` is needed because the body declares `touch-action: none` and the browser
        resolves the allowed gesture as the INTERSECTION with every ancestor. */
     max-height: calc(100vh - 64px - env(safe-area-inset-top)); overflow-y: auto;
-    touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  /* `pan-x pan-y`, NOT `pan-y`. The Arcade runs the landscape games WITHOUT turning the phone:
+     the device stays in portrait and the iframe is rotated 90 degrees in CSS. `touch-action`
+     constrains the gesture's axis in the element's LOCAL coordinates, so with the frame rotated the
+     swipe the player makes vertically arrives at the panel as horizontal and `pan-y` refuses it.
+     Standalone it measured fine, which is why the harness said 22/22 while it did not scroll in the
+     hand. Both axes, and still no zoom. */
+    touch-action: pan-x pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   }
   #infoPanel.show { display: block; }
   @media (orientation: landscape) and (max-height: 560px) {
@@ -222,7 +234,8 @@
 <div id="jMove" aria-label="move"></div>
 <div id="aimSafe"></div>
 <div id="actBtns">
-  <button class="abtn" id="btnJump" aria-label="jump">JUMP</button>
+  <button class="abtn" id="btnDash" aria-label="dash">DASH</button>
+  <button class="abtn" id="btnBlock" aria-label="block">BLOCK</button>
   <button class="abtn" id="btnPunch" aria-label="punch">PUNCH</button>
   <button class="abtn" id="btnKick" aria-label="kick">KICK</button>
 </div>
@@ -250,21 +263,24 @@
 
 <div id="infoPanel"><h4>Stick Fight</h4>
 A brawling sandbox. Clear the stage and reach the <b>EXIT</b> on the right to move on.
-<b>Blocking is holding the direction AWAY from the enemy</b>, and down-and-back blocks sweeps.
+<b>Block with the BLOCK button</b>, or by holding the direction away from the enemy. Blocking crouched stops sweeps.
 <hr>
 <h5>Desktop</h5>
 <ul>
   <li><span class="k">A</span><span class="k">D</span> or <span class="k">←</span><span class="k">→</span> move,
       <span class="k">S</span> crouches, <span class="k">W</span> or <span class="k">Space</span> jumps.</li>
-  <li><span class="k">J</span> punches, <span class="k">K</span> kicks, <span class="k">Shift</span> dashes,
-      <span class="k">P</span> pauses.</li>
+  <li><span class="k">J</span> punches, <span class="k">K</span> kicks, <span class="k">L</span> blocks,
+      <span class="k">Shift</span> dashes, <span class="k">P</span> pauses.</li>
 </ul>
 <h5>Mobile</h5>
 <ul>
-  <li>The <b>joystick</b> on the left half moves; pull down to crouch.</li>
-  <li><span class="k round">PUNCH</span> <span class="k round">KICK</span> <span class="k round">JUMP</span>
-      are the three round buttons on the right.</li>
-  <li><b>Double-tap the joystick</b> sideways to dash.</li>
+  <li>The <b>joystick</b> on the left half does the moving: sideways to walk, <b>up to jump</b>
+      and <b>down to crouch</b> (and to let go of a ledge).</li>
+  <li>Four round buttons on the right, in two columns:
+      <span class="k round">DASH</span> <span class="k round">BLOCK</span> on top,
+      <span class="k round">PUNCH</span> <span class="k round">KICK</span> underneath.</li>
+  <li><span class="k round">DASH</span> goes the way the joystick is pointing, or the way you are
+      facing if it is centred. <b>Double-tapping the joystick</b> sideways still dashes.</li>
 </ul>
 <h5>The bar</h5>
 <ul>
@@ -537,7 +553,7 @@ const sfx = {
 const IS_TOUCH = (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches) || 'ontouchstart' in window;
 // mx ∈ [-1,1] move · my > 0.5 = crouch · jump/punch/kick = held · dashPulse = ±1 for one frame
 // The player writes inP1; each ENEMY has its own struct (written by its AI brain).
-function newInput() { return { mx: 0, my: 0, jump: false, punch: false, kick: false, dashPulse: 0 }; }
+function newInput() { return { mx: 0, my: 0, jump: false, punch: false, kick: false, block: false, dashPulse: 0 }; }
 const inP1 = newInput();
 
 // Audio unlock on the FIRST gesture (iOS/Chrome), at window level, capture phase
@@ -600,7 +616,7 @@ if (IS_TOUCH) createJoystick(document.getElementById('jMove'), { target: moveSti
 else document.body.classList.add('noTouch');
 
 // ── Action buttons (press and hold; pointer events, never click) ──
-const btnState = { jump: false, punch: false, kick: false };
+const btnState = { jump: false, punch: false, kick: false, block: false };
 function holdBtn(id, key) {
   const el = document.getElementById(id);
   const down = e => { e.preventDefault(); audioResume(); btnState[key] = true; el.classList.add('on'); };
@@ -610,7 +626,20 @@ function holdBtn(id, key) {
   el.addEventListener('pointercancel', up);
   el.addEventListener('pointerleave', up);
 }
-holdBtn('btnJump', 'jump'); holdBtn('btnPunch', 'punch'); holdBtn('btnKick', 'kick');
+holdBtn('btnPunch', 'punch'); holdBtn('btnKick', 'kick'); holdBtn('btnBlock', 'block');
+
+// The DASH is a PULSE, not a hold: it takes the direction you are already pointing with the stick,
+// and with the stick centred it goes the way you are facing, so it works as a step back too.
+{
+  const el = document.getElementById('btnDash');
+  const fire = e => {
+    e.preventDefault(); audioResume();
+    inP1.dashPulse = Math.abs(inP1.mx) > 0.25 ? Math.sign(inP1.mx) : (P1 ? P1.facing : 1);
+    el.classList.add('on');
+    setTimeout(() => el.classList.remove('on'), 110);
+  };
+  el.addEventListener('pointerdown', fire);
+}
 
 // ── Keyboard (desktop). P1: A/D/S + W/Space + J/K + Shift. P2 (2P mode): the arrows + Numpad1/2 ──
 const keys = {};
@@ -648,15 +677,21 @@ function pollInputs() {
   if (keys.KeyA || keys.ArrowLeft) mx = -1; if (keys.KeyD || keys.ArrowRight) mx = 1;
   if (keys.KeyS || keys.ArrowDown) my = 1;
   inP1.mx = mx; inP1.my = my;
-  inP1.jump = !!(btnState.jump || keys.KeyW || keys.Space || keys.ArrowUp);
+  // The stick took over jumping and crouching, which is why the phone's JUMP button became DASH.
+  // UP = jump: the same threshold the ledge already used to decide "up" (0.4), so climbing a ledge
+  // and jumping ask for the same gesture instead of two different ones.
+  inP1.jump = !!(btnState.jump || keys.KeyW || keys.Space || keys.ArrowUp || my < -0.4);
   inP1.punch = !!(btnState.punch || keys.KeyJ);
   inP1.kick = !!(btnState.kick || keys.KeyK);
+  // Blocking also stays on holding back, which is how it always worked and how it reads on a
+  // keyboard: the button ADDS a way, it does not replace one.
+  inP1.block = !!(btnState.block || keys.KeyL);
 }
 // Zombie pointers / a hidden tab: release EVERYTHING (it avoids stuck buttons on returning)
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     for (const k in keys) keys[k] = false;
-    btnState.jump = btnState.punch = btnState.kick = false;
+    btnState.jump = btnState.punch = btnState.kick = btnState.block = false;
     for (const el of document.querySelectorAll('.abtn.on')) el.classList.remove('on');
   }
 });
@@ -1175,6 +1210,7 @@ class Fighter {
     this.juggle = 0; this.combo = 0; this.comboT = 0; this.kdT = 0; this.invuln = 0;
     this.hitChain = 0; this.hitChainT = 0;        // consecutive hits taken → they degrade the stun
     this.ledge = null; this.climbFrom = null; this.wallSide = 0; this.lastDashDir = 0; this.dashT = 9;
+    this.noGrabT = 0;                       // grace period after letting go of a ledge on purpose
     this.dashCdT = 0;                                                 // the dash's cooldown (it blocks a new dash while > 0)
     this.foe = null; this.dead = false;
     fk(this.targetPose, this.renderPts, x, 0, 1);
@@ -1208,6 +1244,7 @@ class Fighter {
     this.hitChainT -= dt; if (this.hitChainT <= 0) this.hitChain = 0;
     this.hitFlash = Math.max(0, this.hitFlash - dt);
     this.invuln = Math.max(0, this.invuln - dt);
+    this.noGrabT = Math.max(0, this.noGrabT - dt);
     this.flinchW *= Math.pow(2, -dt / CFG.anim.flinchHl);
     this.renderPtsPrev.set(this.renderPts);
     this.readInput(dt);                      // ALWAYS on real dt: a tap inside the freeze is not lost (it stays in the buffer)
@@ -1346,12 +1383,14 @@ class Fighter {
           if (i.my > 0.5) {
             this.ledge = null; this.state = ST.FALL;
             this.vx = 0; this.vy = 0.05 * S;
+            this.noGrabT = 0.3;                                       // or it grabs the same ledge again next frame
             break;
           }
           // Moving away EXPLICITLY (you pushed the stick away from the ledge) → then we do throw them out.
           if (i.mx * -L.side < -0.4) {
             this.ledge = null; this.state = ST.FALL;
             this.vx = L.side * 0.1 * S; this.vy = 0.05 * S;
+            this.noGrabT = 0.3;
             break;
           }
           if (this.consume('kick') || this.consume('punch')) {        // letting go with a kick (it pushes OUTWARDS from the ledge)
@@ -1658,6 +1697,18 @@ class Fighter {
   // ── climbing up ──
   tryLedgeGrab() {
     if (this.vy < -0.35 * S || this.invuln > 0) return;              // it grabs near the apex or while falling (generosity > realism)
+    // Grace period after letting go ON PURPOSE. Without it, dropping with DOWN was impossible:
+    // that release leaves `vx = 0` and does not move the body, and the "coming in towards the
+    // ledge" test below (`vx * -L.side > -0.05*S`) is TRUE at vx = 0, so the next frame grabbed the
+    // same ledge again, for ever. Letting go sideways did work, because that one does add an
+    // outward velocity. Measured as: hold DOWN while hanging and you never came down.
+    if (this.noGrabT > 0) return;
+    // And while DOWN is held nothing is grabbed at all. The grace period above only covers the
+    // ledge you just let go of; falling straight down `vx` is 0, and the "coming in towards the
+    // ledge" test below is TRUE for every ledge you pass, so with 34 of them in a stage the next
+    // one caught you a few tenths of a second later. Measured: it let go and grabbed again within
+    // 300 ms. Holding down means you want to go down, which is what it means in any platformer.
+    if (this.input.my > 0.5) return;
     for (const L of ARENA.ledges) {
       // the grab rect in front of/above the head, coming in towards the ledge
       const hx = this.x - L.side * 0.1 * CH, hy = this.y - 0.55 * CH;   // an approximate "head"
@@ -2073,9 +2124,14 @@ class Fighter {
     tp[J.aLl] -= 0.35 * push; tp[J.aRl] -= 0.30 * push;
     tp[J.torso] += 0.16 * push; tp[J.head] -= 0.12 * push; tp[J.chest] -= 0.28 * push;
   }
-  guarding() {                                                        // blocking = holding BACK (no button)
-    if (!this.foe || !this.grounded) return false;
+  guarding() {                                                        // blocking: the button, or holding BACK
+    if (!this.grounded) return false;
     if (NOGUARD_STATES.includes(this.state)) return false;
+    // The BUTTON blocks on its own: no enemy required, no threat check. That check is what made
+    // it "imprecise": holding back only guarded while the rival was ALREADY striking and within
+    // 1.6 bodies, so the same gesture sometimes blocked and sometimes just walked backwards.
+    if (this.input.block) return true;
+    if (!this.foe) return false;
     const away = Math.sign(this.x - this.foe.x);
     return away !== 0 && this.input.mx * away > 0.3 && this.foeThreat();
   }
@@ -2734,7 +2790,11 @@ function drawStick(f, pts, alpha) {
   drawHair(f, hx, hy, ink);
   ctx.fillStyle = f.eyeCol || ink;
   circle(hx + f.facing * B.headR * 0.5, hy - B.headR * 0.12, B.headR * 0.15);
-  if (f.angry) {                                                      // a short angry brow, right over the eye
+  // The enemies wear the brow permanently (`angry`); the player's face was blank, always. He gets
+  // the SAME brow, but only while striking or taking a hit, so the effort reads on the face without
+  // turning him into another thug.
+  const ceno = f.angry || f.state === ST.ATTACK || f.state === ST.HITSTUN || f.hitFlash > 0;
+  if (ceno) {                                                         // a short angry brow, right over the eye
     ctx.strokeStyle = ink; ctx.lineWidth = 0.02 * CH;
     ctx.beginPath();
     ctx.moveTo(hx + f.facing * B.headR * 0.28, hy - B.headR * 0.46);
@@ -3703,7 +3763,7 @@ function resetFighter(f, x) {
   f.y = g.y - STAND; f.surf = g.s; f.grounded = true;
   f.state = ST.IDLE; f.stateT = 0; f.atk = null; f.rot = 0; f.juggle = 0; f.combo = 0; f.stun = 0;
   f.hitstopT = 0; f.pendKb = false; f.rag.on = false; f.rag.w = 0; f.invuln = 0; f.ledge = null;
-  f.hitChain = 0; f.hitChainT = 0;
+  f.hitChain = 0; f.hitChainT = 0; f.noGrabT = 0;
   f.buffer.length = 0; f.dead = false; f.leanAx = 0; f.prevVx = 0;
   f.popT = 9; f.squashT = 9; f.squashAmt = 0; f.guardW = 0; f.atkChained = false;
   f.poseCur.set(POSES.idle); f.poseVel.fill(0);
@@ -4260,8 +4320,11 @@ function drawDebugBoxes(f) {
 // Player: an "adventurer" outfit (a light blue shirt, navy trousers, plain hair).
 const P1 = new Fighter(180, [90, 165, 220], null, inP1);
 P1.isPlayer = true;
-P1.pants = '#1f3a68'; P1.pantsDark = '#132648';
-P1.shirt = '#4a90e2'; P1.shirtDark = '#2a5d99';
+// The stick's knob is `#e2781e`, and that orange is now the player's: on a phone the thing you
+// move and the thing that moves are the same colour, which is how you find yourself in a brawl
+// with five other stick figures on screen.
+P1.pants = '#7a3f10'; P1.pantsDark = '#4a2409';
+P1.shirt = '#e2781e'; P1.shirtDark = '#a8500f';
 P1.shoe  = '#2b1e12';
 P1.hairStyle = 'plain'; P1.hairCol = '#3b2517';
 P1.maxHp = CFG.fight.hp;
@@ -4302,14 +4365,14 @@ for (const f of allFighters) {
   f.replantFeet();
 }
 document.body.classList.add('inMenu');
-window.SF = { P1, enemies, PLANTEL, ARENA, CFG, game, cam, MOVES, POSES, ST, simT: 0, get inP1() { return inP1; } };
+window.SF = { P1, enemies, PLANTEL, ARENA, CFG, game, cam, MOVES, POSES, ST, simT: 0, moveStick, btnState, get inP1() { return inP1; } };
 
 document.getElementById('hint').textContent = IS_TOUCH
   ? 'stick = move · double-tap = dash · knock the enemies down and reach the EXIT →'
   : 'A/D move · W jump · S crouch · J punch · K kick · SHIFT dash · reach the EXIT →';
 setTimeout(() => document.getElementById('hint').classList.add('off'), 5000);
 
-function zeroIn(i) { i.mx = 0; i.my = 0; i.jump = false; i.punch = false; i.kick = false; i.dashPulse = 0; }
+function zeroIn(i) { i.mx = 0; i.my = 0; i.jump = false; i.punch = false; i.kick = false; i.block = false; i.dashPulse = 0; }
 let lastT = performance.now(), fpsSm = 60, frameFlip = false;
 let lastW = 0, lastH = 0, rafPend = false;
 // the rAF is scheduled with dedupe: loop() can also be called "by hand" (headless QA) without duplicating the chain

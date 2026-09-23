@@ -119,7 +119,13 @@ body.fs-on #btnFs .ic-exit  { display: block; }
   position: fixed; right: 10px;
   bottom: calc(var(--bar-height, 58px) + 10px + env(safe-area-inset-bottom));
   z-index: 60; width: min(400px, 92vw); max-height: 70vh; overflow-y: auto;
-  touch-action: pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  /* `pan-x pan-y`, NOT `pan-y`. The Arcade runs the landscape games WITHOUT turning the phone:
+     the device stays in portrait and the iframe is rotated 90 degrees in CSS. `touch-action`
+     constrains the gesture's axis in the element's LOCAL coordinates, so with the frame rotated the
+     swipe the player makes vertically arrives at the panel as horizontal and `pan-y` refuses it.
+     Standalone it measured fine, which is why the harness said 22/22 while it did not scroll in the
+     hand. Both axes, and still no zoom. */
+  touch-action: pan-x pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
   padding: 14px 16px; border-radius: 14px;
   background: rgba(10,13,20,0.975);
   border: 1px solid var(--shell-accent);
