@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -19,7 +19,7 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
   }
-  /* FULL-SCREEN canvas (no bar taking up height) — UI = corner buttons + touch control,
+  /* FULL-SCREEN canvas (no bar taking up height), UI = corner buttons + touch control,
      CrazyTanks/Pong style. */
   #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
 
@@ -111,7 +111,7 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  TRON V2 — web port of TronV2.py with a BIG WORLD + a camera that follows the player
+  //  TRON V2: web port of TronV2.py with a BIG WORLD + a camera that follows the player
   //  (like Snake/CrazyTanks), white border and obstacles, and a minimap. Visuals from
   //  v1: neon palette, cheap bloom, a head that fades to the base colour, Orbitron font.
   //
@@ -137,7 +137,7 @@
   const CELL    = 64;                                                              // step of the arena's visual grid
   const GRID_ALPHA = 0.05;                                                         // opacity of the map's white lines
   const BORDER  = 12;                                                              // thickness of the white border (world px)
-  const AI_SCAN = 340;                                                             // cap on the AI's lookahead (px) — do not scan the whole world
+  const AI_SCAN = 340;                                                             // cap on the AI's lookahead (px), do not scan the whole world
   // Minimap: the trails are drawn NATIVELY at this resolution (the big trail is not downscaled), so the
   // scaling to the minimap is clean and faithful. Proportional to the world.
   const MINI_W = 360, MINI_H = Math.round(MINI_W * WORLD_H / WORLD_W);
@@ -408,7 +408,7 @@
     ctx.imageSmoothingEnabled = false;
     scl = Math.min(W / 1280, H / 720);
 
-    // WORLD offscreens (1:1, no dpr — the camera blits them scaled to the viewport)
+    // WORLD offscreens (1:1, no dpr; the camera blits them scaled to the viewport)
     if (!trailCv) { trailCv = document.createElement('canvas'); trailCv.width = WORLD_W; trailCv.height = WORLD_H; tctx = trailCv.getContext('2d'); }
     if (!bgCv)    { bgCv = document.createElement('canvas'); bgCv.width = WORLD_W; bgCv.height = WORLD_H; bctx = bgCv.getContext('2d'); }
     if (!miniCv)  { miniCv = document.createElement('canvas'); miniCv.width = MINI_W; miniCv.height = MINI_H; mctx = miniCv.getContext('2d'); }
@@ -498,7 +498,7 @@
       }
 
       // death: SWEPT COLLISION. The cycle advances several px per frame (more at low FPS), so
-      // checking a single point 2px ahead is not enough — it would jump over a thin trail. I sample
+      // checking a single point 2px ahead is not enough: it would jump over a thin trail. I sample
       // the whole stretch it will cover this frame, from 2px ahead to where the head will end up (+ margin).
       const dir = this.direction;
       if (!this.stop) {
@@ -562,7 +562,7 @@
     ctx.drawImage(bgCv, 0, 0, WORLD_W, WORLD_H, mmX, mmY, mmW, mmH);                // world (grid+border+obstacles)
     ctx.globalAlpha = 1;                                                           // trails: the minimap's native buffer → clean scaling
     ctx.drawImage(miniCv, 0, 0, MINI_W, MINI_H, mmX, mmY, mmW, mmH);
-    // players: a small dot (white halo + core) — small so it does not cover the trail line underneath.
+    // players: a small dot (white halo + core), small so it does not cover the trail line underneath.
     for (const p of players) {
       if (!p.alive) continue;
       const mx = mmX + p.x * sx, my = mmY + p.y * sy;
@@ -591,7 +591,7 @@
     // ── TOURNAMENT (YOU vs CPU): the human wins the round by surviving last, loses it by dying ──
     youWins: 0, cpuWins: 0, targetWins: 1,
     roundScored: false,         // it scores ONCE per round (gameOver is re-evaluated each frame)
-    lastWinner: 'you',          // 'you' | 'cpu' — winner of the last round
+    lastWinner: 'you',          // 'you' | 'cpu'; winner of the last round
     lastWinnerName: null,       // the AI's name if there was a single survivor
   };
   let players = [];
@@ -760,7 +760,7 @@
     updateCamera();
     sfx.boot();
   }
-  // Starts a new SET (resets the scoreboard) — from PLAY or "rematch".
+  // Starts a new SET (resets the scoreboard), from PLAY or "rematch".
   function startGame() {
     const bo = BEST_OF[gh.bestOfIdx];
     gh.targetWins = Math.ceil(bo / 2);
@@ -812,7 +812,7 @@
   // ── v1-style MENU (tappable rows + ‹ › + glow + a cycling neon title + a PLAY button) ──
   // It is AI-only → a single option (number of colours) + PLAY.
   let hoverY = -1;
-  // COMPACT centred layout: sizes and spacings in px proportional to min(W,H) — NOT to the total
+  // COMPACT centred layout: sizes and spacings in px proportional to min(W,H), NOT to the total
   // height. That way it does not sprawl on tall screens (mobile) and fits properly in any orientation.
   function menuLayout() {
     const S = Math.min(W, H), cy = H * 0.46;
@@ -1035,7 +1035,7 @@
   });
 
   // ════════════════ LOOP ════════════════
-  // dt measured against the SAME clock (the now that comes in) and clamped — it avoids the mobile crash from
+  // dt measured against the SAME clock (the now that comes in) and clamped: it avoids the mobile crash from
   // an epoch mismatch between performance.now() and the rAF timestamp.
   let lastT = null;
   let T = 0;
@@ -1133,7 +1133,7 @@
   </script>
 <div id="infoPanel"><h4>Tron V2</h4>
 Tron in a large world with walls and a camera that follows you. Hit a trail, a wall or yourself and
-you are de-rezzed. <b>Your engine rises in pitch as a wall gets closer ahead</b> — if you hear it
+you are de-rezzed. <b>Your engine rises in pitch as a wall gets closer ahead</b>, so if you hear it
 open up, you are about to clip something. The minimap shows where everyone is.
 <hr>
 <h5>Desktop</h5>
@@ -1167,7 +1167,7 @@ open up, you are about to clip something. The minimap shows where everyone is.
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

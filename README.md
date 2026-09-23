@@ -1,12 +1,12 @@
 # Showcase
 
 Twenty-two games, simulations and visual toys, each one a self-contained prototype. Most began as
-[Pygame](https://www.pygame.org/) experiments and every one of them now has a **browser version** —
+[Pygame](https://www.pygame.org/) experiments and every one of them now has a **browser version**:
 plain HTML and Canvas 2D, hand-rolled, no framework and no build step.
 
 ### ▶ Play them: **https://francolaboranti.github.io/Showcase/**
 
-> The URL is case-sensitive — `Showcase` with a capital `S`.
+> The URL is case-sensitive: `Showcase` with a capital `S`.
 
 That link opens the **Arcade**: an installable web app that launches every game. On a phone, "Add
 to Home Screen" and it runs fullscreen like a native app. Landscape games rotate themselves, so you
@@ -18,11 +18,11 @@ Four of them were born in the browser and have no Python original.
 
 | | Play | Python |
 |---|---|---|
-| **Loop** — arena arcade roguelite that fuses every other game in the repo | [▶](Loop/LoopWeb/index.html) | — |
-| **Stick Fight** — platformer-brawler sandbox | [▶](StickFight/StickFightWeb/index.html) | — |
-| **Donkey Kong** | [▶](DonkeyKong/DonkeyKongWeb/index.html) | — |
-| **Pac-Man** | [▶](Pacman/PacmanWeb/index.html) | — |
-| Marbles — marble physics sandbox | [▶](Balls/BallsWeb/index.html) | [Balls.py](Balls/Balls.py) |
+| **Loop**: arena arcade roguelite that fuses every other game in the repo | [▶](Loop/LoopWeb/index.html) | - |
+| **Stick Fight**: platformer-brawler sandbox | [▶](StickFight/StickFightWeb/index.html) | - |
+| **Donkey Kong** | [▶](DonkeyKong/DonkeyKongWeb/index.html) | - |
+| **Pac-Man** | [▶](Pacman/PacmanWeb/index.html) | - |
+| Marbles: marble physics sandbox | [▶](Balls/BallsWeb/index.html) | [Balls.py](Balls/Balls.py) |
 | Mini Marbles | [▶](MiniBalls/MiniBallsWeb/index.html) | [MiniBalls.py](MiniBalls/MiniBalls.py) |
 | Tank Wars | [▶](TankWARS/TankWARSWeb/index.html) | [TankWARS.py](TankWARS/TankWARS.py) |
 | Crazy Tanks | [▶](CrazyTanks/CrazyTanksWeb/index.html) | [CrazyTanks.py](CrazyTanks/CrazyTanks.py) |
@@ -43,7 +43,7 @@ Four of them were born in the browser and have no Python original.
 
 ## How it's built
 
-Each folder is independent — no shared modules, no package, no bundler. A game is one HTML file
+Each folder is independent: no shared modules, no package, no bundler. A game is one HTML file
 with its CSS and JavaScript inside it, drawing to a single `<canvas>`.
 
 The browser versions are **reimplementations, not ports run through a transpiler**: the Python and
@@ -69,7 +69,7 @@ python -m http.server 8000
 ```
 
 The Python originals need `pygame` (`pip install pygame`), plus `pymunk` for Marbles. Each one runs
-on its own — there is no entry point:
+on its own: there is no entry point:
 
 ```powershell
 python <Folder>\<Folder>.py

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
@@ -78,7 +78,7 @@
   #padMenu .btn:active, #padMenu .btn.on { background: rgba(226,120,30,0.35); transform: scale(0.9); }
   #btnExit { border-color: rgba(240,90,95,0.45) !important; }
   #btnExit:active { background: rgba(240,90,95,0.3) !important; }
-  /* Pause: ⏸ by default, ▶ while paused — the button says what it is going to DO.
+  /* Pause: ⏸ by default, ▶ while paused; the button says what it is going to DO.
      This game marks `.paused` and the rest of the repo marks `.on`; both are accepted so the
      pattern is ONE single thing and any shared tool can look at `.on` across all eight. */
   #btnPause .ic-play { display: none; }
@@ -154,7 +154,7 @@
   /* ── A CONTROL IS NAMED WITH ITS OWN FACE ──
      The panel does not describe the buttons, it SHOWS them. `.ik` is `#padMenu .btn` in miniature
      (the same paper, the same ink border, the same rounding) with the SAME `<svg>` inside; `.k` is
-     the action `.abtn` and the keys, which have no drawing but a label — there what you see IS the
+     the action `.abtn` and the keys, which have no drawing but a label: there what you see IS the
      text, so reproducing it is reproducing the control. No emojis and no similar-looking icons:
      if it is not the same node, the player has to translate, and translating is exactly what is in the way. */
   #infoPanel .ik {
@@ -183,8 +183,8 @@
   #tunePanel .val { color: #a3e635; float: right; }
 
   /* These buttons are `static`, so the `::after` below would position itself against another
-     ancestor and the enlarged area would land in the wrong place. `relative` — NOT `absolute`,
-     which takes them out of the flow and stacks them — gives them the containing block without moving them. */
+     ancestor and the enlarged area would land in the wrong place. `relative`, NOT `absolute`,
+     which takes them out of the flow and stacks them, gives them the containing block without moving them. */
   #btnInfo, #btnPause, #btnMute, #btnReset { position: relative; }
   /* TOUCH AREA: these buttons' bodies are 30 px and a thumb needs ~44. The pseudo-element
      enlarges the TARGET without enlarging the drawing. Vertically only: the corner buttons sit at
@@ -240,7 +240,7 @@
 
 <div id="infoPanel"><h4>Stick Fight</h4>
 A brawling sandbox. Clear the stage and reach the <b>EXIT</b> on the right to move on.
-<b>Blocking is holding the direction AWAY from the enemy</b> — down-and-back blocks sweeps.
+<b>Blocking is holding the direction AWAY from the enemy</b>, and down-and-back blocks sweeps.
 <hr>
 <h5>Desktop</h5>
 <ul>
@@ -264,23 +264,29 @@ A brawling sandbox. Clear the stage and reach the <b>EXIT</b> on the right to mo
 <hr>
 <b>Combos</b>
 <ul>
-  <li><b>Punch x3</b>: jab, cross, uppercut — the last one launches.</li>
-  <li><b>Punch, punch, kick</b>: spinning finisher.</li>
-  <li><b>Dash + punch</b>: a running hook. <b>Run + kick</b>: flying kick.</li>
+  <li><b>Punch x4</b>: jab, cross, hook, uppercut. The uppercut is the launcher.</li>
+  <li><b>Finish the chain with a kick</b> and where you are in it decides which one comes out: after
+      one punch a low sweep that knocks down, after two a roundhouse, after the third or the fourth a
+      spinning kick in the air.</li>
+  <li><b>Dash + punch</b>: a lunging straight that inherits the dash's speed as extra damage and
+      knockback. <b>Run + kick</b>: flying kick. <b>Crouch + kick</b>: sweep.</li>
 </ul>
 <b>Climbing and recovery</b>
 <ul>
   <li>Jump at a platform edge to hang; push in or jump to pull up. Against a wall you slide and can
       jump off it.</li>
+  <li><b>Crouch + jump on a platform drops you through it</b>, which is the fast way down.</li>
   <li><b>While you are flying, press jump, punch or kick to recover in mid-air.</b> Landing while
       holding a direction rolls instead of dropping you flat; on the ground any button gets you up
       sooner.</li>
 </ul>
+<hr>
+<span class="fps" id="fpsInfo">FPS: --</span>
 </div>
 <script>
 'use strict';
 // ════════════════════════════════════════════════════════════════════════════
-//  STICK FIGHT — a 2D fighter of articulated stickmen (a web port, no libraries)
+//  STICK FIGHT: a 2D fighter of articulated stickmen (a web port, no libraries)
 //  Architecture: the LOGIC pose (nominal keytracks → deterministic hitboxes) vs
 //  the RENDER pose (springs + IK + ragdoll → drawing and hurtboxes). The springs
 //  smooth what is SEEN; they never touch the fight's frame data.
@@ -302,7 +308,7 @@ const CFG = {
     termVy: 1.6, coyote: 0.13, jumpBuf: 0.18, inputBuf: 0.18, rollConv: 0.40, rollMinVy: 0.8,
   },
   // A smoother dash:
-  //  · wind 0.10→0.04: almost no "winding up" backwards before the push — it starts at once.
+  //  · wind 0.10→0.04: almost no "winding up" backwards before the push; it starts at once.
   //  · time 0.22→0.20 and dist 0.28→0.34: it covers more in less time → a "zip" feel.
   //  · cancelFrom 0.40→0.28: you can cancel into a punch/kick sooner → cleaner dash combos.
   //  · cd 0.55: the cooldown counts from when the dash started (it stops shift spam; the full "reset" is
@@ -319,12 +325,12 @@ const CFG = {
     swayAmp: 0.020,                    // lateral pelvis sway while standing (weight from one leg to the other)
     landT: 0.26,                       // total duration of the landing cycle (squash + bounce)
   },
-  // the procedural gait cycle (stance/swing per leg) — THE "run like a human" dial
+  // the procedural gait cycle (stance/swing per leg), THE "run like a human" dial
   gait: { halfBase: 0.30, halfSpd: 0.55, dutyBase: 0.64, dutySpd: 0.24, stepHBase: 0.05, stepHSpd: 0.10 },
   // the run's ARM/torso cycle (it used to be ping-pong between two poses: a Flash tween)
   run: {
     // CAREFUL: armC/armA are in WORLD angle (relative to the vertical), not relative to the torso
-    // — see runCycle. Authoring them relative was exactly what gave the runner "carrying a tray".
+    // (see runCycle). Authoring them relative was exactly what gave the runner "carrying a tray".
     armC: -0.02, armA: 0.25, armASpd: 0.37,  // the shoulder's centre and amplitude in world space
     elbC: 1.62, elbCSpd: -0.25, elbA: 0.18, elbASpd: 0.36, elbLag: 0.55,   // elbow: flexion + lag
     leanBase: 0.10, leanSpd: 0.30, sway: 0.035,                            // torso lean and sway
@@ -416,7 +422,7 @@ function segDist2(px, py, ax, ay, bx, by) {
   const qx = ax + dx * t - px, qy = ay + dy * t - py;
   return qx * qx + qy * qy;
 }
-// Minimum squared distance between two segments (the strike capsule vs the hurt capsule) — a fine sampling of segment A
+// Minimum squared distance between two segments (the strike capsule vs the hurt capsule), a fine sampling of segment A
 function segSegDist2(ax, ay, bx, by, cx, cy, dx, dy) {
   let best = Infinity;
   for (let i = 0; i <= 4; i++) {
@@ -488,7 +494,7 @@ const IS_TOUCH = (window.matchMedia && window.matchMedia('(hover: none) and (poi
 function newInput() { return { mx: 0, my: 0, jump: false, punch: false, kick: false, dashPulse: 0 }; }
 const inP1 = newInput();
 
-// Audio unlock on the FIRST gesture (iOS/Chrome) — at window level, capture phase
+// Audio unlock on the FIRST gesture (iOS/Chrome), at window level, capture phase
 window.addEventListener('pointerdown', audioResume, true);
 
 // ── Hand-rolled joystick (the CrazyTanksWeb factory): dynamic, born where you touch ──
@@ -642,15 +648,15 @@ const J_LINEAR = [J.dy, J.dx];
 // LEFT side = far (drawn behind, darker) · RIGHT = near (in front). The lead is the right one.
 const P_ = { pelvis: 0, neck: 1, head: 2, shoL: 3, elbL: 4, hanL: 5, shoR: 6, elbR: 7, hanR: 8, kneL: 9, ftL: 10, kneR: 11, ftR: 12, chest: 13 };
 const NP = 14;
-// Bone lengths (fractions of CH) — sanity: legs 0.39 + torso 0.30 + neck 0.08 + head 0.20 ≈ 0.97
+// Bone lengths (fractions of CH), sanity: legs 0.39 + torso 0.30 + neck 0.08 + head 0.20 ≈ 0.97
 // ── PROPORTIONS (revised 2026-09-22) ─────────────────────────────────────────────────────────
 // The neck was 0.08·CH and the shoulders hung 0.07·CH below the top of the spine, so
 // between the shoulder and the base of the head there were 0.152·CH of air: 15 % of the
 // character's height in bare neck. The head looked stuck on with a stick. (And the shirt on top
 // closed to a POINT at shoulder height, so the arms came out of the neck.)
 //
-// The fix keeps the head EXACTLY where it was —torso + neck + headR still gives
-// 0.48·CH— and raises the shoulders 0.10·CH, tucking them under the head:
+// The fix keeps the head EXACTLY where it was: torso + neck + headR still gives
+// 0.48·CH, and raises the shoulders 0.10·CH, tucking them under the head:
 // The gap is split across THREE small moves instead of one big one, because each has its
 // cost: raising the shoulder shortens the punch's extension (the hand is fixed), lowering the head
 // moves its hurtbox, and enlarging it changes the silhouette.
@@ -765,7 +771,7 @@ const POSES = {
   idle:    P({ torso: 0.06, head: 0.04, aLu: 0.22, aLl: 2.55, aRu: 0.50, aRl: 2.15, lLu: -0.22, lLl: -0.18, lRu: 0.2, lRl: -0.28, dy: 0.025 }),
   // Fighting guard (this is not the block): more compact than idle, knees loaded, the front
   // hand high and the back one at the chin. It is blended with idle by how close the opponent is
-  // and CFG.anim.bounce*'s bounce runs on top — which is why it does not look like a mannequin.
+  // and CFG.anim.bounce*'s bounce runs on top, which is why it does not look like a mannequin.
   // CAREFUL: the difference from idle is almost entirely in the ARMS on purpose. The hurtboxes come
   // from renderPts, so lowering the head or the pelvis in the guard would be giving away (or stealing)
   // centimetres of target. Measured: the head ends up ~6 px lower and ~4 px further forward than in
@@ -790,7 +796,7 @@ const POSES = {
   // Jump IMPULSE pose: arms up/back (aLu/aRu well negative), the body stretched,
   // the legs almost straight. Used during the first ~0.15s after take-off → a "pop" feel.
   jumpPop: P({ torso: -0.04, head: -0.10, aLu: -2.05, aLl: 0.55, aRu: -2.25, aRl: 0.62, lLu: 0.08, lLl: -0.15, lRu: 0.12, lRl: -0.20, dy: -0.06, chest: -0.2 }),
-  // ROLL pose: a compact body (a ball). Everything folded fully — arms wrapped, knees to chest,
+  // ROLL pose: a compact body (a ball). Everything folded fully: arms wrapped, knees to chest,
   // a high dy (low to the ground). The visual spin comes from `f.rot` in the ROLL state.
   // With the single-bone torso this could never be a ball: the pelvis→head distance
   // was fixed. With the split spine, `chest` really closes the body.
@@ -806,7 +812,7 @@ const POSES = {
   getup:   P({ torso: 0.55, head: 0.15, aLu: 0.5, aLl: 1.2, aRu: 0.8, aRl: 1.0, lLu: -0.45, lLl: -1.7, lRu: 0.6, lRl: -1.85, dy: 0.26, chest: 0.34 }),
 };
 
-// ════════════════ MOVES: pure data — partial poses + frame data ════════════════
+// ════════════════ MOVES: pure data; partial poses + frame data ════════════════
 // poses: [{p, at (s, absolute), ease}] · startup/active/recovery in s · kb in S · joint masks
 // limb: the striking point (a swept capsule limbPrev→limb) · strike: the limb's joints that strike
 //
@@ -820,7 +826,7 @@ const POSES = {
 //   1. ANTICIPATION keys at `at <= startup - 0.033` (2 frames of cushion at 60 Hz): they fall
 //      outside the active window AND outside the first active frame's swept capsule.
 //   2. "PIN" keys at the middle and end of the active window with the EXACT values of the old curve
-//      (measured with the headless probe) — from the pin on, the recovery is free territory.
+//      (measured with the headless probe), from the pin on, the recovery is free territory.
 // So that a chained combo does NOT wind up from scratch again, the chaining does NOT touch the keytrack
 // (that would move the first active frame's swept capsule): it loosens the springs' half-life
 // during the startup (`atkChained` in springs()). The body passes through the wind-up and still reaches
@@ -874,7 +880,7 @@ const MOVES = {
     fw: { rear: -0.040, front: 0.048, heel: 0.046 }, drive: { sink: 0.030, rise: 0.024, twB: -0.16, twF: 0.13 },
   },
   hook: {
-    // A horizontal hook (right hand) — a fast variant of the uppercut, with a slightly lateral kb.
+    // A horizontal hook (right hand), a fast variant of the uppercut, with a slightly lateral kb.
     // The torso rotates back to load and releases across. It chains into the uppercut (a finish) or the spinkick.
     // The front foot pivots with the turn (fw.front) and the back one pushes: it is a rotational strike.
     poses: [
@@ -947,7 +953,7 @@ const MOVES = {
     fw: { rear: -0.030, front: 0, heel: 0.0 }, drive: { sink: 0.046, rise: 0.030, twB: 0.12, twF: -0.10 },
   },
   spinkick: {
-    // Spinning kick — a combo finisher. The torso rotates 180° to load and releases sideways.
+    // Spinning kick: a combo finisher. The torso rotates 180° to load and releases sideways.
     // Lots of damage, a big horizontal KB, extra reach. It comes as a finish from: hook (K), uppercut
     // (K), roundhouse (K), or straight from dash+kick.
     // The coil is the tell: arms crossed at the chest and the shoulder forward BEFORE opening.
@@ -990,7 +996,7 @@ const MOVES = {
       { p: { torso: 0.15, aRu: -0.5, aRl: 0.5, aLu: 0.6, aLl: 0.8, lRu: 0.74, lRl: -2.46, lLu: 0.50, lLl: -1.55, chest: 0.16 }, at: 0.045, ease: easeOutCubic },   // CHAMBER: knee to the chest
       { p: { torso: 0.3, head: 0.1, aRu: -0.7, aRl: 0.4, aLu: 0.8, aLl: 0.5, lRu: 1.15, lRl: -0.12, lLu: 0.55, lLl: -1.6, chest: 0.1 }, at: 0.08, ease: easeOutCubic },
       // The airkick's active window lasts 0.15 s: splitting the foot's arc into sections would change its
-      // shape. With the PER-CHANNEL sampler that is not needed — these keys do not mention lRu/lRl, so
+      // shape. With the PER-CHANNEL sampler that is not needed: these keys do not mention lRu/lRl, so
       // the striking leg keeps its original 0.08→0.3 curve intact.
       { p: { torso: 0.34, head: 0.15, aRu: -0.86, aRl: 0.38, aLu: 0.92, aLl: 0.45, lLu: 0.6, lLl: -1.72, chest: 0.15 }, at: 0.155 },
       { p: { torso: 0.22, head: 0.08, aRu: -0.55, aRl: 0.45, aLu: 0.7, aLl: 0.6, lLu: 0.45, lLl: -1.4, chest: 0.22 }, at: 0.23 },
@@ -1096,7 +1102,7 @@ class Fighter {
     this.x = x; this.y = 0; this.vx = 0; this.vy = 0; this.facing = 1;
     this.color = color; this.colorDark = colorDark;
     this.input = input; this.prevIn = { jump: false, punch: false, kick: false };
-    this.buffer = [];                        // {act, dir, t} — 160 ms of grace for everything
+    this.buffer = [];                        // {act, dir, t}: 160 ms of grace for everything
     this.state = ST.IDLE; this.stateT = 0; this.T = rnd(0, 9);       // T = the breathing clock (offset per fighter)
     this.grounded = true; this.surf = null; this.coyoteT = 0; this.dropT = 0;
     this.atk = null; this.atkClock = 0; this.atkHit = false; this.atkBlocked = false; this.atkPose0 = new Float64Array(NJ);
@@ -1187,7 +1193,7 @@ class Fighter {
     const i = this.input, foe = this.foe;
     const canAct = ACT_STATES.includes(this.state);
     // facing: NEAR an enemy you face them (this lets you block while walking backwards);
-    // far away, the body points where you are moving (a sandbox rule — it used to get stuck with no foe)
+    // far away, the body points where you are moving (a sandbox rule: it used to get stuck with no foe)
     if (canAct) this.updateFacing(i, foe);
     switch (this.state) {
       case ST.IDLE: case ST.RUN: case ST.SKID: {
@@ -1219,7 +1225,7 @@ class Fighter {
       }
       case ST.ROLL: {
         // The spin is no longer an even smoothstep (a clock hand): it takes a while to start while the
-        // body tucks, spins hard in the middle and CLOSES before the end — the last 8%
+        // body tucks, spins hard in the middle and CLOSES before the end: the last 8%
         // are for unfolding onto your feet (rollPose does the pose's part).
         const u = clamp(this.stateT / 0.38, 0, 1);
         this.rot = TAU * easeInOutCubic(clamp((u - 0.10) / 0.82, 0, 1));
@@ -1349,7 +1355,7 @@ class Fighter {
   tryGroundActions() {
     const i = this.input;
     // dash (a double-tap of the stick / Shift). With a cooldown: if dashCdT > 0, the input is consumed
-    // anyway (so buffers do not pile up) but it does not start — feedback: silence.
+    // anyway (so buffers do not pile up) but it does not start: feedback: silence.
     const d = this.consume('dash');
     if (d && d.dir) {
       if (this.dashCdT > 0) return false;                             // on cooldown
@@ -1449,7 +1455,7 @@ class Fighter {
       // Air control with a CAP: accel used to be added with no cap → if you held left/right in the air, the
       // speed grew without limit and it looked odd. Now we respect the same cap as on the ground,
       // multiplied by softCap (the air is a touch slower). We still let it grow if you come in with
-      // run-up (an aerial dash, a launch) — only a gentle drag until it comes down to the cap.
+      // run-up (an aerial dash, a launch), only a gentle drag until it comes down to the cap.
       const airMax = mv.softCap * mv.maxRun * S;
       const want = clamp(i.mx, -1, 1);
       if (want !== 0) {
@@ -1465,7 +1471,7 @@ class Fighter {
     }
 
     // ── root-motion envelopes (dash / strikes): a smooth twin, zero jerk at the edges ──
-    // CAREFUL: the envelope is an instantaneous VELOCITY — it is added in the integration, not to vx (it would accumulate)
+    // CAREFUL: the envelope is an instantaneous VELOCITY; it is added in the integration, not to vx (it would accumulate)
     let rootVx = 0;
     if (this.state === ST.DASH) this.vx = lungeVel(this.stateT, CFG.dash.wind, CFG.dash.time, CFG.dash.dist * S) * this.lastDashDir;
     if (this.state === ST.ATTACK && this.atk.root && this.grounded)
@@ -1788,7 +1794,7 @@ class Fighter {
     }
     const spd = Math.abs(this.vx) / (CFG.move.maxRun * S);
     // CAREFUL with `quiet`: the PUNCHES' mask does not include dy, so whatever the base puts on the
-    // pelvis leaks into the strike — and moving the pelvis moves the shoulder, i.e. the REACH. During
+    // pelvis leaks into the strike, and moving the pelvis moves the shoulder, i.e. the REACH. During
     // a strike the base runs with no life layer (dy exactly that of POSES.idle, as it always was);
     // the guard bounce and the noise come back as soon as it ends.
     if (spd < 0.12) this.idlePose(tp, this.state === ST.ATTACK); else this.runCycle(tp, spd);
@@ -1800,7 +1806,7 @@ class Fighter {
   // leaning. Now the ARMS register the impact: they come loose towards the strike's side, open
   // and close back over the body while recovering, with a short vibration on top.
   // The arms are NOT a hurtbox (see hurtboxes(): the head, pelvis→neck and pelvis→feet), so
-  // this pose does not move a single pixel of damage box — the punishment and the combos are the same.
+  // this pose does not move a single pixel of damage box: the punishment and the combos are the same.
   // The torso, the head and the legs are still handled by the flinch, unchanged.
   hurtPose(tp) {
     tp.set(POSES.idle);
@@ -1872,7 +1878,7 @@ class Fighter {
   // The arms come out of the gait's phase in counter-phase (right arm forward with the left
   // leg forward), the forearm arrives late (overlapping action), the torso
   // leans with the speed and sways at twice the frequency, and the head compensates for that
-  // sway to stay level — which is what makes it read as a person running.
+  // sway to stay level, which is what makes it read as a person running.
   runCycle(tp, spd) {
     const r = CFG.run, ph = TAU * this.gaitPhase;
     const sN = clamp((spd - 0.1) / 0.9, 0, 1);                        // 0 = a walk, 1 = a sprint
@@ -1898,7 +1904,7 @@ class Fighter {
     const swA = (r.armA + r.armASpd * sN + 0.10 * accN) * dirN;
     tp[J.aRu] = r.armC + swA * c - tor;
     tp[J.aLu] = r.armC - swA * c - tor;
-    // elbow: well flexed and with a phase lag — the hand travels from the hip to the chest
+    // elbow: well flexed and with a phase lag; the hand travels from the hip to the chest
     const elbC = r.elbC + r.elbCSpd * sN, elbA = r.elbA + r.elbASpd * sN;
     tp[J.aRl] = elbC + elbA * cl;
     tp[J.aLl] = elbC - elbA * cl;
@@ -2038,7 +2044,7 @@ class Fighter {
       const m = this.atk, t = this.atkClock;
       const phase = t < m.startup ? 0 : t < m.startup + m.active ? 1 : 2;
       // CHAINED: in the wind-up of a strike that comes out of another one the half-life is loosened, so the
-      // body passes through the loading pose instead of reloading from scratch — the combo
+      // body passes through the loading pose instead of reloading from scratch: the combo
       // reads as a sequence and not as three separate poses. It touches ONLY the render skeleton:
       // the frame data comes from targetPose, and hStrike pins the limb again at contact.
       const hAtk = phase === 0 ? sp.hAtkStart * (this.atkChained ? 2.4 : 1)
@@ -2107,7 +2113,7 @@ class Fighter {
     const gait = spd > 0.12 * CFG.move.maxRun * S && (this.state === ST.RUN || this.state === ST.IDLE);
     // Skid and dash: the feet do NOT plant in the world, they DRAG with the body on a wide base.
     // (planting them while the body leaves at 0.34·S is exactly what gave the spider-leg
-    // stretch Franco removed at the time — this is the opposite: zero planting, zero stretch)
+    // stretch Franco removed at the time: this is the opposite: zero planting, zero stretch)
     const slide = SLIDE_STATES.includes(this.state);
     const { half, duty, stepH } = this.strideParams(spdFrac);
     const dir = Math.sign(this.vx) || this.facing;
@@ -2299,7 +2305,7 @@ class Fighter {
         }
         relaxPair(r.pts, P_.pelvis, P_.head, r.stiffRest, 0.35);      // semi-rigid anti-folding
         // floor + walls by projection with friction; each part rests at ITS height
-        // (the head on its radius, the rest on the stroke's thickness) — without this the body ends up flat
+        // (the head on its radius, the rest on the stroke's thickness), without this the body ends up flat
         for (let p2 = 0; p2 < NP; p2++) {
           const ix = p2 * 2, iy = ix + 1;
           const rest = p2 === P_.head ? B.headR * 0.9
@@ -2469,7 +2475,7 @@ function resolveCombat(att, def) {
   def.atk = null;
 }
 
-// ════════════════ EFFECTS (ink specks — nothing additive: over light paper 'lighter' washes out) ════════════════
+// ════════════════ EFFECTS (ink specks: nothing additive: over light paper 'lighter' washes out) ════════════════
 const sparks = [], dusts = [], dmgNums = [], smears = [], ghosts = [], hitArcs = [];
 const SMEAR_T = 0.18, HITARC_T = 0.22;
 // an impact arc at the contact point: it opens in the strike's direction and fades
@@ -2610,7 +2616,7 @@ function drawStick(f, pts, alpha) {
   ctx.strokeStyle = ink; ctx.fillStyle = ink;
   seg(pts, P_.pelvis, P_.chest, wT); seg(pts, P_.chest, P_.neck, wT);   // the spine in two stretches
   // Shirt (a coloured patch from the shoulders down to the pelvis). It is drawn AFTER the spine
-  // so it covers nearly all of it; the trousers' seat goes over it at the bottom — it reads as a waist.
+  // so it covers nearly all of it; the trousers' seat goes over it at the bottom: it reads as a waist.
   {
     const plx = pts[P_.pelvis * 2],     ply = pts[P_.pelvis * 2 + 1];
     const chx = pts[P_.chest * 2],      chy = pts[P_.chest * 2 + 1];
@@ -2698,7 +2704,7 @@ function drawStick(f, pts, alpha) {
   ctx.globalAlpha = 1;
 }
 
-// Hair styles — each fighter has f.hairStyle ∈ {'plain','spiky','ponytail','mohawk','bald'}
+// Hair styles: each fighter has f.hairStyle ∈ {'plain','spiky','ponytail','mohawk','bald'}
 // (or `f.hair` as a legacy truthy → 'plain'). The hair is combed by the speed to give it life.
 function drawHair(f, hx, hy, ink) {
   const style = f.hairStyle || (f.hair ? 'plain' : null);
@@ -2903,7 +2909,7 @@ function alcanceCayendo(drop) {
 
 // ── DIFFICULTY STAGES ────────────────────────────────────────────────────────────────
 // A level's difficulty is STRUCTURAL: it does not change anyone's damage, health, speed or
-// brain. What changes is the SHAPE of the terrain — which patterns can come up, how many
+// brain. What changes is the SHAPE of the terrain, which patterns can come up, how many
 // runs the level has, how big each platform is and how far you have to jump between them.
 //   · Early     ramps and wide bridges; everything is crossed walking or with a comfortable jump
 //   · Mid       parallel routes, overlapping platforms and forks appear
@@ -2914,7 +2920,7 @@ function alcanceCayendo(drop) {
 //   `wK`    how much surface each platform has (measured: a median width of 297 → 231 px)
 //   `gap`   how far you have to jump from one run to the next
 //   `torre` how many steps the exit tower has
-// `secs` is NOT a lever: measured, the arena's width (8000 px) cuts in before the counter does —
+// `secs` is NOT a lever: measured, the arena's width (8000 px) cuts in before the counter does,
 // with secs = 7 the generator truncated silently and EXPERT came out SHORTER than ADVANCED. It is set
 // high on purpose so the level always fills the arena and its length does not depend on the stage.
 const ETAPAS = [
@@ -3139,7 +3145,7 @@ function xLibre(x, y) {
 }
 // Is there ANY clean trajectory from A to B dodging the blocks? It models what
 // anyone does with air control: GO UP, cross over the top and COME DOWN. Sampling a single parabola
-// with a linear horizontal advance rejected perfectly possible jumps — going up almost vertically
+// with a linear horizontal advance rejected perfectly possible jumps: going up almost vertically
 // against the wall and slipping in at the end is exactly how you climb onto a ledge beside you.
 function tramoLibre(ax, ay, bx, by) {
   for (let k = 0; k <= 16; k++) {
@@ -3333,7 +3339,7 @@ function buildLevel(seed, nivel) {
           // MERGING IS CLOSING THE GAP, not just discounting it from the floor. If it only skipped the
           // run here, an enterable slot was left with no surface inside it: you fell in, the safety
           // net hooked you to `surfs[0]` (which you are not standing on) and you bounced forever.
-          // The previous block —and its top, which is the walkable surf— is stretched until it touches the
+          // The previous block, and its top, which is the walkable surf, is stretched until it touches the
           // next one. The jump does not change: the graph already counted them as one mass.
           const izq = u.blq;
           if (b.x > izq.x + izq.w) { izq.w = b.x - izq.x; if (izq.top) izq.top.w = izq.w; }
@@ -3405,7 +3411,7 @@ const PAPER = '#eee3d4', PAPER_DARK = 'rgba(196,163,152,0.4)';
 const ROCK = '#a9b9ce', ROCK_DARK = '#8ba0ba', ROCK_LIGHT = '#dbe6f2', INK = '#221e1b';
 let bgCanvas = null, terrainCanvas = null, bgK = 1, terrK = 1;
 const BG_W = ARENA.w + 1200, BG_H = 2200, BG_X0 = -600, BG_Y0 = ARENA.floorY - 1900;
-// giant leaf shadows over the paper (a slow parallax) — lens shapes with points
+// giant leaf shadows over the paper (a slow parallax), lens shapes with points
 function bakeBg() {
   bgK = Math.min(0.6, Math.sqrt(2.0e6 / (BG_W * BG_H)));
   if (!bgCanvas) bgCanvas = document.createElement('canvas');
@@ -3632,7 +3638,7 @@ const game = {
   paused: false, mode: 'sandbox',
 };
 // `snd` picks the banner's voice. By default the RISING celebration pair, which is what a
-// banner almost always means — except when it announces that you went down. `setBanner` used to call
+// banner almost always means: except when it announces that you went down. `setBanner` used to call
 // `sfx.banner()` unconditionally and `onKO` uses it for the player's death: dying sounded
 // exactly like winning.
 function setBanner(txt, life, col, sub, snd) { game.banner = txt; game.bannerT = 0; game.bannerLife = life; game.bannerCol = col || INK; game.bannerSub = sub || ''; (snd === null ? 0 : (snd || sfx.banner)()); }
@@ -3729,8 +3735,8 @@ function siguienteNivel() {
   P1.hp = Math.min(CFG.fight.hp, P1.hp + Math.round(CFG.fight.hp * 0.45));
   hud.chip = hud.hpPrev = P1.hp;
   const E = ARENA.etapa;
-  if (E !== antes) setBanner('ETAPA ' + E.n, 1.6, '#8e44ad', 'nivel ' + game.nivel);
-  else setBanner('NIVEL ' + game.nivel, 1.1, '#e2781e', 'etapa ' + E.n);
+  if (E !== antes) setBanner('STAGE ' + E.n, 1.6, '#8e44ad', 'level ' + game.nivel);
+  else setBanner('LEVEL ' + game.nivel, 1.1, '#e2781e', 'stage ' + E.n);
 }
 function onKO(att, def) {
   if (def === P1) {
@@ -3760,7 +3766,7 @@ function stepGameFlow(dt) {
       if (P1.grounded && Math.abs(P1.x - ARENA.exit.x) < 70 && Math.abs(ARENA.exit.y - P1.y - STAND) < 60) {
         // THE EXIT DOES NOT OPEN UNTIL EVERYONE IS DOWN. It used to look only at the position, so the
         // level could be closed with K.O. 0/5 by dodging everyone: the enemies became
-        // scenery. The counter already existed and it already celebrated on reaching zero — the only thing
+        // scenery. The counter already existed and it already celebrated on reaching zero: the only thing
         // missing was for the door to take notice.
         const faltan = game.totalEnem - game.kos;
         if (faltan > 0) {
@@ -3828,7 +3834,7 @@ document.getElementById('btnReset').addEventListener('pointerdown', e => { e.pre
 // ════════════════ AI: one BRAIN per enemy, writing the same input struct as the stick ════════════════
 // Honest perception: it reads a snapshot of the player from reactionMs ago (never the current state).
 const ARCHS = [
-  { name: 'PELEADOR', pref: 1.05, aggr: 0.55, reactMul: 1.0, blockP: 0.55, comboDrop: 0.30, kickBias: 0.42, jumpy: 0.3, feint: 0.15 },
+  { name: 'BRAWLER', pref: 1.05, aggr: 0.55, reactMul: 1.0, blockP: 0.55, comboDrop: 0.30, kickBias: 0.42, jumpy: 0.3, feint: 0.15 },
   { name: 'BRUISER', pref: 0.8, aggr: 0.82, reactMul: 1.15, blockP: 0.30, comboDrop: 0.24, kickBias: 0.62, jumpy: 0.18, feint: 0.07 },
   { name: 'TECHNICIAN', pref: 1.35, aggr: 0.42, reactMul: 0.9, blockP: 0.80, comboDrop: 0.18, kickBias: 0.36, jumpy: 0.25, feint: 0.25 },
   { name: 'ACROBAT', pref: 1.1, aggr: 0.6, reactMul: 1.0, blockP: 0.45, comboDrop: 0.34, kickBias: 0.55, jumpy: 0.85, feint: 0.12 },
@@ -3854,7 +3860,7 @@ function aiPress(br, k, dur) { br.hold[k] = Math.max(br.hold[k], dur || 0.06); }
 // style: the acrobat dares to jump sooner, the technical one lines up better.
 //
 // The problem it fixes (measured before touching anything): with the player three platforms up,
-// 0 of 4 enemies got there and all 4 stood literally STILL — the aggro required
+// 0 of 4 enemies got there and all 4 stood literally STILL: the aggro required
 // |Δy| < 2.2·CH even to latch on, so they did not even try.
 function navSurfOf(f) {
   if (f.grounded && f.surf && f.surf.i !== undefined) return f.surf.i;
@@ -4057,7 +4063,7 @@ function aiThink(me, dt) {
     if (Math.random() < br.arch.aggr * 0.4 && gap < kickReach) aiPress(br, Math.random() < 0.5 ? 'punch' : 'kick');
     return;
   }
-  // (The old CHASE —walking and jumping blindly if the player was above— was replaced by
+  // (The old CHASE, walking and jumping blindly if the player was above, was replaced by
   //  aiNavegar(), which does know the way up. The camping counter is kept so that a player
   //  who stays at the very top still pushes the AI to keep trying.)
   if (foe.y < me.y - 0.6 * CH && foe.grounded) br.campT += br.tick; else br.campT = 0;
@@ -4312,11 +4318,11 @@ function loop(now) {
     ctx.fillStyle = 'rgba(238,227,212,0.6)'; ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = '900 ' + (0.09 * H).toFixed(0) + 'px system-ui,sans-serif';
-    ctx.fillStyle = INK; ctx.fillText('PAUSA', W / 2, H / 2);
+    ctx.fillStyle = INK; ctx.fillText('PAUSED', W / 2, H / 2);
   }
   moveStick.idle(IS_TOUCH && inPlay && !game.paused);
 }
-// a tap to skip the level-complete screen — at window level (the touch zones cover the canvas)
+// a tap to skip the level-complete screen, at window level (the touch zones cover the canvas)
 window.addEventListener('pointerdown', () => { if (game.state === 'win' && game.t > 1) showMenu(); });
 
 resize();

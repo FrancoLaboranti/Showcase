@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -16,7 +16,7 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Segoe UI', system-ui, sans-serif;
   }
-  /* Canvas occupies only the space ABOVE the bar — physics walls are sized to this rect, so balls
+  /* Canvas occupies only the space ABOVE the bar: physics walls are sized to this rect, so balls
      can't fall behind the buttons. Dimensions are set explicitly from JS each resize. */
   #c {
     display: block; position: absolute;
@@ -121,11 +121,11 @@
     </button>
   </div>
 
-  <!-- Physics. Vendored locally (matter-js 0.19.0) — it stops a hiccup of the CDN leaving the game unable to start. -->
+  <!-- Physics. Vendored locally (matter-js 0.19.0), it stops a hiccup of the CDN leaving the game unable to start. -->
   <script src="matter.min.js"></script>
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  MINIBALLS — web port of the pygame sandbox, with the baked marbles from
+  //  MINIBALLS: web port of the pygame sandbox, with the baked marbles from
   //  BallsWeb. The "trim" variant: small balls ALL the same size, up to
   //  300, no sound. Multi-touch: each finger grabs and throws its own ball.
   //  Patterns EXCLUSIVE to MiniBalls (not in Balls): rings, checker,
@@ -142,7 +142,7 @@
   const BALL_WALL_RESTITUTION = 0.97;  // ball↔wall almost lossless → they bounce high off the floor/walls
   const BALL_FRICTION    = 0.1;
   const BALL_FRICTION_AIR= 0.002;      // less air friction → they keep their energy and go on bouncing
-  const R_FRAC           = 0.014;    // radius = R_FRAC·(W+H)/2 — a port of sper(); ALL balls the same. Raised from 0.01 so the patterns read.
+  const R_FRAC           = 0.014;    // radius = R_FRAC·(W+H)/2: a port of sper(); ALL balls the same. Raised from 0.01 so the patterns read.
   const COLLISION_RADIUS_MULT = 1.03;
   const BALL_ALPHA       = 0.7;      // body translucency (coloured sphere + under-glow); the hotspot stays opaque
   const PATTERN_ALPHA    = 1;        // translucency of the pattern overlay
@@ -167,7 +167,7 @@
   const SHAKE_THRESHOLD  = 22;
   const SHAKE_COOLDOWN_MS= 600;
 
-  // Sound — real marble samples (sounds/), the same system as BallsWeb.
+  // Sound: real marble samples (sounds/), the same system as BallsWeb.
   const SND_MAX_PER_FRAME = 1;       // cap on sounds per frame so it does not saturate when several fall together
   const PITCH_JITTER     = 0.06;     // ± random on playbackRate, makes the sample repetition sound natural
   // Thresholds in matter velocity units (px/step, ~×60 = px/s).
@@ -329,7 +329,7 @@
     }
     m.closePath(); m.fill();
   }
-  // wavy: wavy meridians — like stripesSphere but the centre of each band does a sinusoidal
+  // wavy: wavy meridians; like stripesSphere but the centre of each band does a sinusoidal
   // shimmy along the latitude, giving wavy bands that wrap the sphere.
   function wavySphere(m, r, n, amp) {
     const phiStep = Math.PI/n, halfW = phiStep*0.5*0.45;
@@ -442,7 +442,7 @@
     const color = hsv255(hue, rnd(0.95, 1.0), rnd(0.95, 1.0));
     const e = { color, targetR: ballR, visR: 1, x, y, angle: 0, state: 'growing' };
 
-    // style — includes the ones inherited from Balls + the 4 new MiniBalls ones
+    // style: includes the ones inherited from Balls + the 4 new MiniBalls ones
     const sr = Math.random();
     if      (sr < 0.10) { e.style='striped_sphere';  e.styleAngle=rnd(0,Math.PI); e.n=ri(3,7); }
     else if (sr < 0.20) { e.style='striped_diamond'; e.styleAngle=rnd(0,Math.PI); e.n=ri(5,8); }
@@ -955,7 +955,7 @@
 
   // ── Diagnostics: it lives INSIDE the info panel ──
   // It used to be a monospaced card drawn on the canvas, separate from the panel. Now it is one
-  // more section: a single card for everything informational. It is written ONLY with the panel open —
+  // more section: a single card for everything informational. It is written ONLY with the panel open:
   // touching the DOM every frame with the panel closed is wasted work.
   // The node is looked up LAZILY, not at parse time. The main script runs BEFORE
   // `#infoPanel` exists (it is further down the document), so a `getElementById` on the line
@@ -986,7 +986,7 @@
     const lh = 18, padX = 8, padY = 8;
     const statsW = 130;
 
-    // Top-10 speeds — bar chart (a port of the Balls overlay). Matter gives velocity per step;
+    // Top-10 speeds: bar chart (a port of the Balls overlay). Matter gives velocity per step;
     // ×60 to show something close to px/s (assuming 60fps), as in Balls.
     const top = liveBalls
       .map(e => ({ e, sp: Math.hypot(e.body.velocity.x, e.body.velocity.y) }))
@@ -1052,7 +1052,7 @@ Marbles again, but by the hundred and tiny: the toy stops being one marble and b
   <li><b>Drag a marble</b> and let go to throw it.</li>
   <li><b>Q</b> pins the one you are holding, same as <span class="ik"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 3h8v1.5h-1.5v5l2.5 3.5v1h-5v6.5l-1 1-1-1v-6.5h-5v-1l2.5-3.5v-5H8z"/></svg></span> <b>Pin</b>. <b>Space</b> makes them all jump,
       same as <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 11l6-6 6 6"/></svg></span> <b>Jump</b>.</li>
-  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg></span> <b>Add a ball</b> / <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 12h12"/></svg></span> <b>Remove a ball</b>, <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg></span> <b>Wall mode</b> and <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span> <b>Restart</b> in the bar.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg></span> <b>Add a ball</b> / <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 12h12"/></svg></span> <b>Remove a ball</b>, <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg></span> <b>Wall mode</b> (closed, no sides, no ceiling or floor, none at all) and <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span> <b>Restart</b> in the bar.</li>
 </ul>
 <h5>Mobile</h5>
 <ul>
@@ -1081,7 +1081,7 @@ Marbles again, but by the hundred and tiny: the toy stops being one marble and b
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

@@ -6,10 +6,10 @@ Tron light-cycle game for 1–4 players (mix of humans + AI). Each player leaves
 
 ## Controls (per player)
 
-- **Player 1** — `LEFT` / `DOWN`
-- **Player 2** — `Q` / `W`
-- **Player 3** — `O` / `P`
-- **Player 4** — `V` / `B`
+- **Player 1**: `LEFT` / `DOWN`
+- **Player 2**: `Q` / `W`
+- **Player 3**: `O` / `P`
+- **Player 4**: `V` / `B`
 
 Each player has two keys (left-turn / right-turn), not four directions. The `directions` dict maps direction id → `[dx150, dy150, dx2, dy2, scoutDx, scoutDy]`, which is used both for movement and for AI lookahead.
 
@@ -22,7 +22,7 @@ See [../CLAUDE.md](../CLAUDE.md) for the shared sprite/main-loop pattern.
 
 ## AUDIO (2026-09-22)
 
-**Light cycles.** One continuous engine per session — two sawtooths detuned by 7 cents plus a third
+**Light cycles.** One continuous engine per session: two sawtooths detuned by 7 cents plus a third
 at half frequency standing for the SWARM of living AIs, all through a resonant lowpass.
 
 **The engine turns into sound a number the game ALREADY computes for the AI**: `clearDist`, how much
@@ -39,7 +39,7 @@ Stacking the two turns the ending into a collision of two jingles and neither re
 ### The bug it had
 
 `audioResume()` was **defined and never called**. No gesture hooked it, so the `AudioContext` was
-never created and the game was mute no matter what — measured with the harness: zero contexts. And
+never created and the game was mute no matter what: measured with the harness: zero contexts. And
 since `buildEngine()` lives inside `audioResume`, the entire engine
 (`buildEngine`/`engineUpdate`/`engineOff`) was dead code: none of the three was ever called. Also
 missing were the per-frame ceiling reset, the three round/set call sites, the mute button handler and

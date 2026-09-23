@@ -20,7 +20,7 @@ the Arcade (`landscape`).
   - `renderPts` = FK of `poseCur` (critically damped springs per joint) + leg IK + ragdoll blend →
     **drawing and hurtboxes** (dodging by moving really does dodge).
 - **Pose in 3 layers** (`buildPose`): (a) base locomotion computed from the movement (lean by
-  acceleration + lean by velocity, air poses by vy — the Fancy Pants law: animation is COMPUTED, not
+  acceleration + lean by velocity, air poses by vy: the Fancy Pants law: animation is COMPUTED, not
   played back); (b) the attack keytrack, a masked overwrite with weight; (c) additives (flinch,
   landing squash, breathing).
 
@@ -39,7 +39,7 @@ For what is bound there are three resources, all verified with the headless prob
 
 1. **Anticipation** keys at `at <= startup − 0.033` (2 frames of cushion at 60 Hz): they fall outside
    the active window *and* outside the swept capsule of the first active frame (which looks at the
-   PREVIOUS frame's pose — hence the cushion, otherwise the sweep gets longer and the strike reaches
+   PREVIOUS frame's pose: hence the cushion, otherwise the sweep gets longer and the strike reaches
    further).
 2. **PIN** keys at the middle and end of the active window carrying the exact values of the old curve
    (`probe_moves.js` prints them); from the pin on, the recovery is free territory.
@@ -48,10 +48,10 @@ For what is bound there are three resources, all verified with the headless prob
 
 Watch out for a silent fourth route: the **base layer** leaks into the joints the mask does not cover.
 `MASK_PUNCH` does not include `dy`, so anything the base puts on the pelvis moves the shoulder and
-with it the reach — which is why `baseLoco` uses `idlePose(tp, quiet)` during a strike (no guard
+with it the reach, which is why `baseLoco` uses `idlePose(tp, quiet)` during a strike (no guard
 bounce, no noise, `dy` exactly that of `POSES.idle`, as it always was).
 
-### Why the strikes felt short (2026-09-21) — measure the TRAVEL, not the reach
+### Why the strikes felt short (2026-09-21), measure the TRAVEL, not the reach
 
 A strike reads as big by how far the limb TRAVELS, not by where it ends up. Measured with the probe:
 the arm is 76 px long and in the old wind-up the hand sat **46 px from the shoulder, i.e. 63 % already
@@ -73,7 +73,7 @@ Fix: hands at the chin (25-36 px) and real chambers (foot at ~30 px). Measured r
 
 **What makes this NOT a change of reach**: the contact point and the frame data are untouched. Folding
 the wind-up further lengthens the swept capsule of the first active frame *towards the body* (7-21 px),
-never outwards — and that zone was already covered by the radius (`hitR` + hurt ≈ 46 px) of the contact
+never outwards, and that zone was already covered by the radius (`hitR` + hurt ≈ 46 px) of the contact
 frame's capsule, so it enables no new hit. The probe measures the two directions separately:
 **`+REACH` (outward growth) ≤ +0.13 px across the 11 moves**.
 
@@ -102,7 +102,7 @@ which are in no hitbox chain:
 - `runCycle()` computes the whole cycle from the gait phase: contralateral arms, forearm with lag
   (`elbLag` = overlapping action), torso sway at twice the frequency, head that levels itself.
   **`CFG.run.armC/armA` are in WORLD angle**: the arms are children of the torso, so its lean is
-  subtracted (`- tor`). Authoring them relative was exactly what gave the runner "carrying a tray" —
+  subtracted (`- tor`). Authoring them relative was exactly what gave the runner "carrying a tray":
   the more it leaned, the further forward its arms went.
 - The **slide** branch of `feetIK` (`SLIDE_STATES` = skid and dash): the feet do NOT plant, they drag
   with the body in a wide base. Planting them while the body leaves at 0.34·S is exactly what gave the
@@ -119,10 +119,10 @@ which are in no hitbox chain:
   ended up ABOVE the pelvis. Also careful: getting up from a knockdown needs an explicit
   `replantFeet()`.
 - **Procedural gait cycle** (`strideParams` + the `gait` branch of `feetIK`, tunable in `CFG.gait`):
-  each leg alternates STANCE (the foot stays NAILED in the world — the phase advances by distance with
+  each leg alternates STANCE (the foot stays NAILED in the world: the phase advances by distance with
   cycle = `2·half/duty`, so the derivative of the foot in stance is exactly 0 → zero skating) and SWING
   (a `sin(π·u)` arc with the knee forward via IK). Stride/duty/height scale with speed. There used to
-  be a "replant by stretch" system that looked like spider legs — do not go back to that. `feetIK` runs
+  be a "replant by stretch" system that looked like spider legs: do not go back to that. `feetIK` runs
   ALSO with dt=0 (hitstop freeze): otherwise the legs snap to the raw FK pose.
 - **The spring half-life table is the "looseness" dial** (`CFG.spr`): the striking limb drops to
   `hStrike=0.02 s` during the active frames (it converges to the frame data exactly when it lands);
@@ -133,7 +133,7 @@ which are in no hitbox chain:
   the function falls into the usual fast path (no trigonometry).
 - **The keytrack sampler interpolates PER CHANNEL** (`sampleMove`): for each joint it looks for the
   previous and the next key *that define it*. Before, it picked one global "next key", so adding a key
-  for the head split the leg's segment — i.e. changed its trajectory, i.e. its hitbox. With independent
+  for the head split the leg's segment, i.e. changed its trajectory, i.e. its hitbox. With independent
   channels you can author a kick's upper body without grazing the foot's arc. With the old data it
   gives identical results (every key defined all of its bound joints).
 - **13 DOF** in a `Float64Array` (order in `J`), authored facing RIGHT; `facing` mirrors in the FK.
@@ -152,7 +152,7 @@ The gap was split across three small moves, because each one has its cost:
 | | before | now | cost |
 |---|---|---|---|
 | `B.torso` | 0.30 | **0.31** | raises the shoulder ⇒ raises the punches' impact point |
-| `B.neck` | 0.08 | **0.022** | — |
+| `B.neck` | 0.08 | **0.022** | - |
 | `B.headR` | 0.10 | **0.108** | moves the head's hurtbox |
 | `B.shoDrop` | 0.07 | **0.04** | raises the shoulder |
 | shoulder above pelvis | 0.23 | **0.27** | |
@@ -161,7 +161,7 @@ The gap was split across three small moves, because each one has its cost:
 Three more fixes, all of them drawing:
 
 1. **The shirt ends in a SHOULDER LINE** (`wSho = 0.088·CH`), not a point, with a conical silhouette
-   (`wChest 0.068`, `wWaist 0.046`), the waist raised to the hip and **corners rounded with `arcTo`** —
+   (`wChest 0.068`, `wWaist 0.046`), the waist raised to the hip and **corners rounded with `arcTo`**,
    with sharp vertices the back shoulder came out pointed every time the torso leaned, because the
    width is perpendicular to the spine.
 2. **The neck is drawn BEFORE the shirt.** Drawn after, its round cap bit into the neckline and left a
@@ -183,7 +183,7 @@ just as extended.
 #### The ONLY thing the proportion change moved in the combat
 
 The `probe_conecta.js` matrix, deterministic, 1430 cells, HEAD vs now: **21 different cells (8 gained,
-13 lost) — 1.5 %**. One step of the matrix is 0.055 CH ≈ 13.5 px.
+13 lost), 1.5 %**. One step of the matrix is 0.055 CH ≈ 13.5 px.
 
 | strike | target | max reach (CH) |
 |---|---|---|
@@ -214,7 +214,7 @@ is what felt like "it starts all at once".
 
 `buildPose` now crosses the target with a `smoothstep` from the last pose of the previous state
 (`CFG.anim.blendT = 0.075 s`): it arrives at the same place, in the same time, but with zero derivative
-at the start and at the end. **Never during an attack** — there `targetPose` IS the frame data, and the
+at the start and at the end. **Never during an attack**: there `targetPose` IS the frame data, and the
 probe confirms 0.000 px of difference. Measured afterwards: **maximum 0.46 rad** (−81 %).
 
 Two more things from the same batch:
@@ -223,7 +223,7 @@ Two more things from the same batch:
   changing direction the torso flipped its lean all at once (and with it the arms, which are authored
   in world angle). Now it crosses zero continuously.
 - **HITSTUN has its own pose** (`hurtPose`). It had no branch in `baseLoco`: it fell through to
-  `idlePose()` and the only record of the hit was the flinch layer. The ARMS now tell the impact — and
+  `idlePose()` and the only record of the hit was the flinch layer. The ARMS now tell the impact, and
   the arms are **not a hurtbox** (`hurtboxes()` uses the head, pelvis→neck and pelvis→feet), so it does
   not move a single pixel of damage box. HITSTUN also joined `IK_STATES` and **`SLIDE_STATES`**: before,
   the legs came out of pure FK and the feet travelled with the body while you were being pushed
@@ -233,7 +233,7 @@ Two more things from the same batch:
 ### Spine in two segments (2026-09-21)
 
 The torso was ONE rigid pelvis→neck bone and that ran into everything: the body could not hunch (the
-roll was never a ball — the pelvis→head distance was constant), the shoulders could not turn
+roll was never a ball: the pelvis→head distance was constant), the shoulders could not turn
 independently of the hip, and there was nothing to counterbalance with. Now:
 
 - A new point `P_.chest` (NP 13 → 14) at 42 % of the torso; `B.spineLo` + `B.spineUp` = `B.torso`, with
@@ -259,7 +259,7 @@ touching any animation. Each pose was migrated afterwards, one at a time.
 That is why the punches carry arm angles **re-solved by IK** at the contact key and at the pins: the
 desired `chest` is chosen and the arm is recomputed so the hand lands in the SAME position relative to
 the pelvis (`probe_retarget.js`, measured error 0.00000 px). The solution is analytic and forces the
-natural elbow side —`l = +acos(...)`, which in this rig is always positive— because choosing the branch
+natural elbow side, `l = +acos(...)`, which in this rig is always positive, because choosing the branch
 by proximity **inverted the joint** (tested: the elbow jumped 12 px to the other side). Since the total
 reach is fixed, advancing the shoulder forces the arm to shorten: hence the contact values are modest
 (the arm ends at 96-98 % extension) and the large rotation lives in the wind-up and the recovery, which
@@ -284,19 +284,19 @@ staying like a stick.
 seal). `footRoll()` in `drawStick` derives the angle from the shin and weighs it by how far the foot is
 off the ground: planted = flat, in flight or kicking = pointed. Zero degrees of freedom, zero points.
 Wrists and ankles were discarded as real DOF: with `cam.frac = 0.11` the figure is ~80 px on screen and
-a hand is 4 px — at that scale the only thing that reads is the SILHOUETTE.
+a hand is 4 px, at that scale the only thing that reads is the SILHOUETTE.
 - **`ik2(bendDir)` gotcha**: with the canvas's y-down, rotating +θ is visually CLOCKWISE → for the knee
   to point forward you have to pass `-facing` (the legs in `feetIK` already do). Passing `facing` gives
-  bird legs — it already happened and Franco spotted it immediately.
+  bird legs: it already happened and Franco spotted it immediately.
 - **`ik2Blend` blends the TARGET, never the solved points.** The average of two valid poses is not a
   valid pose: interpolating elbow and hand between the FK and the IK solution stretches the bones
   (measured 89 % error in the arm on releasing the ledge in a climb). By blending the target, the chain
   is solved once and the lengths stay exact by construction.
-- **Root motion of strikes/dash**: `lungeVel()` returns instantaneous VELOCITY — it is added in the
+- **Root motion of strikes/dash**: `lungeVel()` returns instantaneous VELOCITY; it is added in the
   integration (`x += (vx + rootVx)·dt`), **never** `vx +=` (it would accumulate and fly off; it already
   happened).
 - **Verlet ragdoll** (13 particles, constraints with the rest taken on activation) only in KNOCKDOWN/KO;
-  the floor projects with a rest offset PER PART (the head over its radius) — without that the body ends
+  the floor projects with a rest offset PER PART (the head over its radius), without that the body ends
   up flat.
 - **Hitstop per entity**: `hitstopT` freezes the pair's `simDt`; the knockback is held in `pendKb` and
   applied on UNFREEZING.
@@ -363,7 +363,7 @@ Four things had to be solved to make it work, all of them measured:
 
 Two reflexes were added to the AI, neither of which touches the combat brain: **jumping the wall** in
 front of it if its top is within the jump (the graph does not generate that route because the floor,
-on the other side, is the same node) and **walljump** on entering WALLSLIDE — but only if the top is
+on the other side, is the same node) and **walljump** on entering WALLSLIDE, but only if the top is
 OUT of reach, because if it is within reach, bouncing took it away from exactly where it wanted to
 climb.
 
@@ -388,7 +388,7 @@ take-off.
 #### Difficulty stages (2026-09-21b)
 
 `game.nivel` grows on reaching the EXIT (`siguienteNivel()`, heals 45 %) and the stage comes from
-`etapaDe(nivel)` — **two levels per stage**. The difficulty is STRUCTURAL: it touches nobody's damage,
+`etapaDe(nivel)`: **two levels per stage**. The difficulty is STRUCTURAL: it touches nobody's damage,
 health, speed or brain.
 
 | stage | levels | patterns | `wK` | `gap` | tower |
@@ -411,7 +411,7 @@ hand: authoring it was the source of the odd overlaps when mirroring.
 
 `buildLevel(seed, nivel)` is reproducible: same seed + same level ⇒ same geometry (verified 32/32,
 dirtying the state between the two runs). `armarNivel(semilla)` and `startMatch(semilla)` take an
-optional seed — that is what the QA uses.
+optional seed, that is what the QA uses.
 
 **`NAV` is a graph over the surfaces** and TWO things use it:
 1. The AI, to chase across heights.
@@ -452,7 +452,7 @@ punches/2 kicks, BRAWLER the one that gets closest at 0.32·CH).
 > AFTER calling it, not before (it happened to me: I was comparing two builds over different levels).
 > And standing on the EXIT platform completes the level and **freezes the AI** (`game.state` stops being
 > `'play'`), so the chase scenarios use the highest one that is not that.
-- `separateBodies`: minimum clinch 0.24·CH — shorter than usual because the uppercut only reaches
+- `separateBodies`: minimum clinch 0.24·CH; shorter than usual because the uppercut only reaches
   0.17·CH forward; if you grow it, the uppercut of the P,P,P combo stops connecting.
 - **Style**: palette in `PAPER/ROCK/INK` (p07). The background is TWO world-space bakes baked once:
   `bgCanvas` (leaf shadows, parallax 0.45) and `terrainCanvas` (rock+ink+scratches+EXIT door, parallax
@@ -464,25 +464,25 @@ punches/2 kicks, BRAWLER the one that gets closest at 0.32·CH).
 
 New probes from 2026-09-21b (all in the scratchpad, injected before `</body>`):
 
-- **`probe_conecta.js`** — a DOES IT CONNECT? matrix of 11 strikes × 5 target states (standing,
+- **`probe_conecta.js`**: a DOES IT CONNECT? matrix of 11 strikes × 5 target states (standing,
   crouching, high block, low block, in the air) × 26 distances = 1430 cells. It is the only test that
   measures EFFECTIVE REACH instead of geometry. **Watch out for two traps that cost a whole run**: (a)
-  the target has to be nailed at an ABSOLUTE x — re-anchoring it to `P1.x` makes it chase the attacker
+  the target has to be nailed at an ABSOLUTE x: re-anchoring it to `P1.x` makes it chase the attacker
   through the root motion and the distance lies; (b) `this.T` (the breathing clock) is born at
   `rnd(0, 9)`, so without fixing it the matrix is not reproducible **even against itself** (measured: 9
   different rows between two runs of the same build). With `P1.T` and `E.T` fixed: 0 rows.
-- **`probe_continuidad.js`** — it measures rather than assumes: the jump in `targetPose` at each state
+- **`probe_continuidad.js`**: it measures rather than assumes: the jump in `targetPose` at each state
   change, jerk per joint, planted-foot skating PER STATE, pelvis-vs-support imbalance, torso
   articulation. A window of ~6 frames after each teleport of the test itself has to be discarded
   (`resetFighter` overwrites `poseCur` outright: without the filter the jerk and the skating measure
   nothing).
-- **`probe_niveles.js`** — reproducibility, a sweep of 200 seeds × 4 stages, the repertoire of patterns
+- **`probe_niveles.js`**: reproducibility, a sweep of 200 seeds × 4 stages, the repertoire of patterns
   per stage, AI chasing per stage and match progression (8 levels in a row).
-- **`probe_humo.js`** — 6 minutes of real play with reproducible pseudo-random input: NaN, states
+- **`probe_humo.js`**: 6 minutes of real play with reproducible pseudo-random input: NaN, states
   outside the enum, hp out of range, fighters outside the world, feet above the pelvis.
-- **`probe_huesos.js`** / **`probe_retrato.js`** — large portraits with and without the joints marked on
+- **`probe_huesos.js`** / **`probe_retrato.js`**: large portraits with and without the joints marked on
   top. Numbers are not enough to judge proportions: you have to look.
-- **`ejes.py`** — decomposes a strike's change into AXES. `compare.py` measures `+REACH` **radially**
+- **`ejes.py`**: decomposes a strike's change into AXES. `compare.py` measures `+REACH` **radially**
   from the root, so raising the hand 9 px gives it +5.5 px even though the horizontal reach does not
   change.
 
@@ -493,7 +493,7 @@ even though the timers run**. The loop is set up to be pumped by hand:
 - `loop(t)` is global and `scheduleRaf()` has dedupe → an injected driver can call `loop(qaNow += 16.7)`
   from a `setInterval` without duplicating the rAF chain.
 - Debug handle: `window.SF = {P1, P2, CFG, game, cam, MOVES, POSES, ST, simT}`; `SF.simT` is the
-  accumulated simulation clock — schedule test actions by `simT`, not by real time.
+  accumulated simulation clock: schedule test actions by `simT`, not by real time.
 - `dbgFreeze = true` freezes the sim (it keeps drawing) → an exact screenshot of the desired instant.
 - The full pattern (error catcher + per-scenario driver + status dump): the `qa.py` harness from the
   2026-07-22/23 session; useful scenarios: menu/fight/run/skid/jump/jab/combo/kick/ko/hang/boxes.
@@ -523,17 +523,17 @@ even though the timers run**. The loop is set up to be pumped by hand:
 
 - All the game's DOM is declared BEFORE the main script (the TankWARSWeb gotcha); the tail script
   (info/FPS/mute) goes after `arcade-shell.js`.
-- The context-loss trio invalidates `bgCanvas`, `skyGrad` and `_glowCache` — if you add a new bake, add
+- The context-loss trio invalidates `bgCanvas`, `skyGrad` and `_glowCache`, if you add a new bake, add
   it there too (the spark sprites keep the ref in the particle: they regenerate via a cache Map).
 - The keytrack times (`poses[].at`) are ABSOLUTE within the move and the sampler starts from `atkPose0`
-  (the real pose at the start of the strike) — a partial pose without a key "holds" the last defined
+  (the real pose at the start of the strike), a partial pose without a key "holds" the last defined
   value.
 
 
-## AUDIO — fix (2026-09-22)
+## AUDIO: fix (2026-09-22)
 
 **Dying sounded exactly like winning.** `setBanner()` ended up calling `sfx.banner()`
-unconditionally — the RISING celebration pair — and `onKO` uses `setBanner` to announce the player's
+unconditionally, the RISING celebration pair, and `onKO` uses `setBanner` to announce the player's
 death (`'YOU WENT DOWN…'`).
 
 `setBanner` now takes a fifth parameter `snd` holding the banner's voice. It still defaults to

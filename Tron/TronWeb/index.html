@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -63,7 +63,7 @@
 
   /* Reset (⟳): inside #ui, it inherits the same style as the arrows. */
   /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css. */
-  /* FPS HUD — Pong format: a monospaced panel at the top left, no border-radius. */
+  /* FPS HUD: Pong format: a monospaced panel at the top left, no border-radius. */
   #fpsOverlay {
     position: absolute;
     left: calc(8px + env(safe-area-inset-left));
@@ -173,9 +173,9 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  TRON (v1) — faithful web port of Tron/Tron.py, with BallsWeb's mobile shell.
+  //  TRON (v1), faithful web port of Tron/Tron.py, with BallsWeb's mobile shell.
   //  Light cycles that leave a trail; you die if your front hits any
-  //  trail (your own included). The field wraps toroidally — there are no walls.
+  //  trail (your own included). The field wraps toroidally: there are no walls.
   //
   //  The original detects collisions by reading pixels (windowSurface.get_at).
   //  Here we replicate that with an OCCUPANCY GRID the size of the canvas
@@ -195,7 +195,7 @@
   const BG          = '#03060d';                                                   // near-black background with a slight blue tint (the Tron arena)
 
   // ── AI ── it navigates by lookahead (it measures the free space ahead/left/right) with noise so it is not
-  // deterministic, and throws in occasional erratic turns — but never one that is immediate death.
+  // deterministic, and throws in occasional erratic turns, but never one that is immediate death.
   const AI_DECIDE_CD = 0.04;                                                       // s between decisions (not every frame, so it does not jitter)
   const AI_LOOK      = 150;                                                        // px of lookahead when measuring how much is free in a direction
   const AI_JITTER    = 70;                                                         // px of random noise added to each measurement (it makes the navigation unpredictable)
@@ -204,18 +204,18 @@
   const AI_ERRATIC   = 0.07;                                                       // probability per decision of an erratic turn (only if it is safe)
 
   // ════════════════════════════════════════════════════════════════════
-  //  AUDIO — WebAudio synthesis, zero files.
+  //  AUDIO: WebAudio synthesis, zero files.
   //
   //  Tron is not made of matter: there is no wood, metal, rubber or skin. The whole world is lines
   //  of light on black. The only thing that exists there is ELECTRICAL SIGNAL, so the audio's material
   //  is electrical signal: a SAWTOOTH wave through a RESONANT lowpass whose cutoff SWEEPS. That sweep is
-  //  the signature — not a mechanical click, not a knock, not a pure beep. An '82 synthesiser, not a sampler.
+  //  the signature, not a mechanical click, not a knock, not a pure beep. An '82 synthesiser, not a sampler.
   //
   //  Consecuencias concretas:
   //   · the 90° turn sounds like a filter snap whose DIRECTION tells you which way you turned;
   //     (left sweeps downwards, right upwards);
   //   · the engine gets higher and more open the less free space you have ahead;
-  //   · white noise appears ONCE in the whole vocabulary — the derezz — because that is the
+  //   · white noise appears ONCE in the whole vocabulary, the derezz, because that is the
   //     only moment the game destroys something and the body breaks up into pixels;
   //   · the menu is of ANOTHER material: pure triangle, no filter. The interface is not the arena.
   //   · each cycle has its fixed pitch just as it has its colour: you hear WHO died.
@@ -349,7 +349,7 @@
 
   // It turns into sound the number the game ALREADY computes for the AI: how much free space there is ahead.
   // The less is left, the higher and the more open. Shaving past a trail stops being purely visual.
-  // 90 px in steps of 2 is 45 reads of a Uint8Array — nothing next to the frame's bloom.
+  // 90 px in steps of 2 is 45 reads of a Uint8Array: nothing next to the frame's bloom.
   function engineUpdate(dt) {
     if (!acOk() || !engGain) return;
     engAcc += dt;
@@ -463,7 +463,7 @@
   let grid = new Uint8Array(0);                                                    // occupancy: grid[y*W+x] = 1 if there is a trail
   // A PERMANENT trail (base colour) baked into an offscreen canvas; each frame it is blitted to the screen and
   // each player's bright "head" is drawn on top, fading down to the base colour. Separating
-  // the two layers keeps the glow from accumulating (as the old card did) — the overlay is transient.
+  // the two layers keeps the glow from accumulating (as the old card did), the overlay is transient.
   let trailCv = null, tctx = null;
   let glowCv = null, gctx = null;                                                 // half-resolution glow buffer (cheap bloom)
 
@@ -495,9 +495,9 @@
   }
   // Stamps a trail point (≈ the original's radius-1 circle): 3×3 in the grid + a little square on the canvas.
   // CAREFUL: it clips (does not wrap) the cells off screen, just like pygame.draw.circle. If it wrapped
-  // with a modulo, crossing an edge would leave a phantom trail on the opposite side —exactly where the player
-  // reappears— and you would die on wrapping. The occ() collision does wrap (like the original's `% SCREEN`).
-  // marks a 3×3 cell in the grid (clips off screen, does not wrap — just like pygame.draw.circle)
+  // with a modulo, crossing an edge would leave a phantom trail on the opposite side, exactly where the player
+  // reappears, and you would die on wrapping. The occ() collision does wrap (like the original's `% SCREEN`).
+  // marks a 3×3 cell in the grid (clips off screen, does not wrap, just like pygame.draw.circle)
   function markCell(ix, iy) {
     for (let dy = -1; dy <= 1; dy++) {
       for (let dx = -1; dx <= 1; dx++) {
@@ -507,7 +507,7 @@
       }
     }
   }
-  // Paints a STRETCH of trail. With `connect` it rasterises a continuous line from (x0,y0) to (x1,y1) — so the
+  // Paints a STRETCH of trail. With `connect` it rasterises a continuous line from (x0,y0) to (x1,y1), so the
   // trail is not broken up even if frames are dropped (the player moves several px per frame). Without
   // connect (the first point or a wrap), it stamps a single point at (x1,y1).
   function paintTrail(x0, y0, x1, y1, color, connect) {
@@ -572,7 +572,7 @@
     tctx = trailCv.getContext('2d');
     tctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     // glow buffer at HALF resolution: blurring here (1/4 of the area) is ~4× cheaper than blurring the
-    // full screen every frame — key to not dropping frames on mobile.
+    // full screen every frame: key to not dropping frames on mobile.
     glowCv = glowCv || document.createElement('canvas');
     glowCv.width = Math.max(1, Math.floor(canvas.width / 2));
     glowCv.height = Math.max(1, Math.floor(canvas.height / 2));
@@ -647,7 +647,7 @@
       this.alive = true;
       this.ai_incd = 0;                                                           // accumulator for the AI's decision cadence
 
-      // they all start in the SAME row (y = 0.95), spread out in x — so with 4 players they do not come
+      // they all start in the SAME row (y = 0.95), spread out in x, so with 4 players they do not come
       // from different heights, but in parallel from the bottom.
       const n = totalplayers;
       const startpos = {
@@ -665,7 +665,7 @@
       this.lastX = null; this.lastY = null;                                       // last stamped position (to connect the trail with a line)
     }
 
-    // manual turn (buttons / screen halves / keyboard) — the human only.
+    // manual turn (buttons / screen halves / keyboard), the human only.
     // The sfx lives here and not in the three call sites: process()'s human branch also goes through here
     // (it used to repeat the arithmetic inline), so a single place covers the tap, the ◄► buttons and the keys.
     // The AIs do NOT go through here: they write this.direction directly, which is exactly what we want.
@@ -687,7 +687,7 @@
         // ahead / left / right by sampling several px (clearDist), and adds noise so the
         // navigation is not deterministic. Three behaviours:
         //   · panic: if the front is almost blocked, it turns at once to the clearer side;
-        //   · erratic: sometimes it turns to a random side — but only if it is NOT immediate death;
+        //   · erratic: sometimes it turns to a random side, but only if it is NOT immediate death;
         //   · greed: if one side is considerably more open than the front, it turns that way.
         // If none of that applies, it goes straight (long, clean trails).
         this.ai_incd += dt;
@@ -721,7 +721,7 @@
       if (wrapped) sfx.wrap(this.id);
 
       // death: SWEPT COLLISION (not a single point). I sample the whole stretch the cycle will cover this
-      // frame —from 2px ahead to where the head lands + a margin— so it does not jump over a thin
+      // frame, from 2px ahead to where the head lands + a margin, so it does not jump over a thin
       // trail when it advances several px per frame.
       const dir = this.direction;
       if (!this.stop) {
@@ -851,7 +851,7 @@
   // moves the selection; and a ▶ PLAY button at the bottom starts the game. ──
   // It is AI-only → a single option (number of players) + PLAY.
   // COMPACT centred layout: sizes and spacings in px proportional to min(W,H) (not to the total
-  // height) — so it does not sprawl on mobile and fits properly in any orientation.
+  // height), so it does not sprawl on mobile and fits properly in any orientation.
   let hoverY = -1;                                                                // the mouse's y over the canvas (CSS px); -1 = no hover
   function menuLayout() {
     const S = Math.min(W, H), cy = H * 0.46;
@@ -1094,7 +1094,7 @@
   tappable(document.getElementById('btnMenu'), () => { if (!gh.menu) backToMenu(); });  // back to the menu
 
   // ════════════════ LOOP ════════════════
-  // CAREFUL on mobile: do NOT initialise lastT with performance.now() and then measure against the rAF timestamp —
+  // CAREFUL on mobile: do NOT initialise lastT with performance.now() and then measure against the rAF timestamp,
   // in several phone WebViews those clocks have different epochs, and the first (now - lastT) gives a
   // negativo enorme → dt negativo → T negativo → accentNow() indexa PLAYER_COLORS[-1] = undefined → crash.
   // It is fixed by always measuring against the SAME clock (the now that comes in) and clamping dt to [0, 0.05].
@@ -1177,7 +1177,7 @@
       const btn = document.getElementById('btnInfo');
       btn.addEventListener('pointerdown', e => {
         e.preventDefault();
-        // The overlay starts at display:none FROM CSS — the inline style is empty "", so we
+        // The overlay starts at display:none FROM CSS; the inline style is empty "", so we
         // compare against === 'block' (an explicitly visible state) instead of !== 'none' (which was true
         // at startup and swallowed the first tap).
         const showing = overlay.style.display === 'block';
@@ -1189,13 +1189,13 @@
 
 
 <div id="infoPanel"><h4>Tron</h4>
-Light cycles that leave a solid trail. Hit any trail — <b>including your own</b> — and you are
+Light cycles that leave a solid trail. Hit any trail, <b>including your own</b>, and you are
 de-rezzed. <b>The field wraps</b>: leave through one edge and you come back through the opposite
 one, and so do the trails. A round is a leg; the <b>set</b> is the real result.
 <hr>
 <h5>Desktop</h5>
 <ul>
-  <li><b>←</b> and <b>↓</b> turn. There is no forward or brake — a cycle only turns.</li>
+  <li><b>←</b> and <b>↓</b> turn. There is no forward or brake: a cycle only turns.</li>
   <li><b>Enter</b> continues after a round; <b>Esc</b> goes back to the menu.</li>
   <li>In the menu, <b>↑ ↓</b> pick the row and <b>← →</b> change the value: how many colours race
       and how many rounds the set is.</li>
@@ -1227,7 +1227,7 @@ one, and so do the trails. A round is a leg; the <b>set</b> is the real result.
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

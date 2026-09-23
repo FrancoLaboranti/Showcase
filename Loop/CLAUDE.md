@@ -15,14 +15,14 @@ a **rule** for the arena or a **card** (the 5 equipped ones make up a poker hand
 ## The arrow's sweep now builds the TIP as well (2026-09-22)
 
 Franco: *"the arrow's tip appears complete from the start"*. It was true, and it was there
-on purpose — the code's comment defended it with an argument that was also true:
+on purpose: the code's comment defended it with an argument that was also true:
 
 > in a long lane the head measures 8% of the length, so tying it to the body's advance would
 > leave it almost unlit during 92% of the warning, precisely when the only thing that matters is WHERE TO.
 
 The two are not resolved by choosing one. They are resolved by **separating shape from fill**:
 
-- **The SHAPE is complete from frame 0**, like a ghost at alpha 0.055 — body and tip. The
+- **The SHAPE is complete from frame 0**, like a ghost at alpha 0.055: body and tip. The
   direction always reads, which was the point of the old design.
 - **The FILL is ONE single clip that advances** over the complete silhouette. There are not two fills or
   two alphas: the same cut reveals the body and then the tip, in one go. A single animation.
@@ -32,7 +32,7 @@ The two are not resolved by choosing one. They are resolved by **separating shap
 
 Measured with captures at a frozen `u` (`dbgFreeze` + two `loop(t)` calls with the SAME `t`, which gives dt = 0 and
 draws without advancing): at 0.12 and 0.70 the tip is outline only; at 0.97 it is built in full. At
-`u = 1` the arrow is no longer there, because the piece is executing the move — that is the game, not a bug.
+`u = 1` the arrow is no longer there, because the piece is executing the move, that is the game, not a bug.
 
 ### The finish
 
@@ -40,12 +40,12 @@ A body 16% thicker (`r*1.12` -> `r*1.30`) and a proportionally longer head.
 
 **The corners are rounded by stretching the outline**, not with curves: the SAME path is filled AND
 stroked with round `lineJoin`/`lineCap` and a stroke of `pad*2`. That rounds every
-vertex at once — the tip and the two shoulders where the body widens, which is the join that
+vertex at once: the tip and the two shoulders where the body widens, which is the join that
 looked hard.
 
 **That is why the silhouette is built as far as `L - pad` and not as far as `L`.** The round stroke sticks out by
 `pad`, so the OUTER EDGE still lands exactly on the destination. Without that correction the arrow
-would point a little beyond the square the piece is going to — an error of a couple of pixels which
+would point a little beyond the square the piece is going to: an error of a couple of pixels which
 in a game where the telegraph IS the mechanic comes expensive.
 
 The movement logic and the telegraph rules were not touched: `u`, `e.dur`, `e.tx/ty` and the knight's
@@ -63,19 +63,19 @@ got there first. In a loop-closure frame the order of execution is
 and from there on they fall off, **in this order**: `claim`, `tateti`, `frenzy`, `hand` and `tight`. That is,
 the whole loop closure, which is the game's central act. Without mines it happens too:
 hit(1) + kill(2) + claim(2) = 5 and `tateti`, `frenzy` and `tight` are lost. And `closeLoop`'s comment
-says verbatim *"That the loop was tight is already said by the golden ghost and by THE SOUND"* —
+says verbatim *"That the loop was tight is already said by the golden ghost and by THE SOUND"*,
 in that frame the sound was not there.
 
 Worse: `killPlayer` calls `sfx.lose()` AFTER `sfx.hurt()` (2 nodes). With three previous routine
-voices in the same frame — `wall` + `deflect` + `clack`, perfectly reachable with 14 live orbs
-— the budget reaches 5 and **the player's death does not sound**. And `endRun` also calls
+voices in the same frame (`wall` + `deflect` + `clack`, perfectly reachable with 14 live orbs)
+the budget reaches 5 and **the player's death does not sound**. And `endRun` also calls
 `droneOff()`, so the room goes quiet too: absolute silence at precisely the one moment
 that cannot go unnoticed.
 
 ### The fix is not raising the ceiling
 
 Raising it would be giving back the problem the ceiling solves. The ceiling exists to defend against the
-**routine** voices — the bounce off the hoop, the clack, the ticking, the whistle —, which fire
+**routine** voices (the bounce off the hoop, the clack, the ticking, the whistle), which fire
 many times in the same frame and are the only ones that can machine-gun. The **narrative** voices
 (you died, you won, you closed the loop, the frenzy came in) happen at most once per frame by
 construction and are exactly what has to be heard.
@@ -115,7 +115,7 @@ visually.
 | a barrel being born | `wall` | the warning of a hazard doing 21 damage sounded the same as the orb's bounce off the hoop, **the game's most frequent background noise**, and it shared its 40 ms cooldown |
 | the knight's jump | `shot` | `shot` is the tank's shell and the boss's fan, that is, the signal for *dodge this*. The knight does not fire: it JUMPS |
 | the boss warning (`wind`) | `ui` | the climax's second of reading sounded like the 30 ms click of the menu buttons |
-| an enemy's death | a single `kill` | the game tells pawn/rook/queen apart with different sparks, ring and shake — and all three sounded the same |
+| an enemy's death | a single `kill` | the game tells pawn/rook/queen apart with different sparks, ring and shake, and all three sounded the same |
 
 `kill(val)` now has three steps that come from `e.T.score`, which is the data the game already
 had one line earlier and was not using. Lower, longer and with more body the more the piece is worth:
@@ -126,22 +126,22 @@ had one line earlier and was not using. Lower, longer and with more body the mor
 
 - **A backgrounded tab did not switch off the bed.** It is the game's only continuous node: two
   oscillators started once and never stopped. With the tab hidden the rAF stops,
-  `updateAmbience` stops running and the 55 Hz hum keeps sounding indefinitely — on
+  `updateAmbience` stops running and the 55 Hz hum keeps sounding indefinitely, on
   desktop the browser does not suspend the audio of a background tab, so it did not fix
   itself. Now `visibilitychange` calls `droneOff()` + `AC.suspend()`, and on the way back `audioResume()`
   (on mobile the context auto-suspends and the game was left mute until the first touch).
 - **`simonFlash` and `updateSimon` called `note()` directly**, skipping `voice()` and therefore the
-  context's state guard — precisely the lesson of the guards section further down. They also
+  context's state guard: precisely the lesson of the guards section further down. They also
   spent frame budget without being able to be held back by it. Now they are `sfx.simon(f)` and
   `sfx.simonGo()`.
 - **`noiseHit` did not clamp the volume** before the exponential ramp and `note()` did, half a
   file away. Today no caller can pass 0 (the lowest is `wall` at 0.005), so
-  it was a latent mine and not a symptom — but the next `noiseHit` scaled by intensity would step on
+  it was a latent mine and not a symptom, but the next `noiseHit` scaled by intensity would step on
   it, and it fails silently.
 - **`sndThisFrame = 0` was AFTER `loop()`'s early returns.** With the canvas context
   lost the frame leaves through the return, but the DOM handlers keep firing sounds
   (`onCanvasTap` touches `ui`/`hour`/`card`) and the counter pinned above the ceiling. It
-  healed itself when the context was restored, which is why it was minor — but resetting right at the top
+  healed itself when the context was restored, which is why it was minor, but resetting right at the top
   costs nothing and the `contextlost`/`contextrestored` pair already exists, so the state is real.
 
 ### How it was verified
@@ -152,7 +152,7 @@ start/stop, running a scenario that provokes the events one at a time. The decis
 (2 oscillators at 330 and 247 Hz, which are its two notes). It lives outside the repo, in the scratchpad, alongside
 a `qa.py`/`qa2.py`.
 
-**None of the suite's 68 scenarios measures audio** — they measure behaviour and resources. These
+**None of the suite's 68 scenarios measures audio**: they measure behaviour and resources. These
 changes do not touch them: not one mechanic was moved, nor one balance number, nor one victory
 condition. The only thing that changed semantically is that `sndPerFrame` now counts only the routine ones.
 
@@ -161,7 +161,7 @@ parameters that were designed; it has no sound card. The listening evaluation is
 
 ## BARRELS: what DonkeyKong contributed as a mechanic (2026-09-18)
 
-DonkeyKong had been contributing only structure — the draft, the seeds, the combo window — and not one
+DonkeyKong had been contributing only structure, the draft, the seeds, the combo window, and not one
 mechanic. The `barrels` rule (×1.55) is the first that really comes in: barrels that arrive from
 outside the clock, cross in a straight line and **hit everything**, the player and the pieces.
 
@@ -185,11 +185,11 @@ a tool, which is exactly the game DK proposes.
 
 The scenario's first version put the test that KILLS the player second. The player
 died, `stepSim` stopped running with the state at `'over'`, and the two following tests measured
-a stopped simulation — reporting "the barrel does not hit the pieces" when in fact nothing
+a stopped simulation: reporting "the barrel does not hit the pieces" when in fact nothing
 was happening at all. **In a scenario with several tests, the one that can end the game goes
 last**; otherwise everything that comes after measures a world that is no longer simulating.
 
-## UI 2026-09-18 — fixed slots, reserved space and asymmetric feedback
+## UI 2026-09-18: fixed slots, reserved space and asymmetric feedback
 
 ### The HUD cannot reposition itself
 
@@ -205,7 +205,7 @@ ternary in a Y coordinate is the easiest way to write a reflow without noticing.
 
 The list of hands beside the hand ended up flush with the margin twice in a row, because it was
 calculated the wrong way round: the cards took their size and the list made do with whatever was left. With
-the hand centred, the left-hand gap measures `(W - total) / 2` — that is, the card size fixes it,
+the hand centred, the left-hand gap measures `(W - total) / 2`, that is, the card size fixes it,
 and the list has no say.
 
 The right calculation goes from the outside in: `margin + list + separation` is what the hand can NOT
@@ -223,20 +223,20 @@ of the name and the effect, which were reaching the second rule.
 ### In a frenzy, EVERYTHING of yours eats them
 
 Direct contact did `hurtEnemy(e, 999)` but the orb and the pulse carried on with their normal damage:
-two different rules for the same state. Now all three kill in one touch during a frenzy —
+two different rules for the same state. Now all three kill in one touch during a frenzy:
 **the boss explicitly excepted**, because the frenzy cannot skip the fight. Measured: an orb
 120/141 → dead, a pulse 138/141 → dead, the boss 2600 → 1776.
 
 ### The TIGHT number goes; the multiplier stays
 
 Before taking it out I had to look at what it did: `tight` **multiplies the loop's damage** up to ×3.3,
-it is not decorative. What it was not contributing was the NUMBER — an "x2.4" next to a "148" adds an
+it is not decorative. What it was not contributing was the NUMBER: an "x2.4" next to a "148" adds an
 unknown instead of information, and the damage is already in view. That the loop was tight is said by the
 golden ghost and by the sound. The test verifies it by inspecting `closeLoop`'s source: the
 multiplier has to be there, the card must not.
 
 (The test's first attempt: close loops with the bot and look at the cards. It came out green with **zero
-loops closed** — a test that almost never fires the branch it claims to watch proves nothing.)
+loops closed**: a test that almost never fires the branch it claims to watch proves nothing.)
 
 ### Asymmetric feedback on purpose
 
@@ -248,7 +248,7 @@ the bar.**
 ### The joystick is the face in miniature
 
 Smaller (0.155 → 0.125 of the short side) with the dead zone lowered from 0.10 to 0.075 so as not to lose
-fine control — the radius IS the stick's resolution, so shrinking it is paid for and has to be
+fine control: the radius IS the stick's resolution, so shrinking it is paid for and has to be
 compensated. Visually: dark felt, a brass hoop, an edge of light on top, and the knob is **the
 marble** with the same gradient and the same specular highlight. What you drag looks like what
 you are dragging.
@@ -262,7 +262,7 @@ Two details that matter:
 
 ## ALLOCATIONS pass (2026-09-17, evening)
 
-Up to here I had always measured canvas operations. Never **allocations** — and on a phone the
+Up to here I had always measured canvas operations. Never **allocations**, and on a phone the
 collector is paid for in stutters, that is, constant garbage is exactly what produces the dips
 downwards. Six sources, and **three of them I had introduced myself while optimising**:
 
@@ -276,7 +276,7 @@ downwards. Six sources, and **three of them I had introduced myself while optimi
 | the boss's closing check | `enemies.some(e => …)` = one closure per frame | a flat loop |
 
 **The most expensive lesson of method in the session: a profiler that does not measure something does not say it is
-cheap — it says it does not measure it.** It happened twice in a row: first with path construction (the
+cheap: it says it does not measure it.** It happened twice in a row: first with path construction (the
 thread was 34% of the render and did not show up), now with the allocations. And both times half
 of what I found I had introduced myself in the previous "optimising" pass. Every optimisation
 has to be measured with the yardstick that matches what it touches.
@@ -285,7 +285,7 @@ has to be measured with the yardstick that matches what it touches.
 
 The colour-string cache started as a `WeakMap` over the colour array. It was no use: almost
 every call to `spawnSparks` passes a new literal (`[120,170,230]`), so the reference
-never repeats. The key is the colour packed into an integer — looking something up with a number allocates
+never repeats. The key is the colour packed into an integer: looking something up with a number allocates
 nothing, which is the whole point of the exercise.
 
 ### What was NOT found
@@ -297,15 +297,15 @@ only the two vignettes. Worth recording so as not to go looking there again.
 ## The frenzy's healing goes 1 HP at a time
 
 The same total (`healFrac` = 1/3 of the bar) and the same time; what changes is the GRAIN. Measured: with 100
-maximum health it is 33 ticks of exactly 1 HP spread over 6.30 s of the 6.5; with 220, **74 ticks**
-— more ticks, not fatter ticks, which is what makes the fraction the right unit.
+maximum health it is 33 ticks of exactly 1 HP spread over 6.30 s of the 6.5; with 220, **74 ticks**:
+more ticks, not fatter ticks, which is what makes the fraction the right unit.
 The `while` that hands them out has a cap of 4 per frame so a long frame does not fire a burst.
 
 ## The same layout does not work for both orientations
 
 The deck panel's table of hands goes on the LEFT in landscape (where there is width to spare): it does not
 eat height and the cards grow. In PORTRAIT it goes underneath, because there what is scarce is width and a
-side column stole more from them than it freed up — measured, it left the cards **19%
+side column stole more from them than it freed up: measured, it left the cards **19%
 smaller** than before. It is the same pattern that had already turned up with `panelRects`: when a measurement
 comes from `min(fraction_of_W, fraction_of_S)`, in each orientation a different one is in charge.
 
@@ -316,15 +316,15 @@ resolution feels better than one that moves by itself halfway through a game. `d
 tuner's CEILING, so the adaptive part can only go down, never up above the base.
 Verified for devicePixelRatio 1 / 1.5 / 2 / 2.625 / 3 / 4: all those of 1.5 or more come out
 exactly at 1.40, and the 1x one stays at 1.00 because you cannot render above the
-native resolution (`dprMin` bounds how far the tuner can go DOWN, not the native resolution — my first
+native resolution (`dprMin` bounds how far the tuner can go DOWN, not the native resolution: my first
 check confused the two and flagged a false positive).
 
 ## Playtest 2026-09-17 (afternoon)
 
-### The joystick was eating the hand's strip — and only in LANDSCAPE
+### The joystick was eating the hand's strip, and only in LANDSCAPE
 
 `elementFromPoint` over the strip's centre returned `jMove`. The zone measures 52% × 84%, and with
-a small `H` —which is what happens in landscape, which is **how Loop is registered in the Arcade**— that
+a small `H`, which is what happens in landscape, which is **how Loop is registered in the Arcade**, that
 84% climbs up to the HUD. In portrait it does not happen. The rule: when a touch zone is defined as a
 PERCENTAGE of the screen, it has to be tested in both orientations; the same number covers different
 things depending on which is the short side.
@@ -335,7 +335,7 @@ It lives in `p04_input` and not inside the joystick, so any future zone consults
 
 **Careful when verifying it**: the fix acts at EVENT level, so `elementFromPoint` **still**
 returns `jMove` and proves nothing. You have to dispatch a real `pointerdown` and look at the
-behaviour. And `moveStick.active` is no use as a signal either — the joystick only turns it on when leaving
+behaviour. And `moveStick.active` is no use as a signal either: the joystick only turns it on when leaving
 the dead zone. The honest signal is to send a `pointermove` and see whether the stick responded.
 
 ### The Simon no longer punishes
@@ -351,7 +351,7 @@ decision.** If the mini-game is optional, not completing it is already the conse
 ### The deck panel LISTS the hands
 
 It showed only the current hand, at a size illegible on mobile. But the player's question is not
-"what have I got" —they can see that in the cards— but **"what is worth building"**. Now it lists all eight with
+"what have I got", they can see that in the cards, but **"what is worth building"**. Now it lists all eight with
 their effect and marks the current one: it stops being a status card and becomes a motive.
 
 ### The frenzy heals
@@ -361,7 +361,7 @@ makes you untouchable: adding healing to it makes it THE window to recover witho
 system, and it gives you a second reason to go and close the line.
 
 `CFG.frenzy.healFrac` goes as a **fraction of the bar**, not as HP/s. With a fixed number, the more
-maximum health (VIGOUR cards) the more insignificant the healing would become — the same mistake the
+maximum health (VIGOUR cards) the more insignificant the healing would become: the same mistake the
 loop, the pulse and the orb already made: fixed damage against health that scales. It is collected in batches of
 ~1/9 of a bar because `healPlayer` puts out a floating number per call and at 60 fps that would be sixty
 little numbers a second.
@@ -370,7 +370,7 @@ little numbers a second.
 
 `autoDpr` measures the frame's MEDIAN (not the average: a single long frame cannot move the
 decision) and adjusts `dprScale`. Hysteresis of 17.5 ms / 13.5 ms so it does not pump, and a cooldown of
-2.5 s because each change calls `resize()` and that re-bakes everything — **if the cure produces the
+2.5 s because each change calls `resize()` and that re-bakes everything: **if the cure produces the
 symptom, it is not a cure**. On a machine that reaches 60 it never drops.
 
 An arithmetic trap I nearly missed: the floor `dprMin / base` can end up **above 1** on
@@ -382,7 +382,7 @@ with `Math.min(1, ...)`.
 `ORB-SPD: v=3.08 against a cap of 1.75` came back after being declared fixed. The first attempt
 put the clamp after the orb-orb pairs, but the problem was never that particular place: there are
 **five** things that push orbs (pairs, pendulums, flares, the frenzy's pull, the
-chimes) and several run AFTER `updateOrbs` — `frenzyBurst` pushes them with +1.4.
+chimes) and several run AFTER `updateOrbs`: `frenzyBurst` pushes them with +1.4.
 
 `clampOrbSpeeds()` is now `stepSim`'s last word, when everybody has already pushed.
 
@@ -399,12 +399,12 @@ defined`), not me. When a block is deleted by range, you have to look at what is
 
 Franco, after the previous pass: *"it's still a bit slow and that's with not much on screen at the
 start"*. **That sentence is the diagnosis**: if it costs the same with the arena empty, what is expensive
-is not per object — it is FIXED PER FRAME, and everything optimised before scaled with the number of
+is not per object: it is FIXED PER FRAME, and everything optimised before scaled with the number of
 objects. When someone reports slowness, the first useful question is *with what does it scale?*
 
 ### The profiler had a hole
 
-It counted `fill`, `stroke`, `clip`, gradients and `drawImage` — but **not path construction**.
+It counted `fill`, `stroke`, `clip`, gradients and `drawImage`, but **not path construction**.
 `moveTo`/`lineTo`/`quadraticCurveTo` are per-vertex CPU work and they did not show up
 anywhere. On adding them:
 
@@ -413,14 +413,14 @@ anywhere. On adding them:
 The thread has up to 195 points and is walked three times (a glow pass with quadratics
 plus the filled ribbon, which goes out and back). **It was always there**, with or without enemies. That
 is: the render's biggest cost had never appeared in the profile, and it was precisely the one that explained
-the symptom. A profiler that does not measure something does not say it is cheap — it says it does not measure it.
+the symptom. A profiler that does not measure something does not say it is cheap: it says it does not measure it.
 
 ### The two corrections
 
 **1. Adaptive decimation of the drawing.** The points are `CFG.thread.spacing` apart (0.010 u), which on
 screen is `spacing * PXR`: ~4.8 px on a monitor and ~2.3 px on a phone. Sending a vertex
 every 2 px is throwing away resolution no eye sees. The step is computed so the vertices end up
-~5.5 px apart, so it gives 1 on desktop (nothing changes) and 2 on small screens — the trim falls exactly
+~5.5 px apart, so it gives 1 on desktop (nothing changes) and 2 on small screens: the trim falls exactly
 where it is needed. **The simulation still runs with all the points**: this is only how many vertices are
 sent to be drawn. 412 → 214 commands, and on a tight curve no faceting is visible.
 
@@ -429,8 +429,8 @@ the originals. Otherwise the normal does not correspond to the polygon that is r
 opens up on the curves.
 
 **2. The simulation was running TWICE per frame.** `steps = min(3, max(1, ceil(simDt / (1/70))))`:
-with `1/70`, a 60 fps frame gives `ceil(1.167) = 2` **always**. That is, the whole rope — a measured
-713 constraint resolutions + 237 integrations per frame with the arena empty — was resolved twice
+with `1/70`, a 60 fps frame gives `ceil(1.167) = 2` **always**. That is, the whole rope, a measured
+713 constraint resolutions + 237 integrations per frame with the arena empty, was resolved twice
 in the normal case. With `1/50` the 60 fps frame fits in one substep and the second only appears
 below 50 fps. The work per SECOND on a slow machine does not change; what goes away is
 the double cost when everything is fine.
@@ -442,7 +442,7 @@ a still thread (5 speeds × 2 timesteps) and **0/56** with a moving thread, 14/1
 
 On going to one substep, `frenzy50` flagged **ORB-SPD: v=3.08 with the cap at 1.75**. The change did not
 break it: it *revealed* it. The speed clamp lives INSIDE `updateOrbs`'s per-orb loop, and
-`resolveOrbPair` runs **after** that loop — so the impulse from a chained collision
+`resolveOrbPair` runs **after** that loop, so the impulse from a chained collision
 went uncapped until the next frame. With two substeps, the second clamped it within the same
 frame and the hole was never visible.
 
@@ -464,12 +464,12 @@ uncovered it.
   one-pixel rectangle look the same, but `fillRect` builds no path (it was ~125
   commands per frame, now zero).
 
-## MOBILE pass (2026-09-16) — measure before touching
+## MOBILE pass (2026-09-16), measure before touching
 
 Franco reported low FPS on a phone. The first thing was a **profiler**, not a hunch:
 `s_prof.py` wraps each render function and attributes the expensive canvas operations by counting
-the counters before and after each call. (TIMES are no use in headless — the
-virtual time freezes `performance.now()` — but COUNTS are objective: 24 clips per frame are
+the counters before and after each call. (TIMES are no use in headless: the
+virtual time freezes `performance.now()`, but COUNTS are objective: 24 clips per frame are
 24 clips anywhere.)
 
 The profile said something no intuition would have said: **`drawEnemy` was 43.6% of the render**, and
@@ -488,7 +488,7 @@ The result, the same scene (14 pieces, 8 orbs, a 109-point thread, 14 mines):
 
 ### The principle: what looks the same in every frame is drawn ONCE
 
-None of the corrections lowers the quality — they are the same image with fewer operations.
+None of the corrections lowers the quality: they are the same image with fewer operations.
 `bakeSprite(key, half, dibujar)` (in `p03_engine`) is the only place where anything is baked.
 
 - **Pieces**: a piece always looks the same and has only four colour states (its own, a white
@@ -525,12 +525,12 @@ declared **in the same file** as their cleanup: `typeof` does NOT protect agains
 
 `CFG.perf.sparkMul` (0.62 on touch) is the ONLY place where anything is lowered. It touches neither resolution nor
 removes effects: it lowers the number of particles in an additive effect, where twenty and thirty look
-almost the same and the difference is paid for in pixel fill — exactly what is scarce on a phone.
+almost the same and the difference is paid for in pixel fill: exactly what is scarce on a phone.
 
 ## PORTRAIT layout: two bugs that only appear on a phone
 
 The whole session was reviewed at 1280×720 and 1920×1080. At 500×905 two things appeared that in landscape
-are not visible, and the invariant QA detects neither — you have to LOOK:
+are not visible, and the invariant QA detects neither: you have to LOOK:
 
 - **The streak line landed on top of the next plate.** In portrait `panelRects` stacks the
   plates with `gap = H*0.016`, but beneath each one the streak is drawn at `b.y + b.h + S*0.026`.
@@ -555,7 +555,7 @@ to ask which one wins in each orientation.
   `if (!IS_TOUCH)`) AND the DOM buttons appear as well: you see an overlap that **on a real
   phone does not exist**. It had me chasing a bug that was not there.
 
-## MOVEMENT vs SELECTION — the joystick was eating the taps
+## MOVEMENT vs SELECTION: the joystick was eating the taps
 
 `#jMove` is a fixed div of **52% × 84%** with `z-index: 3` over the canvas, and it was only hidden with
 `body.inMenu`. During `rule`/`card`/`slot` it stayed alive: **touching the left-hand card created a
@@ -619,7 +619,7 @@ Two things that flow taught which are worth repeating:
   the most expensive error of all because it does not fail: it compiles and does something else.
 - **Before applying, run the patch against a COPY of the parts.** That is how it was caught that
   `wantPointer(false)` hanging off the `else if` chain swallowed the death and victory
-  screens — the game never got to have that bug.
+  screens: the game never got to have that bug.
 
 ## Where each thing came from
 
@@ -651,7 +651,7 @@ in substance**. This is the honest map, so as not to believe again that somethin
 | **Hangman** | **Out altogether.** THE GALLOWS was an attempt and it was removed (see its section). The pool was left with nothing from Hangman. |
 | **Snake** | It contributed the SHAPE of the trace, not its RULE. In Snake crossing yourself **kills you** and eating **makes you bigger**; here crossing yourself is the REWARD and the length is a budget bought with cards. The two ideas that define Snake are inverted or absent. |
 | **Tron** | Half in. LIGHT CYCLES gave the enemy side (a bike whose trail burns), but **your own thread is not a wall**: it grazes for 3.5 with a cooldown, it does not kill. In Tron the point is that YOUR line is lethal. |
-| **Fireworks** | Only the burst on dying and the FIREWORKS rule. The cycle that defines it — launch, arc, burst in a pattern — is not there. |
+| **Fireworks** | Only the burst on dying and the FIREWORKS rule. The cycle that defines it, launch, arc, burst in a pattern, is not there. |
 | **Chess** | The promotion yes; the board decision no. The pieces are telegraphed threats, not an opponent making moves. |
 | **DonkeyKong** | It was only structure until BARRELS came in (2026-09-18). |
 | **StickFight** | The file's skeleton, `voice()`, the Arcade's shell. **Zero mechanics.** |
@@ -659,7 +659,7 @@ in substance**. This is the honest map, so as not to believe again that somethin
 ### Three wired-up mechanics that NOBODY can obtain
 
 `P.thorns` (returning damage when you take it), `P.loopHeal` (healing when you close a loop) and `P.lifesteal`
-exist, are reset in `recomputeStats` and **are checked in the game** — but no card and no
+exist, are reset in `recomputeStats` and **are checked in the game**, but no card and no
 rule ever raises them above 0. They are code that runs for something that cannot happen.
 
 It is not urgent to fix, but it is worth knowing for two reasons: they are slots ready if one of the
@@ -671,7 +671,7 @@ code, or as `chargeCd` missing in the mirror.)
 
 - **World space, not pixels.** The arena is a circle of **radius 1** centred on (0,0);
   the screen is derived when drawing with `sx()/sy()/sr()`. Unlike the rest of the repo's
-  `sper/xper`, **a resize does not touch a single number of the simulation** — which is what
+  `sper/xper`, **a resize does not touch a single number of the simulation**, which is what
   allows ~200 thread points to be stored without ever rescaling them.
 - **The thread is a simulated ROPE, not a painting** (`layThread` + `simThread`, 2026-09-14).
   Franco: *"it would improve ENORMOUSLY with better thread movement"*. A Verlet chain with
@@ -692,7 +692,7 @@ code, or as `chargeCd` missing in the mirror.)
   (`findSelfCross` → `segSegT`), skipping the newest stretch. Without that skip, turning hard
   closes "loops" two pixels across. **The skip is measured in DISTANCE (`CFG.thread.skipDist`),
   not in number of points**: during a lunge the points end up 10× further apart, and counting them
-  left blind precisely the straight line the lunge has just drawn — which is the one you want to close with.
+  left blind precisely the straight line the lunge has just drawn, which is the one you want to close with.
 - **The central balance rule**: `tight = sqrt(0.17 / area)` ⇒ **a small loop = damage,
   a big loop = points**. Without that the game would be "sweep the pitch with an enormous circle"
   and there would be no skill. If you touch this, you touch the whole game.
@@ -758,7 +758,7 @@ Franco played and fired off a batch of changes that redefined several things. Th
   chime). Being there always, the noughts and crosses chained without a break. And the **frenzy comes
   once per hour** (`run.frenzyHour`).
 - **The 3x3 pays ALL its lines** (`linesDone` + `newLines` + `checkLines`): the board is not
-  cleared on closing a triple, so adding sectors keeps closing new combinations —
+  cleared on closing a triple, so adding sectors keeps closing new combinations:
   a well-placed claim closes two together, and with all 9 the 8 come out. It is only reset when
   all nine are taken.
 - **The thread UNDULATES** (`CFG.rope.waveAmp/waveK/waveSpd`): the wave displaces the **anchor**, not the
@@ -772,7 +772,7 @@ Franco played and fired off a batch of changes that redefined several things. Th
   note per colour, the rest of the face **dark**, progress dots and an error warning. Before
   you could not tell whether you had got it right.
 - **The thread's head AIMS** (`CFG.thread.headPts` / `headAim`): near the tip the exit
-  blends towards where you are moving — it is a racket shot, not a bounce. Far away, pure physics.
+  blends towards where you are moving: it is a racket shot, not a bounce. Far away, pure physics.
   The tip is drawn with a halo of its own: if you cannot see it, you do not know which part you are hitting with.
 - **The pieces are NOT swept away at the close of the hour.** Seeing them evaporate on choosing a card broke
   the continuity. The prize for lasting is the rope (14% of health) and the bonus.
@@ -787,11 +787,11 @@ Franco played and fired off a batch of changes that redefined several things. Th
   inside a dark plate with a border (it reads as UI). Before they were the same number in a different
   colour and they were constantly confused.
 - **Outfit typography** (Google Fonts). The previous one was the system-ui, which on Windows falls back to
-  Segoe UI and reads square and generic — above all in the score's numbers.
+  Segoe UI and reads square and generic: above all in the score's numbers.
 - **Modes with a name and an explanation**: FREE RUN / DAILY RUN as cards with a subtitle. A bare "FREE"
   and "DAILY" said nothing.
 
-## Second playtest (2026-09-15) — background bugs and tuning
+## Second playtest (2026-09-15), background bugs and tuning
 
 - **QUEEN EXPLOSION (the worst bug the game has had).** The queens summoned pawns and
   the pawns that reached the centre promoted into queens: an exponential chain reaction. Worse,
@@ -802,13 +802,13 @@ Franco played and fired off a batch of changes that redefined several things. Th
   11 enemies and 2 queens. Before, it burst.
 - **The CELL is square; what is RECTANGULAR is only where the diamond goes.** (Corrected later the
   same day: first the whole cell was squashed and that changed the clock's "#", which was not what was
-  wanted.) The cell is the usual third (`SECT_Q`, `sectRect`, `sectorAt`) — it is what
+  wanted.) The cell is the usual third (`SECT_Q`, `sectRect`, `sectorAt`), it is what
   the clock draws, what is painted whole and what defines which sector you are in. The TARGET goes on
   a squashed grid (`SECT_DX/SECT_DY`): at the geometric centre of a corner cell the
   diamond landed at radius 0.94, on the edge, and **the board could never be completed**.
 - **The board's cycle** (final version): the window opens past `CFG.clock.sectorsAt` of the
   hour (33%), **once only per hour** (`game.sectorsShown`), and collecting a line **clears the
-  whole board** and closes the window — the sectors discharge into the frenzy. Uncollected
+  whole board** and closes the window: the sectors discharge into the frenzy. Uncollected
   sectors do persist between hours. The collected triples live in `linesDone`, which
   `resetSectors()` clears along with the board.
 - **The diamonds are drawn AFTER the hand**: the centre one was covered precisely when the
@@ -821,7 +821,7 @@ Franco played and fired off a batch of changes that redefined several things. Th
   there was always a step between layers; a filled polygon has a continuous silhouette. The colour
   goes in opaque slices that SHARE their edge vertices, so there is no seam. Each point's width
   is the one the hand had when laying it down (`thread[i].w`, see the audit further down).
-- **Orb leak: the thread ALSO moves.** The orb's swept test is not enough — when the
+- **Orb leak: the thread ALSO moves.** The orb's swept test is not enough, when the
   rope sweeps over an almost-still orb there is no intersection against the segment's current
   position. It is also tested against the PREVIOUS position (`p.px/p.py`) and the diagonal
   crossings. And `deflCd` (the BLIND window) went back to being short: at 0.15 s it was 0.26 units of flight
@@ -831,13 +831,13 @@ Franco played and fired off a batch of changes that redefined several things. Th
   17 + speed and they keep 28%. The LOOP's damage went up to compensate: your skill decides.
 - **RESONANCE does not punish stepping on other sectors** (see below).
 
-## QA audit (2026-09-15) — bugs the playtest was not finding
+## QA audit (2026-09-15), bugs the playtest was not finding
 
 All of this was live and none of it threw an error. **Do not re-introduce them.**
 
 - **The courage streak was never broken.** `chooseRule` compared `r.id === 'calma'`, but the id
   had become `'calm'` when the UI was translated. Taking CALM raised the streak just like a spicy
-  rule — and the draft's own card promises the opposite, because there it does compare correctly.
+  rule, and the draft's own card promises the opposite, because there it does compare correctly.
   The moral: **a data id used in two files is a silent dependency**; if
   you rename one, search for the string across the WHOLE repo.
 - **The diamond window reopened the frame after collecting.** `checkLines` does
@@ -887,14 +887,14 @@ place**.
   stepped on it for half a second and came back later burned instantly. It is a PERSISTENCE counter.
 - **With the player STANDING STILL the thread's tail left the arena.** Standing still, the thread stays at 2
   points and `simThread` left early (`if (n < 3) return`), so neither the anchor nor the clip
-  against the face ran — but `kickThread` did keep pushing the tail on every bounce. Measured
+  against the face ran, but `kickThread` did keep pushing the tail on every bounce. Measured
   in the AFK test: radius 1.14 at hour 2, 1.60 at hour 3, **2.86 at hour 4** (the arena
   has radius 1), with the thread drawn as an enormous straight line leaving the face. **An early
   exit for a "trivial case" is suspicious if something outside can keep writing that
   state.** Now the `n < 3` case applies the anchor and the clipping just the same.
 - **The minesweeper was illegible**: the uncovered square was painted at alpha 0.05 (invisible) and the
   numbers ended up UNDER the telegraph lanes and the hand. Franco, verbatim: "what does that
-  number mark?". Now the drawing goes in two passes — `drawMineCells()` with the background and
+  number mark?". Now the drawing goes in two passes: `drawMineCells()` with the background and
   `drawMineMarks()` **on top of everything alive**, because it is information, not decoration.
 
 ## Visual system (art direction, 2026-09-16)
@@ -903,22 +903,22 @@ A casino table: dark felt, golden metal, bone playing cards. Before, each screen
 colours and sizes by eye and that is why they looked like different games. Now there are **tokens** in
 `p03_engine` and everything is written against them:
 
-- **`C`** — the palette. Five families, **one function each**: surfaces (`void/felt/surf/
+- **`C`**: the palette. Five families, **one function each**: surfaces (`void/felt/surf/
   surfHi/line/lineHi`), ink (`ink/inkDim/inkFaint`), **gold** = value (the score, the prizes, the
   clock), **ice** = you (the marble, the thread, your tools), **crimson** = what hurts you,
   **violet** = rules and resonance. If a colour does two things, it stops meaning anything.
-- **`TS`** — the typographic scale in fractions of `min(W,H)`: `display/title/sub/body/cap`.
+- **`TS`**: the typographic scale in fractions of `min(W,H)`: `display/title/sub/body/cap`.
   Do not invent loose sizes.
-- **`panel(x,y,w,h,r,accent,glow)`** — the ONLY place where how a plate looks is decided:
+- **`panel(x,y,w,h,r,accent,glow)`**: the ONLY place where how a plate looks is decided:
   a vertical gradient, an accent border, an edge of light on top. The draft, the menu, the hour card,
   the buttons and the stack panel all use it.
-- **`txtO()`** — outlined text, for whatever flies over the arena. The offset-shadow `txtG`
+- **`txtO()`**: outlined text, for whatever flies over the arena. The offset-shadow `txtG`
   reads as text stuck on top; the outline centres the silhouette.
 - The same variables exist in CSS (`:root`) so the DOM shell is not a different game.
 
 **The performance rule that governs everything: "make it look expensive to produce, but cheap
 to render".** No `shadowBlur`, no `filter`, no new particles. Depth is built
-with vertical gradients, a light edge on top and a dark base — three fills and two lines.
+with vertical gradients, a light edge on top and a dark base: three fills and two lines.
 
 ### The damage numbers say WHO, and the size says HOW MUCH
 
@@ -929,7 +929,7 @@ player could not deduce, at a fixed size. Now:
 - what **is done to you** → crimson, heavier (`kind: 3`, new);
 - what **heals** you → green;
 - the **size** comes from `dmgRef()` = what a tight loop does at that point in the game, so
-  a 40 is impressive in hour 1 and routine in hour 11 — as it feels while playing;
+  a 40 is impressive in hour 1 and routine in hour 11, as it feels while playing;
 - only the big hits earn a flash, and it uses `bloomPx`'s cached sprite. If
   everything shone, nothing would shine.
 
@@ -938,7 +938,7 @@ The score is a **chip** (a plate with a golden edge), not a balloon: it is anoth
 ### This pass's performance decisions
 
 - **The hand's strip is BAKED** (`bakeHandStrip`). It is the only part of the redesign that cost anything IN
-  GAME: it runs on every HUD frame and each card asked for two `createLinearGradient`s — 10 per
+  GAME: it runs on every HUD frame and each card asked for two `createLinearGradient`s; 10 per
   frame to draw something that only changes when you take a card. Now it is **one `drawImage`**,
   invalidated by `handKey()` (content + hand + size) and by the resize. The same pattern as
   `bakeDial`.
@@ -949,13 +949,13 @@ closing it (`startFps`/`stopFps`).
   0.24–0.26 s; past that time the factor is worth 1 and nothing is recomputed. The only permanent
   animation is one `Math.sin` per card in the draft (the resting float), and only while the
   draft is open.
-- **The cards' shadow is two offset rects**, not `shadowBlur` — which is about the most expensive thing
+- **The cards' shadow is two offset rects**, not `shadowBlur`, which is about the most expensive thing
   there is on mobile canvas.
 
-### The arena (2026-09-16, second pass) — where it really shows
+### The arena (2026-09-16, second pass), where it really shows
 
 The first pass touched cards, panels, numbers and screens: **everything you look at for seconds**.
-The face, the pieces, the orbs and the hand — what you look at ALL the time — were left as they were,
+The face, the pieces, the orbs and the hand, what you look at ALL the time, were left as they were,
 and the result was "I didn't feel much difference". A lesson that holds for any redesign here: **an
 art pass is judged by what fills the screen during play, not by the menu screens.**
 
@@ -967,10 +967,10 @@ the turret): otherwise the shine turns with the object and reads as something th
 
 Two helpers, and there is no third place where this is decided:
 
-- **`groundShadow(x,y,r,a)`** — two stacked ellipses, no gradient (with 24 pieces on screen, one
+- **`groundShadow(x,y,r,a)`**: two stacked ellipses, no gradient (with 24 pieces on screen, one
   `createRadialGradient` per piece per frame is a real cost and it looks the same). It is the pass's cheapest
   detail and the one that changes the most: **without a shadow the pieces float; with a shadow they are resting.**
-- **`bevelShape(pathFn, w, liteA, darkA, lx, ly)`** — a light edge on top / a dark one underneath INSIDE
+- **`bevelShape(pathFn, w, liteA, darkA, lx, ly)`**: a light edge on top / a dark one underneath INSIDE
   the silhouette. The trick is to clip against the shape and stroke it again offset: what sticks out
   is clipped, so only the inner half of the stroke is left, which is exactly an edge of light.
   It gives volume without a gradient per object and without a single canvas shadow. `pathFn` is called three
@@ -979,13 +979,13 @@ Two helpers, and there is no third place where this is decided:
 **The face is an object, not a circle.** `bakeDial` is baked once per resize, so **in
 there the detail is free and it is worth spending it all**: a brass bevel with a conic gradient (the
 double reflection is what makes it read as metal), a chapter ring, the bevel's inner shadow
-falling over the felt — that gradient alone is the whole pass's stroke of depth — and
+falling over the felt, that gradient alone is the whole pass's stroke of depth, and
 a cloth grain by tile. The grids go **engraved**: a dark line + a light line offset towards
 the light. A single line reads as drawn; two read as carved.
 
 Three things that cost one iteration each and are worth not repeating:
 
-- **The bevel started too light and too wide** and ate the scene — it looked like a giant
+- **The bevel started too light and too wide** and ate the scene: it looked like a giant
   gold hoop. A bevel FRAMES; if it shines, it has stopped being a frame.
 - **The numerals shared a radius with their own hour marks** and ended up crossed. The
   ring needs TWO bands: marks outside, numbers inside.
@@ -1013,8 +1013,8 @@ over a copy of `parts/` caught it, not the game.
 
 ## THE CLOCKMAKER needed a BAR, not more numbers
 
-The playtest's four complaints — "getting close is only possible if you have a shield", "it's the same
-the whole time", "there are so many enemies I don't understand what's happening", "it's really hard to damage it" — were **the
+The playtest's four complaints: "getting close is only possible if you have a shield", "it's the same
+the whole time", "there are so many enemies I don't understand what's happening", "it's really hard to damage it": were **the
 same failure**: the fight had no cycle. The arms turned non-stop, the core always hurt,
 the attack came out on a coin flip every 3 s, and the armour (`src !== 'loop'` → 30%) left a single
 way to do damage: precisely the one that demands getting in where you get hit. **Without a moment when the
@@ -1025,7 +1025,7 @@ Three beats, in `CFG.boss`:
 | state | what happens |
 |---|---|
 | `idle` | the arms turn, the core hurts; it lasts less in each phase |
-| `wind` (1 s) | the arms speed up and a red hoop closes inwards — a telegraph |
+| `wind` (1 s) | the arms speed up and a red hoop closes inwards: a telegraph |
 | `open` (2.6 s) | the arms **stop and draw in**, the core opens in ice, **it does not hurt on contact** and **takes ×3** |
 
 Measured: 14 transitions in 30 s, the core open 40% of the time, ×3.00 confirmed, and 40 frames
@@ -1038,7 +1038,7 @@ Two principles that hold for any boss added here:
 - **The attacks ALTERNATE, they are not rolled.** A pattern can be learnt; a coin cannot. `rng() < 0.5`
   between two attacks does not generate variety: it generates noise.
 
-The armour became `CFG.boss.armor = 0.55`. The loop is still king — it does not pay it — but at
+The armour became `CFG.boss.armor = 0.55`. The loop is still king, it does not pay it, but at
 30% everything else was a tickle and the fight was a health toll. And the summons are now
 capped against the pieces **that are already alive** (`CFG.boss.maxAdds`): the boss called 2-5 every 3 s
 ON TOP of the hour's normal spawner, and that is why nothing could be understood.
@@ -1051,7 +1051,7 @@ balls anywhere just as you are solving something else. The clock already governs
 rules and the chimes. The boss's arms, which are hands, do not either.
 
 **A trap when taking it out**: `ex`/`ey` (the cosine and sine of `clock.ang`) were declared INSIDE
-that block, and the piece spawning still needs them — the pieces are born at the hand's tip.
+that block, and the piece spawning still needs them: the pieces are born at the hand's tip.
 Deleting the whole block left `ex is not defined` in eleven scenarios. The regression caught it, not me.
 
 ### A green test that proved nothing (twice in a row)
@@ -1059,7 +1059,7 @@ Deleting the whole block left `ex is not defined` in eleven scenarios. The regre
 Verifying "the orb does not move" gave **two false positives** before it was any use:
 
 1. the **player's magnet** pulls on the orb too;
-2. `spawnOrb` **randomises radius and mass**, so two runs compared different orbs — and 30
+2. `spawnOrb` **randomises radius and mass**, so two runs compared different orbs, and 30
    frames of simulation also consume RNG and spawn pieces that collide with it.
 
 What worked was calling `updateClock(dt)` **on its own**, with the orb still on top of the hand, and
@@ -1071,19 +1071,19 @@ touched instead of running the whole game and looking at the result.
 ### The streak is measured against an ABSOLUTE threshold, not against the other two options
 
 The break was relative: the trio's lowest-multiplier option sent the streak to zero.
-With {RESONANCE x1.45, HORDE x1.50, THE GALLOWS x1.75} that punished choosing RESONANCE — which has
-real risk — only because the other two were worse. Franco, verbatim: *"I don't want it to punish
+With {RESONANCE x1.45, HORDE x1.50, THE GALLOWS x1.75} that punished choosing RESONANCE, which has
+real risk, only because the other two were worse. Franco, verbatim: *"I don't want it to punish
 my points for choosing the simon says"*. Now there is `SAFE_RISK = 0.20` and `breaksStreak(r)`: a rule
 with real risk **never** breaks the streak, even if it is the mildest of the three. The plate's colour
 comes from the rule's own risk, not from its place in the trio.
 
 The general lesson: **a relative punishment punishes for the context, not for the decision.** The player
-chooses a concrete rule and expects the price to depend on that rule — not on what happened to be next to it.
+chooses a concrete rule and expects the price to depend on that rule, not on what happened to be next to it.
 
 ### THE GALLOWS: out
 
 Neither the mini-game nor how it looked went down well, and it did not communicate what happened on completion (it collected 34%
-of maximum health and went back to zero — that it had to be asked is the verdict in itself). It was taken out
+of maximum health and went back to zero, that it had to be asked is the verdict in itself). It was taken out
 entirely: the rule, the object, the counter, the relief, the update, the drawing, the CFG and the QA checks. **Switching off a
 rule and leaving its code behind is debt**: the next audit pass finds it again.
 
@@ -1110,13 +1110,13 @@ and light grey: over dark felt they would not exist.
 
 The uncovered square is drawn **sunken** (a light edge on the light's side, a dark one on the opposite), and
 the mine is a metallic sphere with the same key light as everything else, with the red reserved for the hoop
-that pulses — one single red element says "danger" better than a red body with red hoops.
+that pulses: one single red element says "danger" better than a red body with red hoops.
 
 ### Riders: the target heading and the real heading
 
 `e.dir` is the TARGET heading (always at a right angle) and `e.ang` the REAL one, which reaches it by turning at
 `CFG.cycle.turnRate`. Before they were the same thing and the bike changed direction between two frames: it read
-as a teleport of heading. Separating them makes it curve like the ghost without losing the circuit —
+as a teleport of heading. Separating them makes it curve like the ghost without losing the circuit:
 the straight stretches are still straight and the turns are still 90°, only with a radius.
 
 With the smooth turn **"turn on reaching 0.88" is no longer enough**: while it turns it keeps advancing, so
@@ -1124,18 +1124,18 @@ a hard cap against the hoop (0.93) is needed which also forces its heading inwar
 
 `life` x `spd` is the LENGTH of the trail in units of the face (which measures 2 from end to end). It was
 at 4.0 x 0.80 = 3.2 units: more than a whole lap, the face covered in orange. Now 1.5 x 0.60
-= 0.9 — a wall you dodge, not a maze.
+= 0.9: a wall you dodge, not a maze.
 
 ## A rule that ends cannot leave leftovers
 
-`nextHour` says explicitly that it clears the world (pendulums, mines, the sequence) — but **the orbs
+`nextHour` says explicitly that it clears the world (pendulums, mines, the sequence), but **the orbs
 were outside that list**. `orbCap()` depends on `RULE.orbRate`, so an hour of "more
 balls" filled up to 14 and the next hour kept them ALL: the cap drops, but `spawnOrb`
 only REPLACES when it is full, it never trims. A temporary effect stayed permanent for the
 rest of the game. Now `nextHour` prunes to the cap, taking out the neutral ones first (the same policy
 `spawnOrb` already used).
 
-`frenzy50` found it with an **intermittent** `ORB-CAP` — it depended on which rule was rolled.
+`frenzy50` found it with an **intermittent** `ORB-CAP`: it depended on which rule was rolled.
 A failure that appears one run in several is not noise: it is a failure with a precondition you have
 not identified yet. The check's message was not enough to diagnose it, and adding the
 context (the hour, `orbRate`, the rule, the state) is what made it legible.
@@ -1143,7 +1143,7 @@ context (the hour, `orbRate`, the rule, the state) is what made it legible.
 ## The loop cannot devalue itself with the hour
 
 Enemy health scales (`scaleHp()`: ×2.6 at hour 11) and the loop's damage was **constant**.
-Measured: a tight loop was worth **0.94 rooks at hour 1 and 0.36 at hour 11** — the game's
+Measured: a tight loop was worth **0.94 rooks at hour 1 and 0.36 at hour 11**; the game's
 central verb switched itself off, and Franco felt it as "it didn't seem to do damage any more". Now
 `closeLoop` multiplies by `scaleHp()`, so the RELATIVE power is constant (1.13 rooks in
 both hours, verified). **Anything that is the player's main tool has
@@ -1154,7 +1154,7 @@ to scale with what scales against them**; otherwise the game becomes impossible 
 It paid a fixed 1600 points. With six- or seven-figure scoreboards that is not visible: you solved the
 sequence and nothing legible happened. Now each solved sequence adds to `run.resonance`, which gives
 **+8% thread and +15% loop, permanently** (applied in `recomputeStats`, never accumulating over the
-previous value — it is still idempotent) plus a score that scales with the hour. One single thing
+previous value: it is still idempotent) plus a score that scales with the hour. One single thing
 that stacks, not a menu of random bonuses: making a second card system would have competed
 with the one that already exists.
 
@@ -1171,7 +1171,7 @@ CALM still cuts it to zero. The draft's card shows the real jump.
 you had a pair of aces and there was no way of knowing what it was for. Now the effect goes under the
 HUD's strip, and touching the strip (or `H`) opens the **stack panel**, which freezes the simulation and
 shows the five cards large with their concrete effect plus the hand and its bonus. The FLUSH is the
-only one whose effect depends on the suit, so it has its own table (`FLUSH_DESC`) — the old
+only one whose effect depends on the suit, so it has its own table (`FLUSH_DESC`), the old
 text said "The whole suit overflows", which informs you of nothing.
 
 **Careful with the render order:** the panel is a modal and goes LAST, after `drawToasts()`.
@@ -1179,10 +1179,10 @@ Put next to `drawHUD()` it ended up beneath the start-of-hour card, which covere
 
 ## The economy: a RULE by the calendar, a CARD by score
 
-Until 2026-09-15 it alternated — odd hours a rule, even ones a card — and the rule lasted two
+Until 2026-09-15 it alternated, odd hours a rule, even ones a card, and the rule lasted two
 hours. Franco changed it: **the rule changes every hour** (two hours in a row of the same thing
 became routine) and **the card is earned with POINTS** (`CARD_SCORE = [4000, 12000, 26000, 46000,
-75000]`). The stated objective: *"to encourage the player to exploit the score"* — the score
+75000]`). The stated objective: *"to encourage the player to exploit the score"*; the score
 stopped being a scoreboard and became the currency the build is bought with.
 
 Details that matter:
@@ -1192,7 +1192,7 @@ Details that matter:
   than the prize. What is immediate is the notice, not the screen.
 - **They chain.** If a single hit crosses two thresholds (or you had one saved), two
   card screens come out in a row. The flow goes through `afterDraft()`, which is the only place that
-  decides "another card or the next hour?" — **do not call `nextHour()` directly from a draft**.
+  decides "another card or the next hour?": **do not call `nextHour()` directly from a draft**.
 - **The HUD shows the progress** flush with the score (a fine bar + how much is left, or `CARD READY`).
   Without that, "making points" does not feel connected to anything; that bar IS the incentive.
 - A consequence for QA: **closing an hour can chain 2+ screens**, so every test helper
@@ -1208,15 +1208,15 @@ marked"*), and worse: with everything uncovered the numbers told you where the m
 Now `revealed` is a `Float32Array` of **seconds remaining** (`CFG.mines.scanT`, with
 `CFG.mines.fade` of fading). The thread refreshes the cells it passes through and the rest
 goes out: the information is fresh or it is nothing. Measured: from 50+ accumulated cells to **11 lit at a
-time**. The CLEAN cells (0 mines next to them) are painted much fainter than those with a number
-— they were the majority and the ones making the smear.
+time**. The CLEAN cells (0 mines next to them) are painted much fainter than those with a number,
+which were the majority and the ones making the smear.
 
 The deliberate exception: **a mine you passed over stays registered forever** (`m.seen`).
 Finding it is the prize for having gone there; what fades is the sweep, not the find.
 
 ### The bug that made the numbers noise
 
-The mine was created with `mines.push({ c, r, ..., r: CELL * 0.34, ... })` — **two `r` keys**: the
+The mine was created with `mines.push({ c, r, ..., r: CELL * 0.34, ... })`: **two `r` keys**: the
 row and the radius. In a JS literal **the last one wins**, so `m.r` was 0.0755 and the ROW
 was lost silently. Hence:
 
@@ -1225,7 +1225,7 @@ was lost silently. Hence:
 - `revealCell` registered with `m.r === r`, and 0.0755 is never a whole row ⇒ **stepping on a mine's
   cell never revealed it**; the only ones that appeared were the ones that had already exploded.
 
-The radius is now called `rad`. **A double lesson:** a repeated key in a literal gives no warning —
+The radius is now called `rad`. **A double lesson:** a repeated key in a literal gives no warning;
 no error, no warning, nothing; and the field that was overwritten was precisely the one with the shortest
 and most easily repeated name. If an object mixes grid coordinates with physical measurements, make sure the
 names cannot collide.
@@ -1248,7 +1248,7 @@ visual language with what is a hit's feedback.**
 
 The first version ("a wrong sector = an immediate reset") was broken: on a 3×3 grid, going
 from one sector to the next almost always crosses an intermediate one. The second ("punish nothing")
-took away all the risk. The third —the one that is there— tells **passing through** from **standing still**:
+took away all the risk. The third, the one that is there, tells **passing through** from **standing still**:
 
     const spf = clamp(hyp(P.vx, P.vy) / (CFG.player.maxSpd * P.spdMul), 0, 1);
     simon.wrongT += dt * (1 - 0.85 * spf);
@@ -1270,7 +1270,7 @@ simulation runs, and mixing "what is drawn" with "what is simulated" is what bro
 ## QA: qa.py (smoke) and qa2.py (invariants)
 
 - `qa.py` is the usual one: it runs scenarios, takes captures and catches JS errors.
-- `qa2.py` is the **auditor**: besides running, it inspects the internal state with `chk()` — NaN,
+- `qa2.py` is the **auditor**: besides running, it inspects the internal state with `chk()`; NaN,
   Infinity, negative HP, positions outside the face, violated caps, arrays that grow,
   counters that go backwards. `chkEvery = 1` runs it on every frame.
 - A trick for reading state: top-level `const`s do NOT end up on `window`, but
@@ -1282,7 +1282,7 @@ simulation runs, and mixing "what is drawn" with "what is simulated" is what bro
   `STEP`: with `t ≈ 1e5` ms the error is ~1e-11 s, and the system amplifies it over ~500 frames.
 - **The PER-FRAME leak detector over-reports and is not to be believed.** The `leak` scenario
   (qa.py) and `tunnel` (qa2.py) sample the orb's stretch once per frame against the thread's
-  **final** position — but the thread moved during the 3 substeps, so a legitimate sweep
+  **final** position, but the thread moved during the 3 substeps, so a legitimate sweep
   counts as a "crossing". At 50 ms it gets as far as saying 100% leaks. The ones that count are `tunnel2` (a settled
   thread, one shot at a time, 5 speeds × 2 dt) and `tunnel3` (a MOVING thread, counting by
   the orb's final position): **0 of 50 and 0 of 56**. If you are going to measure collisions, measure by
@@ -1450,7 +1450,7 @@ for anything".
 
 **The lesson is not changing 129 characters, it is the rule:** a separator that is neither a word nor
 a common punctuation mark forces the reader to interpret it, and at this size over dark felt it reads as
-a broken dash. Changing one odd sign for another odd sign fixes nothing — that is why the
+a broken dash. Changing one odd sign for another odd sign fixes nothing, that is why the
 first time.
 
 The texts that are DRAWN are rewritten as SENTENCES, their separator is not swapped:
@@ -1500,7 +1500,7 @@ A barrel rolling along the floor, **seen from above**, is something else:
 
 `spin` (a screen angle) became `roll` (the SURFACE's phase). And **the baking went**: it existed
 because the sprite rotated, but now the silhouette is fixed and what changes are the
-staves, so a bake would be regenerated entirely on every frame — it would be more expensive, not cheaper. There are
+staves, so a bake would be regenerated entirely on every frame: it would be more expensive, not cheaper. There are
 three barrels at most and only with the rule in force. The light IS counter-rotated (like the bike, the
 hand and the turret): the barrel does not turn in the plane, so its shine stays where the scene's
 light is.
@@ -1509,11 +1509,11 @@ light is.
 semi-axes (0.075 across, 0.048 in the direction of travel). With an elongated silhouette a circle
 is always a compromise; that it falls on the side generous to the player is the decision.
 
-## THE FIGHTER (StickFight) — the first enemy that comes close and commits
+## THE FIGHTER (StickFight), the first enemy that comes close and commits
 
 StickFight had not contributed **a single** mechanic. What it had to give is what was missing: in the
-arena there were four ways for something to threaten you — a telegraphed lane (the pieces), a chase
-(the ghost), a projectile (the tank, the barrels) and a trail (the bike) — and **none comes within arm's
+arena there were four ways for something to threaten you, a telegraphed lane (the pieces), a chase
+(the ghost), a projectile (the tank, the barrels) and a trail (the bike), and **none comes within arm's
 reach and stays there**.
 
 It walks up to you, plants its feet and throws a flurry of three: jab, jab, lunge. **While it strikes it does
@@ -1525,11 +1525,11 @@ Three things the QA found that are worth more than the enemy:
 1. **It planted itself even with its back turned.** During the wind-up it turns SLOWLY on purpose
    (so it can be juked round the side), so it could not correct half a turn and
    threw the flurry at thin air. It really happens in a game: a loop or a pulse pushes it. The fix
-   is not a special case but a condition — if it is not facing you it carries on WALKING, which is the
+   is not a special case but a condition, if it is not facing you it carries on WALKING, which is the
    state where it turns fast, and it sorts itself out.
 2. **The floating fist made hugging it the perfect defence.** As a disc at the arm's tip,
    the lunge hit a RING (between 0.140 and 0.260) and touched nothing inside 0.140.
-   The closer you were, the less the biggest strike hit you — exactly the wrong way round. **The fix is
+   The closer you were, the less the biggest strike hit you: exactly the wrong way round. **The fix is
    not moving numbers: it is making the impact test describe what you see.** An arm that stretches out
    sweeps from the body to the tip, so the impact goes against the body->fist SEGMENT.
    The scenario went from 2 hits out of 3 up close to 3 out of 3, without touching a single reach.
@@ -1539,8 +1539,8 @@ Three things the QA found that are worth more than the enemy:
    proportions matter more than the size: with the head competing with the trunk, the whole middle
    becomes a knot and the only pose you can make out is the one stretching the arm.
 
-The walk is procedural, not a table of frames: the foot describes an ellipse — forward lifted,
-back planted — and the knee comes from bending forwards according to how much the leg shortened. The
+The walk is procedural, not a table of frames: the foot describes an ellipse, forward lifted,
+back planted, and the knee comes from bending forwards according to how much the leg shortened. The
 cycle advances with what the figure ADVANCES, not with the clock: if it is slowed, it limps more slowly instead of
 skating. **A walk cycle reads by the SEPARATION of the feet, not by the swing of the
 body.** Light ink on the felt, which is StickFight's look turned around (there it was ink
@@ -1548,7 +1548,7 @@ on paper).
 
 The telegraph is not a lane but a REACH ARC that fills while the arm draws back, and it
 disappears when the fist comes out: by the time you see the fist there is nothing left to decide. The same language
-as a piece's lane — the shape says where, the fill says when.
+as a piece's lane: the shape says where, the fill says when.
 
 ## The boss's health is MEASURED, not estimated
 
@@ -1561,7 +1561,7 @@ really be put into it. The result at hour 12:
     + hitting the open-core window (the ceiling)            273 /s
 
 At 4400 that is a **sixteen-second** fight. It is not that the boss was easy: it is that it did not
-get a chance to happen. It went to **12000** — 44s at the ceiling, ~60s for a good but not perfect player.
+get a chance to happen. It went to **12000**: 44s at the ceiling, ~60s for a good but not perfect player.
 
 **Why intuition falls so short here:** the open core multiplies by 3 and is open
 40% of the bar, and on top of that at hour 12 the player arrives with a built hand. Two multipliers
@@ -1573,7 +1573,7 @@ player as one who circles HUGGING the boss and fast: it gave 4/s with 38 loops c
 only 15 loops for one circling far away and slowly. The one that closed MORE loops did LESS damage. The reason is
 geometric: **a loop hurts what is left INSIDE**, and circling up close closes tiny loops
 beside you that do not contain the boss. The boss is 0.15 in radius; the technique is to circle outside
-that. The corrected version sweeps radii instead of guessing which is the optimum — when you do not know which
+that. The corrected version sweeps radii instead of guessing which is the optimum, when you do not know which
 the good technique is, do not assume it, sweep for it.
 
 **What was NOT touched, at Franco's request:** the open-core window and the hands not
@@ -1584,7 +1584,7 @@ less has to last longer; that is not a patch, it is the consequence.
 
 `QA_HTML` was a fixed name (`_qa2.html`). Two QA runs at once overwrite each other: one writes its
 scenario, the other overwrites it, and the first one's Chrome ends up running the second's
-scenario. **It really happened** — in one report `### ruleclean` appeared with `bossdps`'s notes.
+scenario. **It really happened**, in one report `### ruleclean` appeared with `bossdps`'s notes.
 
 What is serious is not the collision but that it is INVISIBLE: it does not fail, it LIES. A scenario reports BAD(0)
 on code it never executed. Now `QA_HTML` includes `os.getpid()`.
@@ -1608,7 +1608,7 @@ points at the aiming. It was two things multiplying:
    of the player, even with them at 0.05. At that distance a point 0.34 ahead ends up
    almost PERPENDICULAR to their advance: it went past, came back, went past again. **The orbit
    was not a calculation error: it was the right solution to the wrong problem.** Now the
-   lead is `t = distance / its own speed` — "where you are going to be when I arrive" — and up
+   lead is `t = distance / its own speed`, "where you are going to be when I arrive", and up
    close it tends to zero, that is, it ends up aiming AT the player, which is the only thing that closes a
    chase.
    And it explains why the case that was easy to test by hand worked: the angular error depends on how much

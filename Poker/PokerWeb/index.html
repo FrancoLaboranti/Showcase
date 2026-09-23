@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -64,7 +64,7 @@
     padding: 0 4px;
   }
   /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css. */
-  /* FPS HUD — Pong format: a monospaced panel at the top left, no border-radius. */
+  /* FPS HUD: Pong format: a monospaced panel at the top left, no border-radius. */
   #fpsOverlay {
     position: absolute;
     left: calc(8px + env(safe-area-inset-left));
@@ -136,7 +136,7 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  POKER — web port of the heads-up Texas Hold'em in Poker.py
+  //  POKER: web port of the heads-up Texas Hold'em in Poker.py
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
   const ri  = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
@@ -205,7 +205,7 @@
             }
     return best;
   }
-  // A version that also returns the winning combination — used in the showdown for the highlight.
+  // A version that also returns the winning combination: used in the showdown for the highlight.
   function bestHandCombo(seven) {
     let best = [0], bestCombo = seven.slice(0, 5);
     const n = seven.length;
@@ -251,7 +251,7 @@
     const w = Math.min(W, H) * 0.13;
     return { w, h: w * 1.45 };
   }
-  // Position of the "slot" by owner + index — used both in deal/advance and in resize.
+  // Position of the "slot" by owner + index: used both in deal/advance and in resize.
   function slotPos(owner, slot) {
     const { w } = cardSize();
     const dx = w * 1.05;
@@ -318,7 +318,7 @@
       ctx.fillRect(c.x - h, c.y - h, h*2, h*2);
     }
 
-    // A soft elliptical shadow under the card — only when it is nearly face on, not mid-flip.
+    // A soft elliptical shadow under the card, only when it is nearly face on, not mid-flip.
     if (scale > 0.55) {
       ctx.save();
       ctx.fillStyle = 'rgba(0,0,0,0.34)';
@@ -366,7 +366,7 @@
         ctx.font = `${suitFs}px ${CARD_FONT}`;
         ctx.fillText(sym, 0, rankFs + sp(0.002));
         ctx.restore();
-        // Central pip — nice and big so the suit "reads" from a distance.
+        // Central pip: nice and big so the suit "reads" from a distance.
         ctx.font = `${Math.round(sp(0.075))}px ${CARD_FONT}`;
         ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(sym, x + w/2, y + h*0.55);
@@ -450,7 +450,7 @@
   const BIG_BLIND   = 20;
   const G = {
     playerChips: 1000, cpuChips: 1000,
-    // Display tweens — they chase the real value with a gentle k; in postBet we snap so that betting
+    // Display tweens: they chase the real value with a gentle k; in postBet we snap so that betting
     // feels immediate and the tween only shows up when the pot is poured to the winner.
     displayedPlayerChips: 1000, displayedCpuChips: 1000,
     button: Math.random() < 0.5 ? 'player' : 'cpu',
@@ -461,11 +461,11 @@
     currentPlayer: 'player',
     raiseAmount: 40,
     message: 'Click DEAL to start',
-    messageT: 0,                            // the message's age in s — it drives the ease-out-back scale-in
+    messageT: 0,                            // the message's age in s; it drives the ease-out-back scale-in
     cpuPending: false, cpuTimer: 0,
     handEndTimer: 0,
     allInActive: false, allInDelay: 0,      // staged auto-advance when someone is all-in
-    playerHandName: '',                     // cached — bestHand() is 21 combos, expensive to run every frame
+    playerHandName: '',                     // cached; bestHand() is 21 combos, expensive to run every frame
     winningCodes: null,                     // Set of codes that win in the showdown → a golden halo
   };
 
@@ -483,7 +483,7 @@
       amount = Math.min(amount, G.playerChips);
       G.playerChips -= amount;
       G.playerBet += amount;
-      G.displayedPlayerChips = G.playerChips;                                      // snap on bet — the counter does not "lag behind" while you bet
+      G.displayedPlayerChips = G.playerChips;                                      // snap on bet: the counter does not "lag behind" while you bet
     } else {
       amount = Math.min(amount, G.cpuChips);
       G.cpuChips -= amount;
@@ -494,7 +494,7 @@
   }
 
   // If one is left with 0 chips and the bets are uneven, we return the excess to the one with the bigger stack (there is nothing
-  // to match it with — it would be a phantom pot) and mark both as acted so the round closes and
+  // to match it with: it would be a phantom pot) and mark both as acted so the round closes and
   // the remaining streets reveal themselves. revealCpuCards() because nothing is being decided any more.
   function resolveAllIn() {
     if (G.playerChips > 0 && G.cpuChips > 0) return;
@@ -587,7 +587,7 @@
     const need = target - G.playerBet;
     if (need <= 0) return;
     postBet('player', need);
-    // NO resolveAllIn — the opponent still has to call/fold against the raise. resolveAllIn lives in
+    // NO resolveAllIn: the opponent still has to call/fold against the raise. resolveAllIn lives in
     // the CALL branches only; calling it here refunded chips before the other player
     // responded (a bug that turned up during the redesign: an all-in raise "deflated itself").
     G.lastRaiser = 'player';
@@ -650,7 +650,7 @@
       // The kicker really matters now: the old +0.04*top/12 got lost in the noise.
       if (score[0] === 1 || score[0] === 2) strength += (score[1] / 12) * 0.10;
 
-      // Draw bonuses — only if there are still cards to come and the made hand is weak.
+      // Draw bonuses, only if there are still cards to come and the made hand is weak.
       if (score[0] <= 2 && G.community.length < 5) {
         const ranks = all7.map(c => RANKS.indexOf(c[0]));
         const suits = all7.map(c => c[1]);
@@ -689,7 +689,7 @@
     const cpuIsButton = G.button === 'cpu';
     const inPosition = (G.phase === 'preflop') ? !cpuIsButton : cpuIsButton;
     if (inPosition) strength += 0.06;
-    // Reduced noise (-0.06/+0.06) — the old (-0.12/+0.10) buried the signal.
+    // Reduced noise (-0.06/+0.06), the old (-0.12/+0.10) buried the signal.
     strength += rnd(-0.06, 0.06);
     return strength;
   }
@@ -710,7 +710,7 @@
     }
 
     // Raise: '>=' allows the exact min-raise at the stack=callAmt+BB edge. And you CANNOT raise
-    // against an opponent already all-in — there are no chips on the other side to match the raise.
+    // against an opponent already all-in: there are no chips on the other side to match the raise.
     const canRaise = G.cpuChips >= callAmt + BIG_BLIND && G.playerChips > 0;
     // Value raise: a strong hand; if I was already the last raiser, reroll to 0.50 (it was 0.25, far too passive).
     const wantValueRaise = canRaise && strength > 0.55 && (G.lastRaiser !== 'cpu' || Math.random() < 0.5);
@@ -720,7 +720,7 @@
     const wantBluffRaise = canRaise && !wantValueRaise && strength > 0.15 && G.lastRaiser !== 'cpu' && Math.random() < bluffP;
 
     if (wantValueRaise || wantBluffRaise) {
-      // Sizing: preflop BB multiples (as before); postflop a fraction of the pot — realistic and reactive.
+      // Sizing: preflop BB multiples (as before); postflop a fraction of the pot; realistic and reactive.
       let bump;
       if (G.phase === 'preflop') {
         const mult = [1,1,2,2,3][Math.floor(Math.random() * 5)];
@@ -731,7 +731,7 @@
       }
       bump = Math.min(bump, G.cpuChips - callAmt);
       postBet('cpu', callAmt + bump);
-      // NO resolveAllIn — the player still has to call/fold. If we called it here, an all-in
+      // NO resolveAllIn: the player still has to call/fold. If we called it here, an all-in
       // raise by the CPU would deflate itself before the player responded.
       G.lastRaiser = 'cpu';
       G.acted = new Set(['cpu']);
@@ -809,7 +809,7 @@
       const half = Math.floor(G.pot / 2);
       G.playerChips += half;
       G.cpuChips += G.pot - half;
-      setMsg(`Split pot — both ${pName}`);
+      setMsg(`Split pot: both ${pName}`);
       // Tie: we highlight the union of both winning combos (overlap is common on the board).
       G.winningCodes = new Set([...pBest.combo, ...cBest.combo]);
     }
@@ -921,7 +921,7 @@
     // (it is on the other side) and quieter.
     fold(far) { voice('fold', 200, () => aNoise(0, 0.075, far ? 0.022 : 0.030, far ? 660 : 900, 1.0, 'bandpass')); },
     // The CPU's cards are turned over: two dry, bright "tacks", higher and shorter
-    // than the deal's slide — a card being flipped strikes, it does not slide.
+    // than the deal's slide: a card being flipped strikes, it does not slide.
     reveal() { voice('reveal', 300, () => { aNoise(0, 0.028, 0.048, 2900, 3.5, 'bandpass'); aNoise(0.12, 0.028, 0.044, 2900, 3.5, 'bandpass'); }); },
     // The pot is poured to the winner. It starts 0.18 s AFTER the resolution so it does not step on the
     // result, and it is the only thing that says how much was taken.
@@ -933,7 +933,7 @@
     // The raise amount: 18 ms at the back of the mix. If it sounded like a chip, raising the amount
     // would be confused with betting.
     tick() { voice('tick', 45, () => aNote(1400, 1150, 0, 0.018, 'square', 0.02)); },
-    // Rebuy: the tray of chips coming in. Lower and without the clay body — it is the sound
+    // Rebuy: the tray of chips coming in. Lower and without the clay body: it is the sound
     // of the whole stack, not of a bet.
     tray() { voice('tray', 500, () => { let t = 0.35; for (let i = 0; i < 6; i++) { aNoise(t, 0.04, 0.034, 1500, 5, 'bandpass'); t += rndf(0.03, 0.06); } }); },
   };
@@ -1046,7 +1046,7 @@
     o.lineWidth = 1.5;
     o.beginPath(); o.ellipse(0, 0, rx, ry, 0, 0, TAU); o.stroke();
 
-    // Felt: a warm radial gradient at the centre, sunken at the edge — an inner vignette effect.
+    // Felt: a warm radial gradient at the centre, sunken at the edge; an inner vignette effect.
     const felt = o.createRadialGradient(0, -ry*0.15, 0, 0, 0, Math.max(rx, ry));
     felt.addColorStop(0,    '#1d7a35');
     felt.addColorStop(0.55, '#0f5520');
@@ -1092,7 +1092,7 @@
     return ['#dadada', '#ffffff', 'rgba(120,120,120,0.45)'];
   }
   function drawChipDisk(cx, cy, r, fill, hi, rim) {
-    // The shadow/side (a "rim" ellipse underneath) — it gives volume.
+    // The shadow/side (a "rim" ellipse underneath), it gives volume.
     ctx.fillStyle = '#0b0b0b';
     ctx.beginPath(); ctx.ellipse(cx, cy + r*0.20, r, r*0.32, 0, 0, TAU); ctx.fill();
     // Tapa principal.
@@ -1101,7 +1101,7 @@
     // A faint highlight (the top band).
     ctx.fillStyle = hi;
     ctx.beginPath(); ctx.ellipse(cx, cy - r*0.04, r*0.62, r*0.18, 0, 0, TAU); ctx.fill();
-    // Radial marks (4) — little white pins.
+    // Radial marks (4), little white pins.
     ctx.strokeStyle = rim;
     ctx.lineWidth = Math.max(1.2, r*0.06);
     for (let i = 0; i < 4; i++) {
@@ -1119,7 +1119,7 @@
   }
   function drawChipStack(cx, cy, amount, baseR) {
     if (amount <= 0) return;
-    // A mix of up to 2 denominations so the stack READS as a quantity — it is not exact change.
+    // A mix of up to 2 denominations so the stack READS as a quantity: it is not exact change.
     const denoms = amount >= 500 ? [500, 25]
                  : amount >= 100 ? [100, 25]
                  : amount >= 25  ? [25, 5]
@@ -1233,7 +1233,7 @@
     }
   }
 
-  // The centre message — separated from drawHud and called AFTER the cards in the main loop, so that
+  // The centre message: separated from drawHud and called AFTER the cards in the main loop, so that
   // it stays above the community cards instead of being covered by them. A semi-transparent box
   // behind the text so it reads even when it falls over the middle suit.
   function drawMessage() {
@@ -1276,7 +1276,7 @@
     const dt = Math.min(0.05, (now - lastT) / 1000);
     lastT = now;
 
-    // CPU "turn" pacing — a delay the first time it is their turn, then they act.
+    // CPU "turn" pacing: a delay the first time it is their turn, then they act.
     // NOTE: the all-in auto-advance forces the CPU too; the `inBetting()` guard prevents a double trigger.
     if (inBetting() && G.currentPlayer === 'cpu' && !G.allInActive) {
       if (!G.cpuPending) { G.cpuPending = true; G.cpuTimer = 0.9; }
@@ -1289,13 +1289,13 @@
     }
 
     // Hand end: timer + broke detection. We only override the showdown's message AFTER the
-    // timer — doing it in the same frame as the showdown would swallow "You win!".
+    // timer: doing it in the same frame as the showdown would swallow "You win!".
     if (G.phase === 'hand_end') {
       G.handEndTimer -= dt;
       if (G.handEndTimer <= 0) {
         G.phase = 'idle';
-        if (G.playerChips <= 0)      setMsg('You went broke — DEAL to rebuy');
-        else if (G.cpuChips <= 0)    setMsg('CPU went broke — DEAL to rebuy');
+        if (G.playerChips <= 0)      setMsg('You went broke: DEAL to rebuy');
+        else if (G.cpuChips <= 0)    setMsg('CPU went broke: DEAL to rebuy');
       }
     }
 
@@ -1308,7 +1308,7 @@
       }
     }
 
-    // Chip display tween — it chases the real value with k ≈ 1 - e^{-5dt} (~1 s to converge).
+    // Chip display tween: it chases the real value with k ≈ 1 - e^{-5dt} (~1 s to converge).
     // In postBet we snap, so this only shows up when the pot is poured to the winner.
     const k = 1 - Math.exp(-dt * 5);
     G.displayedPlayerChips += (G.playerChips - G.displayedPlayerChips) * k;
@@ -1321,7 +1321,7 @@
     drawTable();
     // Layer order: felt → bets/pot/dealer/glow (HUD) → cards (with the highlight on top) → the centre
     // message last, SO it is not covered by the row of community cards (that was the bug in the
-    // screenshot — the "You win!" landed right on the bottom edge of the cards).
+    // screenshot: the "You win!" landed right on the bottom edge of the cards).
     drawHud();
     for (const c of cards) drawCard(c);
     drawMessage();
@@ -1356,7 +1356,7 @@
       const btn = document.getElementById('btnInfo');
       btn.addEventListener('pointerdown', e => {
         e.preventDefault();
-        // The overlay starts at display:none FROM CSS — the inline style is empty "", so we
+        // The overlay starts at display:none FROM CSS; the inline style is empty "", so we
         // compare against === 'block' (an explicitly visible state) instead of !== 'none' (which was true
         // at startup and swallowed the first tap).
         const showing = overlay.style.display === 'block';
@@ -1376,7 +1376,7 @@ If you run out of chips, <span class="k">DEAL</span> gives you a fresh stack.
 <ul>
   <li><span class="k">DEAL</span> deals and posts the blinds.</li>
   <li><span class="k">CHECK</span> passes without betting (only when nobody has bet); <span class="k">CALL</span> matches the bet.</li>
-  <li><span class="k">RAISE</span> bets more — the amount is set with <span class="k">+</span> and <span class="k">−</span>.</li>
+  <li><span class="k">RAISE</span> bets more, and the amount is set with <span class="k">+</span> and <span class="k">−</span>.</li>
   <li><span class="k">ALL IN</span> pushes your whole stack. <span class="k">FOLD</span> gives up the hand and the pot.</li>
 </ul>
 <h5>Mobile</h5>
@@ -1406,7 +1406,7 @@ If you run out of chips, <span class="k">DEAL</span> gives you a fresh stack.
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

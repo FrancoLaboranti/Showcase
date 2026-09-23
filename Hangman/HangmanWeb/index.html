@@ -24,7 +24,7 @@
   }
 
   /* Bottom bar (sitting above the keyboard): new round + language change + exit.
-     A centred flex layout like the other games — the shell adds gap:8px. */
+     A centred flex layout like the other games: the shell adds gap:8px. */
   #bar {
     position: absolute; left: 0; right: 0;
     bottom: calc(var(--kb-height) + env(safe-area-inset-bottom));
@@ -72,7 +72,7 @@
   .kbrow { display: flex; justify-content: center; gap: 4px; flex: 1; padding: 0 4px; }
   .key {
     flex: 1 1 0; min-width: 0;
-    /* A cap so the shorter QWERTY rows (7 keys) do not blow them up — the width is set by the
+    /* A cap so the shorter QWERTY rows (7 keys) do not blow them up: the width is set by the
        row of 10. `justify-content: center` on .kbrow centres them. */
     max-width: calc((100% - 36px) / 10);
     border: 1px solid rgba(255,255,255,0.22);
@@ -92,7 +92,7 @@
   .key:disabled { cursor: default; opacity: 0.85; }
 
   /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css (included in <head>). */
-  /* FPS HUD — Pong format: a monospaced panel at the top left, no border-radius. */
+  /* FPS HUD: Pong format: a monospaced panel at the top left, no border-radius. */
   #fpsOverlay {
     position: absolute;
     left: calc(8px + env(safe-area-inset-left));
@@ -158,7 +158,7 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  HANGMAN — web port of Hangman.py.
+  //  HANGMAN: web port of Hangman.py.
   //  It renders the gallows + the word + category/hint on canvas. The virtual
   //  keyboard at the bottom is HTML so that tapping on mobile is comfortable.
   //  It also accepts physical keys (including Ñ).
@@ -198,7 +198,7 @@
     wins: 0, losses: 0,
     shakeT: 0, shakeTotal: 0.4, lastFails: 0,
     flashT: 0,
-    endStateAt: 0,    // performance.now() on entering won/lost — a grace period so it does not auto-advance
+    endStateAt: 0,    // performance.now() on entering won/lost; a grace period so it does not auto-advance
   };
   const END_TAP_DELAY_MS = 250;  // ignore taps for this long after winning/losing
 
@@ -219,18 +219,18 @@
   const WORDS = { es: [], en: [] };
 
   // ════════════════════════════════════════════════════════════════════
-  //  AUDIO — WebAudio synthesis, zero files, zero dependencies.
+  //  AUDIO: WebAudio synthesis, zero files, zero dependencies.
   //
   //  The identity comes from the set: four beams, a rope and a stick figure
   //  on a dark room. Out of that come three materials and not one
   //  single synthesiser with a melody:
-  //    · GRAPHITE — the hit. Short, bright noise, PITCHLESS: the
+  //    · GRAPHITE: the hit. Short, bright noise, PITCHLESS: the
   //      pencil filling in blanks. One stroke per revealed square, so the
   //      ear counts how many the letter uncovered.
-  //    · WOOD     — the miss. A mallet on a beam: low bandpassed noise plus a
+  //    · WOOD: the miss. A mallet on a beam: low bandpassed noise plus a
   //      triangle body. The six blows DESCEND in pitch and thicken, which
   //      means that without looking at "MISSES n/6" you know which miss you are on.
-  //    · ROPE     — it appears twice in the whole round: it creaks when
+  //    · ROPE: it appears twice in the whole round: it creaks when
   //      one life is left and takes the weight in defeat.
   //  The only tuned thing is the victory, and it is a marimba (wooden bars)
   //  so that even the celebration is made of the gallows' material.
@@ -245,7 +245,7 @@
 
   // Per-frame voice ceiling. 14 and not 4 (StickFight) or 5 (Loop) because here
   // the worst frame is known and it is NOT a machine gun: it is the hit that wins
-  // the round — 4 chalk strokes (the real maximum measured in the corpus: the O
+  // the round: 4 chalk strokes (the real maximum measured in the corpus: the O
   // in ZOOLOGICO) + the marimba, which is 4 notes doubled an octave down
   // plus the confetti's flutter = 13 voices. With 4 the victory would be mute.
   const SND_PER_FRAME = 14;
@@ -362,7 +362,7 @@
     },
     // Sixth miss: the trapdoor opens and the rope takes the weight. It REPLACES the
     // mallet (they do not stack) and after it there is nothing: the silence is the ending.
-    // No defeat jingle — it would be a clown act on top of a hanging.
+    // No defeat jingle: it would be a clown act on top of a hanging.
     drop() {
       voice('drop', 300, () => {
         noiseHit(0.09, 0.120, 260, 2);                    // the trapdoor
@@ -467,7 +467,7 @@
     ctx.closePath();
   }
 
-  // Palette per category — used in the pill above the word. It covers
+  // Palette per category: used in the pill above the word. It covers
   // both languages (categories in ES and EN point to the same colour).
   const CATEGORY_COLORS = {
     ANIMAL:      [125, 220, 125],
@@ -489,7 +489,7 @@
     return 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + alpha + ')';
   }
 
-  // Background — a cached gradient (invalidated on resize).
+  // Background: a cached gradient (invalidated on resize).
   let bgGradient = null;
   function drawBackground() {
     if (!bgGradient) {
@@ -1003,7 +1003,7 @@
   });
 
   // Mute. It persists in localStorage so it survives the restarts, not because the button is
-  // unreachable — since the language screen went away, the bar is there from the first frame.
+  // unreachable, since the language screen went away, the bar is there from the first frame.
   const btnMute = document.getElementById('btnMute');
   if (btnMute) {
     btnMute.classList.toggle('muted', muted);
@@ -1021,7 +1021,7 @@
   }
 
   // Tap-to-continue once the round is over. It is hooked to the canvas and to the
-  // keyboard (whose keys are disabled in won/lost — the pointerdown bubbles
+  // keyboard (whose keys are disabled in won/lost: the pointerdown bubbles
   // up to the #keyboard div). There is a brief grace period so that the same gesture that
   // won/lost does not trigger the next round.
   function advanceIfEnded(e) {
@@ -1044,7 +1044,7 @@
   }
 
   // ════════════════════════════════════════════════════════════════════
-  //  Word sources — same format as Hangman/words_*.txt
+  //  Word sources: same format as Hangman/words_*.txt
   //  WORD|CATEGORY|hint (the hint is optional). Lines that
   //  start with # are comments.
   // ════════════════════════════════════════════════════════════════════
@@ -1910,7 +1910,7 @@ VACCINE|SCIENCE|trains immunity
       const btn = document.getElementById('btnInfo');
       btn.addEventListener('pointerdown', e => {
         e.preventDefault();
-        // The overlay starts at display:none FROM CSS — the inline style is empty "", so we
+        // The overlay starts at display:none FROM CSS; the inline style is empty "", so we
         // compare against === 'block' (an explicitly visible state) instead of !== 'none' (which was true
         // at startup and swallowed the first tap).
         const showing = overlay.style.display === 'block';
@@ -1924,7 +1924,7 @@ VACCINE|SCIENCE|trains immunity
 <div id="infoPanel">
 <div class="infoEN"><h4>Hangman</h4>
 Guess the word letter by letter. Six misses and you lose. <b>A letter you already tried costs
-nothing</b> — it neither adds a miss nor uses a turn. Each word comes with its category in view.
+nothing</b>: it neither adds a miss nor uses a turn. Each word comes with its category in view.
 <hr>
 <h5>Desktop</h5>
 <ul>
@@ -1939,7 +1939,7 @@ nothing</b> — it neither adds a miss nor uses a turn. Each word comes with its
 </div>
 <div class="infoES"><h4>Ahorcado</h4>
 Adiviná la palabra letra por letra. Seis fallos y perdés. <b>Una letra que ya probaste no cuesta
-nada</b> — no suma fallo ni gasta turno. Cada palabra viene con su categoría a la vista.
+nada</b>: no suma fallo ni gasta turno. Cada palabra viene con su categoría a la vista.
 <hr>
 <h5>Escritorio</h5>
 <ul>
@@ -1973,7 +1973,7 @@ nada</b> — no suma fallo ni gasta turno. Cada palabra viene con su categoría 
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

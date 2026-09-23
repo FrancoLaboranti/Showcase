@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -16,7 +16,7 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Segoe UI', system-ui, sans-serif;
   }
-  /* Canvas occupies only the space ABOVE the bar — physics walls are sized to this rect, so balls
+  /* Canvas occupies only the space ABOVE the bar: physics walls are sized to this rect, so balls
      can't fall behind the buttons. Dimensions are set explicitly from JS each resize. */
   #c {
     display: block; position: absolute;
@@ -124,11 +124,11 @@
     </button>
   </div>
 
-  <!-- Physics. Vendored locally (matter-js 0.19.0) — it stops a hiccup of the CDN leaving the game unable to start. -->
+  <!-- Physics. Vendored locally (matter-js 0.19.0), it stops a hiccup of the CDN leaving the game unable to start. -->
   <script src="matter.min.js"></script>
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  BALLS — faithful web port of the pymunk sandbox.
+  //  BALLS: faithful web port of the pymunk sandbox.
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
   const mod = (a, n) => ((a % n) + n) % n;
@@ -137,13 +137,13 @@
 
   // ── TUNING KNOBS ──
   const GRAVITY_Y        = 1.4;       // bumped from 1.0 → snappier falls without changing the rest of the feel
-  const BALL_BALL_RESTITUTION = 0.3;   // ball↔ball — matches the pymunk pre_solve override; lower = sticky piles, higher = jittery
-  const BALL_WALL_RESTITUTION = 0.65;  // ball↔wall — matches pymunk; Matter.js uses max(a, b) when combining, so wall=0.65 + ball=0.3 → collision uses 0.65
+  const BALL_BALL_RESTITUTION = 0.3;   // ball↔ball: matches the pymunk pre_solve override; lower = sticky piles, higher = jittery
+  const BALL_WALL_RESTITUTION = 0.65;  // ball↔wall: matches pymunk; Matter.js uses max(a, b) when combining, so wall=0.65 + ball=0.3 → collision uses 0.65
   const BALL_FRICTION    = 0.25;
   const BALL_FRICTION_AIR= 0.006;
   const R_MIN_FRAC       = 0.040;
   const R_MAX_FRAC       = 0.085;
-  const COLLISION_RADIUS_MULT = 1.03; // collider radius vs. visual radius — bumped out a touch so balls leave a small visible gap at rest instead of touching pixel-tight
+  const COLLISION_RADIUS_MULT = 1.03; // collider radius vs. visual radius: bumped out a touch so balls leave a small visible gap at rest instead of touching pixel-tight
   const BALL_ALPHA       = 0.7;    // translucency of the ball BODY (base color sphere + under-glow). Lower = more glass-like. Specular hotspot stays opaque so the marble still has a sharp highlight.
   const PATTERN_ALPHA    = 1;      // translucency of the PATTERN overlay (stripes / dots / dot-rims). Higher than BALL_ALPHA so the pattern reads as solid paint sitting on top of the glass body.
   const MAX_BALLS        = 100;
@@ -152,14 +152,14 @@
 
   const GRAB_GAIN        = 1;      // bumped from 0.5 → the ball follows the cursor with no visible lag on desktop. The GRAB_MAX_SPEED cap still acts as an anti-tunneling brake.
   const GRAB_MAX_SPEED   = 120;    // bumped from 55 (px/step in matter ≈ 5700 px/s at 60fps) → allows fast flicks without clamping.
-  const MOUSE_SMOOTH_TC  = 0.04;   // time constant (sec) of the pointer-velocity low-pass — port of pymunk's MOUSE_SMOOTH_TC. Frame-rate independent via smoothing = 1 - exp(-dt/TC).
+  const MOUSE_SMOOTH_TC  = 0.04;   // time constant (sec) of the pointer-velocity low-pass: port of pymunk's MOUSE_SMOOTH_TC. Frame-rate independent via smoothing = 1 - exp(-dt/TC).
 
   const JUMP_VELOCITY    = 22;
   const ANGULAR_DAMPING_TC = 0.8;  // time constant (sec) for extra angular-velocity decay. Matter.js's frictionAir damps linear+angular together; this knob lets us bleed spin faster without making the balls float. Lower = stops rotating sooner.
   const SHAKE_THRESHOLD  = 22;
   const SHAKE_COOLDOWN_MS= 600;
 
-  // Sound — all marble, real samples recorded by Franco in sounds/cuts/.
+  // Sound: all marble, real samples recorded by Franco in sounds/cuts/.
   const SND_MAX_PER_FRAME = 1;                                                    // hard ceiling so it does not saturate when several balls come down at once
   const PITCH_JITTER     = 0.06;                                                  // ± random on playbackRate, makes the sample repetition sound natural
   // Thresholds in matter velocity units (px/step, ~×60 = px/s).
@@ -172,7 +172,7 @@
 
   // ── SETUP MATTER ──
   const { Engine, World, Bodies, Body, Composite, Query, Vector, Sleeping } = Matter;
-  const engine = Engine.create();                                                  // no enableSleeping — Matter.js sleeping wasn't waking bodies reliably on grab/collision and balls were getting stuck dead
+  const engine = Engine.create();                                                  // no enableSleeping: Matter.js sleeping wasn't waking bodies reliably on grab/collision and balls were getting stuck dead
   engine.gravity.y = GRAVITY_Y;
   const world = engine.world;
 
@@ -192,7 +192,7 @@
   function buildWalls() {
     for (const w of walls) World.remove(world, w);
     walls = [];
-    const t = 600;                                                                 // thick offscreen so a ball pushed past the edge stays inside the capsule and gets shoved back in — same intent as WALL_THICKNESS=100 in pymunk
+    const t = 600;                                                                 // thick offscreen so a ball pushed past the edge stays inside the capsule and gets shoved back in: same intent as WALL_THICKNESS=100 in pymunk
     const opt = { isStatic: true, restitution: BALL_WALL_RESTITUTION, friction: 0.4 };
     if (wallMode === 1 || wallMode === 2) {                                        // ceiling + floor in modes 1 and 2
       walls.push(Bodies.rectangle(W/2, -t/2,    W + 2*t, t, opt));
@@ -333,9 +333,9 @@
 
   function drawMask(m, e, cx, cy, r) {
     // Render every pattern into a high supersample temp canvas, then blit it down with image smoothing
-    // enabled — gives strong antialiasing for the scanline-based patterns (sphere/diamond/pinwheel) and
+    // enabled: gives strong antialiasing for the scanline-based patterns (sphere/diamond/pinwheel) and
     // tightens the dotted ones too. SS=4 means 16× the pixels of a straight render; cost is per-bake
-    // (one-time per ball), no per-frame impact. imageSmoothingQuality 'high' is the spec max — actual
+    // (one-time per ball), no per-frame impact. imageSmoothingQuality 'high' is the spec max: actual
     // "ultra" quality comes from increasing SS, not from the smoothing API.
     const SS = 7;
     const R = r * SS;
@@ -361,14 +361,14 @@
     const prevQuality = m.imageSmoothingQuality;
     m.imageSmoothingEnabled = true;
     m.imageSmoothingQuality = 'high';
-    // Blit twice — the second pass pushes anti-aliased edge alpha closer to 1 so the pattern doesn't
+    // Blit twice: the second pass pushes anti-aliased edge alpha closer to 1 so the pattern doesn't
     // look ghosted/transparent through its outline (source-over compounds: 0.5 → 0.75 → 0.875…).
     m.drawImage(tmp, cx - r - 1, cy - r - 1, tmp.width / SS, tmp.height / SS);
     m.drawImage(tmp, cx - r - 1, cy - r - 1, tmp.width / SS, tmp.height / SS);
     m.imageSmoothingEnabled = prevSmooth;
     m.imageSmoothingQuality = prevQuality;
 
-    // Dot positions are in the SS-space — convert back to the final-canvas scale + global offset.
+    // Dot positions are in the SS-space: convert back to the final-canvas scale + global offset.
     return localDots ? localDots.map(([x,y,dr]) => [cx + x/SS, cy + y/SS, dr/SS]) : null;
   }
 
@@ -465,7 +465,7 @@
     else {
       const o = Math.random();
       if (o < 0.25) e.overlay = [255,255,255];                                      // white pattern: 25%
-      else if (o < 0.50) e.overlay = [18, 18, 18];                                  // black pattern: 25% — genuine near-black, not a tint of the base color
+      else if (o < 0.50) e.overlay = [18, 18, 18];                                  // black pattern: 25%; genuine near-black, not a tint of the base color
       else e.overlay = hsv255(mod(hue+0.5, 1), 0.95, 1.0);                          // complementary hue (two-tone ball): 50%
     }
 
@@ -486,7 +486,7 @@
     makeBall(rnd(W*0.15, W*0.85), rnd(H*0.12, H*0.4));
   }
   function removeBall() {
-    // the last 'live' one that is not grabbed (pinned ones CAN be removed — they unpin on the way out)
+    // the last 'live' one that is not grabbed (pinned ones CAN be removed: they unpin on the way out)
     for (let i = balls.length - 1; i >= 0; i--) {
       const e = balls[i];
       if (e.state === 'live' && !isGrabbedBody(e.body)) {
@@ -530,7 +530,7 @@
   }
 
   function wrapBalls() {
-    // Teleport balls that left the playfield in the wrap-active axes — pymunk has no native wrapping either; same idea.
+    // Teleport balls that left the playfield in the wrap-active axes: pymunk has no native wrapping either; same idea.
     if (wallMode === 1) return;                                                    // mode 1: closed walls, no wrap
     for (const e of balls) {
       if (e.state !== 'live') continue;
@@ -552,7 +552,7 @@
 
   function drawGlowRing(x, y, r, color) {
     // 6-layer halo at 1.10× radius, brightened color, alpha sweeping outer→inner. Port of the
-    // pymunk grabbed-ball glow ring — visual confirmation of which ball is being held.
+    // pymunk grabbed-ball glow ring: visual confirmation of which ball is being held.
     const outerR = r * 1.10;
     const layers = 6;
     const halo = tint(color, 1.7);
@@ -581,7 +581,7 @@
     for (const e of balls) {
       if (e.state !== 'live') continue;
       if (isGrabbedBody(e.body)) continue;
-      if (pinnedBodies.has(e.body)) continue;                                      // pinned balls don't jump — and even though they're static, setVelocity would shift positionPrev and leak as a kick when unpinned
+      if (pinnedBodies.has(e.body)) continue;                                      // pinned balls don't jump, and even though they're static, setVelocity would shift positionPrev and leak as a kick when unpinned
       Body.setVelocity(e.body, { x: e.body.velocity.x, y: -JUMP_VELOCITY * physicsScale });
     }
   }
@@ -603,7 +603,7 @@
     return false;
   }
   function tryGrabAt(p, exclude) {
-    // Allow grabbing pinned bodies (they're static, so we'd normally filter them out — but the user
+    // Allow grabbing pinned bodies (they're static, so we'd normally filter them out, but the user
     // needs a way to select them so the pin button can release them).
     const hits = Query.point(Composite.allBodies(world), p).filter(b => (!b.isStatic || pinnedBodies.has(b)) && !exclude.has(b));
     if (!hits.length) return null;
@@ -643,7 +643,7 @@
     pointers.delete(e.pointerId);
     if (ps.grab && !ps.grab.body.isStatic) {
       // vx/vy are px/sec; matter velocity is "displacement per step", so multiply by current loop dt.
-      // Pinned (static) bodies skip the throw — releasing a finger on a pinned ball doesn't fling it.
+      // Pinned (static) bodies skip the throw: releasing a finger on a pinned ball doesn't fling it.
       const k = dtSmoothed;
       Body.setVelocity(ps.grab.body, { x: ps.vx * k, y: ps.vy * k });
       Body.setAngularVelocity(ps.grab.body, (ps.vx / ps.grab.body.circleRadius) * k);
@@ -651,7 +651,7 @@
   }
   canvas.addEventListener('pointerup', endPointer);
   canvas.addEventListener('pointercancel', endPointer);
-  canvas.addEventListener('contextmenu', e => { e.preventDefault(); });            // only suppress the OS context menu on long-press / right-click — jump is now the explicit button
+  canvas.addEventListener('contextmenu', e => { e.preventDefault(); });            // only suppress the OS context menu on long-press / right-click: jump is now the explicit button
 
   // buttons (with press-and-hold on +/−)
   // Implicit touch capture: when you put a finger on a button the browser "captures" it, so the
@@ -717,7 +717,7 @@
   });
 
   // Pin: tap toggles the pinned state of each currently-grabbed ball. Pinning makes the body STATIC
-  // (Matter.js treats it as a wall — other balls bounce off without budging it, even under heavy pile
+  // (Matter.js treats it as a wall: other balls bounce off without budging it, even under heavy pile
   // weight). The grab is released on pin so the finger is free. Unpinning restores the dynamic body
   // and KEEPS the grab so you can drag it away immediately. Tap with nothing grabbed is a no-op.
   // Other ways to clear pins: reset, or minus to remove the ball.
@@ -727,7 +727,7 @@
       if (!ps.grab) continue;
       const body = ps.grab.body;
       if (pinnedBodies.has(body)) {
-        Body.setStatic(body, false);                                               // back to dynamic — mass/inertia restored by Matter.js
+        Body.setStatic(body, false);                                               // back to dynamic: mass/inertia restored by Matter.js
         Body.setVelocity(body, { x: 0, y: 0 });                                    // matter.js setStatic(false) doesn't reset positionPrev, so any leftover from before the pin (or numerical drift) leaks back as a velocity kick on unpin. Force a clean zero.
         Body.setAngularVelocity(body, 0);
         pinnedBodies.delete(body);
@@ -773,7 +773,7 @@
   }
 
   // ════════════════ SOUND ════════════════
-  // Real sample system — all marbles. Files in sounds/cuts/. Each "bucket" has N numbered
+  // Real sample system: all marbles. Files in sounds/cuts/. Each "bucket" has N numbered
   // variants (e.g. MarbleLowClick.mp3, MarbleLowClick2.mp3, …); when one has to play it is picked at
   // random from the bucket's pool. Buffers load async on the first audioResume() (autoplay policy).
   let actx = null;
@@ -866,29 +866,29 @@
 
       const grabbed = isGrabbedBody(bodyA) || isGrabbedBody(bodyB);
       const wallHit = bodyA.isStatic || bodyB.isStatic;
-      // For pitch: we use the ball (the smaller one wins — higher).
+      // For pitch: we use the ball (the smaller one wins; higher).
       let pitchBody;
       if (wallHit) pitchBody = bodyA.isStatic ? bodyB : bodyA;
       else pitchBody = (bodyA.circleRadius <= bodyB.circleRadius) ? bodyA : bodyB;
       const pitch = pitchForBall(pitchBody);
 
-      // The InHand sounds will NOT fire here — they live in updateBagSounds(), which counts how many balls
+      // The InHand sounds will NOT fire here: they live in updateBagSounds(), which counts how many balls
       // the grabbed one touches each frame and only fires when the counter is ≥ BAG_MIN_CONTACTS. Meanwhile
       // the hard/soft clicks follow the normal flow just as for free balls.
       const vthrAud = VTHR_AUDIBLE * physicsScale;
       const vthrMed = VTHR_MED * physicsScale;
       const vthrHard = VTHR_HARD * physicsScale;
       const intensity = (vrel - vthrAud) / (vthrHard - vthrAud);
-      if (false && vrel >= vthrHard && !grabbed) {                                 // MarbleClick DISABLED for now — every hard hit falls through to MarbleLowClick. Restore by removing `false &&`.
+      if (false && vrel >= vthrHard && !grabbed) {                                 // MarbleClick DISABLED for now: every hard hit falls through to MarbleLowClick. Restore by removing `false &&`.
         tryPlay('MarbleClick', Math.min(1, intensity), pitch);
       } else if (vrel >= vthrMed) {
         tryPlay('MarbleLowClick', intensity, pitch);
       } else {
         // low speed: the specific sample depends on what it hit.
         if (wallHit) {
-          tryPlay('MarbleLowClick', intensity * 0.7, pitch);                      // ShortBounceEnd disabled for now — every low-speed wall hit uses the soft MarbleLowClick
+          tryPlay('MarbleLowClick', intensity * 0.7, pitch);                      // ShortBounceEnd disabled for now: every low-speed wall hit uses the soft MarbleLowClick
         } else {
-          tryPlay('MarbleLowClick', intensity * 0.7, pitch);                       // ShortDoubleBounce disabled for now — low-speed ball-ball uses the soft MarbleLowClick
+          tryPlay('MarbleLowClick', intensity * 0.7, pitch);                       // ShortDoubleBounce disabled for now: low-speed ball-ball uses the soft MarbleLowClick
         }
       }
     }
@@ -980,7 +980,7 @@
     sndThisFrame = 0;
 
     // Chase each grabbed ball toward its owning finger's position. Multi-touch: one chase per pointer.
-    // Pinned bodies are static and stay nailed — they show the grab glow but don't move until the
+    // Pinned bodies are static and stay nailed: they show the grab glow but don't move until the
     // pin button releases them.
     for (const ps of pointers.values()) {
       if (!ps.grab) continue;
@@ -995,7 +995,7 @@
       Body.setAngularVelocity(b, 0);
     }
 
-    // Pin: no per-frame override needed — pinned bodies are STATIC in matter.js (see btnPin handler).
+    // Pin: no per-frame override needed; pinned bodies are STATIC in matter.js (see btnPin handler).
     // Static bodies inherently ignore forces and collisions.
 
     updateGrowth(dt);
@@ -1003,7 +1003,7 @@
     updateRollSounds(dt);
     updateBagSounds();
 
-    // extra angular damping — exponential decay independent of frictionAir
+    // extra angular damping: exponential decay independent of frictionAir
     const angDecay = Math.exp(-dt / ANGULAR_DAMPING_TC);
     for (const e of balls) {
       if (e.state !== 'live') continue;
@@ -1025,7 +1025,7 @@
 
   // ── Diagnostics: it lives INSIDE the info panel ──
   // It used to be a monospaced card drawn on the canvas, separate from the panel. Now it is one
-  // more section: a single card for everything informational. It is written ONLY with the panel open —
+  // more section: a single card for everything informational. It is written ONLY with the panel open:
   // touching the DOM every frame with the panel closed is wasted work.
   // The node is looked up LAZILY, not at parse time. The main script runs BEFORE
   // `#infoPanel` exists (it is further down the document), so a `getElementById` on the line
@@ -1057,7 +1057,7 @@
     const lh = 18, padX = 8, padY = 8;
     const statsW = 110;
 
-    // Top-10 speeds bar chart — port of the pymunk debug overlay. Matter.js velocity is per step;
+    // Top-10 speeds bar chart: port of the pymunk debug overlay. Matter.js velocity is per step;
     // I multiply by 60 to show something close to px/s (assuming a 60fps target), as Balls.py does.
     const top = liveBalls
       .map(e => ({ e, sp: Math.hypot(e.body.velocity.x, e.body.velocity.y) }))
@@ -1116,15 +1116,16 @@
   <!-- The Arcade's shell (exit + fullscreen + orientation lock). data-orient: landscape/portrait/any. -->
   <script src="../../Arcade/arcade-shell.js" data-orient="portrait"></script>
 <div id="infoPanel"><h4>Marbles</h4>
-A box of marbles with real physics. There is no goal — it is a toy.
+A box of marbles with real physics. There is no goal: it is a toy.
 <hr>
 <h5>Desktop</h5>
 <ul>
   <li><b>Drag a marble</b> and let go to throw it; the faster the gesture, the harder the throw.</li>
   <li><b>Q</b> pins the marble you are holding in mid-air, same as <span class="ik"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 3h8v1.5h-1.5v5l2.5 3.5v1h-5v6.5l-1 1-1-1v-6.5h-5v-1l2.5-3.5v-5H8z"/></svg></span> <b>Pin</b>.</li>
   <li><b>Space</b> makes them all jump, same as <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 11l6-6 6 6"/></svg></span> <b>Jump</b>.</li>
-  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg></span> <b>Add a ball</b> / <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 12h12"/></svg></span> <b>Remove a ball</b> change how many there are; <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg></span> <b>Wall mode</b> changes
-      how the walls behave; <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span> <b>Restart</b> puts everything back.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg></span> <b>Add a ball</b> / <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 12h12"/></svg></span> <b>Remove a ball</b> change how many there are; <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg></span> <b>Wall mode</b> cycles the four:
+      closed, no sides (it wraps sideways), no ceiling or floor (it wraps up and down) and none at
+      all; <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span> <b>Restart</b> puts everything back.</li>
 </ul>
 <h5>Mobile</h5>
 <ul>
@@ -1158,7 +1159,7 @@ of numbers does not give.</span>
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

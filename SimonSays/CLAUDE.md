@@ -2,29 +2,29 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Classic Simon memory game — watch a growing sequence of colored/sounding buttons, repeat it back. 700×700 window. Spanish identifiers (`fuente`, `colors`, `buttons`, `swidth`, `sheight`).
+Classic Simon memory game: watch a growing sequence of colored/sounding buttons, repeat it back. 700×700 window. Spanish identifiers (`fuente`, `colors`, `buttons`, `swidth`, `sheight`).
 
-## ⚠️ This file is ~660 KB — do NOT read it in full
+## ⚠️ This file is ~660 KB: do NOT read it in full
 
-The `sounds` list at module top contains four `pygame.mixer.Sound(buffer=b'...')` calls with **raw PCM audio sample buffers pasted as bytes literals** — that's where all the bulk lives. The actual game logic is small (~212 lines visually but most of the line count is the audio bytes spread across long lines).
+The `sounds` list at module top contains four `pygame.mixer.Sound(buffer=b'...')` calls with **raw PCM audio sample buffers pasted as bytes literals**, that's where all the bulk lives. The actual game logic is small (~212 lines visually but most of the line count is the audio bytes spread across long lines).
 
 When editing:
 
 - Use `Grep` to find code sections rather than reading the file.
-- When reading with the `Read` tool, always pass `offset` and `limit` — a bare `Read` will exceed the token cap.
+- When reading with the `Read` tool, always pass `offset` and `limit`: a bare `Read` will exceed the token cap.
 - Treat the four bytes literals inside `sounds = [...]` as opaque binary; don't reformat or modify them.
 
-Mixer is pre-initialized with `pygame.mixer.pre_init(frequency=44100, size=-16)` before `pygame.init()` — the order matters; don't reorder.
+Mixer is pre-initialized with `pygame.mixer.pre_init(frequency=44100, size=-16)` before `pygame.init()`: the order matters; don't reorder.
 
 See [../CLAUDE.md](../CLAUDE.md) for shared conventions.
 
 
-## AUDIO — fix (2026-09-22)
+## AUDIO: fix (2026-09-22)
 
 `playTone()` is called from `update()`, which runs inside `loop()`, and the `requestAnimationFrame`
 is at the end. If creating the context threw, Simon was not left mute: it was left **FROZEN
-forever**. `audioResume()` now sits in `try/catch` and `playTone` requires `actx.state === 'running'`
-— an interrupted context throws when a node is created.
+forever**. `audioResume()` now sits in `try/catch` and `playTone` requires `actx.state === 'running'`,
+because an interrupted context throws when a node is created.
 
 Pending, on the Python side: the audit measured that **the four tones are indistinguishable from
 each other and one is inaudible**. In a memory game where the tone IS the mnemonic, that breaks what

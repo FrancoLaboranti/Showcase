@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -24,7 +24,7 @@
     font-family: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
   }
   /* The canvas has a fixed LOGICAL resolution of 1280×720 (the same as the original pygame) and is scaled with
-     a letterbox to fit the screen — that way all the percentage geometry and the SCREEN_X-dependent
+     a letterbox to fit the screen, that way all the percentage geometry and the SCREEN_X-dependent
      physics thresholds behave identically to the desktop game. */
   #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
 
@@ -110,7 +110,7 @@
   #rotate svg { width: 88px; height: 88px; color: #78c8ff; animation: rotatehint 2.2s ease-in-out infinite; }
   #rotate p { font-size: 19px; letter-spacing: 0.06em; line-height: 1.5; }
   @keyframes rotatehint { 0%, 55%, 100% { transform: rotate(0deg); } 25%, 40% { transform: rotate(-90deg); } }
-  /* Exit button — flush with the top-right corner (the one nearest the edge) */
+  /* Exit button: flush with the top-right corner (the one nearest the edge) */
   #btnExit {
     position: absolute;
     right: calc(8px + env(safe-area-inset-right));
@@ -126,7 +126,7 @@
   }
   #btnExit svg { display: block; width: 14px; height: 14px; pointer-events: none; }
   #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; transform: scale(0.9); }
-  /* Info (FPS) — top right, next to the exit one (to its left). */
+  /* Info (FPS), top right, next to the exit one (to its left). */
   #btnInfo {
     position: absolute;
     right: calc(46px + env(safe-area-inset-right));
@@ -142,7 +142,7 @@
   }
   #btnInfo svg { display: block; width: 14px; height: 14px; pointer-events: none; }
   #btnInfo:active, #btnInfo.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
-  /* Pause — as in Pong: the LEFT-hand end of the corner cluster (to the left of fullscreen/back). During a race only (__setPauseUI handles the display). */
+  /* Pause, as in Pong: the LEFT-hand end of the corner cluster (to the left of fullscreen/back). During a race only (__setPauseUI handles the display). */
   #btnPause {
     position: absolute;
     right: calc(160px + env(safe-area-inset-right));
@@ -162,7 +162,7 @@
   #btnMute.muted .ic-off { display: block; }
   #btnPause:active { transform: scale(0.9); }
   #btnPause.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
-  /* FPS HUD — Pong format: a monospaced panel at the top left, no border-radius. */
+  /* FPS HUD: Pong format: a monospaced panel at the top left, no border-radius. */
   #fpsOverlay {
     position: absolute;
     left: calc(8px + env(safe-area-inset-left));
@@ -237,8 +237,8 @@
 
 
   /* These buttons are `static`, so the `::after` below would position itself against another
-     ancestor and the enlarged area would land in the wrong place. `relative` — NOT `absolute`,
-     which takes them out of the flow and stacks them — gives them the containing block without moving them. */
+     ancestor and the enlarged area would land in the wrong place. `relative`, NOT `absolute`,
+     which takes them out of the flow and stacks them, gives them the containing block without moving them. */
   #btnMute { position: relative; }
   /* TOUCH AREA: these buttons' bodies are 30 px and a thumb needs ~44. The pseudo-element
      enlarges the TARGET without enlarging the drawing. Vertically only: the corner buttons sit at
@@ -300,10 +300,10 @@
 <script src="matter.min.js"></script>
 <script>
 // ════════════════════════════════════════════════════════════════════
-//  CRAZYTANKS — a web port of the racing game. Played in LANDSCAPE (the phone sideways).
+//  CRAZYTANKS: a web port of the racing game. Played in LANDSCAPE (the phone sideways).
 // ════════════════════════════════════════════════════════════════════
 
-// ── LOGICAL DIMENSION — 1280×720 (16:9, the maps' original dimensions) ──
+// ── LOGICAL DIMENSION: 1280×720 (16:9, the maps' original dimensions) ──
 const SCREEN_X = 1280;
 const SCREEN_Y = 720;
 // The 10 original tracks are enlarged to a MAP_SCALE× world (with a camera following the player). The design
@@ -362,7 +362,7 @@ let ctx = mainCtx;                                                     // it is 
 let dpr = 1, scaleX = 1, scaleY = 1, cssW = 0, cssH = 0;
 
 // A static background baked per track (floor + decor + finish line + walls + motifs). It is drawn once and
-// blitted every frame instead of redrawing hundreds of shapes — key to the FPS on mobile.
+// blitted every frame instead of redrawing hundreds of shapes: key to the FPS on mobile.
 let bgCanvas = null, bgReady = false, bgTrack = -1, bgW = 0, bgH = 0;
 let mmCanvas = null, mmKey = '';                                      // minimap: baked walls (they are not redrawn every frame)
 let mmStatic = null;                                                  // minimap: per-track invariants (geometry, gradient, finish-line endpoints) cached
@@ -373,7 +373,7 @@ let mmStatic = null;                                                  // minimap
 // skill generates) declare a bigger world in WORLDS[track] and then the camera that follows the player kicks in.
 // The visible "window" is always SCREEN_X×SCREEN_Y units of the world (the same zoom as before), and it
 // scrolls inside the big world.
-const WORLDS = {};                                                    // { [track]: [w, h] } — big tracks only (filled in below)
+const WORLDS = {};                                                    // { [track]: [w, h] } for big tracks only (filled in below)
 const THEMES = {};                                                    // a theme override per track (the generated ones set their own)
 const TRACK_POLY = {};                                                // { [track]: {outer, inner, theme} } → a SMOOTH drawing of the corridor
 const TRACK_DECO_SEED = {};                                           // the decor/scenery seed per track (the AUTO slot re-rolls it on each gen)
@@ -801,19 +801,19 @@ const engine = Engine.create();
 engine.gravity.x = 0; engine.gravity.y = 0;
 const world = engine.world;
 const PHYS_STEP = 1000 / 60;                 // a fixed step (the speeds stay in px/frame at 60fps)
-// — Handling tuning (px/frame and rad/frame at 60fps; raise/lower to taste) —
+// ── Handling tuning (px/frame and rad/frame at 60fps; raise/lower to taste) ──
 const TANK_SPEED   = 13;                    // max forward speed (everyone starts out fast, "techno" style). Careful: too high = it goes through thin walls.
 const TANK_REVERSE = 5;                       // max reverse speed
 const TANK_ACCEL   = 0.09;                   // FORWARD PICKUP (0..1): how fast the target speed is reached. The same for everyone → everyone agile. (The SLIDE is separate, per biome.)
 const TANK_AIRDRAG = 0.02;                   // the body's air friction: low = it keeps/builds up speed
-const TANK_TURN    = 0.045;                  // the player's turn to maximum steering (rad/frame, ~2.7 rad/s) — less agile
+const TANK_TURN    = 0.045;                  // the player's turn to maximum steering (rad/frame, ~2.7 rad/s), less agile
 const AI_TURN_K    = 3.0;                    // how hard the AI corrects its heading towards the waypoint
 const AI_LOOKAHEAD = 4;                       // how many waypoints ahead the AI looks (smaller = it follows the curves better)
 const AI_LANE      = 58;                      // max lateral deviation (units) from the centre → it opens/closes the corner
 const AI_STUCK_SPD = 2.4;                     // below this speed (and accelerating) the AI considers itself stuck
 const AI_STUCK_T   = 0.55;                    // s stuck before going back to the waypoint's centre to free itself
 const AI_REVERSE_T = 1.3;                     // s stuck before putting it in reverse to get out
-// — AI profile per DIFFICULTY (0..4). Each row = a "driver": not only faster, but also better through corners,
+// ── AI profile per DIFFICULTY (0..4). Each row = a "driver": not only faster, but also better through corners, ──
 //   more aggressive on the trigger and more willing to use nitro. Before, the difficulty only scaled speed+shooting
 //   (corners and nitro were the same for everyone) → the levels felt almost identical. Now they really do differ.
 //   acel = throttle band on the straights (×TANK_SPEED); turn = a multiplier on AI_TURN_K (cornering skill);
@@ -827,11 +827,11 @@ const AI_DIFF = [
   { acel: [0.97, 1.00], turn: 1.12, shoot: 3,  nitro: 0.44 },   // 4 Very Hard
 ];
 const MOVE_STEER_K = 2.8;                    // a single stick: how hard it turns towards the aimed heading
-const SPIN_TIME = 0.6;                        // how long the spin-out lasts when hit by a shot (s) — it penalises less time
-const SPIN_RATE = 0.34;                       // the spin-out's speed (rad/frame) — it spins visually FASTER
+const SPIN_TIME = 0.6;                        // how long the spin-out lasts when hit by a shot (s), it penalises less time
+const SPIN_RATE = 0.34;                       // the spin-out's speed (rad/frame), it spins visually FASTER
 const GRAZE_CUT = 0.66;                       // #3 bomb: closeness ≥ this = a DIRECT hit (a full spin-out); below = a GRAZE (a short spin-out)
 const SPIN_RECOVER_MAX = 0.25;                // #4 counter-spin: how much of the spin-out can be "eaten" by steering against it (a cap; it never ends at 0)
-// — Nitro (boost) and nitro items on the track —
+// ── Nitro (boost) and nitro items on the track ──
 const NITRO_MULT  = 1.8;                     // the speed multiplier while the nitro is in use
 const NITRO_DRAIN = 0.4;                     // charge/sec the boost consumes (1/0.4 ≈ 2.5s of boost at full)
 const NITRO_PICK  = 0.25;                    // the charge each item gives (1/4 of a tank)
@@ -847,28 +847,29 @@ const DRAFT_READY = 1.0;                      // #5 s tucked in the wake to char
 const SLIP_TIME   = 0.9;                      // #5 the duration of the tow (slingshot) when you leave the wake
 const SLIP_MULT   = 1.22;                     // #5 the multiplier on the FORWARD target during the tow (bounded; it does not stack with itself, and only the one BEHIND charges it)
 const HAZARD_SLIDE_T = 0.2;                   // #8 s of slide when you hit a hazard patch (almost no lateral grip + a sideways kick on entering)
-// — Handling per BIOME: index = themeOf(track). Columns = [latGrip, spd, turn]. —
+// ── Handling per BIOME: index = themeOf(track). Columns = [latGrip, spd, turn]. ──
 // latGrip = LATERAL GRIP (the fraction of the sideways speed KILLED per frame): HIGH = it grips (it does NOT drift), LOW = it DRIFTS.
 // spd = a multiplier on TANK_SPEED (max speed); turn = a multiplier on TANK_TURN. The forward PICKUP is TANK_ACCEL (the same for everyone).
 const THEME_HANDLING = [
   // latGrip, spd,  turn
-  [0.09,  1.00,  1.00],   // 0 grass/park — neutral, a slight drift
-  [0.40,  1.00,  0.96],   // 1 desert/sand — it GRIPS hard (it hardly drifts), it is no longer slow
-  [0.01,  1.05,  1.08],   // 2 snow — it DRIFTS A LOT: the nose turns but the body carries straight on
-  [0.20,  1.10,  1.15],   // 3 techno/blue — slot-car: grippy, fast and precise
-  [0.06,  1.15,  1.20],   // 4 lava/red — loose and nervous, the fastest of all
-  [0.15,  1.40,  1.00],   // 5 park at night — IDENTICAL to grass (it handles just like the green park)
+  [0.09,  1.00,  1.00],   // 0 grass/park: neutral, a slight drift
+  [0.40,  1.00,  0.96],   // 1 desert/sand: it GRIPS hard (it hardly drifts), it is no longer slow
+  [0.01,  1.05,  1.08],   // 2 snow: it DRIFTS A LOT: the nose turns but the body carries straight on
+  [0.20,  1.10,  1.15],   // 3 techno/blue: slot-car: grippy, fast and precise
+  [0.06,  1.15,  1.20],   // 4 lava/red: loose and nervous, the fastest of all
+  [0.15,  1.40,  1.00],   // 5 park at night: IDENTICAL to grass (it handles just like the green park)
 ];
 const TANK_MAX_VEL = TANK_SPEED * 4;         // a hard anti-tunneling ceiling (px/frame): well above lava+nitro (~24) and below the wall thickness (~90) → it only stops pathological cases, it does NOT touch normal nitro
-// — EXACT-EDGE collision (a dynamic polygon): thin ROTATED rects that trace the corridor's drawn curve —
+// ── EXACT-EDGE collision (a dynamic polygon): thin ROTATED rects that trace the corridor's drawn curve ──
 const WALL_CHAIN  = true;                    // true = EXACT-EDGE collision (a chain of rotated rects tracing the curve), in the portal too. false = scanline (an instant revert).
 const CHAIN_THICK = 40;                       // the chain's wall thickness (anti-tunneling: 30 + a tank radius of ~20 > a max step of ~26)
 const CHAIN_DEV   = 2;                         // fidelity: the collision stays within this many px of the drawn curve. LOW = fine curves (more bodies, only where there is curvature) / HIGH = curves that cut corners (fewer bodies). The straights are merged either way.
 const CHAIN_SEGMAX = 170;                      // a cap on the LENGTH of each rect in the chain (world). Matter 0.19 uses Detector = sweep-and-prune on X: a LONG rect (a straight/diagonal) has an enormous AABB that the sweep cannot skip → it degenerates to O(n²) and kills the FPS. Cutting the long straights keeps every AABB small (the sweep skips properly) without losing the exact edge. LOW = more small bodies / HIGH = fewer bodies but a big AABB (expensive).
 const CHAIN_JOIN  = 0.5;                       // how far each rect EXTENDS beyond its own segment (in units of thick) so it overlaps its neighbour and leaves no gaps. On VERY tight curves the segments are short and this overhang made the walls STICK OUT past the drawn edge (a fan). 0.5 = half → less protrusion; the short segments still overlap. Lower = less sticking out but it risks gaps at the corners.
 const PICKUP_COUNT = 6;                      // nitro items present on the track at once
-// — Race MUTATORS (free race, a menu row): SYMMETRICAL rules (they affect all 16 tanks equally, through the
-//   same constants the AI reads) that re-flavour the map. One is active per race, fixed in startRace. —
+// ── Race MUTATORS (free race, a menu row): SYMMETRICAL rules (they affect all 16 tanks equally,
+//   through the same constants the AI reads) that re-flavour the map. One is active per race,
+//   fixed in startRace. ──
 const MUT_NAMES = ['Normal', 'Fog', 'Wet', 'Hot Ammo', 'Drift', 'Chaos'];   // 0..5
 let MUT = { fog: false, wet: false, hotSpin: 1, hotCd: 1, drift: false, pickups: PICKUP_COUNT, drainMul: 1 };
 function applyMutator(m) {
@@ -879,7 +880,7 @@ function applyMutator(m) {
   else if (m === 4) MUT.drift = true;                               // Drift: drifting for real RECHARGES nitro (#1, now a mutator)
   else if (m === 5) { MUT.pickups = 11; MUT.drainMul = 2; }         // Chaos: lots of items but it drains twice as fast (short boosts)
 }
-// — #7 MEDALS (cosmetic, no power): optional per-race objectives for the player. The all-time total is in localStorage. —
+// ── #7 MEDALS (cosmetic, no power): optional per-race objectives for the player. The all-time total is in localStorage. ──
 let lastMedals = [], medalTotal = 0;
 try { medalTotal = parseInt(localStorage.getItem('ct_medals') || '0', 10) || 0; } catch (e) {}
 const MEDAL_DEFS = [
@@ -961,7 +962,7 @@ function voice(name, cdMs, fn) {
   try { fn(); } catch (e) {}
 }
 
-// One second of noise on loop: the base of both the track and the nitro. It is generated ONCE — regenerating it per
+// One second of noise on loop: the base of both the track and the nitro. It is generated ONCE: regenerating it per
 // frame is half a megabyte of Float32 per second thrown in the bin.
 function buildContinuous() {
   const sr = AC.sampleRate;
@@ -1247,7 +1248,7 @@ class Tank {
     this.boosting = false;                                             // it lights up underneath only if it is boosting (off during the spin-out)
     if (this.spin_timer > 0) {
       // SPIN-OUT from a bomb hit: it spins out of control and slows down, ignoring the input for a while.
-      // #4 COUNTER-SPIN (CANCELLED — left commented out so it can be switched back on): steering against the spin shortened it (the player only, capped at SPIN_RECOVER_MAX)
+      // #4 COUNTER-SPIN (CANCELLED: left commented out so it can be switched back on): steering against the spin shortened it (the player only, capped at SPIN_RECOVER_MAX)
       // let drain = deltaT;
       // if (!this.ai && Math.sign(steer) === -this.spin_dir && Math.abs(steer) > 0.3) { const e = Math.min(deltaT * 1.2, SPIN_RECOVER_MAX - this.spin_saved); if (e > 0) { drain += e; this.spin_saved += e; } }
       this.spin_timer -= deltaT;
@@ -1287,7 +1288,7 @@ class Tank {
         const d = NITRO_DRAIN * MUT.drainMul * deltaT;
         this.nitro = Math.max(0, this.nitro - d); this.nitroSpent += d;   // #7 it accumulates the nitro spent (for the Efficient medal)
         boostMult = NITRO_MULT;
-        // #6 OVERCHARGE (CANCELLED — left commented out so it can be switched back on): with nitro>0.7, a 2.1x peak in exchange for DOUBLE drain + a cornering grip penalty
+        // #6 OVERCHARGE (CANCELLED: left commented out so it can be switched back on): with nitro>0.7, a 2.1x peak in exchange for DOUBLE drain + a cornering grip penalty
         // const over = !this.ai && this.nitro > 0.7;
         // if (over) { boostMult = OVERCHARGE_MULT; this.nitro = Math.max(0, this.nitro - NITRO_DRAIN * MUT.drainMul * deltaT); this.nitroSpent += NITRO_DRAIN * MUT.drainMul * deltaT; if (Math.abs(steer) > 0.4) this.oc_pen = OC_PENALTY; }
       }
@@ -1400,7 +1401,7 @@ class Tank {
     ctx.drawImage(spr.cv, -spr.half, -spr.half, spr.half * 2, spr.half * 2);
     ctx.restore();
 
-    if (this.slide_timer > 0) {                                        // #8 PUDDLE: a "you can't steer" indicator — a pair of streaks at each REAR corner, flickering
+    if (this.slide_timer > 0) {                                        // #8 PUDDLE: a "you can't steer" indicator; a pair of streaks at each REAR corner, flickering
       ctx.save(); ctx.translate(this.x, this.y); ctx.rotate(this.ang);
       ctx.globalAlpha = 0.5 + 0.5 * Math.sin(T * 30); ctx.strokeStyle = 'rgba(150,225,255,1)'; ctx.lineWidth = Math.max(1, r * 0.13); ctx.lineCap = 'round';
       ctx.beginPath();
@@ -1430,8 +1431,8 @@ class Tank {
     // after ALL the tanks, so no sprite covers them (z-order).
     const rankFont = SCREEN_X < 1000 ? RS_font : S_font;
     // The position card is NOT drawn here. Drawing it inside a tank's draw() puts it in the
-    // middle of the sprite loop, and anything coming after — the TECHNO biome's stands, for
-    // example — ends up ON TOP of it. It goes in the HUD pass alongside the minimap, which runs at the end.
+    // middle of the sprite loop, and anything coming after, the TECHNO biome's stands, for
+    // example, ends up ON TOP of it. It goes in the HUD pass alongside the minimap, which runs at the end.
 
     if (this.wrongway) {
       if (!this.pause) this.wrongwayalert_cooling += deltaT;
@@ -1462,7 +1463,7 @@ class Bomb {
       if (tank.color === this.color || tank.finished) continue;
       const lim = (this.radius + tank.radius) * 0.75;                  // the same AABB as before, without allocating arrays
       if (Math.abs(this.x - tank.x) < lim && Math.abs(this.y - tank.y) < lim) {
-        // #3 GRAZE vs DIRECT (CANCELLED — left commented out so it can be switched back on): spin-out + braking graded by nearness to the centre of the impact
+        // #3 GRAZE vs DIRECT (CANCELLED: left commented out so it can be switched back on): spin-out + braking graded by nearness to the centre of the impact
         // const closeness = 1 - Math.max(Math.abs(this.x - tank.x), Math.abs(this.y - tank.y)) / lim;   // 0 = edge, 1 = centre
         // const direct = closeness > GRAZE_CUT;
         // tank.spin_timer = SPIN_TIME * MUT.hotSpin * (direct ? 1 : 0.6 + 0.4 * closeness);
@@ -1477,7 +1478,7 @@ class Bomb {
       }
     }
     const tr = sprites[0] ? sprites[0].track : 0, WW = worldW(tr), HH = worldH(tr);
-    // The bomb is REMOVED on leaving the world — on tracks with a PORTAL too (it no longer wraps). We used to
+    // The bomb is REMOVED on leaving the world, on tracks with a PORTAL too (it no longer wraps). We used to
     // wrap it and it could end up crossing the portal in an infinite loop (which looked like "the AI keeps firing").
     if (this.x > WW + this.radius || this.x < -this.radius || this.y > HH + this.radius || this.y < -this.radius) {
       removeFromList(bombs, this); removeFromList(sprites, this);
@@ -1823,8 +1824,8 @@ function trackStep(track, dir) {                                      // it step
 }
 
 // ════════════════ AUTO-GENERATED MAP (every free race = a new circuit) ════════════════
-// SKELETON FIRST: a big rectilinear loop is rolled on a grid — with axes optionally "toroidal":
-// portals crossing from one edge to the other, in X, in Y or both — it is mutated to put curves in, it is validated as
+// SKELETON FIRST: a big rectilinear loop is rolled on a grid, with axes optionally "toroidal":
+// portals crossing from one edge to the other, in X, in Y or both, it is mutated to put curves in, it is validated as
 // raceable, and ONLY THEN are the walls built. Rolls: the grid, the world's size, portals, track
 // width, how open the corners are, how many curves, the direction of travel, the start's place and direction, the theme.
 const TRACK_WRAP = {};                                                // tracks with a portal (crossing from edge to edge)
@@ -1983,7 +1984,7 @@ function buildAutoTrack(idx, W, H, theme) {
   const cellX = (W-2*margin)/(nC-1), cellY = (H-2*margin)/(nR-1);
   const fit = (Math.min(cellX, cellY) - wall) / 2;                  // the MAXIMUM half-width that leaves `wall` between adjacent lanes
   if (fit < 80) return false;                                       // the cell is too small → retry with another grid/world
-  // The width STYLE (another variety factor): technical/narrow, normal or WIDE — biased towards wider; it is clipped to `fit`
+  // The width STYLE (another variety factor): technical/narrow, normal or WIDE; biased towards wider; it is clipped to `fit`
   // (as long as it does not merge with the lane next door, we give it a reasonable width). It combines narrow shapes + wide roads.
   const styles = [[72,105],[110,158],[110,158],[165,235],[165,235]];
   const sr = styles[ri(0, styles.length-1)];
@@ -1994,7 +1995,7 @@ function buildAutoTrack(idx, W, H, theme) {
   const base = cor.map(([gx, gy]) => [margin + gx*cellX, margin + gy*cellY]);
   // VARIABLE WIDTH (another variety factor, prob 0.5): each STRAIGHT (an edge of the base) rolls its own
   // half-width ≤ fit → wide and narrow straights are combined in the same track. Otherwise, a uniform width = half.
-  // (Since each width is ≤ fit and adjacent lanes are ≥ cellX/Y apart, they NEVER merge — verified in Python.)
+  // (Since each width is ≤ fit and adjacent lanes are ≥ cellX/Y apart, they NEVER merge: verified in Python.)
   const variable = Math.random() < 0.5;
   let hw;
   if (variable) {
@@ -2054,7 +2055,7 @@ function buildAutoTrack(idx, W, H, theme) {
                            : _ringWallsMulti(copies, W, H, Math.round(H / 32));               // scanline if the flag is off
   let wp = smoothSample(sBase, 70);
   if (wrap) wp = wp.map(p => wrapAx === 0 ? [((p[0] % W) + W) % W, p[1]] : [p[0], ((p[1] % H) + H) % H]);   // wrap the centreline to the world
-  // — the start on a STRAIGHT stretch (low curvature), never on the portal's seam —
+  // ── the start on a STRAIGHT stretch (low curvature), never on the portal's seam ──
   const nw = wp.length;
   const turn = i => {
     const aa = wp[(i-1+nw)%nw], bb = wp[i], cc = wp[(i+1)%nw];
@@ -2227,7 +2228,7 @@ class MainHandler {
     }
   }
 
-  // — reusable actions (the keyboard and touch share these) —
+  // ── reusable actions (the keyboard and touch share these) ──
   pickOption0(opt) {                                                   // menulevel 0: choose New Race / Tournament
     this.option = opt;
     if (opt === 0) { this.menulevel = 1; this.tournament = false; this.option = this.menuOpts()[0]; }
@@ -2405,7 +2406,7 @@ class MainHandler {
             // The preview ALWAYS goes in the same place. It used to measure the real label, which grows with
             // the `< >` when the row is selected and changes with the length of the skin's name: the
             // tank jumped when you landed on it and again when you changed skin. We measure the WIDEST
-            // possible case — the longest name, already with the signs — so the position is fixed.
+            // possible case, the longest name, already with the signs, so the position is fixed.
             ctx.save(); ctx.font = `700 ${M_font}px ${FONT_FAMILY}`; ctx.letterSpacing = (M_font*0.04).toFixed(1) + 'px';
             let tw = 0;
             for (const sk of SKINS) tw = Math.max(tw, ctx.measureText(`< Tank: ${sk.name} >`).width);
@@ -2413,13 +2414,13 @@ class MainHandler {
             paintTank(xper(0.5) + tw/2 + xper(0.035), yper(y), 0, xper(0.02), SKINS[playerSkinIdx].color, 1, false, SKINS[playerSkinIdx]);
           }
         }
-        // the PLAY button (tap/click to start) — it pulses, and it lights up on hover
+        // the PLAY button (tap/click to start), it pulses, and it lights up on hover
         const hj = rowHover(0.85), playPulse = 0.6 + 0.4*Math.sin(T*4);
         createText(M_font, '▶ PLAY', [120 + 120*playPulse, 230, 150], null, xper(0.5), yper(0.85), hj ? 30 : 16);
       }
       if (this.menulevel === 2) this.drawPicker(menucolor);
     }
-    // in a race the background (floor+decor+finish line+walls) is blitted baked from the loop — nothing to do here
+    // in a race the background (floor+decor+finish line+walls) is blitted baked from the loop: nothing to do here
   }
 }
 
@@ -2606,7 +2607,7 @@ class AuxiliaryHandler {
           for (const tank of tanks) if (tank.rank === 1)
             createText(B_font, `${tankName(tank)} Wins!`, modifyColor(tank.color,75), null, xper(0.5), yper(0.5), 30);
         } else {
-          // ── The tournament's STANDINGS TABLE (16 tanks in 2 columns of 8) — TWO STEPS:
+          // ── The tournament's STANDINGS TABLE (16 tanks in 2 columns of 8), TWO STEPS:
           //    STEP 1 (~TABLE_STEP1 s): the position you CAME IN with, each one with "x + n" (previous points + this race's).
           //    STEP 2: the totals already counted, reordered (the usual table). ──
           const step1 = this.prevPoints && this.table_cooldown < this.table_timer + TABLE_STEP1;
@@ -2621,7 +2622,7 @@ class AuxiliaryHandler {
           const order = tanks.slice().sort((a, b) => pts[b.id] - pts[a.id] || tms[a.id] - tms[b.id]);
           const champ = order[0];
           if (this.tournamentfinished && !step1)
-            createText(M_font, `${tankName(champ)} — CHAMPION!`, modifyColor(champ.color, 85), null, xper(0.5), yper(0.115), 20);
+            createText(M_font, `CHAMPION: ${tankName(champ)}!`, modifyColor(champ.color, 85), null, xper(0.5), yper(0.115), 20);
           else
             createText(Math.round(M_font*0.78), `Race ${this.raceIdx + 1} / ${TOURNEY_RACES} · ${step1 ? 'Round points' : 'Standings'}`, [225,230,240], null, xper(0.5), yper(0.115), 4);
 
@@ -2943,7 +2944,7 @@ function getDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
 }
 function drawDeco(track, ww = SCREEN_X, hh = SCREEN_Y) {
   const { theme, items } = getDeco(track, ww, hh);
-  // (the background grid was TAKEN OUT — it was drawn all the time)
+  // (the background grid was TAKEN OUT: it was drawn all the time)
   // a themed scatter
   for (const it of items) {
     ctx.globalAlpha = it.alpha;
@@ -3119,7 +3120,7 @@ function drawEmber(x, y, s) {
   ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(x, y, r*3, 0, TAU); ctx.fill();
   drawCircle(x, y, r*0.6, [255,232,150]);
 }
-// a soft base texture for the infield (low alpha) — it gives variety without covering the walls
+// a soft base texture for the infield (low alpha), it gives variety without covering the walls
 function sceneryBase(theme, ww, hh, rng) {
   const af = (ww * hh) / (1280 * 720);
   if (theme === 0) {                                                   // park: patches of grass
@@ -3146,7 +3147,7 @@ function sceneryBase(theme, ww, hh, rng) {
   }
   ctx.globalAlpha = 1;
 }
-function drawGrassTuft(x, y, s) {                                     // park: tufts of grass (brush strokes) — DARK green to contrast with the background's grass
+function drawGrassTuft(x, y, s) {                                     // park: tufts of grass (brush strokes), DARK green to contrast with the background's grass
   const h = 8 + s*8;
   ctx.strokeStyle = rgb(_pc([14, 58, 26])); ctx.lineWidth = Math.max(1.8, s*2.2); ctx.lineCap = 'round';
   ctx.beginPath();
@@ -3205,22 +3206,22 @@ function drawScenery(track, ww, hh) {
 // A PER-FRAME layer in WORLD coords (it is drawn after the tanks, with the camera applied). Everything is bounded and
 // culled to the visible window [camX,camY]..[+SCREEN]. The positions are seeded ONCE per map (mulberry32 +
 // decoSeedFor) and rebuilt on regenerating (TRACK_DECO_SEED changes / on returning to the menu). Leaves/sand/bugs live in
-// WORLD coords (a GLOBAL wind: they do NOT follow the player) — there are a few more particles but they are culled to the camera.
+// WORLD coords (a GLOBAL wind: they do NOT follow the player), there are a few more particles but they are culled to the camera.
 const FX_LEAF_DENS = 22, FX_SAND_DENS = 30, FX_BUG_DENS = 5, FX_FIRE_DENS = 42, FX_RAIN_DENS = 64;   // the density per screen-equivalent (it scales with the world, bounded). Rain (water) = the densest
 const SNOW_THROW_RANGE = 640;                                          // the distance (world) at which a snowman throws at you
 const SNOWBALL_SPD = 680;                                              // the ball's speed (u/s)
 const SNOWBALL_R   = 13;                                               // the ball's visual/collision radius
 const SNOWBALL_KNOCK = TANK_SPEED * 0.6;                               // the shove on impact (px/frame) → a slide (on snow it lingers)
-const LEAF_WX = 46, LEAF_WY = 30;                                     // the leaves' GLOBAL wind (u/s, world) — it does NOT follow the player
-const SAND_WX = 680, SAND_WY = 80;                                    // the sand's GLOBAL wind (u/s) — fairly fast (gusts)
-const FIRE_WX = -55, FIRE_WY = -120;                                  // the lit embers' GLOBAL drift (u/s) — they FLOAT / rise slowly with a breeze to the left
-const RAIN_WX = -150, RAIN_WY = 1050;                                 // the rain's GLOBAL wind (u/s) — it falls FAST, almost vertical with a slight wind bias
+const LEAF_WX = 46, LEAF_WY = 30;                                     // the leaves' GLOBAL wind (u/s, world), it does NOT follow the player
+const SAND_WX = 680, SAND_WY = 80;                                    // the sand's GLOBAL wind (u/s), fairly fast (gusts)
+const FIRE_WX = -55, FIRE_WY = -120;                                  // the lit embers' GLOBAL drift (u/s), they FLOAT / rise slowly with a breeze to the left
+const RAIN_WX = -150, RAIN_WY = 1050;                                 // the rain's GLOBAL wind (u/s), it falls FAST, almost vertical with a slight wind bias
 const _RAIN_L = Math.hypot(RAIN_WX, RAIN_WY), RAIN_DX = RAIN_WX / _RAIN_L, RAIN_DY = RAIN_WY / _RAIN_L;   // the drop's falling direction (the tail trailing behind)
 let fxTrack = -2, fxSeed = -2, fxData = null;                          // a per-map cache (particles included, world-spaced)
 const fxSnowballs = [];                                                // balls in flight (a small dynamic pool)
 
 // An OFF-ROAD point beside the track. It offsets perpendicularly from a waypoint, but it VALIDATES that the point
-// ends up ≥ `clear` from ALL the waypoints — that way it never lands on the asphalt, not even when the perpendicular
+// ends up ≥ `clear` from ALL the waypoints, that way it never lands on the asphalt, not even when the perpendicular
 // offset overshoots into the inside of a tight curve (which is what used to put things in the middle of the road).
 // `clear` must be ≥ the track's max half-width (~235) + the object's size. It retries; if it finds nothing, null.
 function fxAlongTrack(rng, clear) {
@@ -3265,7 +3266,7 @@ function ensureFx(track) {
     for (let i = 0, ns = cap(6); i < ns; i++) { const p = fxAlongTrack(rng, 300); if (!p) continue; if (d.stands.some(st => Math.hypot(st.x - p.x, st.y - p.y) < 150)) continue; d.stands.push({ x: p.x, y: p.y, ph: rng() * TAU, w: 88, rows: 4 }); }   // ALL the same size; ≥150 apart → they do NOT overlap
   } else if (theme === 2) {                                            // SNOW: snowmen that throw balls (at the edge, off-road even on wide tracks)
     for (let i = 0, nm = cap(7); i < nm; i++) { const p = fxAlongTrack(rng, 262); if (p) d.snowmen.push({ x: p.x, y: p.y, cd: 1.0 + rng() * 2.6, ph: rng() * TAU, sz: 17 + rng() * 7, thr: 0 }); }   // validated off-road (not inside the track)
-  } else if (theme === 5) {                                            // PARK AT NIGHT: rain (world, global) — the same particles as the fire but as water
+  } else if (theme === 5) {                                            // PARK AT NIGHT: rain (world, global), the same particles as the fire but as water
     for (let i = 0, n = cap(FX_RAIN_DENS); i < n; i++) d.rain.push({ x: rng() * ww, y: rng() * hh, len: 16 + rng() * 26, w: 1 + rng() * 1.4, a: 0.10 + rng() * 0.16, ph: rng() * TAU });
   }
   // #8 on-track HAZARD ZONES (ALL the biomes): patches ON the track (off-centre) that give a mini-slide when you hit them. No damage, symmetrical, seeded per map.
@@ -3360,16 +3361,16 @@ function fxLightning(col) {
   if (flash > 0.002) { ctx.fillStyle = col; ctx.globalAlpha = Math.min(0.34, flash); ctx.fillRect(camX - 2, camY - 2, SCREEN_X + 4, SCREEN_Y + 4); }
   ctx.globalAlpha = 1;                                                 // an unconditional reset (it is a reusable function)
 }
-// LAVA: a subtle and CONSTANT ORANGE glow — an intermittent background flicker (embers), never off, without dramatic lightning.
+// LAVA: a subtle and CONSTANT ORANGE glow; an intermittent background flicker (embers), never off, without dramatic lightning.
 function fxLavaGlow() {
   const flick = 0.5 + 0.5 * Math.sin(T * 2.1) * Math.sin(T * 0.83 + 1.1);   // a slow and IRREGULAR pulse (a product of sines → no obvious period)
   const jit = 0.5 + 0.5 * Math.sin(T * 8.5 + 0.6);                          // the embers' fast flicker
-  const a = 0.035 + 0.055 * flick + 0.022 * jit;                           // ~0.035 .. 0.11 — ALWAYS present, rising and falling (subtly intermittent)
+  const a = 0.035 + 0.055 * flick + 0.022 * jit;                           // ~0.035 .. 0.11: ALWAYS present, rising and falling (subtly intermittent)
   ctx.fillStyle = 'rgb(255,104,30)'; ctx.globalAlpha = Math.min(0.12, a);  // more ORANGE (it used to be red) and constant
   ctx.fillRect(camX - 2, camY - 2, SCREEN_X + 4, SCREEN_Y + 4);
   ctx.globalAlpha = 1;
 }
-function fxDrawLeaves(d) {                                             // drifting leaves — a GLOBAL wind in the world (wrapping at the world's edges), culled
+function fxDrawLeaves(d) {                                             // drifting leaves: a GLOBAL wind in the world (wrapping at the world's edges), culled
   const ww = d.ww, hh = d.hh;
   for (const lf of d.leaves) {
     const wob = Math.sin(T * lf.fs + lf.ph);
@@ -3387,7 +3388,7 @@ function fxDrawLeaves(d) {                                             // drifti
   }
   ctx.globalAlpha = 1;
 }
-function fxDrawSand(d) {                                               // blowing sand — a GLOBAL wind in the world (wrap), culled
+function fxDrawSand(d) {                                               // blowing sand: a GLOBAL wind in the world (wrap), culled
   const ww = d.ww, hh = d.hh;
   ctx.lineCap = 'butt'; ctx.strokeStyle = 'rgb(120,92,50)'; ctx.lineWidth = 3;   // DARK dust, SHORT and THICK streaks, straight ends (no point/grain)
   for (const s of d.sand) {
@@ -3400,7 +3401,7 @@ function fxDrawSand(d) {                                               // blowin
   }
   ctx.globalAlpha = 1;
 }
-function fxDrawFire(d) {                                               // LAVA: LIT EMBERS flying — embers that float/rise slowly (world, global, wrap), they sway and FLICKER, culled
+function fxDrawFire(d) {                                               // LAVA: LIT EMBERS flying; embers that float/rise slowly (world, global, wrap), they sway and FLICKER, culled
   const ww = d.ww, hh = d.hh;
   ctx.globalCompositeOperation = 'lighter';                            // ADDITIVE brightness → the embers add light (a glow), they do not cover
   for (const f of d.fire) {
@@ -3430,7 +3431,7 @@ function fxDrawHazard(hz, theme) {                                     // #8 haz
   if (tech) { ctx.globalAlpha = base * 0.85; ctx.beginPath(); ctx.ellipse(hz.x, hz.y, r * 0.98, r * 0.7, 0, 0, TAU); ctx.stroke(); }   // a neon edge ring (an outline)
   ctx.globalAlpha = 1; ctx.restore();
 }
-function fxDrawRain(d) {                                               // RAIN — falling drops, a GLOBAL wind in the world (wrap), culled. The same base as the fire but WATER (a cold streak, no glow)
+function fxDrawRain(d) {                                               // RAIN: falling drops, a GLOBAL wind in the world (wrap), culled. The same base as the fire but WATER (a cold streak, no glow)
   const ww = d.ww, hh = d.hh;
   ctx.lineCap = 'butt'; ctx.strokeStyle = 'rgb(150,178,214)';
   for (const r of d.rain) {
@@ -3509,7 +3510,7 @@ function fxDrawLavaLight(l) {                                          // a flic
   ctx.globalAlpha = 0.6 * fl * (1 - er / (l.sz * 4)); drawCircle(l.x + Math.sin(T * 3 + l.ph) * l.sz * 0.5, l.y - er, l.sz * 0.16, [255, 180, 90]);
   ctx.globalAlpha = 1;
 }
-function fxDrawDevil(dv) {                                             // a little devil jumping with a trident, egging you on — WITH LEGS and its torso up
+function fxDrawDevil(dv) {                                             // a little devil jumping with a trident, egging you on, WITH LEGS and its torso up
   const sx = dv.x - camX, sy = dv.y - camY;
   if (sx < -40 || sx > SCREEN_X + 40 || sy < -40 || sy > SCREEN_Y + 40) return;
   const hop = Math.abs(Math.sin(T * dv.sp + dv.ph)), z = hop * dv.sz * 0.8, s = dv.sz, f = dv.face;
@@ -3554,7 +3555,7 @@ function fxDrawStand(st) {                                             // a smal
   ctx.moveTo(-w * 0.46, -h * 0.5); ctx.lineTo(w * 0.46, -h * 0.5); ctx.lineTo(w * 0.4, -h * 0.64); ctx.lineTo(-w * 0.4, -h * 0.64); ctx.closePath(); ctx.fill();
   ctx.strokeStyle = 'rgb(72,98,134)'; ctx.lineWidth = 2;
   for (let r = 0; r < st.rows; r++) { const yy = h * 0.5 - (r + 1) * (h / (st.rows + 1)), ww2 = w * (0.5 - 0.12 * (r + 1) / st.rows); ctx.beginPath(); ctx.moveTo(-ww2, yy); ctx.lineTo(ww2, yy); ctx.stroke(); }
-  // a crowd shaped like LITTLE PEOPLE (a torso + a head + RAISED ARMS pumping in a wave), flickering per row — 1 fill per row (cheap)
+  // a crowd shaped like LITTLE PEOPLE (a torso + a head + RAISED ARMS pumping in a wave), flickering per row: 1 fill per row (cheap)
   ctx.fillStyle = 'rgb(150,212,255)';
   for (let r = 0; r < st.rows; r++) {
     const yy = h * 0.5 - (r + 0.55) * (h / (st.rows + 1)), tw = 0.45 + 0.55 * Math.abs(Math.sin(T * 3 + st.ph + r * 1.3)), ps = w * 0.052;
@@ -3738,7 +3739,7 @@ const KEYMAP = {
   ShiftLeft: 'SHIFT', ShiftRight: 'SHIFT',
 };
 // WASD ALSO raises the name of the equivalent arrow. It is done here and not in `TANK_CONTROLS`
-// so it works everywhere the arrows work — driving and moving around the menu — not only
+// so it works everywhere the arrows work, driving and moving around the menu, not only
 // while driving. The names 'W'/'A'/'S'/'D' are still marked in case something looks at them separately.
 const WASD_ALIAS = { KeyW: 'UP', KeyS: 'DOWN', KeyA: 'LEFT', KeyD: 'RIGHT' };
 window.addEventListener('keydown', e => {
@@ -3945,7 +3946,7 @@ function smoothPath(p) {
   for (let i = 0; i < n; i++) { const m = mid(i); ctx.quadraticCurveTo(p[i][0], p[i][1], m[0], m[1]); }
   ctx.closePath();
 }
-// The AUTO-GENERATED map's corridor: it paints EVERYTHING as wall and CARVES OUT the corridor from every displaced copy — that way what
+// The AUTO-GENERATED map's corridor: it paints EVERYTHING as wall and CARVES OUT the corridor from every displaced copy, that way what
 // goes out through one edge comes in through the other. It supports any topology: portals on X, on Y or both.
 function drawCorridorCarve(poly, ww, hh, track) {
   const wallc = THEME_WALL[poly.theme], edge = modifyColor(wallc, -45), hi = modifyColor(wallc, 35);
@@ -3984,7 +3985,7 @@ function drawSmoothCorridor(poly, ww, hh) {
 }
 
 // A memory cap on the baked background (~38MB): the BIG worlds are baked at a lower resolution (bgK<1) and
-// scaled up when blitting — without this, 4800×3000 at phone resolution would be >100MB of canvas.
+// scaled up when blitting, without this, 4800×3000 at phone resolution would be >100MB of canvas.
 const BG_MAX_PIXELS = 4096 * 2400;
 let bgK = 1;
 function bgScaleFor(ww, hh) { return Math.min(1, Math.sqrt(BG_MAX_PIXELS / (ww * scaleX * dpr * hh * scaleY * dpr))); }
@@ -4003,8 +4004,8 @@ function bakeBackground(track) {
   try {
     fillRect(0, 0, ww, hh, THEME_FLOOR[themeOf(track)]);
     drawDeco(track, ww, hh);
-    drawCenterMarks(track);                                            // the centre's dotted line (park white / techno blue) — BELOW the finish line
-    for (const tp of trackpoints) tp.draw();                           // the finish line + the starting grid — ON TOP of the dotted one
+    drawCenterMarks(track);                                            // the centre's dotted line (park white / techno blue), BELOW the finish line
+    for (const tp of trackpoints) tp.draw();                           // the finish line + the starting grid, ON TOP of the dotted one
     if (poly && poly.copies) drawCorridorCarve(poly, ww, hh, track);   // the auto-generated map (with or without portals)
     else if (poly) drawSmoothCorridor(poly, ww, hh);                   // 5 curated circuits: SMOOTH walls (curves)
     else for (const w of walls) w.draw();                             // the original tracks: walls with motifs
@@ -4119,7 +4120,7 @@ function drawMinimap() {
   ctx.save(); roundRectPath(mmX, mmY, mmW, mmH, rad); ctx.clip();
   // walls: baked ONCE per track into a small canvas (they used to be redrawn as ~200 rects per frame → it killed mobile)
   ctx.drawImage(minimapWallsImg(tr, mmW, mmH, sc, accent), mmX, mmY, mmW, mmH);
-  // the camera's box (what you can see) — subtle
+  // the camera's box (what you can see), subtle
   ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.2;
   ctx.strokeRect(mx(camX), my(camY), SCREEN_X*sc, SCREEN_Y*sc);
   // THE FINISH/START LINE (a reference): perpendicular to the track at waypoint 0, solid WHITE.
@@ -4228,7 +4229,7 @@ function frame(now) {
     for (const tp of trackpoints) tp.debugDraw();                     // waypoints: the same logic as the old F2 (a dot tinted by the racing line)
   }
 
-  if (main0 && !main0.menu) drawAmbientFx(main0.track);                // the theme's animated AMBIENT EFFECTS (cheap, culled) — ON TOP of the tanks
+  if (main0 && !main0.menu) drawAmbientFx(main0.track);                // the theme's animated AMBIENT EFFECTS (cheap, culled), ON TOP of the tanks
   if (MUT.fog && main0 && !main0.menu) {                               // the FOG mutator: a mist vignette covering the periphery (perceptual; it reduces the player's visibility)
     const cx = camX + SCREEN_X * 0.5, cy = camY + SCREEN_Y * 0.5, rOut = Math.hypot(SCREEN_X, SCREEN_Y) * 0.52;
     const g = ctx.createRadialGradient(cx, cy, rOut * 0.30, cx, cy, rOut);
@@ -4269,13 +4270,13 @@ function frame(now) {
     const yo = tanks.find(t => t.id === 0);
     if (yo && yo.racetime > 1) drawPosCard(yo.rank, tanks.length, yo.color, yo.laps, yo.racelength, yo.skin);
   }
-  // (the FPS + the wall count 'W' go in the LEFT-hand card, which the info button toggles — unified debug)
+  // (the FPS + the wall count 'W' go in the LEFT-hand card, which the info button toggles: unified debug)
   ctx.restore();
 
-  // The AuxiliaryHandler's overlay (the countdown / the tournament's TABLE / the pause) — ON TOP of the HUD and everything else.
+  // The AuxiliaryHandler's overlay (the countdown / the tournament's TABLE / the pause), ON TOP of the HUD and everything else.
   { const aux = sprites.find(s => s instanceof AuxiliaryHandler); if (aux) aux.draw(); }
 
-  // Confirmation of quitting to the menu (ESC during a race) — on top of EVERYTHING (the table included). Tap Yes / No.
+  // Confirmation of quitting to the menu (ESC during a race), on top of EVERYTHING (the table included). Tap Yes / No.
   if (sprites[0] && sprites[0].confirmQuit) {
     ctx.save(); ctx.translate(camX, camY);
     ctx.save(); ctx.globalAlpha = 0.62; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, SCREEN_X, SCREEN_Y); ctx.restore();
@@ -4304,7 +4305,7 @@ function frame(now) {
   if (inRace !== btnsShown) { btnsShown = inRace; actBtns.style.display = inRace ? 'flex' : 'none'; }
   // The player's meters on the buttons: the shot's cooldown (red) and the nitro charge (light blue).
   // We use tank 0 ALWAYS (even if it goes over to ai when the race ends): that way the buttons do not "switch off" abruptly
-  // at the finish — they keep their real state (they keep charging if they were on cd, or stay as they are).
+  // at the finish: they keep their real state (they keep charging if they were on cd, or stay as they are).
   const p = tanks[0], pl = p || null;
   if (fireFill) {
     const ch = pl ? Math.max(0, 1 - pl.shoot_cooling / 2) : 0;         // the shot's charge: 0 (just fired) → 1 (ready). cooldown = 2s
@@ -4316,7 +4317,7 @@ function frame(now) {
   }
   if (nitroFill) {
     const n = pl ? pl.nitro : 0;                                                                  // #10 TWO LAYERS on the same button: cyan (the 1st bar 0..1) + blue ON TOP (the 2nd bar 1..2). Each one fills 0→100% of the height, from the bottom.
-    const cyanF = Math.min(n, NITRO_MAX) / NITRO_MAX * 100;                                        // the 1st bar (cyan): 0→100% of the height — identical to the one before
+    const cyanF = Math.min(n, NITRO_MAX) / NITRO_MAX * 100;                                        // the 1st bar (cyan): 0→100% of the height; identical to the one before
     const blueF = Math.max(0, n - NITRO_MAX) / NITRO_MAX * 100;                                    // the 2nd bar (blue): 0→100% of the height, as a 2nd LAYER over the full cyan
     const cyan = `linear-gradient(to top, rgba(80,220,255,0.92) ${cyanF}%, transparent ${cyanF}%)`;
     const blue = `linear-gradient(to top, rgba(40,120,255,0.95) ${blueF}%, transparent ${blueF}%)`;
@@ -4327,7 +4328,7 @@ function frame(now) {
 
 }
 // A resilient loop: if frame() throws an exception (a size transition, an odd state on re-entering from the
-// Arcade, etc.) it must NOT kill the rAF — otherwise the loop dies and the screen is left frozen/black with the
+// Arcade, etc.) it must NOT kill the rAF: otherwise the loop dies and the screen is left frozen/black with the
 // DOM buttons alive. The catch logs once per message and ALWAYS re-schedules the next frame.
 function loop(now) {
   sndThisFrame = 0;                                                               // MANDATORY: without this it goes mute after SND_PER_FRAME
@@ -4362,7 +4363,7 @@ window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true 
   <script>
     document.getElementById('btnExit').addEventListener('click', () => {
       // Embedded in the Arcade shell: postMessage to go back to the menu without reloading the iframe.
-      // Standalone: we navigate straight there (no confirm — same pattern as the rest of the games).
+      // Standalone: we navigate straight there (no confirm; same pattern as the rest of the games).
       if (window.self !== window.top) {
         try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {}
         return;
@@ -4408,7 +4409,7 @@ window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true 
       const btn = document.getElementById('btnInfo');
       btn.addEventListener('pointerdown', e => {
         e.preventDefault();
-        // The overlay starts at display:none FROM CSS — the inline style is empty "", so we
+        // The overlay starts at display:none FROM CSS; the inline style is empty "", so we
         // compare against === 'block' (an explicitly visible state) instead of !== 'none' (which was true
         // at startup and swallowed the first tap).
         const showing = overlay.style.display === 'block';
@@ -4420,12 +4421,12 @@ window.addEventListener('keydown', () => hint.style.opacity = '0', { once: true 
   </script>
 
 <div id="infoPanel"><h4>Crazy Tanks</h4>
-A race between tanks on a track generated fresh every time. Finish the laps first — and you can
+A race between tanks on a track generated fresh every time. Finish the laps first, and you can
 shoot the others. <b>A hit sends the other tank into a spin.</b>
 <hr>
 <h5>Desktop</h5>
 <ul>
-  <li><b>Arrow keys</b> drive. <b>Space</b> fires a shell, same as <span class="ik"><svg class="fbomb fbLight" viewBox="0 0 54 54" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(8.8 10.9) scale(1.4)"><circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" stroke="none"/><path d="M15 9.5 18 6.5" stroke-width="2"/><circle cx="18.8" cy="5.6" r="1.7" fill="currentColor" stroke="none"/><path d="M20.5 3.6 21.7 2.6M20.2 6.4 21.6 6.7M17.6 3.3 17.2 1.9" stroke-width="1.4"/></g></svg></span> <b>Fire</b>.
+  <li><b>Arrow keys</b> or <b>W A S D</b> drive, in the menu as well. <b>Space</b> fires a shell, same as <span class="ik"><svg class="fbomb fbLight" viewBox="0 0 54 54" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(8.8 10.9) scale(1.4)"><circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" stroke="none"/><path d="M15 9.5 18 6.5" stroke-width="2"/><circle cx="18.8" cy="5.6" r="1.7" fill="currentColor" stroke="none"/><path d="M20.5 3.6 21.7 2.6M20.2 6.4 21.6 6.7M17.6 3.3 17.2 1.9" stroke-width="1.4"/></g></svg></span> <b>Fire</b>.
       <b>Shift</b> uses nitro, same as <span class="ik"><svg class="nflame nfLight" viewBox="0 0 54 54" fill="currentColor" stroke="none"><path transform="translate(10 11.5) scale(1.4)" d="M12.5 2c.6 3-1.4 4-1.4 6.3 0 1 .7 1.7 1.6 1.7 1.2 0 1.7-1 1.6-2.2 1.7 1.3 2.7 3.4 2.7 5.5a5.5 5.5 0 0 1-11 0c0-2.7 1.7-4.6 3-6.1C10.9 5.3 11.8 3.7 12.5 2z"/></svg></span> <b>Nitro</b>.</li>
   <li><b>Enter</b> confirms in the menu; <b>Esc</b> goes back. <span class="ik"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg></span> <b>Pause</b> in the corner.</li>
 </ul>
@@ -4435,7 +4436,7 @@ shoot the others. <b>A hit sends the other tank into a spin.</b>
   <li><span class="ik"><svg class="fbomb fbLight" viewBox="0 0 54 54" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(8.8 10.9) scale(1.4)"><circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" stroke="none"/><path d="M15 9.5 18 6.5" stroke-width="2"/><circle cx="18.8" cy="5.6" r="1.7" fill="currentColor" stroke="none"/><path d="M20.5 3.6 21.7 2.6M20.2 6.4 21.6 6.7M17.6 3.3 17.2 1.9" stroke-width="1.4"/></g></svg></span> <b>Fire</b> (the red bomb) and <span class="ik"><svg class="nflame nfLight" viewBox="0 0 54 54" fill="currentColor" stroke="none"><path transform="translate(10 11.5) scale(1.4)" d="M12.5 2c.6 3-1.4 4-1.4 6.3 0 1 .7 1.7 1.6 1.7 1.2 0 1.7-1 1.6-2.2 1.7 1.3 2.7 3.4 2.7 5.5a5.5 5.5 0 0 1-11 0c0-2.7 1.7-4.6 3-6.1C10.9 5.3 11.8 3.7 12.5 2z"/></svg></span> <b>Nitro</b> (the cyan flame) are the buttons on the right.</li>
 </ul>
 <hr>
-<b>Nitro runs out</b> — pick up the cyan orbs on the track to refill it.
+<b>Nitro runs out</b>: pick up the cyan orbs on the track to refill it, or drift for real and it recharges on its own, a little per drift.
 <span class="dim">Each biome has its own grip: on snow the tank slides, on tarmac it bites. The
 track rattle changes with the surface before you feel the slide.</span>
 </div>
@@ -4459,7 +4460,7 @@ track rattle changes with the surface before you feel the slide.</span>
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

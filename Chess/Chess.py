@@ -1221,10 +1221,10 @@ class Game(Sprite):
                        (230, 220, 130), screenX/2, yper(0.04))
         elif view_status == 'checkmate':
             winner = 'Black' if view_turn == 'w' else 'White'
-            createText(int(sper(0.030)), 'CHECKMATE — ' + winner + ' wins',
+            createText(int(sper(0.030)), 'CHECKMATE: ' + winner + ' wins',
                        'center', (255, 90, 90), screenX/2, yper(0.04))
         elif view_status == 'stalemate':
-            createText(int(sper(0.030)), 'STALEMATE — Draw',
+            createText(int(sper(0.030)), 'STALEMATE: Draw',
                        'center', (230, 220, 100), screenX/2, yper(0.04))
         elif view_status == 'repetition':
             createText(int(sper(0.030)), 'DRAW BY REPETITION',

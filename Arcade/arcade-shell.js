@@ -1,5 +1,5 @@
 // ════════════════════════════════════════════════════════════════════
-//  Arcade shell — exit / fullscreen / info wiring + orientation lock +
+//  Arcade shell: exit / fullscreen / info wiring + orientation lock +
 //  postMessage bridge to the parent shell (when the game runs embedded in the
 //  Arcade's iframe). Shared by every game.
 //
@@ -10,9 +10,9 @@
 //  an orientation lock on entering fullscreen. 'any' = no lock.
 //
 //  Requirements in the game's HTML:
-//   · <button id="btnExit"> — the ✕ button (in the bar)
-//   · <button id="btnFs">   — the ⛶ button (in the bar; it carries <g class="ic-enter">/<g class="ic-exit">)
-//   · <button id="btnInfo"> — the ⓘ button (in the bar) [optional]
+//   · <button id="btnExit">, the ✕ button (in the bar)
+//   · <button id="btnFs">, the ⛶ button (in the bar; it carries <g class="ic-enter">/<g class="ic-exit">)
+//   · <button id="btnInfo">, the ⓘ button (in the bar) [optional]
 //
 //  Behaviour:
 //   · Embedded in the Arcade's iframe → the parent shell handles fullscreen and

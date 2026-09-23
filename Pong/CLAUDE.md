@@ -6,7 +6,7 @@ Pong with a menu system, configurable win-points (5/10/20/40/practice), and an o
 
 Diverges from the repo skeleton: no `Sprite` base class, no `xper`/`yper` helpers, no `deltaT`. State is a `gamestate` string switched between `'menu'`, `'juego'`, and `'pausa'`. Ball physics use a 5-element list `[x, y, radius, vx, vy]` rather than an object.
 
-`fire_mode`, `j1onfire`, `j2onfire`, `firenet` are top-level globals — gameplay reads/writes them directly rather than through a manager.
+`fire_mode`, `j1onfire`, `j2onfire`, `firenet` are top-level globals: gameplay reads/writes them directly rather than through a manager.
 
 See [../CLAUDE.md](../CLAUDE.md) for the shared conventions this file does not follow.
 
@@ -15,7 +15,7 @@ See [../CLAUDE.md](../CLAUDE.md) for the shared conventions this file does not f
 
 **Charged light and glass.** The background is a near-black radial gradient with a blue grid,
 everything is drawn with `shadowBlur` and the particles run in `lighter`: there is not one matte
-surface on screen. So no impact is a knock — it is a DISCHARGE, a glassy transient with a TUNED
+surface on screen. So no impact is a knock: it is a DISCHARGE, a glassy transient with a TUNED
 resonant tail.
 
 **The rally ladder.** The pitch of the return rises with `rallyHits`: measured, 293 Hz on step 0 and

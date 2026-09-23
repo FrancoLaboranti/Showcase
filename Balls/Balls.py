@@ -14,25 +14,25 @@ import pymunk
 #
 # This is the pymunk-based rewrite. The hand-rolled physics engine (with its own
 # sleep state machine, BFS wake check, settle damp, position+velocity gates,
-# spatial hash, impulse resolver) is in handrolled/Balls.py — see that file for
+# spatial hash, impulse resolver) is in handrolled/Balls.py, see that file for
 # the history of what each constant meant before.
 #
 # Now pymunk owns: integration, broadphase, sequential-impulse solver, island
 # sleeping, contact persistence. So this knob block is mostly visuals / sound /
-# UX — physics knobs collapse down to gravity, restitution, friction, damping.
+# UX: physics knobs collapse down to gravity, restitution, friction, damping.
 # ------------------------------------------------------------------------------
 
 BALL_RADIUS_MIN    = 0.02     # smallest ball radius as a fraction of (screenX+screenY)/2 (passed through sper()).
 BALL_RADIUS_MAX    = 0.065    # largest ball radius. Bigger balls = heavier (mass ∝ radius²) and lower pitch.
 
 GRAVITY            = 3000.0   # px/s² downward (positive y = down in screen coords; matches pymunk's gravity direction conventions when y-axis isn't flipped).
-JUMP_VELOCITY      = 2400.0   # px/s — upward impulse on each right-click jump (flappy-bird hop).
+JUMP_VELOCITY      = 2400.0   # px/s: upward impulse on each right-click jump (flappy-bird hop).
 
 BALL_FRICTION      = 0.4      # ball↔ball tangential friction. Higher = more rolling / less sliding.
 WALL_FRICTION      = 0.6      # walls vs balls (controls how much horizontal speed bleeds off when sliding along floor/walls).
 
 # Restitution is overridden per pair-type in pre_solve callbacks (see _ballBallPreSolve / _ballWallPreSolve).
-# This decouples "ball-ball bounce" from "ball-wall bounce" — pymunk's default combining is multiplicative,
+# This decouples "ball-ball bounce" from "ball-wall bounce": pymunk's default combining is multiplicative,
 # which means setting shape.elasticity to e gives 0.4·0.4 = 0.16 ball-ball and 0.4·0.7 = 0.28 ball-wall:
 # both feel dead, especially the floor. By overriding the arbiter directly we get exact control.
 BALL_BALL_RESTITUTION = 0.3   # how bouncy ball-on-ball is. Higher = livelier piles (more jitter risk), lower = sticky/dampened.
@@ -40,7 +40,7 @@ BALL_WALL_RESTITUTION = 0.65  # how bouncy ball-on-wall is. Matches the old hand
 
 AIR_DAMPING        = 0.6      # space.damping per-second velocity multiplier (0.6 = loses 40 %/s in the air). Direct equivalent of the old AIR_FRICTION.
 
-GROWTH_RATE        = 500      # px/s — visual radius animation on spawn/remove. The physics body is added to the world only once the visual radius reaches targetRadius (and removed immediately on shrink-out).
+GROWTH_RATE        = 500      # px/s: visual radius animation on spawn/remove. The physics body is added to the world only once the visual radius reaches targetRadius (and removed immediately on shrink-out).
 MAX_BALLS          = 100      # upper bound for scroll-up spawns.
 
 MOUSE_SMOOTH_TC    = 0.04     # time constant (sec) of the mouse-velocity low-pass filter (used as throw velocity on release).
@@ -60,14 +60,14 @@ COLLISION_TYPE_WALL = 2
 
 # --- Sound --------------------------------------------------------------------
 
-SAMPLE_RATE        = 22050    # Hz, mono 16-bit. Don't touch — would invalidate every pre-baked sound buffer.
+SAMPLE_RATE        = 22050    # Hz, mono 16-bit. Don't touch: would invalidate every pre-baked sound buffer.
 
 IMPACT_VOL_SCALE   = 1500     # impact speed (px/s) that maps to full volume.
 IMPACT_MIN_VEL     = 500      # velocity threshold below which no sound plays (free balls).
 IMPACT_MIN_VEL_GRABBED = 800  # separate, higher threshold when a grabbed ball is involved (mouse velocities spike easily).
 
 MAX_SOUNDS_PER_FRAME = 1      # hard cap on how many impact sounds can play per frame.
-IMPACT_COOLDOWN    = 0.12     # seconds — minimum time between any two impact sounds (global rate-limit).
+IMPACT_COOLDOWN    = 0.12     # seconds: minimum time between any two impact sounds (global rate-limit).
 
 PITCH_PRIORITY_BIAS = 4.0     # bass-heavy weight: weight(hit) = intensity · (1 + bias · (1 − pitchNorm)).
 PITCH_JITTER       = 2        # per-impact pitch variation in slot units (±this many slots randomly).
@@ -85,7 +85,7 @@ class Sprite:
 
 
 class Ball(Sprite):
-    _nextId = 1                                                                    # class-level counter — first ball gets id=1, second gets id=2, etc.
+    _nextId = 1                                                                    # class-level counter: first ball gets id=1, second gets id=2, etc.
 
     def __init__(self):
         self.id = Ball._nextId
@@ -98,7 +98,7 @@ class Ball(Sprite):
         self._inWorld = False                                                      # tracks whether body+shape are currently part of pymunk space (false while growing in, false after starting to shrink out)
         self._sphereSurf = None
 
-        # Visuals: color, voice, pitch slot, style, overlay color — same logic as the hand-rolled version
+        # Visuals: color, voice, pitch slot, style, overlay color; same logic as the hand-rolled version
         hue = random.random()
         rH, gH, bH = colorsys.hsv_to_rgb(hue, random.uniform(0.95, 1.0), random.uniform(0.95, 1.0))
         self.color = (int(rH * 255), int(gH * 255), int(bH * 255))
@@ -156,9 +156,9 @@ class Ball(Sprite):
                 self.overlayColor = (int(r2 * 255), int(g2 * 255), int(b2 * 255))
 
         # pymunk body + shape. moment_for_circle gives the proper rotational inertia.
-        # Balls DO rotate physically (rolling friction works correctly), but the rendered sphere is blitted axis-aligned —
+        # Balls DO rotate physically (rolling friction works correctly), but the rendered sphere is blitted axis-aligned:
         # the pattern doesn't visually rotate. That's a deliberate trade-off: real rolling physics + simple render.
-        # (float('inf') moment to disable rotation entirely is NOT allowed by pymunk — step() requires moment < inf.)
+        # (float('inf') moment to disable rotation entirely is NOT allowed by pymunk: step() requires moment < inf.)
         self.mass = self.targetRadius * self.targetRadius                          # mass ∝ area (2D); kept consistent with the hand-rolled version for momentum feel
         self._moment = pymunk.moment_for_circle(self.mass, 0, self.targetRadius)   # cached so we can restore it after KINEMATIC↔DYNAMIC transitions wipe it (pymunk doesn't preserve mass/moment across body_type changes)
         self.body = pymunk.Body(self.mass, self._moment)
@@ -170,7 +170,7 @@ class Ball(Sprite):
         self.shape.collision_type = COLLISION_TYPE_BALL
         self.shape.ball_ref = self                                                 # backref so collision handlers can look up the Ball from the shape
 
-    # --- Position / velocity properties — read directly from the pymunk body so the rest of the code (rendering, debug overlay, RMB jump) can keep using self.x / self.y / self.vx / self.vy as if they were plain attributes
+    # --- Position / velocity properties: read directly from the pymunk body so the rest of the code (rendering, debug overlay, RMB jump) can keep using self.x / self.y / self.vx / self.vy as if they were plain attributes
     @property
     def x(self): return self.body.position.x
     @property
@@ -203,7 +203,7 @@ class Ball(Sprite):
 
         Records the cursor-to-ball-center offset so the grip-point on the ball stays glued to the cursor. With this
         offset, the first chase frame has dx=dy=0 by construction (target = cursor − offset = ball center, equal to
-        the current body position), so the ball stays put on grab and doesn't fire into a neighbor — same anti-shove
+        the current body position), so the ball stays put on grab and doesn't fire into a neighbor, the same anti-shove
         guarantee as snapping the cursor to the ball center, but without the side-effect of `pygame.mouse.set_pos`,
         which under pygame.SCALED can land the cursor in an unexpected place (we were seeing cursor jumps to the
         opposite corner when grabbing near an edge)."""
@@ -273,10 +273,10 @@ class Ball(Sprite):
             return
 
         # 3. Held-LMB grab: passing the cursor over any ball while LMB is held grabs it. Requires the cursor to be
-        # INSIDE the playable zone — without this guard, an auto-released ball pinned against a wall would re-grab
+        # INSIDE the playable zone, without this guard, an auto-released ball pinned against a wall would re-grab
         # itself on the very next frame (cursor outside the screen edge is still inside the ball's radius), then
         # immediately auto-release again, looping at 0 velocity and looking "stuck". With the guard, the user has
-        # to bring the cursor back into the zone to grab again (same ball or any other — that's the desired flow).
+        # to bring the cursor back into the zone to grab again (same ball or any other, that's the desired flow).
         cursorInZone = True
         if WALL_MODE == 1 and (mouseX < EDGE_MARGIN or mouseX > screenX - EDGE_MARGIN or mouseY < EDGE_MARGIN or mouseY > screenY - EDGE_MARGIN):
             cursorInZone = False
@@ -289,16 +289,16 @@ class Ball(Sprite):
             self.release()
 
         # 4. Velocity-chase while grabbed: compute the velocity needed to land on the mouse position this frame,
-        # cap it (anti-tunneling), and assign. The ball is DYNAMIC so it collides with walls/other balls correctly —
+        # cap it (anti-tunneling), and assign. The ball is DYNAMIC so it collides with walls/other balls correctly,
         # if the path to the mouse is blocked, the ball stays put and natural impulses push the obstacles instead.
         if self.grabbed and deltaT > 0:
             targetX = mouseX - self._grabOffsetX                                    # chase toward (cursor − click-offset) so the grip-point on the ball stays glued to the cursor instead of the center snapping to it
             targetY = mouseY - self._grabOffsetY
             r = self.radius
-            # Auto-release trigger uses the CURSOR position (not target) — same criterion as the grab check above,
+            # Auto-release trigger uses the CURSOR position (not target), same criterion as the grab check above,
             # so the two are symmetric: grab is allowed iff cursor is in the zone, auto-release fires iff it leaves.
             # If we used "target outside playfield" instead, a large ball grabbed by its edge would auto-release the
-            # moment the cursor approached the screen edge — even though the cursor is still on-screen.
+            # moment the cursor approached the screen edge, even though the cursor is still on-screen.
             cursorOutsideZone = False
             if AUTO_FLING_ENABLED:
                 if WALL_MODE == 1 and (mouseX < EDGE_MARGIN or mouseX > screenX - EDGE_MARGIN or mouseY < EDGE_MARGIN or mouseY > screenY - EDGE_MARGIN):
@@ -328,25 +328,25 @@ class Ball(Sprite):
                 vy *= scale
             self.body.velocity = (vx, vy)
             # Spin model: rolling on a horizontal floor with the rotation axis horizontal in 3D (out-of-plane in
-            # this 2D side-view). Only the horizontal velocity contributes — ω = vx/radius. Vertical motion
+            # this 2D side-view). Only the horizontal velocity contributes: ω = vx/radius. Vertical motion
             # doesn't induce spin (a ball flung straight up doesn't roll). Positive vx → positive ω (clockwise
             # visually in y-down screen, the natural rolling direction for rightward motion).
             # While grabbed the body stays visually still (angular_velocity = 0); spin is committed on release.
             self.body.angular_velocity = 0.0
-            if cursorOutsideZone:                                                   # auto-release: the ball becomes a free dynamic body carrying the fling velocity above. Spin derived from the same vx we just assigned, so throw and roll stay coupled. The grab condition (step 3) also requires cursor-in-zone, so we won't re-grab the same ball this frame — only after the cursor comes back into the playable zone.
+            if cursorOutsideZone:                                                   # auto-release: the ball becomes a free dynamic body carrying the fling velocity above. Spin derived from the same vx we just assigned, so throw and roll stay coupled. The grab condition (step 3) also requires cursor-in-zone, so we won't re-grab the same ball this frame, only after the cursor comes back into the playable zone.
                 self.body.angular_velocity = vx / self.radius
                 self.grabbed = False
             return                                                                  # grabbed balls skip wrap
 
         # 5. Pin: pin-position + zero velocity overwritten each frame. Other balls colliding into it nudge it
-        # within the step, but our overwrite snaps it back next frame — visually nailed in place.
+        # within the step, but our overwrite snaps it back next frame: visually nailed in place.
         if self.pinned:
             self.body.position = self._pinPos
             self.body.velocity = (0, 0)
-            self.body.angular_velocity = 0                                          # pinned balls don't spin either — rock solid
+            self.body.angular_velocity = 0                                          # pinned balls don't spin either: rock solid
             return
 
-        # 6. Wrap modes (sides and/or top/bottom). pymunk has no native wrapping — we teleport here.
+        # 6. Wrap modes (sides and/or top/bottom). pymunk has no native wrapping: we teleport here.
         r = self.radius
         pos = self.body.position
         x, y = pos.x, pos.y
@@ -428,7 +428,7 @@ class Ball(Sprite):
                 pygame.gfxdraw.filled_circle(glowSurf, hcx, hcy, rL, (*haloColor, alpha))
             windowSurface.blit(glowSurf, (self.x - hcx, self.y - hcy))
 
-        if self.radius < self.targetRadius:                                        # GROWING or SHRINKING — slow per-frame draw at the current radius
+        if self.radius < self.targetRadius:                                        # GROWING or SHRINKING; slow per-frame draw at the current radius
             lightX, lightY = xper(0.5), -yper(0.2)
             dx, dy = lightX - self.x, lightY - self.y
             d = math.sqrt(dx*dx + dy*dy) or 1
@@ -440,7 +440,7 @@ class Ball(Sprite):
                 offset = self.radius * 0.45 * t
                 tint = 0.45 + 1.20 * t
                 pygame.draw.circle(windowSurface, modifyColorPerc(self.color, tint), (self.x + lx * offset, self.y + ly * offset), layerRadius)
-        else:                                                                      # GROWN — blit the baked sphere, rotated by the body's current angle so the pattern visually rolls with the physics. Pymunk's moment_for_circle gives finite rotational inertia, so balls spin from friction / glancing impacts. The hotspot + gradient rotate with the pattern (not strictly correct for a sphere lit from a fixed direction, but reads as a stamped rolling ball — cheap and convincing).
+        else:                                                                      # GROWN; blit the baked sphere, rotated by the body's current angle so the pattern visually rolls with the physics. Pymunk's moment_for_circle gives finite rotational inertia, so balls spin from friction / glancing impacts. The hotspot + gradient rotate with the pattern (not strictly correct for a sphere lit from a fixed direction, but reads as a stamped rolling ball: cheap and convincing).
             if self._sphereSurf is None:
                 self._bakeSphere()
             angle = self.body.angle
@@ -463,8 +463,8 @@ class Ball(Sprite):
 pygame.mixer.pre_init(frequency=SAMPLE_RATE, size=-16, channels=1, buffer=256)
 pygame.init()
 
-_desktopSize = pygame.display.get_desktop_sizes()[0]                              # SCALED requires explicit dimensions — (0,0) is rejected. Query the display's native size and pass it through.
-windowSurface = pygame.display.set_mode(_desktopSize, pygame.FULLSCREEN | pygame.SCALED, depth=32, display=0, vsync=1)   # vsync=1 syncs the framebuffer flip to the monitor refresh — kills the horizontal tearing line that shows up under high motion. SCALED is needed in SDL2 for vsync to be enforced strictly (without it the driver may ignore the hint). Tearing doesn't appear in screenshots (capture reads the composed buffer, not the in-progress scanout).
+_desktopSize = pygame.display.get_desktop_sizes()[0]                              # SCALED requires explicit dimensions: (0,0) is rejected. Query the display's native size and pass it through.
+windowSurface = pygame.display.set_mode(_desktopSize, pygame.FULLSCREEN | pygame.SCALED, depth=32, display=0, vsync=1)   # vsync=1 syncs the framebuffer flip to the monitor refresh: kills the horizontal tearing line that shows up under high motion. SCALED is needed in SDL2 for vsync to be enforced strictly (without it the driver may ignore the hint). Tearing doesn't appear in screenshots (capture reads the composed buffer, not the in-progress scanout).
 screenX, screenY = windowSurface.get_size()
 pygame.display.set_caption('Balls')
 
@@ -885,26 +885,26 @@ WALL_MODE = 1
 
 space = pymunk.Space()
 space.gravity = (0, GRAVITY)
-space.damping = AIR_DAMPING                                                        # per-second velocity multiplier — directly replaces the old AIR_FRICTION
+space.damping = AIR_DAMPING                                                        # per-second velocity multiplier: directly replaces the old AIR_FRICTION
 space.iterations = SOLVER_ITERATIONS
 space.sleep_time_threshold = SLEEP_DELAY                                           # seconds an island must rest before sleeping
 space.idle_speed_threshold = IDLE_SPEED                                            # |v| considered "at rest" for the sleep accumulator
 
 _wallShapes = []                                                                   # rebuilt whenever WALL_MODE changes
 
-WALL_THICKNESS = 500                                                               # half-thickness of the segment capsule. Walls are invisible (offscreen entirely) but THICK toward the outside — collision face still aligns with the screen edge (because the centerline sits at -t and the capsule has radius t), but the capsule body extends 2*WALL_THICKNESS pixels offscreen. Side effect (the point): a ball pushed slightly past the screen edge by a high-impulse collision is still INSIDE the capsule, so pymunk's overlap resolution shoves it back in; same for WALL_MODE transitions that leave a ball in the off-screen zone (3 → 2 or 1 now finds the ball inside the capsule and corrects it). Tunneling threshold = 2*(WALL_THICKNESS + ball.radius) / subDt; with t=100 and substeps=3 the threshold is ~70 000 px/s, well beyond any natural ball velocity.
-EDGE_MARGIN    = 5                                                                 # interior pixels reserved as "wall zone" — cursor inside this strip counts as outside-the-playable-zone (so auto-release fires when the cursor reaches the wall, not only when it leaves the OS window — pygame clamps mouse pos to the window on Windows, so `mouseX < 0` rarely triggers). Also the visible thickness of the wall lines drawn each frame.
+WALL_THICKNESS = 500                                                               # half-thickness of the segment capsule. Walls are invisible (offscreen entirely) but THICK toward the outside: collision face still aligns with the screen edge (because the centerline sits at -t and the capsule has radius t), but the capsule body extends 2*WALL_THICKNESS pixels offscreen. Side effect (the point): a ball pushed slightly past the screen edge by a high-impulse collision is still INSIDE the capsule, so pymunk's overlap resolution shoves it back in; same for WALL_MODE transitions that leave a ball in the off-screen zone (3 → 2 or 1 now finds the ball inside the capsule and corrects it). Tunneling threshold = 2*(WALL_THICKNESS + ball.radius) / subDt; with t=100 and substeps=3 the threshold is ~70 000 px/s, well beyond any natural ball velocity.
+EDGE_MARGIN    = 5                                                                 # interior pixels reserved as "wall zone": cursor inside this strip counts as outside-the-playable-zone (so auto-release fires when the cursor reaches the wall, not only when it leaves the OS window: pygame clamps mouse pos to the window on Windows, so `mouseX < 0` rarely triggers). Also the visible thickness of the wall lines drawn each frame.
 
 def buildWalls():
     """(Re)build the static wall segments based on current WALL_MODE.
        MODE 1: all 4 walls. MODE 2: top + floor only (sides wrap). MODE 3: no walls (everything wraps).
        Centerlines sit OUTSIDE the visible playfield by WALL_THICKNESS so the capsule's inner face lines up exactly
-       with the screen edge. The capsule itself is off-screen and invisible — balls appear to bounce at the screen
+       with the screen edge. The capsule itself is off-screen and invisible: balls appear to bounce at the screen
        boundary, just like the hand-rolled clamp."""
     global _wallShapes
     # Remove every wall the engine still knows about. Walking space.shapes (instead of just iterating _wallShapes)
     # is paranoid by design: if anything in the past missed a remove (e.g. a previous buildWalls that bailed out, a
-    # space reset, etc.) we'd leak collision faces that show up as "phantom bounces" — exactly the WALL_MODE 2
+    # space reset, etc.) we'd leak collision faces that show up as "phantom bounces": exactly the WALL_MODE 2
     # symptom of balls still bouncing on the sides after switching away from MODE 1.
     for s in list(space.shapes):
         if getattr(s, "collision_type", None) == COLLISION_TYPE_WALL:
@@ -913,7 +913,7 @@ def buildWalls():
     t = WALL_THICKNESS
     # Top/floor segments are extended laterally past the side-wrap threshold (x = ±max_ball_radius) so a ball
     # near the top or floor that's about to wrap in x can't slip into the gap between the wall endpoint and the
-    # wrap threshold — that gap has no collision face and gravity would accelerate the ball indefinitely there
+    # wrap threshold, that gap has no collision face and gravity would accelerate the ball indefinitely there
     # (we've seen ~5600 px/s, which is ~2 s of free-fall).
     wrapBuffer = sper(BALL_RADIUS_MAX) + 50                                         # past the wrap threshold by a comfortable margin
     sides = [
@@ -931,10 +931,10 @@ def buildWalls():
         segs = topbot
     elif WALL_MODE == 3:                                                            # no ceiling/floor: the sides, vertical wrap
         segs = sides
-    # MODE 4: no walls, wrap on both axes — segs stays empty.
+    # MODE 4: no walls, wrap on both axes; segs stays empty.
     for (a, b) in segs:
         seg = pymunk.Segment(space.static_body, a, b, t)
-        seg.elasticity = BALL_WALL_RESTITUTION                                     # fallback only — pre_solve callback overrides this on every contact
+        seg.elasticity = BALL_WALL_RESTITUTION                                     # fallback only: pre_solve callback overrides this on every contact
         seg.friction = WALL_FRICTION
         seg.collision_type = COLLISION_TYPE_WALL
         space.add(seg)
@@ -953,7 +953,7 @@ def _vRelN_from_impulse(arbiter, mass_inv_sum, e):
 
 def _ballBallPreSolve(arbiter, space, data):
     """Override the combined restitution before the solver runs. pymunk's default is multiplicative
-    (shape_a.elasticity * shape_b.elasticity), which gives 0.09 for our 0.3·0.3 shapes — way too dead.
+    (shape_a.elasticity * shape_b.elasticity), which gives 0.09 for our 0.3·0.3 shapes, way too dead.
     Setting arbiter.restitution explicitly to BALL_BALL_RESTITUTION gives the bounce we actually want."""
     arbiter.restitution = BALL_BALL_RESTITUTION
     return True
@@ -966,7 +966,7 @@ def _ballWallPreSolve(arbiter, space, data):
 
 
 def _ballBallPostSolve(arbiter, space, data):
-    if not arbiter.is_first_contact:                                               # only fire on the first frame of contact — sustained pile/touch contacts would otherwise spam sound every frame
+    if not arbiter.is_first_contact:                                               # only fire on the first frame of contact; sustained pile/touch contacts would otherwise spam sound every frame
         return
     a, b = arbiter.shapes
     ballA = getattr(a, 'ball_ref', None)
@@ -1018,7 +1018,7 @@ addSprite(Ball())
 while True:
 
     now = time.time()
-    deltaT = min(now - iniT, 1 / 60)                                               # cap dt — pymunk's solver explodes on very large timesteps
+    deltaT = min(now - iniT, 1 / 60)                                               # cap dt: pymunk's solver explodes on very large timesteps
     iniT = now
     clock.tick()
 
@@ -1028,7 +1028,7 @@ while True:
     if keys[pygame.K_1]:   newMode = 1
     elif keys[pygame.K_2]: newMode = 2
     elif keys[pygame.K_3]: newMode = 3
-    elif keys[pygame.K_4]: newMode = 4                                              # no walls and no wrap — the balls go off into the void and stay there
+    elif keys[pygame.K_4]: newMode = 4                                              # no walls and no wrap; the balls go off into the void and stay there
     if newMode != WALL_MODE:
         WALL_MODE = newMode
         buildWalls()
@@ -1079,7 +1079,7 @@ while True:
     windowSurface.fill((0,0,0))
 
     # Draw the active walls as EDGE_MARGIN-thick bars along the screen edge. Physics walls are still 2px capsules
-    # sitting just OUTSIDE the screen (collision face exactly at x=0/x=screenX/etc) — the visual bar overlaps the
+    # sitting just OUTSIDE the screen (collision face exactly at x=0/x=screenX/etc), the visual bar overlaps the
     # interior strip that's now "outside the playable zone" for cursor purposes, so what you SEE as wall is exactly
     # the dead zone for the cursor.
     wallColor = (30, 30, 30)

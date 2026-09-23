@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -16,7 +16,7 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Segoe UI', system-ui, sans-serif;
   }
-  /* Canvas occupies only the space ABOVE the bar — the board centers in that rect so it never sits
+  /* Canvas occupies only the space ABOVE the bar: the board centers in that rect so it never sits
      behind the buttons. Dimensions are set explicitly from JS each resize. */
   #c {
     display: block; position: absolute;
@@ -34,7 +34,7 @@
     box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
-  /* Round stopwatch — top left, discreet. It starts on the 1st move and stops on finishing. */
+  /* Round stopwatch: top left, discreet. It starts on the 1st move and stops on finishing. */
   #timer {
     position: absolute;
     left: calc(12px + env(safe-area-inset-left)); top: calc(9px + env(safe-area-inset-top));
@@ -92,7 +92,7 @@
   #ui #btnSound.on { background: rgba(120,200,255,0.26); border-color: rgba(120,200,255,0.55); }
   #ui #btnMode.on  { background: rgba(255,200,50,0.28); border-color: rgba(255,200,50,0.6); color: #ffd23f; }
 
-  /* Mine counter — an overlay anchored to the board's frame (placeHud() sets the position in JS). */
+  /* Mine counter: an overlay anchored to the board's frame (placeHud() sets the position in JS). */
   #status {
     position: absolute;
     display: flex; align-items: center; gap: 5px;
@@ -102,7 +102,7 @@
   }
   #status svg { width: 14px; height: 14px; }
   /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css. */
-  /* FPS HUD — Pong format: a monospaced panel at the top left, no border-radius. */
+  /* FPS HUD: Pong format: a monospaced panel at the top left, no border-radius. */
   #fpsOverlay {
     position: absolute;
     left: calc(8px + env(safe-area-inset-left));
@@ -172,7 +172,7 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  MINESWEEPER — web port of MineSweeperGPT.py, with BallsWeb's mobile shell.
+  //  MINESWEEPER: web port of MineSweeperGPT.py, with BallsWeb's mobile shell.
   //  Improvements over the .py: a modern "field" look (grass/earth + a cascading
   //  reveal animation), a difficulty selector, and synthesised WebAudio sound.
   //  It keeps the safe zone after the 1st click; mine placement is blue-noise (even, no clusters).
@@ -270,7 +270,7 @@
   let goldCollected = 0;         // gold collected in the current round
   let goldTimeMs = 0;            // time limit (countdown) of gold mode
   let goldMult = 1;             // points per nugget according to difficulty (×1/×2/×3)
-  let endReason = '';            // 'mine' | 'time' | 'win' — to pick the end card
+  let endReason = '';            // 'mine' | 'time' | 'win', to pick the end card
   let bonusPts = 0;             // bonus points for collecting everything (half the remaining seconds)
   let lastRecord = 0, isNewRecord = false;   // high score (localStorage) of the current difficulty in gold mode
   let coinFx = [], coinFxStart = 0, coinTickN = 0;   // animation: the remaining time flies to the centre as coins
@@ -863,7 +863,7 @@
   const sndCoin   = (n) => { tone(880, 0.10, 'triangle', 0.14); tone(1320, 0.12, 'triangle', 0.12, null, 0.05); if (n > 2) tone(1760, 0.14, 'triangle', 0.10, null, 0.10); };  // coin (an arpeggio if I collected several)
 
   // === INPUT (canvas) ===
-  const LONG_MS = 150;                                                          // hold for a flag (mobile) — nice and short
+  const LONG_MS = 150;                                                          // hold for a flag (mobile), nice and short
   const MOVE_TOL = () => Math.max(tile * 0.9, 22);                              // generous slop (min 22px): on small cells a shaky touch does not cancel the tap
   let pressId = null, pressTile = null, pressX = 0, pressY = 0, longFired = false, pressTimer = null;
 
@@ -958,10 +958,10 @@
   document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); reset(); });
   window.addEventListener('keydown', e => {
     if (e.key === 'r' || e.key === 'R') reset();
-    // if (e.key === 'w' || e.key === 'W') autoWin();                            // DEBUG disabled — uncomment for autowin
+    // if (e.key === 'w' || e.key === 'W') autoWin();                            // DEBUG disabled, uncomment for autowin
   });
 
-  // DEBUG — autowin: it sets the board up, marks everything as completed and triggers the win (with the time bonus).
+  // DEBUG, autowin: it sets the board up, marks everything as completed and triggers the win (with the time bonus).
   function autoWin() {
     audioOn();
     reset();
@@ -1005,7 +1005,7 @@
       const btn = document.getElementById('btnInfo');
       btn.addEventListener('pointerdown', e => {
         e.preventDefault();
-        // The overlay starts at display:none FROM CSS — the inline style is empty "", so we
+        // The overlay starts at display:none FROM CSS; the inline style is empty "", so we
         // compare against === 'block' (an explicitly visible state) instead of !== 'none' (which was true
         // at startup and swallowed the first tap).
         const showing = overlay.style.display === 'block';
@@ -1031,7 +1031,8 @@ around it</b>.
   <li><b>Tap</b> a cell to dig it. <b>Press and hold</b> to plant or remove a flag.</li>
 </ul>
 <hr>
-<b>Gold Rush</b> adds buried gold, and <b>it does not auto-clear</b> — you have to dig it out.
+<b>Gold Rush</b> adds buried gold that <b>does not auto-clear</b>: every nugget has to be dug out by
+hand, and there is <b>a clock</b>. Collect them all and you win the field.
 Difficulty changes the field size and how many mines it holds.
 </div>
 
@@ -1054,7 +1055,7 @@ Difficulty changes the field size and how many mines it holds.
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

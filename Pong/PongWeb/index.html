@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -22,7 +22,7 @@
     user-select: none; -webkit-user-select: none;
     font-family: var(--font);
   }
-  /* Full-screen canvas (no bottom bar) — the UI is corner buttons + a canvas menu,
+  /* Full-screen canvas (no bottom bar), the UI is corner buttons + a canvas menu,
      CrazyTanks style. */
   #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
 
@@ -63,7 +63,7 @@
   #btnPause { right: calc(198px + env(safe-area-inset-right)); }
   #btnExit:active { background: rgba(240,90,95,0.28); border-color: rgba(240,90,95,0.55); color: #fff; }
   #btnInfo.on     { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); color: #fff; }
-  /* sound icon: waves / crossed out according to .muted (the button is NEVER hidden — you have to
+  /* sound icon: waves / crossed out according to .muted (the button is NEVER hidden; you have to
      be able to mute from the menu, before a match exists) */
   #btnMute .ic-off { display: none; }
   #btnMute.muted .ic-on  { display: none; }
@@ -167,7 +167,7 @@
 
   /* The mute button was born in the audio pass and ended up WITH NO SIZE: `arcade-shell.css` only
      styles ✕ / ⛶ / ⓘ, and in this game the mute falls outside the bar's rules. It looked like a
-     one-pixel sliver. It gets the same body as the shell's three — it is not added to the shell so
+     one-pixel sliver. It gets the same body as the shell's three: it is not added to the shell so
      as not to tread on the nine games that already give it a style of their own. */
   #btnMute {
     width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
@@ -260,7 +260,7 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  PONG — web port of Pong.py (Pygame → Canvas 2D), the same format as
+  //  PONG: web port of Pong.py (Pygame → Canvas 2D), the same format as
   //  BallsWeb/TatetiWeb. Left/right paddles (faithful to the original), dt-based
   //  physics scaled to the resolution, fire mode with streaks.
   //
@@ -275,7 +275,7 @@
 
   // ── TUNING KNOBS (all in fractions of the screen / seconds) ──
   const PADDLE_H_FRAC   = 0.25;    // paddle height (a fraction of H)
-  const PADDLE_H_MAX_FRAC = 0.25;  // cap on the height relative to min(W,H) — it avoids enormous paddles on a phone/portrait
+  const PADDLE_H_MAX_FRAC = 0.25;  // cap on the height relative to min(W,H), it avoids enormous paddles on a phone/portrait
   const PADDLE_W_FRAC   = 0.02;   // paddle width (a fraction of W)
   const PADDLE_MARGIN_FRAC = 0.025;// gap from the paddle to the edge (a fraction of W)
   const BALL_R_FRAC     = 0.017;   // ball radius (a fraction of min(W,H))
@@ -304,7 +304,7 @@
   // Sound only: nothing in the physics reads or touches it.
   const RALLY_SCALE     = [0, 3, 5, 7, 10, 12, 15, 17, 19, 22, 24, 27];
 
-  // AI (1-player mode) — it plays with intent: it predicts the bounce, positions itself and "shoots" by angling
+  // AI (1-player mode), it plays with intent: it predicts the bounce, positions itself and "shoots" by angling
   // the ball away from the opponent. Good but not perfect (aiming error + occasional lapses).
   // AI_BASE = the values of the "balanced" CPU (magenta). Each opponent (OPPONENTS, below) starts
   // from here and overrides a few keys to have a distinct PERSONALITY. The effective config lives in `A`.
@@ -335,25 +335,25 @@
   // tone/jitter are audio ONLY: semitones that transpose the rally ladder when THIS opponent
   // returns, and the detuning of its voice. They touch nothing in the AI (see the AUDIO block).
   const OPPONENTS = [
-    // Magenta — balanced (the usual one): no overrides.
+    // Magenta: balanced (the usual one): no overrides.
     { name: 'Magenta', letter: 'M', col: [255, 95, 205], glow: [255, 95, 205], tone: 0, ai: {} },
-    // Green — aggressive/tryhard: fast, precise, reacts early, angles a lot, it hardly ever lapses or sleeps.
-    { name: 'Verde', letter: 'V', col: [80, 230, 140], glow: [90, 245, 150], tone: 4, ai: {
+    // Green: aggressive/tryhard: fast, precise, reacts early, angles a lot, it hardly ever lapses or sleeps.
+    { name: 'Green', letter: 'V', col: [80, 230, 140], glow: [90, 245, 150], tone: 4, ai: {
       SPEED_MULT: 1.08, ERROR_FRAC: 0.025, REACT_FRAC: 0.92, MIX_CHANCE: 0.45, FLICK_TIME: 0.22,
       SMART_MIN: 4, SMART_MAX: 7, DUMB_MIN: 0.4, DUMB_MAX: 0.9, DUMB_SPEED: 0.7,
       AWAKE_MIN: 8, AWAKE_MAX: 14, SLEEP_MIN: 0.4, SLEEP_MAX: 0.9 } },
-    // Black — the wall/defensive: very precise at positioning but it almost never angles (it returns flat), it does not sleep.
-    { name: 'Negro', letter: 'N', col: [58, 60, 76], glow: [185, 195, 215], tone: -7, ai: {
+    // Black: the wall/defensive: very precise at positioning but it almost never angles (it returns flat), it does not sleep.
+    { name: 'Black', letter: 'N', col: [58, 60, 76], glow: [185, 195, 215], tone: -7, ai: {
       SPEED_MULT: 1.05, ERROR_FRAC: 0.02, REACT_FRAC: 0.95, MIX_CHANCE: 0.05, FLICK_TIME: 0.10, AIM_FRAC: 0.18,
       SMART_MIN: 6, SMART_MAX: 10, DUMB_MIN: 0.3, DUMB_MAX: 0.6, DUMB_SPEED: 0.8, IDLE_AMP: 0.02,
       AWAKE_MIN: 14, AWAKE_MAX: 22, SLEEP_MIN: 0.3, SLEEP_MAX: 0.6, FIREPROOF: true } },
-    // Yellow — erratic/clown: it shoots anywhere, sways a lot, it lapses and sleeps often. Easy/funny.
-    { name: 'Amarillo', letter: 'A', col: [255, 225, 70], glow: [255, 235, 90], tone: 2, jitter: 0.35, ai: {
+    // Yellow: erratic/clown: it shoots anywhere, sways a lot, it lapses and sleeps often. Easy/funny.
+    { name: 'Yellow', letter: 'A', col: [255, 225, 70], glow: [255, 235, 90], tone: 2, jitter: 0.35, ai: {
       SPEED_MULT: 0.95, ERROR_FRAC: 0.09, MIX_CHANCE: 0.7, IDLE_AMP: 0.09, IDLE_FREQ: 3.2,
       SMART_MIN: 1.5, SMART_MAX: 3, DUMB_MIN: 1.2, DUMB_MAX: 2.6, DUMB_SPEED: 0.45,
       AWAKE_MIN: 2.5, AWAKE_MAX: 5, SLEEP_MIN: 1.0, SLEEP_MAX: 2.2, PADDLE_H_MULT: 0.85 } },
-    // Light blue — a calm beginner: slow, reacts late, a large error, a wide dead zone. Easy.
-    { name: 'Celeste', letter: 'C', col: [120, 210, 255], glow: [140, 220, 255], tone: -3, ai: {
+    // Light blue: a calm beginner: slow, reacts late, a large error, a wide dead zone. Easy.
+    { name: 'Sky', letter: 'C', col: [120, 210, 255], glow: [140, 220, 255], tone: -3, ai: {
       SPEED_MULT: 0.85, ERROR_FRAC: 0.11, REACT_FRAC: 0.62, FLICK_TIME: 0.12, MIX_CHANCE: 0.2,
       DUMB_DEADZONE: 0.16, DUMB_SPEED: 0.4, SMART_MIN: 2, SMART_MAX: 4, DUMB_MIN: 1.0, DUMB_MAX: 2.2,
       AWAKE_MIN: 3.5, AWAKE_MAX: 7, SLEEP_MIN: 1.0, SLEEP_MAX: 2.0, PADDLE_H_MULT: 0.9 } },
@@ -382,7 +382,7 @@
   let twoPlayers = false;          // false = 1 player (the CPU on the left paddle)
   let ptsIdx = 1;                  // index into WIN_POINTS (starts at 10)
   let fireEnabled = true;
-  let oppIdx = 0;                  // the chosen opponent (an index into OPPONENTS) — it only matters in 1 player
+  let oppIdx = 0;                  // the chosen opponent (an index into OPPONENTS), it only matters in 1 player
   let A = { ...AI_BASE };          // the current opponent's effective AI config
   function applyOpponent() {
     A = { ...AI_BASE, ...OPPONENTS[oppIdx].ai };
@@ -393,7 +393,7 @@
   // CHALLENGE: you play 1 game (to 10) against each opponent in order easy → hard. Win → the next one; lose → the end.
   let challenge = false, challengeIdx = 0;
   const CHALLENGE_ORDER = [3, 4, 0, 1, 2];   // Yellow → Light blue → Magenta → Green → Black
-  // Modifiers per Challenge RUNG — keyed by RIVAL id (not by slot), so reordering
+  // Modifiers per Challenge RUNG: keyed by RIVAL id (not by slot), so reordering
   // CHALLENGE_ORDER does not mispair them. Early rungs (Yellow/Light blue) have no entry = no mod.
   const CHALLENGE_MODS = {
     0: { serveMult: 1.06, label: 'FAST SERVE' },                   // Magenta (rung 3)
@@ -452,15 +452,15 @@
   const FONT    = "'Orbitron', 'Segoe UI', system-ui, sans-serif";
   const FONT_UI = "'Segoe UI', system-ui, sans-serif";
 
-  // fire particles (embers + sparks) — emitted from the ball and lit paddles
+  // fire particles (embers + sparks), emitted from the ball and lit paddles
   const embers = [];
   const sparks = [];                       // neon impact sparks (bounces), with their own colour
   const ballTrail = [];                    // recent ball positions for the trail
   const TRAIL_LEN = 26;   // more points: the physics now runs at 120 Hz, so the trail keeps its length
 
   // ── NEON PALETTE (a futuristic look) ──
-  const NEON_P1   = [90, 225, 255];        // cyan — player 1 (right paddle)
-  const NEON_P2   = [255, 95, 205];        // magenta — player 2 / CPU (left paddle)
+  const NEON_P1   = [90, 225, 255];        // cyan, player 1 (right paddle)
+  const NEON_P2   = [255, 95, 205];        // magenta, player 2 / CPU (left paddle)
   const NEON_BALL = [195, 245, 255];       // pelota
   const NEON_GRID = [70, 140, 210];        // background grid
   const rgba = (c, a) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a == null ? 1 : a})`;
@@ -526,8 +526,27 @@
     }
   }
 
-  // ── HIGH SCORES PER OPPONENT (persisted in localStorage; 1P/Challenge only — in 2P there is no fixed opponent) ──
-  function loadRecords() { try { return JSON.parse(localStorage.getItem('pong.records')) || {}; } catch (e) { return {}; } }
+  // ── HIGH SCORES PER OPPONENT (persisted in localStorage; 1P/Challenge only, in 2P there is no fixed opponent) ──
+  // The opponent's NAME is the key of `pong.records`, so translating the names would have orphaned
+  // every record already saved. This moves them across once, on load; after that the old keys no
+  // longer exist and the map does nothing.
+  function loadRecords() {
+    // It goes INSIDE: `let records = loadRecords()` runs further up than this block, so as a `const`
+    // at the top level of the module it fell into the temporal dead zone and the game died on load.
+    const RECORD_ALIAS = { 'Verde': 'Green', 'Negro': 'Black', 'Amarillo': 'Yellow', 'Celeste': 'Sky' };
+    let r;
+    try { r = JSON.parse(localStorage.getItem('pong.records')) || {}; } catch (e) { return {}; }
+    let migrado = false;
+    for (const viejo in RECORD_ALIAS) {
+      if (!Object.prototype.hasOwnProperty.call(r, viejo)) continue;
+      const nuevo = RECORD_ALIAS[viejo];
+      if (!r[nuevo]) r[nuevo] = r[viejo];   // if both exist, the new one wins: it is the more recent
+      delete r[viejo];
+      migrado = true;
+    }
+    if (migrado) { try { localStorage.setItem('pong.records', JSON.stringify(r)); } catch (e) {} }
+    return r;
+  }
   function saveRecords() { try { localStorage.setItem('pong.records', JSON.stringify(records)); } catch (e) {} }
   function recordMatch(scorer) {
     if (twoPlayers) return;
@@ -604,14 +623,14 @@
     return y;
   }
 
-  // a gentle sway (a sine) so the paddle breathes without teleporting — a small amplitude.
+  // a gentle sway (a sine) so the paddle breathes without teleporting: a small amplitude.
   function idleSway() {
     return Math.sin(performance.now() / 1000 * A.IDLE_FREQ) * A.IDLE_AMP * Math.min(W, H);
   }
 
   function updateAI(dt) {
     // NAP: it alternates awake/asleep periods. It only toggles the flag; the rest of the logic
-    // (cycles, prediction, positioning) keeps being processed as usual — updatePaddle is what
+    // (cycles, prediction, positioning) keeps being processed as usual: updatePaddle is what
     // overrides the movement to 0 while it sleeps.
     aiSleepCD -= dt;
     if (aiSleepCD <= 0) {
@@ -657,7 +676,7 @@
       if (tHit < A.FLICK_TIME && Math.abs(left.cy - aiBaseY) <= span) {
         // ALREADY in position and about to hit: it SWEEPS the paddle at a fixed speed in the shot's direction.
         // Since the spin comes from the paddle's speed, the ball comes out angled and hard (not flat).
-        // Only if it has arrived: if it is far away, it keeps chasing (below) — no teleporting.
+        // Only if it has arrived: if it is far away, it keeps chasing (below), no teleporting.
         aiFlickVel = aiAimDir * paddleSpeed() * A.SPEED_MULT;
       } else {
         aiTarget = aiBaseY;                                  // position itself (if it does not get there in time, it loses: fair enough)
@@ -713,7 +732,7 @@
     ballTrail.push({ x: bx, y: by });                 // estela
     if (ballTrail.length > TRAIL_LEN) ballTrail.shift();
 
-    // ceiling / floor — if the ball is coming in lit, it sets that edge alight
+    // ceiling / floor, if the ball is coming in lit, it sets that edge alight
     if (by > H - r) { by = H - r; bvy = -Math.abs(bvy) * WALL_ACCEL; burst(bx, H, fireball ? [255, 170, 40] : NEON_P1, 7, Math.min(W, H) * 0.5, r * 0.4, 0.3); if (fireball) fireBot = true; }
     if (by < r)     { by = r;     bvy =  Math.abs(bvy) * WALL_ACCEL; burst(bx, 0, fireball ? [255, 170, 40] : NEON_P1, 7, Math.min(W, H) * 0.5, r * 0.4, 0.3); if (fireball) fireTop = true; }
 
@@ -751,8 +770,8 @@
     b.fire = false; b.last = 0; b.trail.length = 0; b.px = b.x; b.py = b.y; b.entry = 0;
     b.hold = SERVE_DELAY;                          // a serve pause before it goes out (as in the normal mode)
   }
-  // Wall layouts (one per round, chosen in startBricks). Each generator gets addBrick(x,y) — which does
-  // the power roll + the anti-cluster — and the geometry g. None of them raises the power density (the same roll per cell).
+  // Wall layouts (one per round, chosen in startBricks). Each generator gets addBrick(x,y), which does
+  // the power roll + the anti-cluster, and the geometry g. None of them raises the power density (the same roll per cell).
   const BRICK_LAYOUTS = [
     // 0 · Rampart: 3 staggered columns (the usual one)
     (add, g) => {
@@ -895,7 +914,7 @@
     if (b.entry <= 0) b.vy = clampN(b.vy, -vyMax() * BRICK_SPEED, vyMax() * BRICK_SPEED);   // do not brake the dash
     for (const k of bricks) if (b.x + r > k.x && b.x - r < k.x + k.w && b.y + r > k.y && b.y - r < k.y + k.h) { breakBrick(k, b); break; }
     // goal: if the ball goes out at one side, a point for the OPPONENT. It does NOT end the round (it only ends on reaching
-    // the total). The BASE balls reappear; the EXTRA ones (from a power-up) disappear — they live one life only.
+    // the total). The BASE balls reappear; the EXTRA ones (from a power-up) disappear: they live one life only.
     if (b.x - r > W) {                                 // it got past the player (right) → a point for the CPU, unless the player has a shield
       if (right.shield) { right.shield = false; burst(W, b.y, POWER_COLS.shield, 20, Math.min(W, H) * 0.7, r * 0.6, 0.5); }
       else addBrickPoint(2);
@@ -934,7 +953,7 @@
     burst(cx, cy, bcol, 18, Math.min(W, H) * 0.7, r * 0.6, 0.5);
     bricks.splice(bricks.indexOf(k), 1);
     // bricks do NOT score (that is only for goals). A coloured one DROPS a token (fire/ball)
-    // that falls towards the side of whoever touched it — you have to catch it with the paddle.
+    // that falls towards the side of whoever touched it: you have to catch it with the paddle.
     if ((b.last === 1 || b.last === 2) && k.power) spawnDrop(cx, cy, b.last, k.power);
     if (brickAttack && (b.last === 1 || b.last === 2)) { if (b.last === 1) j1brick++; else j2brick++; }  // time trial: breaking DOES add to your score
     if (!bricks.length) { if (brickAttack) brickRegenCD = 1.2; else setupBricks(); }   // defence: regen on contact · time trial: with a cooldown
@@ -1242,7 +1261,7 @@
   addEventListener('blur', () => { ctlPointers.clear(); refreshPad(); });
 
   // PC detection (no touch screen): there you play with the keyboard. The pads are shown/hidden in
-  // CSS by body.touch.playing — here we only set the class.
+  // CSS by body.touch.playing: here we only set the class.
   const isTouch = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches)
                   || 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   document.body.classList.toggle('touch', isTouch);
@@ -1280,10 +1299,10 @@
   }
   const PLAY_BTN_Y = 0.85;
   function setupRowLabel(key) {
-    if (key === 'rival')  return 'Rival: ' + OPPONENTS[oppIdx].name;
-    if (key === 'puntos') return 'Puntos: ' + (WIN_POINTS[ptsIdx] == null ? 'Practice' : SCORE_LABELS[ptsIdx]);
-    if (key === 'modo')   return 'Modo: ' + (bricksModeIdx === 0 ? 'Defensa' : 'Contrarreloj');
-    return 'Fuego: ' + (fireEnabled ? 'Sí' : 'No');
+    if (key === 'rival')  return 'Opponent: ' + OPPONENTS[oppIdx].name;
+    if (key === 'puntos') return 'Points: ' + (WIN_POINTS[ptsIdx] == null ? 'Practice' : SCORE_LABELS[ptsIdx]);
+    if (key === 'modo')   return 'Mode: ' + (bricksModeIdx === 0 ? 'Defence' : 'Time trial');
+    return 'Fire: ' + (fireEnabled ? 'On' : 'Off');
   }
   function setupCycle(key, dir) {
     if (key === 'rival')       { oppIdx = (oppIdx + dir + OPPONENTS.length) % OPPONENTS.length; applyOpponent(); }
@@ -1486,7 +1505,7 @@
   function togglePause() {
     if (state === 'play') state = 'paused';
     else if (state === 'paused') state = 'play';
-    // `.on` is what makes the button show ▶ while paused (the rule is inline above — Pong does not load arcade-shell.css).
+    // `.on` is what makes the button show ▶ while paused (the rule is inline above: Pong does not load arcade-shell.css).
     const bp = document.getElementById('btnPause');
     if (bp) bp.classList.toggle('on', state === 'paused');
   }
@@ -1515,7 +1534,7 @@
   window.addEventListener('resize', resize);
 
   // Bakes the STATIC background (a radial gradient + grid) into an offscreen canvas once per resize.
-  // Before, this was redrawn every frame (a full-screen gradient fill + ~30 lines) — the biggest
+  // Before, this was redrawn every frame (a full-screen gradient fill + ~30 lines), the biggest
   // render cost on mobile. Now it is blitted in one go. The "walls" (which catch fire) are still live.
   function bakeBackground() {
     if (!bgCanvas) bgCanvas = document.createElement('canvas');
@@ -1589,7 +1608,7 @@
     roundRect(x, y, pw, ph, r); ctx.fill();          // a single pass with a shadow (the double fill doubled the blur, expensive)
     ctx.shadowBlur = 0; ctx.fill();                  // a solid body on top, without re-blurring
     ctx.restore();
-    // a light core with a vertical sheen (glossy): brighter at the top — it defines the paddle well
+    // a light core with a vertical sheen (glossy): brighter at the top; it defines the paddle well
     const inset = pw * 0.30;
     const cg = ctx.createLinearGradient(0, y, 0, y + ph);
     cg.addColorStop(0,   onF ? 'rgba(255,250,232,0.99)' : 'rgba(255,255,255,0.98)');
@@ -1597,7 +1616,7 @@
     cg.addColorStop(1,   onF ? 'rgba(255,160,60,0.82)'  : rgba(col, 0.7));
     ctx.fillStyle = cg;
     roundRect(x + inset * 0.5, y + ph * 0.05, pw - inset, ph * 0.9, r * 0.5); ctx.fill();
-    // SHIELD active (bricks): a light halo around the paddle — it saves one goal against
+    // SHIELD active (bricks): a light halo around the paddle; it saves one goal against
     if (p.shield) {
       const pul = 0.6 + 0.4 * Math.sin(performance.now() / 160);
       ctx.save();
@@ -1656,7 +1675,7 @@
     ctx.beginPath(); ctx.arc(bx, by, gr, 0, TAU); ctx.fill();
     ctx.globalCompositeOperation = 'source-over';
     // core: a glossy sphere. A gradient with light at the top left, a mid colour and a darker edge
-    // (it gives volume) — no hard cuts against the glow.
+    // (it gives volume), no hard cuts against the glow.
     const lx = bx - r * 0.36, ly = by - r * 0.36;
     const cg = ctx.createRadialGradient(lx, ly, r * 0.04, bx, by, r * 1.02);
     if (fireball) {
@@ -1836,7 +1855,7 @@
     }
     // The "RALLY xN" card was removed: it announced the milestone of a counter that in a normal match is
     // not visible anywhere (the counter only exists in PRACTICE), so it appeared out of nowhere and
-    // with no consequence — the milestone touches no speed. What remains is the frame and net glow,
+    // with no consequence: the milestone touches no speed. What remains is the frame and net glow,
     // which celebrates the rally without asking you to interpret a number.
   }
 
@@ -1880,7 +1899,7 @@
     ctx.fillRect(0, 0, W, H);
     let big, sub = 'tap: rematch   ·   back: menu';
     if (bricksMode) {
-      big = winner === 1 ? 'YOU WIN!' : 'GANA ' + OPPONENTS[oppIdx].name.toUpperCase();
+      big = winner === 1 ? 'YOU WIN!' : OPPONENTS[oppIdx].name.toUpperCase() + ' WINS';
       sub = brickAttack
         ? `bricks ${j1brick} - ${j2brick}  ·  tap: rematch  ·  back: menu`
         : `points ${j1score} - ${j2score}  ·  tap: rematch  ·  back: menu`;
@@ -1889,12 +1908,12 @@
       const oppName = OPPONENTS[CHALLENGE_ORDER[challengeIdx]].name;
       if (winner === 1) {
         if (challengeIdx >= total - 1) { big = 'CHALLENGE CLEARED!'; sub = `you beat all ${total} · tap: menu`; }
-        else { big = 'VENCISTE A ' + oppName.toUpperCase(); sub = 'siguiente: ' + OPPONENTS[CHALLENGE_ORDER[challengeIdx + 1]].name + ' · tap to continue'; }
+        else { big = 'YOU BEAT ' + oppName.toUpperCase(); sub = 'next: ' + OPPONENTS[CHALLENGE_ORDER[challengeIdx + 1]].name + ' · tap to continue'; }
       } else {
         big = oppName.toUpperCase() + ' WINS'; sub = `opponents beaten: ${challengeIdx}/${total} · tap: menu`;
       }
     } else if (twoPlayers) big = winner === 1 ? 'PLAYER 1 WINS' : 'PLAYER 2 WINS';
-    else                   big = winner === 1 ? 'YOU WIN!' : 'GANA ' + OPPONENTS[oppIdx].name.toUpperCase();
+    else                   big = winner === 1 ? 'YOU WIN!' : OPPONENTS[oppIdx].name.toUpperCase() + ' WINS';
     const s = Math.min(W, H);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     // glow according to whether the win was by fire or not
@@ -1981,7 +2000,7 @@
     ctx.fillStyle = 'rgba(6,8,14,0.74)'; ctx.fillRect(0, 0, W, H);
     const s = Math.min(W, H);
     mtext('EXIT TO MENU?', Math.min(42, s * 0.062), [255, 255, 255], W / 2, H * 0.4, s * 0.04, 1, 900);
-    mtext('SÍ', Math.min(34, s * 0.052), [255, 120, 120], W * 0.4, H * 0.6, s * 0.03, 1, 900);
+    mtext('YES', Math.min(34, s * 0.052), [255, 120, 120], W * 0.4, H * 0.6, s * 0.03, 1, 900);
     mtext('NO', Math.min(34, s * 0.052), NEON_P1,         W * 0.6, H * 0.6, s * 0.03, 1, 900);
     mtext('the match is lost', Math.min(13, s * 0.022), [180, 190, 210], W / 2, H * 0.72, 0, 0.65, 500);
   }
@@ -1989,7 +2008,7 @@
   // Info button overlay: a HOW TO PLAY card (it makes the point of the game legible) + live stats.
   // ── Diagnostics: it lives INSIDE the info panel ──
   // It used to be a monospaced card drawn on the canvas, separate from the panel. Now it is one
-  // more section: a single card for everything informational. It is written ONLY with the panel open —
+  // more section: a single card for everything informational. It is written ONLY with the panel open:
   // touching the DOM every frame with the panel closed is wasted work.
   // The node is looked up LAZILY, not at parse time. The main script runs BEFORE
   // `#infoPanel` exists (it is further down the document), so a `getElementById` on the line
@@ -2052,10 +2071,10 @@
   }
 
   // ════════════════════════════════════════════════════════════════════════════════════
-  //  AUDIO — Web Audio synthesis, zero files, zero dependencies.
+  //  AUDIO: Web Audio synthesis, zero files, zero dependencies.
   //
   //  IDENTITY. There is no wood or rubber here: the world is made of charged light and glass. The background is
-  //  a near-black gradient, EVERYTHING is drawn with shadowBlur and the particles run in 'lighter' — there is not
+  //  a near-black gradient, EVERYTHING is drawn with shadowBlur and the particles run in 'lighter': there is not
   //  one matte surface on screen. So no impact can be a knock: it is a
   //  DISCHARGE, a glassy 20-30 ms transient with a TUNED resonant tail, never a thud.
   //  The only material with real matter in the whole game is the fire (embers, flames running along
@@ -2063,7 +2082,7 @@
   //  the glass turning into combustion. That clean/dirty contrast is the palette's vertical axis.
   //
   //  The horizontal axis is chromatic, because the game is: cyan against the opponent's colour, and each
-  //  opponent sounds at its own pitch (OPPONENTS.tone) — Green high and piercing, Black seven
+  //  opponent sounds at its own pitch (OPPONENTS.tone), Green high and piercing, Black seven
   //  semitones down and with no brightness because it is the wall, Yellow detuned because it is the clown.
   //
   //  And above all, the idea that makes THIS game and not another: the rally climbs the minor
@@ -2075,11 +2094,11 @@
   //    main       0.05-0.09 → paddle return, point, end of match, shield, catching fire
   //    secondary  0.025-0.05 → wall, brick, tokens, rally milestone, serve, regeneration
   //    interface  0.028-0.05 → menu, pause, back, startup
-  //    ambience   — there is none: this game's music IS the rally ladder (see CLAUDE.md)
+  //    ambience: there is none: this game's music IS the rally ladder (see CLAUDE.md)
   // ════════════════════════════════════════════════════════════════════════════════════
   let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
   const voiceLast = {};                                // cooldown per voice (ms of performance.now)
-  const SFX_BASE = 392;                                // G4 — the tonic: the player's voice (right paddle, cyan)
+  const SFX_BASE = 392;                                // G4: the tonic: the player's voice (right paddle, cyan)
 
   function audioResume() {
     if (!AC) {
@@ -2144,7 +2163,7 @@
   }
 
   // The same as noiseHit but SWEEPING the filter: it is the fire. Catching fire is not an impact, it is a
-  // line of gas igniting — and in the spectrum that is a sweep, not a static filter.
+  // line of gas igniting, and in the spectrum that is a sweep, not a static filter.
   function noiseSweep(dur, vol, f0, f1, q) {
     const a = AC; if (!a) return;
     sndThisFrame++;
@@ -2215,7 +2234,7 @@
     // Your fire power expires (bricks): a timer that dies on its own, with no on-screen warning.
     fireOut() { if (!ac()) return; note(330, 110, 0, 0.30, 'sawtooth', 0.035); noiseSweep(0.22, 0.022, 900, 200, 0.8); },
     // The shield absorbs a goal: the only event that CANCELS another. It is the highest-pitched sound in the game on
-    // purpose — nothing else sounds like it, which means it cannot be confused with a goal.
+    // purpose: nothing else sounds like it, which means it cannot be confused with a goal.
     shield() { if (!ac()) return; noiseHit(0.12, 0.06, 2200, 1.0, 'bandpass'); note(1174, 294, 0, 0.30, 'triangle', 0.06); },
     // End of match: the only moment that asks for a phrase, not an effect.
     over(win, record, t0) {
@@ -2477,7 +2496,18 @@
   </script>
 <div id="infoPanel"><h4>Sleepy Pong</h4>
 Pong, played in <b>landscape</b>. Two things are not standard: <b>two points in a row set your
-paddle on fire</b>, and <b>the CPU falls asleep</b> — when you see the Zzz, that is the window.
+paddle on fire</b>, and <b>the CPU falls asleep</b>. When you see the Zzz, that is the window.
+<h5>The menu</h5>
+<ul>
+  <li><b>One Player</b> and <b>Two Players</b> open a setup: the opponent, the points to win (5 to
+      40, or Practice for an endless match) and whether fire is on.</li>
+  <li><b>Challenge</b> lines the five opponents up easiest first and you go through them in one run.</li>
+  <li><b>Bricks</b> puts a wall behind each paddle: <b>Defence</b> plays for points, <b>Time trial</b>
+      counts how much of it you break against a clock.</li>
+  <li>The <b>five opponents differ in behaviour</b>, not only in difficulty: one returns flat and
+      never sleeps, another sprays the ball everywhere and dozes off constantly. Your longest rally
+      and your best winning margin are kept for each one.</li>
+</ul>
 <hr>
 <h5>Desktop</h5>
 <ul>
@@ -2515,7 +2545,7 @@ point you are in.</span>
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

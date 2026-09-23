@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -25,7 +25,7 @@
     top: 0; left: 0;
   }
 
-  /* Start menu — an HTML overlay so it is easy to tap on mobile */
+  /* Start menu: an HTML overlay so it is easy to tap on mobile */
   #menu {
     position: absolute; inset: 0; z-index: 5;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -339,7 +339,7 @@
 
   function newPiece(color, kind) { return { color, kind, hasMoved: false }; }
   function pieceAt(grid, c, r)   { return (c>=0 && c<8 && r>=0 && r<8) ? grid[c][r] : null; }
-  function copyGrid(g)           { return g.map(col => col.slice()); }   // shallow — it shares refs
+  function copyGrid(g)           { return g.map(col => col.slice()); }   // shallow: it shares refs
 
   function initialGrid() {
     const g = Array.from({length: 8}, () => Array(8).fill(null));
@@ -480,7 +480,7 @@
     if (!p) return [];
     const pseudo = genPseudoMoves(grid, c, r, ep);
 
-    // Castling — we add the king's pseudo-moves only if it has not moved yet
+    // Castling: we add the king's pseudo-moves only if it has not moved yet
     if (p.kind === 'K' && !p.hasMoved) {
       const rank = p.color === 'w' ? 7 : 0;
       if (c === 4 && r === rank) {
@@ -575,7 +575,7 @@
     return null;
   }
 
-  // Key for threefold repetition — board + turn + castling + en passant
+  // Key for threefold repetition: board + turn + castling + en passant
   function positionKey(grid, turn, ep) {
     let s = '';
     for (let r = 0; r < 8; r++) {
@@ -622,7 +622,7 @@
   }
 
   // ════════════════════════════════════════════════════════════════════
-  //  AI — negamax + alpha-beta + iterative deepening
+  //  AI: negamax + alpha-beta + iterative deepening
   //  (To plug in Stockfish.js: uncomment the worker block in _aiWorker.
   //  It needs stockfish.js loaded as a Web Worker; ~1MB of WASM.)
   // ════════════════════════════════════════════════════════════════════
@@ -731,8 +731,8 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  CHESS — web port of Chess.py.
-  //  Internal engine (no Stockfish — the .exe does not run in a browser).
+  //  CHESS: web port of Chess.py.
+  //  Internal engine (no Stockfish: the .exe does not run in a browser).
   //
   //  AI WORKER ARCHITECTURE: the engine + search live in the
   //  <script id="ai-engine" type="text/plain"> block above. Here we
@@ -748,7 +748,7 @@
   const MOVE_ANIM_MS      = 180;      // slide-animation duration
   const SOUND_VOLUME      = 0.18;     // master gain of the SFX (0 = mute, 1 = full)
   const CLOCK_INITIAL_MS  = 15 * 60 * 1000;   // 15 minutes per player
-  // Stockfish.js asm.js single-file — first we try the local file
+  // Stockfish.js asm.js single-file: first we try the local file
   // (same origin, it works on iOS Safari and other browsers strict about cross-origin
   // Workers). If it is not there, we fall back to the CDN. If the CDN does not load either, the internal engine.
   const STOCKFISH_URLS = [
@@ -778,7 +778,7 @@
 
   // ════════════════════════════════════════════════════════════════════
   //  STOCKFISH.JS LOADER (CDN, asm.js single-file)
-  //  If it loads OK it stays as the main engine — much stronger than the
+  //  If it loads OK it stays as the main engine: much stronger than the
   //  internal one. If it fails (offline, CSP, network) we use the internal one.
   // ════════════════════════════════════════════════════════════════════
   let stockfishWorker = null;
@@ -869,11 +869,11 @@
   function askStockfish(fen, timeMs, skillLevel) {
     return new Promise((resolve) => {
       if (!stockfishReady || !stockfishWorker) { resolve(null); return; }
-      if (stockfishPending) {            // defensive — it should not happen
+      if (stockfishPending) {            // defensive: it should not happen
         stockfishPending.resolve(null);
       }
       stockfishPending = { resolve, depth: 0, seldepth: 0 };
-      // Set the Skill Level (0–20) per move — the option is global but it changes
+      // Set the Skill Level (0–20) per move: the option is global but it changes
       // between calls, so in AI vs AI it can differ per turn.
       if (typeof skillLevel === 'number') {
         stockfishWorker.postMessage('setoption name Skill Level value ' + skillLevel);
@@ -886,7 +886,7 @@
   initStockfish();
 
   // ════════════════════════════════════════════════════════════════════
-  //  SOUND (Web Audio API — synthesised, no assets)
+  //  SOUND (Web Audio API: synthesised, no assets)
   // ════════════════════════════════════════════════════════════════════
   let actx = null;
   let masterGain = null;
@@ -960,7 +960,7 @@
     aiBoth: false,
     aiSkillW: 4,            // AI_LEVELS id (0..4) for White (if it is an AI)
     aiSkillB: 4,            // AI_LEVELS id (0..4) for Black (if it is an AI)
-    paused: false,          // global pause — tickClock + triggerAI + handlePress are gated on false
+    paused: false,          // global pause; tickClock + triggerAI + handlePress are gated on false
     flip: false,
     grid: initialGrid(),
     turn: 'w',
@@ -1002,13 +1002,13 @@
   // ── Clock ──
   // Decrements the clock of the player to move. If it reaches 0, it declares a timeout.
   // On making a move (the turn changes), it automatically starts the other
-  // clock because it always ticks the current game.turn's — which is what
+  // clock because it always ticks the current game.turn's, which is what
   // a real chess clock does when you press the button.
   function tickClock() {
     const now = performance.now();
     if (game.state === 'play' && !game.gameOver
         && !isViewingHistory() && game.clockLastTick > 0) {
-      // The clock runs in general EXCEPT when paused — EXCEPT if it is the AI's turn
+      // The clock runs in general EXCEPT when paused: EXCEPT if it is the AI's turn
       // and it is thinking: there we keep charging it its time even with the pause
       // on (otherwise you could exploit it by pausing just as the AI starts thinking).
       const aiBilling = game.paused && currentPlayerIsAI() && game.aiThinking;
@@ -1085,7 +1085,7 @@
     pushHistory();
   }
 
-  // Difficulty levels — Skill Level is Stockfish's standard UCI option.
+  // Difficulty levels: Skill Level is Stockfish's standard UCI option.
   // For the internal engine we use depthCap as the iterative-deepening ceiling.
   // The ELO is approximate (what the UI shows).
   const AI_LEVELS = [
@@ -1097,7 +1097,7 @@
   ];
   const DEFAULT_LEVEL = 4;
 
-  // startGame(mode, skillW, skillB) — the skills are AI_LEVELS ids.
+  // startGame(mode, skillW, skillB), the skills are AI_LEVELS ids.
   // For pvp both are null. For vs AI only the AI side is set.
   function startGame(mode, skillW, skillB) {
     game.mode = mode;
@@ -1214,7 +1214,7 @@
   }
 
   // ════════════════════════════════════════════════════════════════════
-  //  Tactical heuristic — it decides whether to give the AI more time.
+  //  Tactical heuristic: it decides whether to give the AI more time.
   //  A position counts as "tactical" if:
   //   - the side to move is in check (forced to respond)
   //   - there is a promotion available
@@ -1243,7 +1243,7 @@
   }
 
   // ════════════════════════════════════════════════════════════════════
-  //  AI worker — it runs the search in a Web Worker (off the main thread)
+  //  AI worker: it runs the search in a Web Worker (off the main thread)
   //  so the UI keeps responding (history buttons, menu,
   //  reset, board render) while the AI thinks.
   //
@@ -1277,7 +1277,7 @@
       if (genSnap !== game.gen || !currentPlayerIsAI() || game.gameOver || !move) return;
       game.aiEngineName = engineName;
       // If an animation is IN PROGRESS or the game is PAUSED, we queue the
-      // result — the main loop applies it when play resumes. The AI's clock
+      // result: the main loop applies it when play resumes. The AI's clock
       // already consumed its time during the computation (tickClock keeps running
       // while aiThinking=true, even with the pause on).
       if (game.animation || game.paused) {
@@ -1300,7 +1300,7 @@
           applyResult(move, sfResult.depth || 0, sfResult.seldepth || 0, 'Stockfish');
           return;
         }
-        // Stockfish returned null or failed — we fall back to the internal engine
+        // Stockfish returned null or failed: we fall back to the internal engine
       } catch (err) {
         console.warn('Stockfish failed, falling back to the internal engine', err);
       }
@@ -1369,7 +1369,7 @@
     // toolbar and the safe area). We fall back to innerHeight if it does not exist.
     const viewportH = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
     // The bar is now a floating pill at the bottom centre. We use getBoundingClientRect
-    // to know where it STARTS — the old offsetHeight arithmetic underestimated the reserved
+    // to know where it STARTS: the old offsetHeight arithmetic underestimated the reserved
     // space (it did not count the bottom margin + safe area).
     const bar = document.getElementById('bar');
     let reservedBottom = 0;
@@ -1388,7 +1388,7 @@
     ctx.imageSmoothingQuality = 'high';
 
     // Layout: status on top, a horizontal strip (clocks + captures) above the board,
-    // labels below. No side panels — everything is grouped at the top.
+    // labels below. No side panels: everything is grouped at the top.
     // On mobile: we push everything below the notch using the browser's
     // safe-area-inset-top (more precise than a fixed value, it covers everything from iPhone X to Pro 15+).
     const safeTopRaw = getComputedStyle(document.documentElement).getPropertyValue('--safe-top');
@@ -1439,7 +1439,7 @@
     c.textBaseline = 'middle';
     c.font = `${Math.floor(size * 0.92)}px "Segoe UI Symbol", "Arial Unicode MS", "DejaVu Sans", serif`;
 
-    // 1) Drop shadow — the piece in a dark colour with a native shadow (offset Y > 0)
+    // 1) Drop shadow: the piece in a dark colour with a native shadow (offset Y > 0)
     c.save();
     c.shadowColor = 'rgba(0,0,0,0.55)';
     c.shadowBlur = size * 0.14;
@@ -1475,9 +1475,9 @@
     c.fillStyle = grad;
     c.fillText(ch, cx, cy);
 
-    // 4) Top-left reflection — clipped to the silhouette with source-atop.
+    // 4) Top-left reflection: clipped to the silhouette with source-atop.
     // White: a light highlight (white light).
-    //    Black: a "dark shine" — a soft shadow in the same area, giving a glossy noir look.
+    //    Black: a "dark shine"; a soft shadow in the same area, giving a glossy noir look.
     c.save();
     c.globalCompositeOperation = 'source-atop';
     const hl = c.createRadialGradient(
@@ -1497,7 +1497,7 @@
     c.fillRect(cx - size*0.6, cy - size*0.6, size*1.2, size*1.2);
     c.restore();
 
-    // 5) A subtle lower reflection — a "fake ambient occlusion" inside to give it weight
+    // 5) A subtle lower reflection: a "fake ambient occlusion" inside to give it weight
     c.save();
     c.globalCompositeOperation = 'source-atop';
     const ao = c.createLinearGradient(0, cy, 0, cy + size*0.45);
@@ -1545,7 +1545,7 @@
     }
   }
 
-  // Cache of small sprites (captures) — baked at their NATURAL size
+  // Cache of small sprites (captures), baked at their NATURAL size
   // so we do not lose definition downscaling from a large board sprite.
   // Indexed by rounded size to avoid re-bakes over sub-pixels.
   const smallSpriteCache = new Map();    // key = `${color}${kind}@${roundedSize}@${dpr}`
@@ -1639,7 +1639,7 @@
     ctx.fillStyle = vGrad;
     ctx.fillRect(boardX, boardY, boardSize, boardSize);
 
-    // ── Last-move highlight — flat translucent yellow ──
+    // ── Last-move highlight: flat translucent yellow ──
     if (view.lastMove) {
       ctx.fillStyle = 'rgba(246,236,120,0.40)';
       const [fc, fr, tc, tr] = view.lastMove;
@@ -1649,7 +1649,7 @@
       ctx.fillRect(tx, ty, cellSize, cellSize);
     }
 
-    // ── King in check — flat translucent red ──
+    // ── King in check: flat translucent red ──
     if (view.status === 'check' || view.status === 'checkmate') {
       const k = findKing(view.grid, view.turn);
       if (k) {
@@ -1659,14 +1659,14 @@
       }
     }
 
-    // ── Selection — flat translucent green ──
+    // ── Selection: flat translucent green ──
     if (!viewing && game.selected) {
       const [sx, sy] = cellToScreen(game.selected[0], game.selected[1]);
       ctx.fillStyle = 'rgba(120,210,120,0.45)';
       ctx.fillRect(sx, sy, cellSize, cellSize);
     }
 
-    // Pieces — we skip the animation's destination square (we draw it interpolated afterwards)
+    // Pieces: we skip the animation's destination square (we draw it interpolated afterwards)
     const skip = new Set();
     if (!viewing && game.animation) {
       skip.add(game.animation.toC + ',' + game.animation.toR);
@@ -1700,7 +1700,7 @@
       }
     }
 
-    // ── Legal targets — flat green dots/rings ──
+    // ── Legal targets: flat green dots/rings ──
     if (!viewing && !game.animation) {
       ctx.save();
       for (const [tc, tr, extra] of game.legal) {
@@ -1722,7 +1722,7 @@
       ctx.restore();
     }
 
-    // Dragged piece — a little bigger, with an extra shadow to "lift" it
+    // Dragged piece: a little bigger, with an extra shadow to "lift" it
     if (!viewing && game.dragging && game.dragFrom) {
       const p = game.grid[game.dragFrom[0]][game.dragFrom[1]];
       if (p) {
@@ -1735,7 +1735,7 @@
       }
     }
 
-    // ── a-h, 1-8 labels — a warm colour (the frame's colour) ──
+    // ── a-h, 1-8 labels: a warm colour (the frame's colour) ──
     ctx.fillStyle = 'rgba(240,225,195,0.85)';
     ctx.font = `600 ${Math.max(11, Math.floor(cellSize * 0.18))}px "Segoe UI", sans-serif`;
     ctx.textAlign = 'center';
@@ -1758,7 +1758,7 @@
 
   function drawTopBar(viewCaptured) {
     // A horizontal bar above the board. The pieces are drawn in 2 rows
-    // against the clock — ALL the captures, ordered by decreasing value.
+    // against the clock: ALL the captures, ordered by decreasing value.
     //   [♛ ♜ ♜ ♝ ♝ ♞][Black clock][White clock][♕ ♖ ♖ ♗ ♗ ♘]
     //   [♞ ♟ ♟ ♟ ♟ ♟ ♟ ♟]                                  [♘ ♟ ♟ ♟ ♟ ♟ ♟ ♟]
     const order = { Q: 5, R: 4, B: 3, N: 2, P: 1, K: 0 };
@@ -1771,10 +1771,10 @@
     const stripBottom = boardY - gapToBoard;
     const available   = stripBottom - minStripTop;
     const stripH      = Math.min(maxStripH, available);
-    if (stripH < 56) return;                 // minimum ratio — there is no air for 2 rows
+    if (stripH < 56) return;                 // minimum ratio, there is no air for 2 rows
     const stripTop    = stripBottom - stripH;
 
-    // Compact clocks against the centre — smaller than the strip,
+    // Compact clocks against the centre, smaller than the strip,
     // vertically centred, so they do not dominate visually.
     const clockW = Math.min(60, Math.max(50, boardSize * 0.13));
     const clockH = Math.min(42, stripH - 12);
@@ -1884,11 +1884,11 @@
       const winner = view.turn === 'w' ? 'Black' : 'White';
       ctx.fillStyle = '#ff6464';
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
-      ctx.fillText('CHECKMATE — ' + winner + ' win', W / 2, 28 + topInset);
+      ctx.fillText('CHECKMATE: ' + winner + ' win', W / 2, 28 + topInset);
     } else if (view.status === 'stalemate') {
       ctx.fillStyle = '#e8d864';
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
-      ctx.fillText('STALEMATE — Draw', W / 2, 28 + topInset);
+      ctx.fillText('STALEMATE: Draw', W / 2, 28 + topInset);
     } else if (view.status === 'repetition') {
       ctx.fillStyle = '#e8d864';
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
@@ -1902,7 +1902,7 @@
       const winner = view.turn === 'w' ? 'Black' : 'White';
       ctx.fillStyle = '#ff6464';
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
-      ctx.fillText('OUT OF TIME — ' + winner + ' win', W / 2, 28 + topInset);
+      ctx.fillText('OUT OF TIME: ' + winner + ' win', W / 2, 28 + topInset);
     } else if (game.paused) {
       ctx.fillStyle = '#ffb83a';
       ctx.font = banner(Math.max(22, Math.min(32, Math.floor(W * 0.028))));
@@ -1925,7 +1925,7 @@
     }
     ctx.restore();
 
-    // (The mode chip was removed — its space is taken by the .cbtn cluster at the top right.
+    // (The mode chip was removed: its space is taken by the .cbtn cluster at the top right.
     //  The AI's difficulty is still visible in the depth line as "(Medium)".)
 
     // Secondary depth + the engine's name
@@ -1948,7 +1948,7 @@
         if (game.aiLastDepth > 0) {
           line = motorTag + ' · depth ' + fmtDepth(game.aiLastDepth, game.aiLastSeldepth);
         } else {
-          line = motorTag + ' · pensando' + dots;
+          line = motorTag + ' · thinking' + dots;
         }
         if (game.aiTactical) line += ' · tactical';
         ctx.fillStyle = 'rgba(180,200,240,0.7)';
@@ -1963,7 +1963,7 @@
   }
 
   // ════════════════════════════════════════════════════════════════════
-  //  INPUT — pointer events (unifica mouse + touch)
+  //  INPUT: pointer events (unifica mouse + touch)
   // ════════════════════════════════════════════════════════════════════
   let pointerX = 0, pointerY = 0, pointerDown = false;
   let pressOriginSq = null;
@@ -1997,7 +1997,7 @@
     const sq = pixelToSquare(pointerX, pointerY);
     if (!sq) { game.selected = null; game.legal = []; game.dragging = false; return; }
     const [c, r] = sq;
-    // a click on a legal destination? — move (click-click, animated)
+    // a click on a legal destination is a move (click-click, animated)
     if (game.selected) {
       for (const [tc, tr, extra] of game.legal) {
         if (tc === c && tr === r) {
@@ -2007,7 +2007,7 @@
         }
       }
     }
-    // a click on your own piece? — select + start the drag
+    // a click on your own piece?: select + start the drag
     const p = game.grid[c][r];
     if (p && p.color === game.turn) {
       game.selected = [c, r];
@@ -2152,7 +2152,7 @@
     fpsOverlay.style.display = showFps ? 'block' : 'none';
     document.getElementById('btnInfo').classList.toggle('on', showFps);
   });
-  // FPS counter — cheap, it does not draw unless it is visible
+  // FPS counter: cheap, it does not draw unless it is visible
   let _fpsFrames = 0, _fpsLastT = performance.now();
   function _fpsTick() {
     _fpsFrames++;
@@ -2169,7 +2169,7 @@
   });
   document.getElementById('btnFirst').addEventListener('click', historyFirst);
   document.getElementById('btnLast').addEventListener('click', historyLast);
-  // (btnReset/btnMenu were removed — Reset is now reachable only from the menu
+  // (btnReset/btnMenu were removed: Reset is now reachable only from the menu
   // after going back with the cluster's btnBack. The R key still works for a reset.)
 
   // Auto-repeat for the step-by-one forward/back buttons: it fires once
@@ -2228,7 +2228,7 @@
         drawBoard();
       }
     } catch (err) {
-      // Do not kill the render loop over a painting exception — the game goes on.
+      // Do not kill the render loop over a painting exception: the game goes on.
       console.error('render loop error:', err);
     }
     requestAnimationFrame(loop);
@@ -2251,7 +2251,7 @@
 
 <div id="infoPanel"><h4>Chess</h4>
 Full chess, with castling, en passant and promotion. You pick your opponent and colour in the menu.
-<b>While you are reviewing the history you cannot move</b> — return to the present first.
+<b>While you are reviewing the history you cannot move</b>, so return to the present first.
 <hr>
 <h5>Desktop</h5>
 <ul>
@@ -2288,7 +2288,7 @@ Full chess, with castling, en passant and promotion. You pick your opponent and 
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

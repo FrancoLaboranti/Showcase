@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -23,7 +23,7 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Rajdhani', 'Segoe UI', system-ui, sans-serif;
   }
-  /* Canvas occupies only the space ABOVE the bar — the clock centers in that rect so it never sits
+  /* Canvas occupies only the space ABOVE the bar: the clock centers in that rect so it never sits
      behind the button. Dimensions are set explicitly from JS each resize. */
   #c {
     display: block; position: absolute;
@@ -71,7 +71,7 @@
   /* visual indicator for the smooth (suave) mode */
   #ui button.on { background: rgba(var(--accent),0.26); border-color: rgba(var(--accent),0.6); color: rgb(var(--accent)); }
   /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css. */
-  /* FPS HUD — Pong format: a monospaced panel at the top left, no border-radius. */
+  /* FPS HUD: Pong format: a monospaced panel at the top left, no border-radius. */
   #fpsOverlay {
     position: absolute;
     left: calc(8px + env(safe-area-inset-left));
@@ -87,7 +87,7 @@
     z-index: 9;
   }
 
-  /* Mute button — the same visual weight as ⛶/ⓘ (30 px, faint, against the bar's bottom edge) and
+  /* Mute button: the same visual weight as ⛶/ⓘ (30 px, faint, against the bar's bottom edge) and
      not #ui's 48 px: sound is a preference, not one of the clock's three controls. The width sum:
      30(✕)+160(#ui)+30(🔊)+30(⛶)+30(ⓘ)+4 gaps of 8+32 of padding = 344 px, so it still fits in
      360 px (a typical Android). It goes here and NOT in arcade-shell.css, which all 23 share. */
@@ -152,15 +152,15 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  CLOCK — faithful web port of Clock.py, with the same mobile shell as BallsWeb.
+  //  CLOCK: faithful web port of Clock.py, with the same mobile shell as BallsWeb.
   //  An analogue clock drawn from Date(). The button (or a tap on the clock)
   //  toggles the second hand between ticking (segundero=0) and sweeping (segundero=1).
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
 
   // ── COLOUR THEMES ──
-  // The whole clock derives from ONE base colour (the "bright"). The rest of the tones —dark, accent,
-  // rings, vignette, glass face, hub— are scales of that colour, so the neon contrast holds
+  // The whole clock derives from ONE base colour (the "bright"). The rest of the tones, dark, accent,
+  // rings, vignette, glass face, hub, are scales of that colour, so the neon contrast holds
   // whatever colour is chosen. Green [0,255,0] reproduces Clock.py's values exactly.
   const clampC = v => Math.max(0, Math.min(255, Math.round(v)));
   function makeTheme(base) {
@@ -293,7 +293,7 @@
   }
 
   // ════════════════════════════════════════════════════════════════════
-  //  AUDIO — quartz and glass. Synthesised, zero files, zero dependencies.
+  //  AUDIO: quartz and glass. Synthesised, zero files, zero dependencies.
   //
   //  This clock is not made of wood or brass: it is phosphor on black glass, a laboratory
   //  instrument that tells the time. So the timbral family is a dry, very high transient
@@ -368,7 +368,7 @@
     src.stop(t + dur + 0.02);
   }
 
-  // Tonal voice. `atk` in seconds: 0 = a dry note (the interface pings), > 0 = a bell — a bell
+  // Tonal voice. `atk` in seconds: 0 = a dry note (the interface pings), > 0 = a bell; a bell
   // does not click, it needs a few milliseconds of attack or the hit swallows the partial.
   function note(f0, f1, t0, dur, type, vol, atk) {
     const a = AC; if (!a) return;
@@ -398,7 +398,7 @@
     // The minute hand's jump: lower, longer and louder than the tick. It is what lets you
     // count minutes without looking at the screen. No tonal partial: the tonal is reserved for the hour.
     minuto() { hit(900, 1.6, 0.014, 0.040, 0); },
-    // Hour chime: a GLASS bell, not brass — three inharmonic partials at
+    // Hour chime: a GLASS bell, not brass; three inharmonic partials at
     // 1 : 2.76 : 5.40 (the series of a circular plate) over the palette's pitch a fourth
     // down. ONE only, never twelve: twelve strikes is eight seconds of sound nobody asked for.
     hora() {
@@ -497,7 +497,7 @@
     circulo(T.ringMid, centroX, centroY, radio * 0.955, 2);
     circulo(T.ringOut, centroX, centroY, radio * 1.025, 1);
 
-    // minute marks (60) — thin, soft glow
+    // minute marks (60), thin, soft glow
     setGlow(T.dark, 5);
     for (let i = 1; i <= 60; i++) {
       const a = TAU * i / 60;
@@ -506,7 +506,7 @@
         centroX + Math.cos(a) * radio * 0.85, centroY + Math.sin(a) * radio * 0.85, 2);
     }
     clearGlow();
-    // hour marks (12) — thick, bright, with a rounded tip
+    // hour marks (12), thick, bright, with a rounded tip
     setGlow(T.bright, 12);
     for (let i = 1; i <= 12; i++) {
       const a = TAU * i / 12;
@@ -516,20 +516,20 @@
     }
     clearGlow();
 
-    // date + time, mirrored above and below the centre — small text, with a slight glow
+    // date + time, mirrored above and below the centre: small text, with a slight glow
     const offY = S * 5 / 16;
     crearTexto(hora,  T.bright, centroX, centroY + offY,         17, 8, FONT_TIME, 600);
     crearTexto(fecha, T.dark,   centroX, centroY + offY * 0.875, 13, 5, FONT_DATE, 500);
     crearTexto(hora,  T.bright, centroX, centroY - offY,         17, 8, FONT_TIME, 600);
     crearTexto(fecha, T.dark,   centroX, centroY - offY * 0.875, 13, 5, FONT_DATE, 500);
 
-    // conical hands — the hour one shorter and sturdier, the minute one longer and finer
+    // conical hands: the hour one shorter and sturdier, the minute one longer and finer
     const am = ca_m * TAU / 60 - Math.PI / 2;
     const ah = (ca_h * 60 + ca_m) * TAU / 720 - Math.PI / 2;
     drawHand(ah, radio * 0.50, 20, 5, radio * 0.09, T.dark, 10);
     drawHand(am, radio * 0.72, 13, 3, radio * 0.11, T.accent, 12);
 
-    // second hand — angle according to the mode (ticking vs sweeping)
+    // second hand: angle according to the mode (ticking vs sweeping)
     let as;
     if (segundero === 0) as = ca_s * TAU / 60 - Math.PI / 2;
     else                 as = (ca_ms + ca_s * 999999) * TAU / (60 * 999999) - Math.PI / 2;
@@ -541,7 +541,7 @@
     circulo(T.bright, centroX + cos * radio * 0.62, centroY + sin * radio * 0.62, radio * 0.018, 0);        // a little pearl on the hand
     clearGlow();
 
-    // centre pin — a hub with a gradient + a dark pinhole
+    // centre pin: a hub with a gradient + a dark pinhole
     setGlow(T.bright, 12);
     const hub = ctx.createRadialGradient(centroX - radio * 0.02, centroY - radio * 0.02, 1, centroX, centroY, radio * 0.06);
     hub.addColorStop(0, T.hubHi); hub.addColorStop(1, T.dark);
@@ -695,7 +695,7 @@
       const btn = document.getElementById('btnInfo');
       btn.addEventListener('pointerdown', e => {
         e.preventDefault();
-        // The overlay starts at display:none FROM CSS — the inline style is empty "", so we
+        // The overlay starts at display:none FROM CSS; the inline style is empty "", so we
         // compare against === 'block' (an explicitly visible state) instead of !== 'none' (which was true
         // at startup and swallowed the first tap).
         const showing = overlay.style.display === 'block';
@@ -707,19 +707,19 @@
 
 
 <div id="infoPanel"><h4>Clock</h4>
-An analogue clock in phosphor on black glass. It shows the device's time — there is nothing to win.
+An analogue clock in phosphor on black glass. It shows the device's time, and there is nothing to win.
 <hr>
 <h5>Desktop</h5>
 <ul>
-  <li><b>Click the clock</b> — switches the second hand between <b>tick</b> (one jump per second)
+  <li><b>Click the clock</b> to switch the second hand between <b>tick</b> (one jump per second)
       and <b>sweep</b> (continuous).</li>
-  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 12V6"/></svg></span> <b>Second hand: tick / sweep</b> — the same switch from the bar.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 12V6"/></svg></span> <b>Second hand: tick / sweep</b> is the same switch from the bar.</li>
   <li><span class="ik"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/></svg></span> <b>Clock colour</b> cycles the seven palettes; <span class="ik"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l1.7 4.5L18 8l-4.3 1.5L12 14l-1.7-4.5L6 8l4.3-1.5z"/><circle cx="18.5" cy="16.5" r="1.6"/><circle cx="6" cy="16" r="1.2"/></svg></span> <b>Auto colour</b> changes them every two
       seconds on its own.</li>
 </ul>
 <h5>Mobile</h5>
 <ul>
-  <li><b>Tap the clock</b> — switches the second hand between tick and sweep.</li>
+  <li><b>Tap the clock</b> to switch the second hand between tick and sweep.</li>
   <li>The bar buttons do the same as on desktop.</li>
 </ul>
 </div>
@@ -743,7 +743,7 @@ An analogue clock in phosphor on black glass. It shows the device's time — the
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

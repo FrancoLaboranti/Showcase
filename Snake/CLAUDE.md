@@ -8,7 +8,7 @@ A non-grid Snake: the head smoothly chases the mouse cursor, each body segment c
 
 Body coloring alternates: every 4th segment uses a brighter green range (`randColorInRange(10,40,225,255,10,40)`), the rest use a darker green. Per-segment `wave_time`/`wave_time_total` drives a sine-wave breathing animation.
 
-The `manager` global is a single-element list `[Manager()]` — index it as `manager[0]` (see `SnakePiece.process` reading `manager[0].gameOver` and `manager[0].pause`). This is unusual for the repo; don't replace it with a plain object without updating every read site.
+The `manager` global is a single-element list `[Manager()]`: index it as `manager[0]` (see `SnakePiece.process` reading `manager[0].gameOver` and `manager[0].pause`). This is unusual for the repo; don't replace it with a plain object without updating every read site.
 
 See [../CLAUDE.md](../CLAUDE.md) for the shared sprite/main-loop pattern.
 
@@ -21,9 +21,9 @@ produces an audible switching click, and a click is precisely what water does no
 
 Two families and no more:
 
-- **HYDRAULIC** — body and weight: sines and triangles from 40 to 250 Hz with lowpassed noise for
+- **HYDRAULIC**: body and weight: sines and triangles from 40 to 250 Hz with lowpassed noise for
   the displaced water. Bites, charges, hits, mines, bosses.
-- **BIOLUMINESCENT** — everything that glows: pure sines from 500 to 1800 Hz, very short, with a
+- **BIOLUMINESCENT**: everything that glows: pure sines from 500 to 1800 Hz, very short, with a
   harmonic at the fifth. Eating, levelling up, picking a card.
 
 ### The master lowpass is an instrument

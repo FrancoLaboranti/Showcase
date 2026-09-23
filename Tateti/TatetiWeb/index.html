@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -16,7 +16,7 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Segoe UI', system-ui, sans-serif;
   }
-  /* Canvas occupies only the space ABOVE the bar — same layout as BallsWeb. Dimensions set from JS each resize. */
+  /* Canvas occupies only the space ABOVE the bar: same layout as BallsWeb. Dimensions set from JS each resize. */
   #c {
     display: block; position: absolute;
     top: 0; left: 0;
@@ -77,7 +77,7 @@
 
   /* The mute button was born in the audio pass and ended up WITH NO SIZE: `arcade-shell.css` only
      styles ✕ / ⛶ / ⓘ, and in this game the mute falls outside the bar's rules. It looked like a
-     one-pixel sliver. It gets the same body as the shell's three — it is not added to the shell so
+     one-pixel sliver. It gets the same body as the shell's three: it is not added to the shell so
      as not to tread on the nine games that already give it a style of their own. */
   #btnMute {
     width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
@@ -109,6 +109,15 @@
   }
   #infoPanel h5:first-of-type { margin-top: 8px; }
 
+  /* Diagnostics INSIDE the panel, in Pong's format: monospaced and separated by a rule. It hides
+     itself while it is empty, which is the state before the panel is opened for the first time. */
+  #infoPanel #fpsOverlay {
+    margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,0.11);
+    font: 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
+    color: #8ee36b; white-space: pre-line;
+  }
+  #infoPanel #fpsOverlay:empty { display: none; }
+
 </style>
 </head>
 <body>
@@ -139,7 +148,7 @@
   </div>
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  TATETI — web port of the Pygame Tateti.py, same format as BallsWeb.
+  //  TATETI: web port of the Pygame Tateti.py, same format as BallsWeb.
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
 
@@ -249,7 +258,7 @@
     return 0;
   }
 
-  // Negamax with α/β pruning. SCORE RELATIVE TO THE SIDE-TO-MOVE (mark) — the previous
+  // Negamax with α/β pruning. SCORE RELATIVE TO THE SIDE-TO-MOVE (mark), the previous
   // code returned the score from the root's perspective, which with a
   // negation at each level crossed the signs and the CPU could stop playing
   // immediately winning moves. In this version, terminal returns +1/−1
@@ -616,7 +625,7 @@
     const lineW = Math.max(2, size * 0.008);
     const r = size * 0.025;
 
-    // 1) Board — a soft outer shadow (the winner's colour if it is over)
+    // 1) Board: a soft outer shadow (the winner's colour if it is over)
     const winning = winner > 0;
     const glowCol = winning ? colorForMark(winner) : [120, 140, 180];
     ctx.shadowColor = `rgba(${glowCol[0]},${glowCol[1]},${glowCol[2]},${winning ? 0.22 : 0.08})`;
@@ -672,7 +681,7 @@
       }
     }
 
-    // 6) Dots in empty cells — a subtle "this is tappable" hint
+    // 6) Dots in empty cells: a subtle "this is tappable" hint
     if (winner === 0) {
       ctx.fillStyle = 'rgba(255,255,255,0.045)';
       for (let i = 0; i < 9; i++) {
@@ -710,7 +719,7 @@
       drawMark(cells[i], x, y, cs*0.32*scale, dim);
     }
 
-    // 9) Winning line — a wide halo + a core with glow + round caps
+    // 9) Winning line: a wide halo + a core with glow + round caps
     if (winLine) {
       const a = cellCenter(winLine[0]);
       const c = cellCenter(winLine[2]);
@@ -784,9 +793,9 @@
     }
   }
 
-  // 3 sequential dots that fade in/out — no layout shift thanks to left anchoring.
+  // 3 sequential dots that fade in/out: no layout shift thanks to left anchoring.
   function drawPensando(cxp, cy, col, fs) {
-    const txt = 'PENSANDO';
+    const txt = 'THINKING';
     ctx.font = `600 ${fs}px 'Segoe UI', system-ui, sans-serif`;
     const w = ctx.measureText(txt).width;
     const dotsArea = fs * 1.2;
@@ -887,7 +896,7 @@
     return;
     /* eslint-disable no-unreachable */
     if (!showInfo) return;
-    // the backdrop darkens the whole game — it reinforces the "tap outside to close" hint
+    // the backdrop darkens the whole game: it reinforces the "tap outside to close" hint
     ctx.fillStyle = 'rgba(0,0,0,0.55)';
     ctx.fillRect(0, 0, W, H);
 
@@ -897,7 +906,7 @@
       ['Mode (left button on the bar):', 'body'],
       ['· 2 players  · vs CPU (you are X)  · vs CPU (you are O)', 'body'],
       ['', 'gap'],
-      ['The CPU uses minimax — it plays perfectly.', 'body'],
+      ['The CPU uses minimax: it plays perfectly.', 'body'],
       ['Who starts alternates each round.', 'body'],
       ['', 'gap'],
       ['↻  another round', 'body'],
@@ -963,7 +972,7 @@
     scoreBump.o = Math.max(0, scoreBump.o - dt);
     scoreBump.d = Math.max(0, scoreBump.d - dt);
 
-    // CPU — paused while the modal is open, so it does not play "behind" the card
+    // CPU: paused while the modal is open, so it does not play "behind" the card
     const cpu = cpuMark();
     if (!showInfo && winner === 0 && cpu && turn === cpu) {
       if (cpuThinkCD <= 0) { cpuThinkCD = CPU_THINK_T; sfx.think(); }
@@ -976,7 +985,7 @@
       cpuThinkCD = 0;
     }
 
-    // render — order: background → header → board (with marks+line) → score → prompt → modal
+    // render: order: background → header → board (with marks+line) → score → prompt → modal
     drawBackground();
     drawHeader();
     drawBoard();
@@ -998,7 +1007,7 @@
   <!-- The Arcade's shell (exit + fullscreen + orientation lock). data-orient: landscape/portrait/any. -->
   <script src="../../Arcade/arcade-shell.js" data-orient="any"></script>
 <div id="infoPanel"><h4>Tic-Tac-Toe</h4>
-Three in a row on a 3x3 board. <b>The CPU searches the whole game tree, so it cannot be beaten</b> —
+Three in a row on a 3x3 board. <b>The CPU searches the whole game tree, so it cannot be beaten</b>:
 against it the best result is a draw. Who opens alternates every round.
 <hr>
 <h5>Desktop</h5>
@@ -1012,7 +1021,30 @@ against it the best result is a draw. Who opens alternates every round.
   <li><b>Tap a cell</b> to place your mark.</li>
   <li>The bar buttons behave the same as on desktop.</li>
 </ul>
+<div id="fpsOverlay"></div>
 </div>
+
+<script>
+// FPS, in the same place as in the other twenty-one: inside the info panel. It has its OWN rAF and
+// does not hang off the game's loop, which between rounds advances nothing. It writes only with the
+// panel open, so with it closed the DOM is not touched sixty times a second.
+(function () {
+  var el = null, frames = 0, t0 = performance.now();
+  function tick(now) {
+    frames++;
+    if (now - t0 >= 500) {
+      if (!el) el = document.getElementById('fpsOverlay');
+      var panel = el && el.parentNode;
+      if (panel && panel.classList.contains('show')) {
+        el.textContent = 'FPS: ' + Math.round(frames * 1000 / (now - t0));
+      }
+      frames = 0; t0 = now;
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
 
 <script>
 // The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
@@ -1033,7 +1065,7 @@ against it the best result is a draw. Who opens alternates every round.
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

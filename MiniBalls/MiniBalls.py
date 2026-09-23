@@ -227,7 +227,7 @@ while True:
 
     keys = pygame.key.get_pressed()
     showInfo = keys[pygame.K_SPACE]
-    # WALL_MODE is changed further down in the event loop (KEYDOWN, not polling) — get_pressed()
+    # WALL_MODE is changed further down in the event loop (KEYDOWN, not polling), get_pressed()
     # seemed to behave oddly with a single K_2 press in this setup.
 
     mouseX, mouseY = pygame.mouse.get_pos()
@@ -249,7 +249,7 @@ while True:
         sprite.process()
         sprite.draw()
 
-    # A permanent indicator of the current WALL_MODE (top-right corner) — useful to confirm that keys
+    # A permanent indicator of the current WALL_MODE (top-right corner), useful to confirm that keys
     # 1/2/3/4 are changing something, especially when the visual change is subtle.
     createText(16, "MODE: %d" % WALL_MODE, 'topright', (180,180,180), xper(0.99), yper(0.02))
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -15,12 +15,12 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Segoe UI', system-ui, sans-serif;
   }
-  /* Canvas occupies only the space ABOVE the bar — the playfield (screenX/screenY) is sized to this
+  /* Canvas occupies only the space ABOVE the bar: the playfield (screenX/screenY) is sized to this
      rect, so the snake never runs behind the buttons. Dimensions are set explicitly from JS each resize. */
   #c {
     display: block; position: absolute;
     top: 0; left: 0;
-    cursor: none;                                                                /* hide the OS cursor — we draw our own dot at the steering point (port of pygame.mouse.set_visible(False)) */
+    cursor: none;                                                                /* hide the OS cursor; we draw our own dot at the steering point (port of pygame.mouse.set_visible(False)) */
   }
 
   #hint { display: none; }   /* the start hint is hidden on purpose */
@@ -49,7 +49,7 @@
   body.fs-on #btnFs .ic-enter { display: none; }
   body.fs-on #btnFs .ic-exit  { display: block; }
 
-  /* Exit — now INSIDE #padMenu (last = against the right corner). It inherits the size/shape of
+  /* Exit: now INSIDE #padMenu (last = against the right corner). It inherits the size/shape of
      #padMenu button; we only give it a hint of red to tell it apart and full red on press. */
   #btnExit { border-color: rgba(255,120,120,0.45) !important; color: rgba(255,190,190,0.9) !important; }
   #btnExit:active { background: rgba(240,90,95,0.32) !important; border-color: rgba(240,90,95,0.6) !important; color: #fff !important; }
@@ -205,8 +205,8 @@
 
 
   /* These buttons are `static`, so the `::after` below would position itself against another
-     ancestor and the enlarged area would land in the wrong place. `relative` — NOT `absolute`,
-     which takes them out of the flow and stacks them — gives them the containing block without moving them. */
+     ancestor and the enlarged area would land in the wrong place. `relative`, NOT `absolute`,
+     which takes them out of the flow and stacks them, gives them the containing block without moving them. */
   #btnDebug, #btnPause, #btnReset { position: relative; }
   /* TOUCH AREA: these buttons' bodies are 30 px and a thumb needs ~44. The pseudo-element
      enlarges the TARGET without enlarging the drawing. Vertically only: the corner buttons sit at
@@ -278,16 +278,16 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  SNAKE — faithful web port of Snake.py, with the same mobile shell as BallsWeb.
+  //  SNAKE: faithful web port of Snake.py, with the same mobile shell as BallsWeb.
   //  A non-grid snake: the head chases the pointer and each segment chases the
   //  one before it. You eat stars (it grows +10); hitting a "bright" segment
   //  (every 4th, id>5) is game over.
   //
   //  Performance notes (the body can reach hundreds of segments):
-  //   · no per-frame sort — the z-order is fixed (tail→head→food→manager).
+  //   · no per-frame sort: the z-order is fixed (tail→head→food→manager).
   //   · the radius is computed once per frame (curR), not per piece.
   //   · geometry with scalars (zero arrays per call) and squared distance (no sqrt).
-  //   · each segment caches its rgb() string — it is not rebuilt per circle.
+  //   · each segment caches its rgb() string: it is not rebuilt per circle.
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
   const MAX_HAZARDS = 16;                                                         // cap on mines (inedible obstacles)
@@ -348,7 +348,7 @@
   // ── BOSSES: big creatures with an ON-SCREEN bar. They appear EVERY 10 LEVELS and ROTATE through 3 types
   //    (pufferfish → stonefish → anglerfish). The normal enemies KEEP appearing during the fight. ──
   const BOSS_FIRST_LEVEL = 5, BOSS_LEVEL_STEP = 5;                                // TEST: bosses at level 5/10/15/20 (puffer/stone/angler/puffer...) to see them quickly. PRODUCTION: set 10 and 10 (every 10 levels)
-  const BOSS_HP_BASE = 200, BOSS_HP_GROW = 75;                                   // the boss's health — ×8 over the previous nerf (45/19): more tanky. (The original was 900/380.) The damage they deal is still gentle (see *_DMG)
+  const BOSS_HP_BASE = 200, BOSS_HP_GROW = 75;                                   // the boss's health, ×8 over the previous nerf (45/19): more tanky. (The original was 900/380.) The damage they deal is still gentle (see *_DMG)
   const BOSS_KILL_SCORE = 1200 + BOSS_HP_BASE*2;                                                   // score bonus for killing a boss
   // PUFFERFISH (puffer): it cycles deflated↔inflated; vulnerable to the dash DEFLATED, it bites with spines inflated
   const PUFFER_R_F = 0.075, PUFFER_SPEED_F = 0.16;
@@ -360,14 +360,14 @@
   const STONE_FOLLOW_F = 0.5, STONE_CHASE_SPEED_F = 0.12;                          // if you get a little close it stops wandering and CHASES you (like the other enemies), faster than while prowling
   const STONE_ARM_CD = 1.1;                                                        // after stinging it does not charge again for this long (anti-spam)
   const STONE_TELE_T = 1, STONE_STRIKE_T = 0.26, STONE_STRIKE_SPEED_F = 2.0, STONE_RECOVER_T = 1.4; // a longer telegraph (you can tell when it is about to strike); the strike collides SWEPT → it does not tunnel
-  const STONE_ARMOR_IDLE = 0.30, STONE_VENOM_DMG = 20, STONE_VENOM_DPS = 5, STONE_VENOM_T = 4; // venom (DoT) — on connecting it BLOCKS the regen for STONE_VENOM_T s
+  const STONE_ARMOR_IDLE = 0.30, STONE_VENOM_DMG = 20, STONE_VENOM_DPS = 5, STONE_VENOM_T = 4; // venom (DoT), on connecting it BLOCKS the regen for STONE_VENOM_T s
   // ANGLERFISH (angler): it DARKENS the scene + a lure + a cone of light; it bites and teleports, vulnerable MOUTH OPEN
   const ANGLER_R_F = 0.072, ANGLER_SPEED_F = 0.13;
   const ANGLER_LURE_T = 2.5, ANGLER_DARK_T = 1.1;
   const ANGLER_AGGRO_F = 0.5;                                                      // it stalks until you enter this radius → it ARMS the charge (× sper)
   const ANGLER_WINDUP_T = 0.55;                                                    // TELEGRAPH: it slows, aims, backs off and opens its mouth; the cone turns RED (a clear warning)
   const ANGLER_LUNGE_T = 0.5, ANGLER_LUNGE_SPEED_F = 1.2;                          // CHARGE: a straight dash MOUTH OPEN = a window to counter (it does not correct course → dodgeable)
-  const ANGLER_RECOVER_T = 1.5;                                                    // cooldown after biting/missing — it does NOT launch again immediately
+  const ANGLER_RECOVER_T = 1.5;                                                    // cooldown after biting/missing: it does NOT launch again immediately
   const ANGLER_STAGGER_T = 1.2;                                                    // if you COUNTER it mid-charge: stunned, motionless and wide open (and it does NOT bite you)
   const ANGLER_TP_CD = 7, ANGLER_TP_FAR_F = 0.85;                                  // teleport: if you get further than sper(ANGLER_TP_FAR_F) away (or every ANGLER_TP_CD s while out of range)
   const ANGLER_BITE_DMG = 40, ANGLER_BITE_REACH_F = 0.02, ANGLER_ARMOR_CLOSED = 0.80; // mouth closed = heavily armoured (you barely scratch it); hit it MOUTH OPEN
@@ -481,7 +481,7 @@
     try { masterLP.frequency.setTargetAtTime(hz, AC.currentTime, tau || 0.25); } catch (e) {}
   }
 
-  // A 4-8 ms attack on EVERY voice: without it the gain switches and that is a click — exactly
+  // A 4-8 ms attack on EVERY voice: without it the gain switches and that is a click; exactly
   // what water does not do.
   function wNote(f0, f1, t0, dur, type, vol, atk) {
     const a = AC; if (!a) return;
@@ -526,7 +526,7 @@
 
   // ── Diagnostics: it lives INSIDE the info panel ──
   // It used to be a monospaced card drawn on the canvas, separate from the panel. Now it is one
-  // more section: a single card for everything informational. It is written ONLY with the panel open —
+  // more section: a single card for everything informational. It is written ONLY with the panel open:
   // touching the DOM every frame with the panel closed is wasted work.
   // The node is looked up LAZILY, not at parse time. The main script runs BEFORE
   // `#infoPanel` exists (it is further down the document), so a `getElementById` on the line
@@ -638,7 +638,7 @@
   const inView = (x, y) => x >= vL && x <= vR && y >= vT && y <= vB;
   const ambient = [];                                                            // drifting motes (a sense of current)
   const fishes = [];                                                             // ambient little fish (decorative): they swim/weave/flap, surrounding the camera
-  const corals = [];                                                             // (unused now) procedural corals — replaced by the background PHOTO; kept in case they come back
+  const corals = [];                                                             // (unused now) procedural corals: replaced by the background PHOTO; kept in case they come back
   const coralSprites = [];                                                       // (unused now) baked coral sprites
   let seafloorReq = false, seafloorTex = null, seafloorReady = false;            // SEA FLOOR: a baked/tiled photo; seafloorReady = the load FINISHED (it triggers the fade-in)
   let currentAng = 0.7;                                                          // the lake's current direction (it rotates very slowly)
@@ -716,14 +716,14 @@
 
   // does the attacking head at (hx,hy) CONNECT with the ATTACK POINT (the opponent's HEAD) during the charge?
   // ONLY the head counts: grazing "some other part" (the body) does NO damage, and the hit has to be made by the LUNGE
-  // reaching that head — not by being in contact with the body before jumping. The test only runs in the
+  // reaching that head, not by being in contact with the body before jumping. The test only runs in the
   // charge phase (lungeT<=LUNGE_TIME). extraR = the opponent's thickness (the big ones are a touch easier to hit).
   // (victimPieces is kept for call compatibility; the body is no longer walked.)
   function hitConnect(hx, hy, victimHead, victimPieces, extraR) {
     const hitR = sper(ATTACK_HIT_F) + extraR, dx = victimHead.x - hx, dy = victimHead.y - hy;
     return dx*dx + dy*dy < hitR*hitR;
   }
-  function segPointDist2(ax, ay, bx, by, px, py) {                                // squared distance from point P to SEGMENT AB — a swept collision (it does not tunnel even with a big step)
+  function segPointDist2(ax, ay, bx, by, px, py) {                                // squared distance from point P to SEGMENT AB: a swept collision (it does not tunnel even with a big step)
     const vx = bx - ax, vy = by - ay, wx = px - ax, wy = py - ay;
     const len2 = vx*vx + vy*vy; let t = len2 > 1e-9 ? (wx*vx + wy*vy)/len2 : 0;
     t = t < 0 ? 0 : (t > 1 ? 1 : t);
@@ -934,7 +934,7 @@
 
       if (this.id === 0) {
         // HEAD: persistent DIRECTION control. targetAng is set ONLY on each input (see aimAt in the
-        // pointer handlers); between inputs the head keeps its heading and goes straight — it does not orbit or
+        // pointer handlers); between inputs the head keeps its heading and goes straight: it does not orbit or
         // recompute towards the point, which is left as a visual guide only. To turn, you give a new input.
         this.vel = sper(SNAKE_SPEED);
         this.angVel = sper(0.01) * Math.max(0.3, 1 - (girth - 1) * AGILITY_DROP) * manager.turnMul; // it loses agility from girth (clamped at 0.3 so a high girth does not cancel it); "Agility" raises it
@@ -1131,8 +1131,8 @@
     checkHeadCol() {
       const hx = this.x, hy = this.y, thr = curR*girth*2, thr2 = thr*thr;        // the collision scales with the girth
       // a circular world (the lake): the shore NO LONGER kills outright OR stops you. You can GO OUT INTO THE VOID (outside the lake)
-      // but it burns you (DPS) the whole time you are outside — risk/reward. On coming back in, the regen
-      // recovers. (Snakes do NOT die from colliding with each other — combat is by attack/health.)
+      // but it burns you (DPS) the whole time you are outside: risk/reward. On coming back in, the regen
+      // recovers. (Snakes do NOT die from colliding with each other: combat is by attack/health.)
       const edge = WORLD_R - curR;
       if (hx*hx + hy*hy > edge*edge) { manager.borderHurt(); sfx.border(); }     // the void: NO clamp, only DPS while you are outside
       // a GENEROUS grab radius for food: in line with the visual size (a star ~curR*1.55, a jellyfish
@@ -1229,7 +1229,7 @@
     draw() {
       const cx = this.x, cy = this.y, a = this.ang;
       const breath = 1 + Math.sin(waveClock*5 + this.ang)*0.12;
-      const r = curR * 1.55 * breath * easeOutBack(this.appear);                 // appearance scale (a pop) — a little bigger
+      const r = curR * 1.55 * breath * easeOutBack(this.appear);                 // appearance scale (a pop), a little bigger
 
       // urgency: on expiring it FLASHES by OPACITY (not by colour) → every star of the SAME type always has the
       // SAME tone; on a black background the fade still reads. (It used to darken the `light` → different tones.)
@@ -1267,7 +1267,7 @@
     }
   }
 
-  // ════════════════ HAZARD (a mine — touching it shrinks you and costs score, it does not kill) ════════════════
+  // ════════════════ HAZARD (a mine: touching it shrinks you and costs score, it does not kill) ════════════════
   class Hazard {
     constructor() {
       this.z = -1;
@@ -1344,7 +1344,7 @@
     }
   }
 
-  // ════════════════ JELLY (a bioluminescent jellyfish — a new edible: it gives a temporary SHIELD + a bonus) ════════════════
+  // ════════════════ JELLY (a bioluminescent jellyfish: a new edible: it gives a temporary SHIELD + a bonus) ════════════════
   // A luminous pink, a pulsing bell with fringes and waving tentacles dragged by the current. Its shape and
   // colour are very different from the amber star (food) and from the dark/violet mine. Eating it = immunity
   // (you pass through your own body) for a few seconds + a score bonus + you grow a little.
@@ -1382,7 +1382,7 @@
       const cx = this.x, cy = this.y, hue = 335;
       const sp = easeOutBack(this.appear);
       const fade = Math.min(1, this.appear*1.4) * (this.timer <= 4 ? (0.45 + 0.55*Math.abs(Math.sin(waveClock*6))) : 1); // it flashes on expiring
-      const R = curR*1.75*sp*(1 + Math.sin(this.pulse)*0.16);                    // the pulsing bell — a little bigger
+      const R = curR*1.75*sp*(1 + Math.sin(this.pulse)*0.16);                    // the pulsing bell: a little bigger
       const td = currentAng;                                                     // tentacles swept by the current
       const pdx = -Math.sin(td), pdy = Math.cos(td);                             // perpendicular to the current
       // waving tentacles (additive)
@@ -1421,7 +1421,7 @@
   }
 
   // ════════════════ SEAHORSE (a temporary speed boost) ════════════════
-  // Eating it gives an automatic BOOST of 3× the base speed for a few seconds (short, like the shield) — with
+  // Eating it gives an automatic BOOST of 3× the base speed for a few seconds (short, like the shield), with
   // no indicator at all (you only notice because you are going faster). The same points as the jellyfish. An orange-gold colour.
   class Seahorse {
     constructor() {
@@ -1675,7 +1675,7 @@
       if (this.hurt > 0) this.hurt = Math.max(this.hurt - deltaT, 0);
       this.chase = 1;                                                            // it only rises above 1 while chasing a victim
       const head = this.pieces[0];
-      const rBase = curR*this.sizeMul;                                           // base thickness (spacing/turning), with no girth — the same as the player
+      const rBase = curR*this.sizeMul;                                           // base thickness (spacing/turning), with no girth: the same as the player
       this.g = 1 + GIRTH_MAX * Math.min(1, this.pieces.length / GIRTH_LEN);      // it thickens with the length
       const r = rBase * this.g, hd = Math.hypot(head.x, head.y);                 // the real thickness (collision / drawing)
       // ── STEERING (a sum of vectors in world coords) ──
@@ -1735,7 +1735,7 @@
       }
       const MA = sper(0.2);                                                      // dodge mines (always)
       for (const h of hazards) { const dx = head.x-h.x, dy = head.y-h.y, d = Math.hypot(dx, dy); if (d < MA && d > 1) { const w = 1 - d/MA; sx += dx/d*w*3.6; sy += dy/d*w*3.6; } }
-      // avoid collisions — BUT not with the victim I am attacking (I commit to the cut-off)
+      // avoid collisions, BUT not with the victim I am attacking (I commit to the cut-off)
       const PA = sper(0.16), ph = snake[0];
       if (ph && !this.foePlayer) { const dx = head.x-ph.x, dy = head.y-ph.y, d = Math.hypot(dx, dy); if (d < PA && d > 1) { const w = 1 - d/PA; sx += dx/d*w*3; sy += dy/d*w*3; } }
       if (!this.foePlayer) for (let i = 6; i < snake.length; i += 8) { const p = snake[i], dx = head.x-p.x, dy = head.y-p.y, d2 = dx*dx+dy*dy; if (d2 < PA*PA && d2 > 1) { const d = Math.sqrt(d2), w = 1 - d/PA; sx += dx/d*w*2; sy += dy/d*w*2; } }
@@ -1792,7 +1792,7 @@
           if (p.wt < WAVE_TOTAL*0.97 && p.wt > WAVE_TOTAL*0.5 && next && next.wt === 0) next.wt = WAVE_TOTAL;
         }
       }
-      this.processExtraHeads();                                                 // extra heads (necks that bite on their own) — after updating the body
+      this.processExtraHeads();                                                 // extra heads (necks that bite on their own), after updating the body
       this.combat();                                                            // attack by charging (health/damage), replacing death by collision
       // eating (it competes with the player) and hitting mines (it shrinks)
       const er2 = (r*2.6)*(r*2.6);
@@ -1930,7 +1930,7 @@
       this.x = Math.cos(a)*rr; this.y = Math.sin(a)*rr; this.ang = a + Math.PI;
       this.integrated = false; this.bob = Math.random()*TAU;
       this.rF = def.rF; this.speedF = def.speedF; this.name = def.name; this.hue = def.hue;
-      // PUFFERFISH — bodyR() reads this.inflate for ALL types → it must start at 0
+      // PUFFERFISH: bodyR() reads this.inflate for ALL types → it must start at 0
       this.phase = 'deflated'; this.phaseT = PUFFER_DEFLATE_T; this.inflate = 0;
       // STONEFISH
       this.sphase = 'settling'; this.sphaseT = 0; this.tele = 0; this.wx = this.x; this.wy = this.y; this.armCD = 0; this.lvx = 0; this.lvy = 0; this.struck = false;
@@ -2062,7 +2062,7 @@
         real = dmg * ((open || this.aphase === 'stagger') ? 1 : (1 - ANGLER_ARMOR_CLOSED));
         if (open) { real *= ANGLER_COUNTER_MULT; countered = true; this.aphase = 'stagger'; this.aphaseT = ANGLER_STAGGER_T; this.bitten = true; this.lvx = 0; this.lvy = 0; } // CRIT + stunned + it cancels its bite (the player is processed BEFORE the boss → the bite block no longer runs)
       }
-      // TWO timbres: if the armour absorbed more than half, a dry, matte knock — it did not land, the
+      // TWO timbres: if the armour absorbed more than half, a dry, matte knock; it did not land, the
       // vulnerable window was shut. If it landed, a bell. It is the only way to know whether the
       // moment was right without memorising each boss's phase.
       sfx.bossHit(real >= dmg * 0.5);
@@ -2213,7 +2213,7 @@
       this.hitFlash = 0;                                                          // timer for the red flash when hitting a mine
       this.pendingShrink = 0;                                                     // segments to remove (applied outside the process for-loop)
       this.pendingGrow = 0;                                                       // segments to add (they materialise a few per frame, not stacked)
-      this.fed = 0;                                                               // accumulated FOOD: it feeds the girth — eating makes you grow wide, not pile up length
+      this.fed = 0;                                                               // accumulated FOOD: it feeds the girth; eating makes you grow wide, not pile up length
       this.foodCD = 0;                                                            // delay until the next food spawn
       this.hazCD = HAZARD_SPAWN_DELAY;                                            // delay until the next mine spawn
       this.jellyCD = JELLY_SPAWN_DELAY;                                           // delay until the next jellyfish
@@ -2327,7 +2327,7 @@
         new Food(e.x + rndRange(-curR*2, curR*2), e.y + rndRange(-curR*2, curR*2));
       }
     }
-    burst(x, y, hue, count) {                                                     // a burst of ephemeral particles at (x,y) — used when eating a jellyfish/seahorse
+    burst(x, y, hue, count) {                                                     // a burst of ephemeral particles at (x,y), used when eating a jellyfish/seahorse
       for (let k = 0; k < count; k++) {
         const a = Math.random()*TAU, sp = sper(0.05) + Math.random()*sper(0.18), life = rndRange(0.4, 0.9);
         this.deathParticles.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp, r: curR*rndRange(0.3,0.8), life, maxLife: life, hue });
@@ -3064,7 +3064,7 @@
   }
 
   // ════════════════ INPUT ════════════════
-  // On TOUCH the direction comes from the hand-rolled STICK (below); touching the field does NOT steer — it only serves to
+  // On TOUCH the direction comes from the hand-rolled STICK (below); touching the field does NOT steer: it only serves to
   // sprint with 2+ fingers and to restart on game over. On DESKTOP the mouse steers (the head goes towards the
   // pointer) and holding the button sprints (a port of "LMB held = sprint").
   function evtPos(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
@@ -3080,7 +3080,7 @@
   function dropTouch(e) { if (activeTouches.delete(e.pointerId)) updateSprint(); }
   addEventListener('pointerup', dropTouch);
   addEventListener('pointercancel', dropTouch);
-  function aimAt(px, py) {                                                       // it sets the head's HEADING towards the pointer — mouse only (desktop)
+  function aimAt(px, py) {                                                       // it sets the head's HEADING towards the pointer: mouse only (desktop)
     const head = snake[0];
     if (!head || manager.gameOver) return;
     const dx = px - W/2, dy = py - H/2, dz = curR * 1.5;                          // camera: the head is ALWAYS at the centre of the screen → heading = centre→pointer
@@ -3139,11 +3139,11 @@
   const btnDebug = document.getElementById('btnDebug');
   tappable(btnDebug, () => { showDebug = !showDebug; btnDebug.classList.toggle('on', showDebug); });
 
-  // ── DIRECTION STICK (hand-rolled) — touch only ──
+  // ── DIRECTION STICK (hand-rolled), touch only ──
   // A stick of our own, WITHOUT nipplejs: it appears where you touch inside the zone (the left half × the bottom third) and its
   // direction sets the head's HEADING (head.targetAng), persistent between inputs. The key to its robustness is
   // setPointerCapture: ALL of that finger's events (move/up/cancel) always reach the zone, wherever the finger
-  // goes, so it NEVER gets stuck — not even with another finger on the boost orb. nipplejs in dynamic
+  // goes, so it NEVER gets stuck, not even with another finger on the boost orb. nipplejs in dynamic
   // mode lost the pointerup with multitouch and left the stick pinned to the centre.
   const IS_TOUCH = (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches) || 'ontouchstart' in window;
   const JOY_BASE_R = 52, JOY_KNOB_R = 30, JOY_DEAD = 7;    // CSS px (the ctx is already scaled by dpr)
@@ -3245,7 +3245,7 @@
   function showUpgradeOverlay(list) {
     const ov = document.getElementById('levelup');
     document.getElementById('luLvl').textContent = manager.level;
-    // (the modifiers' state is always shown in the HUD, under the score — no longer in the overlay)
+    // (the modifiers' state is always shown in the HUD, under the score: no longer in the overlay)
     // CARDS colour-coded by rarity, a terse label + a pill
     const cards = document.getElementById('luCards'); cards.innerHTML = '';
     list.forEach((entry, i) => {
@@ -3449,7 +3449,7 @@
   <script>
     document.getElementById('btnExit').addEventListener('click', () => {
       // Embedded in the Arcade shell: postMessage to go back to the menu without reloading the iframe.
-      // Standalone: we navigate straight there (no confirm — same pattern as the rest of the games).
+      // Standalone: we navigate straight there (no confirm; same pattern as the rest of the games).
       if (window.self !== window.top) {
         try { window.parent.postMessage({ type: 'arcade:exit' }, '*'); } catch (e) {}
         return;
@@ -3495,18 +3495,18 @@
 
 <div id="infoPanel"><h4>Snake</h4>
 A sea snake on a dark reef. Eat stars to grow and level up; <b>every level lets you pick an
-upgrade</b>. <b>Leaving the lake drains your health continuously</b> — the edge is not a wall.
+upgrade</b>. <b>Leaving the lake drains your health continuously</b>: the edge is not a wall.
 <hr>
 <h5>Desktop</h5>
 <ul>
-  <li><b>Move the mouse</b> — the snake turns toward the pointer.</li>
+  <li><b>Move the mouse</b> and the snake turns toward the pointer.</li>
   <li><b>Hold any mouse button</b> to sprint. It burns turbo, which refills when you let go.</li>
   <li><span class="ik"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg></span> <b>Pause</b> and <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span> <b>Restart</b> in the top-right cluster.</li>
 </ul>
 <h5>Mobile</h5>
 <ul>
   <li><b>Joystick</b> at the bottom left steers.</li>
-  <li><b>Sprint (hold)</b> — the <span class="ik"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span> button at the bottom right — accelerates while held.</li>
+  <li><b>Sprint (hold)</b>, the <span class="ik"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg></span> button at the bottom right, accelerates while held.</li>
   <li><b>Two fingers anywhere on the canvas also sprint</b>, without reaching for the button.</li>
 </ul>
 <hr>
@@ -3541,7 +3541,7 @@ upgrade</b>. <b>Leaving the lake drains your health continuously</b> — the edg
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

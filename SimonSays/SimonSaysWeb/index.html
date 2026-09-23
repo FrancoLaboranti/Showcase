@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -16,7 +16,7 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Segoe UI', system-ui, sans-serif;
   }
-  /* The canvas takes only the space ABOVE the bar — same layout as BallsWeb/TatetiWeb. */
+  /* The canvas takes only the space ABOVE the bar: same layout as BallsWeb/TatetiWeb. */
   #c { display: block; position: absolute; top: 0; left: 0; }
 
   #hint {
@@ -61,7 +61,7 @@
 
   /* The mute button was born in the audio pass and ended up WITH NO SIZE: `arcade-shell.css` only
      styles ✕ / ⛶ / ⓘ, and in this game the mute falls outside the bar's rules. It looked like a
-     one-pixel sliver. It gets the same body as the shell's three — it is not added to the shell so
+     one-pixel sliver. It gets the same body as the shell's three: it is not added to the shell so
      as not to tread on the nine games that already give it a style of their own. */
   #btnMute {
     width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
@@ -93,6 +93,15 @@
   }
   #infoPanel h5:first-of-type { margin-top: 8px; }
 
+  /* Diagnostics INSIDE the panel, in Pong's format: monospaced and separated by a rule. It hides
+     itself while it is empty, which is the state before the panel is opened for the first time. */
+  #infoPanel #fpsOverlay {
+    margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,0.11);
+    font: 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
+    color: #8ee36b; white-space: pre-line;
+  }
+  #infoPanel #fpsOverlay:empty { display: none; }
+
 </style>
 </head>
 <body>
@@ -120,7 +129,7 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  // SIMON — web port of the Pygame SimonSays.py, same format as BallsWeb.
+  // SIMON: web port of the Pygame SimonSays.py, same format as BallsWeb.
   // The Pygame version used 4 pre-recorded PCM buffers; here the 4 tones are
   // synthesised with WebAudio (it sounds like the classic Simon, with no assets).
   // ════════════════════════════════════════════════════════════════════
@@ -166,7 +175,7 @@
 
   // visuales
   let clock = 0;                  // accumulated clock (s) for animations
-  let padGlow = [0, 0, 0, 0];     // smoothed brightness per pad (0..1) — gives trails on the on/off
+  let padGlow = [0, 0, 0, 0];     // smoothed brightness per pad (0..1), gives trails on the on/off
   let nicePulse = 0;              // expanding ring on a correct tap (1→0)
   let best = 0;                   // mejor score (persistido)
   let newRecord = false;          // whether the last game over beat the record
@@ -185,7 +194,7 @@
   let actx = null;
   let heldOsc = null, heldGain = null;
   function audioResume() {
-    // `playTone()` is called from `update()`, which runs inside `loop()` — and the
+    // `playTone()` is called from `update()`, which runs inside `loop()`, and the
     // `requestAnimationFrame` is at the end. If creating the context throws, Simon is not left
     // mute: it is left FROZEN forever.
     if (!actx) {
@@ -428,7 +437,7 @@
     ctx.save();
     ctx.clip();
 
-    // radial gradient from the outer edge — gives a sense of a lit dome
+    // radial gradient from the outer edge: gives a sense of a lit dome
     const ox = cx + Math.cos(mid) * R * 0.74, oy = cy + Math.sin(mid) * R * 0.74;
     const grad = ctx.createRadialGradient(ox, oy, R*0.04, ox, oy, R*0.98);
     grad.addColorStop(0, rgbStr(clampCol(lerpCol(col, [255,255,255], 0.10 + 0.22*glow))));
@@ -599,7 +608,8 @@
       'lights up and repeat it on the pads.',
       'Each correct round adds one more colour.',
       '',
-      'You have 3 lives — on the 3rd mistake, game over.',
+      'You have 3 lives: a mistake replays the same',
+      'sequence, and the 3rd one ends the run.',
       'Your best score is saved.',
       '',
       'Centre: start / back to the menu.',
@@ -682,7 +692,7 @@
     if (phase === 'menu') tg[menuPad] = 1;
     else if (phase === 'showing' || phase === 'input') { if (litPad >= 0) tg[litPad] = 1; }
     else if (phase === 'wrong') { const v = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(clock * 22)); tg[0]=tg[1]=tg[2]=tg[3]=v; }
-    // rises fast (snap on), falls with a short trail — crisp between flashes but smooth
+    // rises fast (snap on), falls with a short trail: crisp between flashes but smooth
     for (let i = 0; i < 4; i++) {
       const rate = tg[i] > padGlow[i] ? 34 : 16;
       padGlow[i] += (tg[i] - padGlow[i]) * Math.min(1, dt * rate);
@@ -734,8 +744,9 @@
   <script src="../../Arcade/arcade-shell.js" data-orient="portrait"></script>
 <div id="infoPanel"><h4>Simon Says</h4>
 The memory toy. The disc plays a sequence and you repeat it; each round <b>adds one more at the
-end</b>. One mistake ends the run. <b>Each colour has a fixed note and the four form a chord</b>, so
-the sequence can be remembered by ear as well as by sight — that is how the real toy worked.
+end</b>. <b>You have three lives</b>: a mistake costs one and replays the sequence, and the third
+ends the run. <b>Each colour has a fixed note and the four form a chord</b>, so the sequence can be
+remembered by ear as well as by sight, which is how the real toy worked.
 <hr>
 <h5>Desktop</h5>
 <ul>
@@ -747,7 +758,30 @@ the sequence can be remembered by ear as well as by sight — that is how the re
 <ul>
   <li><b>Tap the centre</b> to start, then <b>tap the quarters</b> in order.</li>
 </ul>
+<div id="fpsOverlay"></div>
 </div>
+
+<script>
+// FPS, in the same place as in the other twenty-one: inside the info panel. It has its OWN rAF and
+// does not hang off the game's loop, which in the menu advances nothing. It writes only with the
+// panel open, so with it closed the DOM is not touched sixty times a second.
+(function () {
+  var el = null, frames = 0, t0 = performance.now();
+  function tick(now) {
+    frames++;
+    if (now - t0 >= 500) {
+      if (!el) el = document.getElementById('fpsOverlay');
+      var panel = el && el.parentNode;
+      if (panel && panel.classList.contains('show')) {
+        el.textContent = 'FPS: ' + Math.round(frames * 1000 / (now - t0));
+      }
+      frames = 0; t0 = now;
+    }
+    requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+})();
+</script>
 
 <script>
 // The ⓘ button opens the panel. The FPS meter ended up INSIDE the panel, so the handler the
@@ -768,7 +802,7 @@ the sequence can be remembered by ear as well as by sight — that is how the re
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.

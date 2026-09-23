@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Top-down tank shooter with RPG-style upgrades — **distinct project from [../CrazyTanks/](../CrazyTanks/)**, which is a racing game. ~1870+ lines.
+Top-down tank shooter with RPG-style upgrades: **distinct project from [../CrazyTanks/](../CrazyTanks/)**, which is a racing game. ~1870+ lines.
 
 ## Tank capabilities
 
@@ -11,12 +11,12 @@ Each `Tank` carries: `health`, `attack`, `defense`, `moveSpeed`, `primaryShotAS`
 ## Controls
 
 - **Player 1** (`Tank.__init__` default keys): `W`/`S`/`A`/`D` for move, `SPACE` for shield
-- **TAB** — shop (manager `tabPressed` flag)
-- **P** — pause
-- **F** — toggle FPS
-- **F1**, **F2**, **F3** — debug toggles (hitboxes / scout markers / etc.)
-- **Alt+Return** — fullscreen toggle
-- **ESC** — quit / back out
+- **TAB**: shop (manager `tabPressed` flag)
+- **P**: pause
+- **F**: toggle FPS
+- **F1**, **F2**, **F3**: debug toggles (hitboxes / scout markers / etc.)
+- **Alt+Return**: fullscreen toggle
+- **ESC**: quit / back out
 
 Window is 1280×720, recreatable in fullscreen at runtime. Sprites use a "scout" pattern (`scoutX`/`scoutY`) for AI target previews; tanks also push back against borders via `borderPushX`/`borderPushY` rather than clamping position.
 

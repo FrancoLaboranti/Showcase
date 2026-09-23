@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -16,7 +16,7 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Segoe UI', system-ui, sans-serif;
   }
-  /* Canvas occupies only the space ABOVE the bar — the cradle is laid out inside that rect so it never
+  /* Canvas occupies only the space ABOVE the bar: the cradle is laid out inside that rect so it never
      sits behind the buttons. Dimensions are set explicitly from JS each resize. */
   #c {
     display: block; position: absolute;
@@ -64,7 +64,7 @@
   /* visual indicator for toggled-on state */
   #ui button.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); }
   /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css. */
-  /* FPS HUD — Pong format: a monospaced panel at the top left, no border-radius. */
+  /* FPS HUD: Pong format: a monospaced panel at the top left, no border-radius. */
   #fpsOverlay {
     position: absolute;
     left: calc(8px + env(safe-area-inset-left));
@@ -135,7 +135,7 @@
 
   <script>
   // ════════════════════════════════════════════════════════════════════
-  //  NEWTON'S CRADLE — a "real" Newton's cradle, with the mobile shell
+  //  NEWTON'S CRADLE: a "real" Newton's cradle, with the mobile shell
   //  from BallsWeb / ClockWeb.
   //
   //  Physics (rewritten, no longer the literal port of the raw .py):
@@ -155,16 +155,16 @@
 
   // ── TUNING KNOBS ──
   const FIXED_DT       = 5;       // ms per physics step (an accumulator → stable and independent of the fps)
-  const OMEGA          = 6.1;     // rad/s — the pendulum's natural frequency (a short period ≈ 2π/OMEGA ≈ 1.0 s)
-  const DAMP           = 0.15;    // 1/s — air damping (small = it oscillates for a long time)
+  const OMEGA          = 6.1;     // rad/s: the pendulum's natural frequency (a short period ≈ 2π/OMEGA ≈ 1.0 s)
+  const DAMP           = 0.15;    // 1/s: air damping (small = it oscillates for a long time)
   const COLLISION_LOSS = 1.0;     // 1 = a perfectly elastic collision; <1 loses energy on each impact
   const RESIDUAL       = 0.005;    // the fraction NOT transferred in the collision ⇒ some sway is left in the chain (0 = a perfect swap, a dead row)
-  const REST_SNAP_ANG  = 0.004;   // rad — below this (and at low speed) it snaps to rest
+  const REST_SNAP_ANG  = 0.004;   // rad: below this (and at low speed) it snaps to rest
   const REST_SNAP_VEL  = 0.012;   // rad/s
-  const ANG_EPS        = 0.0015;  // rad — angular penetration below which it is not corrected (anti-jitter at rest)
-  const VEL_EPS        = 1e-3;    // rad/s — the "approaching" threshold that triggers the swap
-  const FLING_TC       = 0.05;    // s — the time constant of the drag velocity's lowpass filter (like Balls' MOUSE_SMOOTH_TC)
-  const FLING_MAX      = 10;      // rad/s — cap on the impulse you can impart to a ball on releasing it
+  const ANG_EPS        = 0.0015;  // rad, angular penetration below which it is not corrected (anti-jitter at rest)
+  const VEL_EPS        = 1e-3;    // rad/s, the "approaching" threshold that triggers the swap
+  const FLING_TC       = 0.05;    // s: the time constant of the drag velocity's lowpass filter (like Balls' MOUSE_SMOOTH_TC)
+  const FLING_MAX      = 10;      // rad/s: cap on the impulse you can impart to a ball on releasing it
 
   // ball colours (chromed steel, as in the photo: a bright highlight and a dark fresnel edge)
   const STEEL = {
@@ -183,20 +183,20 @@
   let radio = 30, L = 450, origY = 150, centerX = 0;
   let frameLeft = 0, frameRight = 0, frameTop = 0, baseY = 0, k = 1;
   // Scale of the SCENE (window, moon, horizon, plant): it depends ONLY on W/H, NOT on the number of
-  // balls. That way, adding/removing balls only changes the cradle and the table's size — the background stays fixed.
+  // balls. That way, adding/removing balls only changes the cradle and the table's size: the background stays fixed.
   let sceneR = 30, sceneK = 1;
   let tableTop = 0;             // y of the surface of the furniture the pendulum's base rests on
   let tableLeft = 0;            // x where the table STARTS (it runs off to the right; the cradle sits near this edge)
-  let sceneDay = null, sceneNight = null;   // BACKGROUND (wall+window+bookcase+gloom) — behind the plant
+  let sceneDay = null, sceneNight = null;   // BACKGROUND (wall+window+bookcase+gloom), behind the plant
   let plantDay = null, plantNight = null;   // THE PLANT alone (its own layer so it can be animated with a sway)
-  let frontDay = null, frontNight = null;   // TABLE (edge + contact shadow) — in front of the plant
+  let frontDay = null, frontNight = null;   // TABLE (edge + contact shadow), in front of the plant
   let godRaysDay = null, godRaysNight = null; // light rays from the window (baked, blitted with an animated alpha)
-  let frameLayer = null;        // the pendulum's frame (arch + base + collars) baked — static between layouts
+  let frameLayer = null;        // the pendulum's frame (arch + base + collars) baked: static between layouts
   let ballSprite = null, ballSpriteHalf = 0; // metal sphere baked once per layout (they all have the same radius)
   let vignette = null;          // vignette gradient (it darkens the edges; it gives a "close-up plane" depth)
   let nightFactor = 0;          // 0 = day, 1 = night (it transitions in a loop, independent of the pendulum)
   let sceneClock = 0;           // accumulated ms for the day/night cycle
-  const NIGHT_PERIOD = 54;      // s — duration of a full day↔night cycle
+  const NIGHT_PERIOD = 54;      // s: duration of a full day↔night cycle
 
   // simulation state
   let nroBalls = 5;
@@ -233,7 +233,7 @@
     const rH = (tableTop - topMargin) / divH;
     radio = Math.max(6, Math.min(rW, rH));
     k = radio / 30;
-    // stable scene scale (independent of nroBalls) — it fixes the window/moon/horizon/plant
+    // stable scene scale (independent of nroBalls), it fixes the window/moon/horizon/plant
     sceneR = Math.min(W, H) * 0.06;
     sceneK = sceneR / 30;
     L = radio * STRING_K;
@@ -530,7 +530,7 @@
     // ── BOOKCASE: it fills the left wall for its full height (cropped top and bottom) ──
     drawBookshelf(s, night);
 
-    // pool of light coming in through the window — warm by day, cool (the moon) by night
+    // pool of light coming in through the window: warm by day, cool (the moon) by night
     const lx0 = W * 0.62;
     const lg = s.createRadialGradient(lx0, H * 0.2, 0, lx0, H * 0.2, Math.max(W, H) * 0.7);
     if (night) { lg.addColorStop(0, 'rgba(150,172,230,0.10)'); lg.addColorStop(1, 'rgba(150,172,230,0)'); }
@@ -545,7 +545,7 @@
 
   // A giant window with NO edges in sight: just glass + mullions. The real rect extends beyond
   // all 4 visible sides (left: behind the bookcase; right/top: off screen; bottom:
-  // it continues behind the table) — we are seeing ~3/4 of its height, like a close-up plane.
+  // it continues behind the table), we are seeing ~3/4 of its height, like a close-up plane.
   function drawWindow(s, night) {
     const gx = W * 0.305;                                                           // it starts past the bookcase (leaving a strip of wall)
     const gy = -H * 0.30;                                                           // ~1/4 of the height is above, off screen
@@ -606,7 +606,7 @@
     s.quadraticCurveTo(gx + gw * 0.8, horizonY + H * 0.08, gx + gw, horizonY - H * 0.02);
     s.lineTo(gx + gw, gy + gh); s.lineTo(gx, gy + gh); s.closePath(); s.fill();
 
-    // mullions: a regular grid over the TOTAL rect — the bars run off screen on all 4 sides,
+    // mullions: a regular grid over the TOTAL rect; the bars run off screen on all 4 sides,
     // not one edge of the frame in sight
     const bar = Math.max(4, sceneR * 0.42);
     const cell = Math.max(sceneR * 6, H * 0.36);
@@ -968,7 +968,7 @@
       crowns[idx] = drawCane(cx, lipY + pot * 0.05, topY, wBase);
     }
 
-    // (the LEAVES are drawn LAST, above the pot — see below)
+    // (the LEAVES are drawn LAST, above the pot, see below)
 
     // ============================================================
     // SOIL / BARK at the pot's rim
@@ -1047,7 +1047,7 @@
     s.fill();
 
     // ============================================================
-    // LEAVES (rosettes) — ABOVE the pot: the hanging ones spill over the pot's rim
+    // LEAVES (rosettes), ABOVE the pot: the hanging ones spill over the pot's rim
     // ============================================================
     for (const idx of order) {
       const leafScale = canes[idx][3], sideBias = canes[idx][4];
@@ -1226,7 +1226,7 @@
 
   // strings: each ball hangs from two strings splayed in a V towards the crossbeam; with a splay > radius the ones from
   // neighbouring balls cross and form the classic X net. Thin and with a hint of metallic shine.
-  // The strings of ALL the balls in a single path/stroke (the same style) — it used to be 1 stroke per ball.
+  // The strings of ALL the balls in a single path/stroke (the same style), it used to be 1 stroke per ball.
   function drawStrings() {
     const splay = radio * 1.15, ay = frameTop;
     ctx.lineWidth = Math.max(1, 0.7 * k);
@@ -1242,7 +1242,7 @@
   }
 
   // Contact shadows of ALL the balls with ONE save/clip/restore (the clip is the same rect of
-  // the base for all of them) — it used to clip and save/restore per ball. CLIPPED to the top: a ball lifted
+  // the base for all of them), it used to clip and save/restore per ball. CLIPPED to the top: a ball lifted
   // out of the cradle does not cast a shadow "in mid air".
   function drawBallShadows() {
     const baseTop = baseY;
@@ -1325,7 +1325,7 @@
   function draw() {
     const tt = performance.now() / 1000;
     ctx.clearRect(0, 0, W, H);
-    // BACKGROUND (wall + window + bookcase + gloom) — day/night crossfade
+    // BACKGROUND (wall + window + bookcase + gloom), day/night crossfade
     blitDN(sceneDay, sceneNight);
 
     // LIGHT RAYS from the window (a baked layer) with a "breathing" alpha
@@ -1361,7 +1361,7 @@
     ctx.transform(1, 0, sway, 1, -sway * anchorY, 0);
     blitDN(plantDay, plantNight);
     ctx.restore();
-    // TABLE (edge + contact shadow) — in front of the plant
+    // TABLE (edge + contact shadow), in front of the plant
     blitDN(frontDay, frontNight);
     if (frameLayer) ctx.drawImage(frameLayer, 0, 0, W, H);                          // marco bakeado
     if (!ghosted) drawBallShadows();
@@ -1482,7 +1482,7 @@
   // at most once per frame, with a cooldown, scaling volume/pitch with the force of the collision.
   let actx = null, lastClickT = 0, frameImpactV = 0;
   const SND_COOLDOWN = 32;     // minimum ms between clicks (it avoids a machine gun)
-  const SND_VTHR     = 0.4;    // rad/s — below this it does not sound (numerical rubbing)
+  const SND_VTHR     = 0.4;    // rad/s: below this it does not sound (numerical rubbing)
   function audioResume() {
     try {
       if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
@@ -1525,8 +1525,8 @@
     if (frameImpactV > SND_VTHR && now - lastClickT > SND_COOLDOWN) {
       lastClickT = now;
       // The try/catch is NOT for tidiness: `playClick` is called from inside `frame()` and the
-      // `requestAnimationFrame(frame)` is further down. An audio exception — an interrupted context
-      // on mobile throws `InvalidStateError` when writing any parameter — would not
+      // `requestAnimationFrame(frame)` is further down. An audio exception, an interrupted context
+      // on mobile throws `InvalidStateError` when writing any parameter, would not
       // leave the cradle mute: it would leave it STILL, never asking for another frame again.
       try { playClick(Math.min(1, frameImpactV / 6)); } catch (e) {}
     }
@@ -1580,7 +1580,7 @@
 
 <div id="infoPanel"><h4>Newton's Cradle</h4>
 The desk toy: steel spheres that pass the impulse end to end. <b>Lift two or three together and the
-same number swings out the other side.</b> Nothing to win — it is there to be watched.
+same number swings out the other side.</b> Nothing to win: it is there to be watched.
 <hr>
 <h5>Desktop</h5>
 <ul>
@@ -1618,7 +1618,7 @@ so you can tell time is passing.</span>
     // it floated in the middle of the game with no relation to anything; hanging off the button it
     // reads as "this came from here", which is what Loop's does.
     //   · the same margin as the button (right if the button is on the right, left otherwise);
-    //   · below the button if it is in the top half, above if it is in the bottom half — that is,
+    //   · below the button if it is in the top half, above if it is in the bottom half, that is,
     //     in games with a bottom bar the panel still ends up over the bar.
     // It is measured live and not done in CSS because each game puts the button somewhere
     // different, and several move it with the orientation.
