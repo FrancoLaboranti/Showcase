@@ -430,7 +430,7 @@
     if (W <= 0 || H <= 0) return;
     sceneDay   = renderScene(false); sceneNight = renderScene(true);   // BACKGROUND (behind the plant)
     godRaysDay = renderGodRays(false); godRaysNight = renderGodRays(true); // window rays
-    plantDay   = renderPlant(false); plantNight = renderPlant(true);   // PLANTA (capa animable)
+    plantDay   = renderPlant(false); plantNight = renderPlant(true);   // THE PLANT (an animatable layer)
     frontDay   = renderFront(false); frontNight = renderFront(true);   // TABLE (in front of the plant)
     buildFrameLayer();                                                             // baked pendulum frame (static)
     bakeBallSprite();                                                              // baked metal sphere (they all have the same radius)
@@ -460,7 +460,7 @@
       rg.addColorStop(0.55, base + (night ? 0.04 : 0.06) + ')');
       rg.addColorStop(1, 'rgba(0,0,0,0)');
       c.fillStyle = rg; c.fillRect(tableLeft, topY, W - tableLeft, band);
-      for (const fx of [0.30, 0.5, 0.7]) {                                          // manchas difusas ~ bolas reflejadas
+      for (const fx of [0.30, 0.5, 0.7]) {                                          // diffuse smudges ~ reflected balls
         const sx = tableLeft + (W - tableLeft) * fx, sy = topY + band * 0.3;
         const hg = c.createRadialGradient(sx, sy, 0, sx, sy, sceneR * 0.55);
         hg.addColorStop(0, `rgba(${night ? '190,205,235' : '225,215,190'},${night ? 0.05 : 0.09})`);
@@ -639,7 +639,7 @@
     const bottom = tableTop + edgeH;
     // ── wooden edge (tableLeft → W) ──
     const g = s.createLinearGradient(0, tableTop, 0, bottom);
-    g.addColorStop(0,    `rgb(${132*DK|0},${86*DK|0},${50*DK|0})`);                // arista superior, iluminada
+    g.addColorStop(0,    `rgb(${132*DK|0},${86*DK|0},${50*DK|0})`);                // the top edge, lit
     g.addColorStop(0.14, `rgb(${102*DK|0},${65*DK|0},${36*DK|0})`);
     g.addColorStop(1,    `rgb(${54*DK|0},${33*DK|0},${17*DK|0})`);
     s.fillStyle = g; s.fillRect(tableLeft, tableTop, W - tableLeft, edgeH);
@@ -674,7 +674,7 @@
         ? "rgb(" + ((r * DK) | 0) + "," + ((g * DK) | 0) + "," + ((b * DK) | 0) + ")"
         : "rgba(" + ((r * DK) | 0) + "," + ((g * DK) | 0) + "," + ((b * DK) | 0) + "," + a + ")";
 
-    // ---- PRNG sembrado (mulberry32), 100% determinista ----
+    // ---- A seeded PRNG (mulberry32), 100% deterministic ----
     function mulberry32(a) {
       return function () {
         a |= 0; a = (a + 0x6d2b79f5) | 0;
@@ -744,7 +744,7 @@
         return w * (e + (1 - t) * 0.05);                                           // a pinch of body at the base; 0 at the tip
       };
 
-      // --- relleno: gradiente longitudinal (base->punta) ---
+      // --- the fill: a lengthwise gradient (base->tip) ---
       const baseLight = backLayer ? -16 : 0;
       const tone = ((seed * 23) % 11) - 5; // -5..+5 micro-variation
       const g = s.createLinearGradient(0, 0, tipX, tipY);
@@ -789,7 +789,7 @@
       s.closePath();
       s.fill();
 
-      // --- nervadura central oscura ---
+      // --- the dark central vein ---
       s.strokeStyle = C(18, 48, 26, 0.5);
       s.lineWidth = Math.max(0.6, w * 0.05);
       s.lineCap = "round";
@@ -1074,7 +1074,7 @@
     woodG.addColorStop(0.5, `rgb(${96*DK|0},${62*DK|0},${33*DK|0})`);
     woodG.addColorStop(1,   `rgb(${52*DK|0},${33*DK|0},${17*DK|0})`);
     s.fillStyle = woodG; s.fillRect(bsL, bsTop, bsR - bsL, bsBottom - bsTop);
-    // hueco interior oscuro
+    // a dark inner hollow
     const inL = bsL + fr, inR = bsR - fr;
     s.fillStyle = night ? 'rgb(12,9,7)' : 'rgb(26,17,11)'; s.fillRect(inL, bsTop, inR - inL, bsBottom - bsTop);
     // TALL shelves (big books): the first and last rows are cropped by the edges
@@ -1113,7 +1113,7 @@
     g.addColorStop(0,    'rgb(28,11,7)');
     g.addColorStop(0.12, 'rgb(66,26,16)');
     g.addColorStop(0.40, 'rgb(112,50,32)');
-    g.addColorStop(0.5,  'rgb(138,66,44)');                                        // lomo iluminado (caoba)
+    g.addColorStop(0.5,  'rgb(138,66,44)');                                        // a lit ridge (mahogany)
     g.addColorStop(0.62, 'rgb(100,44,28)');
     g.addColorStop(0.86, 'rgb(56,22,13)');
     g.addColorStop(1,    'rgb(24,9,5)');
@@ -1180,7 +1180,7 @@
     c.beginPath();
     for (const f of [0.42, 0.62, 0.8]) { const ly = top + thk * f; c.moveTo(xL + rad, ly); c.lineTo(xR - rad, ly); }
     c.stroke();
-    // canto superior iluminado
+    // a lit top edge
     c.strokeStyle = 'rgba(212,140,104,0.6)'; c.lineWidth = Math.max(1, 1.0 * k);
     c.beginPath(); c.moveTo(xL + rad, top + 1); c.lineTo(xR - rad, top + 1); c.stroke();
     // curved grain of turned wood (deterministic) → "real furniture" instead of a smooth cylinder
@@ -1512,7 +1512,7 @@
     }
   }
 
-  // ════════════════ LOOP (paso fijo) ════════════════
+  // ════════════════ LOOP (a fixed step) ════════════════
   let lastT = performance.now(), acc = 0;
   function frame(now) {
     if (typeof now !== 'number') now = performance.now();
@@ -1547,7 +1547,7 @@
   setTimeout(() => hint.style.opacity = '0', 5000);
   </script>
 
-  <!-- Shell del Arcade (exit + fullscreen + lock de orientación). data-orient: landscape/portrait/any. -->
+  <!-- The Arcade's shell (exit + fullscreen + orientation lock). data-orient: landscape/portrait/any. -->
   <script src="../../Arcade/arcade-shell.js" data-orient="landscape"></script>
 
   <div id="fpsOverlay">FPS: --</div>

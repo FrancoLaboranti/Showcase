@@ -26,12 +26,12 @@ GREEN = (0, 180, 0)
 # Classic-style palette
 NUMBER_COLORS = {
     1: (0, 100, 255),     # Turquesa
-    2: (0, 200, 0),       # Verde
-    3: (255, 0, 0),       # Rojo
-    4: (0, 0, 128),       # Azul oscuro
-    5: (182, 128, 0),     # Marrón rojizo
-    6: (0, 128, 128),     # Cian oscuro
-    7: (0, 0, 0),         # Negro
+    2: (0, 200, 0),       # Green
+    3: (255, 0, 0),       # Red
+    4: (0, 0, 128),       # Dark blue
+    5: (182, 128, 0),     # Reddish brown
+    6: (0, 128, 128),     # Dark cyan
+    7: (0, 0, 0),         # Black
     8: (128, 128, 128),   # Gris
 }
 
@@ -103,16 +103,16 @@ class GameManager(Sprite):
 
     def place_mines(self, first_click_tile):
         safe_zone = self.get_neighbors(first_click_tile) | {first_click_tile}
-        all_tiles = set(tile for row in grid for tile in row)  # Convertimos all_tiles a un set
-        candidates = all_tiles - safe_zone  # Ahora usamos un set para restar safe_zone
+        all_tiles = set(tile for row in grid for tile in row)  # we convert all_tiles into a set
+        candidates = all_tiles - safe_zone  # now we use a set to subtract safe_zone
 
-        visited = set()  # Iniciamos visited antes de usarlo
+        visited = set()  # we start visited before using it
         placed = 0
 
         while placed < MINES_COUNT:
             # We randomly decide whether to place a loose mine or a cluster
-            if random.random() < 0.2:  # 20% de chance de que sea un cluster
-                start = random.choice(list(candidates))  # Seleccionamos aleatoriamente de los candidatos
+            if random.random() < 0.2:  # a 20% chance of it being a cluster
+                start = random.choice(list(candidates))  # we pick at random from the candidates
                 if start in visited:
                     continue
                 cluster_size = random.randint(3, 5)
@@ -120,14 +120,14 @@ class GameManager(Sprite):
                 for tile in cluster:
                     tile.is_mine = True
                 placed += len(cluster)
-                visited.update(cluster)  # Actualizamos visited después de colocar las minas
-            else:  # 50% de chance de que sea una mina suelta
+                visited.update(cluster)  # we update visited after placing the mines
+            else:  # a 50% chance of it being a loose mine
                 start = random.choice(list(candidates))
                 if start in visited:
                     continue
                 start.is_mine = True
                 placed += 1
-                visited.add(start)  # Marcamos la mina suelta como visitada
+                visited.add(start)  # we mark the loose mine as visited
 
         self.calculate_adjacency()
         self.grid_ready = True
@@ -201,8 +201,8 @@ class GameManager(Sprite):
 
     def show_message(self, text, color):
         # Render the text
-        render = font.render(text, True, WHITE)  # Color blanco para el texto
-        text_rect = render.get_rect(center=(WIDTH // 2, HEIGHT // 2))  # Centrar el texto
+        render = font.render(text, True, WHITE)  # white as the text's colour
+        text_rect = render.get_rect(center=(WIDTH // 2, HEIGHT // 2))  # centre the text
 
         # Create a solid background behind the text
         background_rect = pygame.Rect(text_rect.x - 10, text_rect.y - 10, text_rect.width + 20, text_rect.height + 20)

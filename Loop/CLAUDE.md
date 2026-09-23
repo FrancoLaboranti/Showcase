@@ -1359,7 +1359,7 @@ is left frozen even though the timers run. The loop is prepared to be pumped by 
 
 **A hole found on 2026-09-18: `ALL` was not the list of scenarios, it was a hand-written list.**
 `SCENARIOS` had 47 defined and `ALL` named 35. The TWELVE that were missing were precisely the most
-nuevos - `boss`, `barriles`, `hudfijo`, `fkill`, `feedback`, `dprbase`, `heal`, `handtouch`,
+recent ones - `boss`, `barriles`, `hudfijo`, `fkill`, `feedback`, `dprbase`, `heal`, `handtouch`,
 `touchsel`, `feel`, and today's two - that is, a bare `python qa2.py` never ran them and they were only
 executed by naming them by hand on the day they were written. They are all in `ALL` now. **When a
 scenario is added it has to be added to `ALL` in the same movement**, or it is born dead: it passes once

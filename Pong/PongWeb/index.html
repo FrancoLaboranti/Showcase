@@ -221,7 +221,7 @@
   <canvas id="c"></canvas>
   <div id="hint">tap a menu option · in a match: ↑/↓ (W/S in 2P)</div>
 
-  <!-- UI de esquina (estilo CrazyTanks), de afuera hacia adentro: salir · info · pantalla · sonido · atrás · pausa -->
+  <!-- Corner UI (CrazyTanks style), from the outside in: exit · info · fullscreen · sound · back · pause -->
   <button class="cbtn" id="btnExit" aria-label="exit" title="Exit">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
   </button>
@@ -241,8 +241,8 @@
     <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg>
   </button>
 
-  <!-- Controles de movimiento (mobile, sólo en partido). izq sube · der baja.
-       padR = jugador 1 (derecha) · padL = jugador 2 (izquierda, sólo 2P). -->
+  <!-- Movement controls (mobile, during a match only). left goes up · right goes down.
+       padR = player 1 (right) · padL = player 2 (left, 2P only). -->
   <div class="pad" id="padL" aria-label="player 2 control">
     <button class="ctl" data-side="L" data-dir="up" aria-label="up"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg></button>
     <button class="ctl" data-side="L" data-dir="dn" aria-label="climb down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg></button>
@@ -252,7 +252,7 @@
     <button class="ctl" data-side="R" data-dir="dn" aria-label="climb down"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg></button>
   </div>
 
-  <!-- Aviso: girá el teléfono a horizontal -->
+  <!-- Notice: turn the phone to landscape -->
   <div id="rotate">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="7" y="2" width="10" height="20" rx="2.5"/><line x1="10.5" y1="19" x2="13.5" y2="19" stroke-width="2"/></svg>
     <p>Rotate your phone<br>Pong is played in landscape</p>
@@ -410,7 +410,7 @@
   let menuOption = 0;              // the selected row within the current level
   let pendingBricks = false;       // true = the setup (level 1) is configuring brick mode
   let confirmQuit = false;         // the "exit to menu?" overlay during a match
-  let winner = 0;                  // 1 = jug.1 (der), 2 = jug.2 (izq)
+  let winner = 0;                  // 1 = player 1 (right), 2 = player 2 (left)
   let j1score = 0, j2score = 0;
   let j1racha = 0, j2racha = 0;
   let j1pulse = 0, j2pulse = 0;    // 1→0: a visual "punch" on the scoreboard when scoring (the point is noticeable)
@@ -582,7 +582,7 @@
   // sweeps the paddle to send the ball away from the opponent. It does not play perfectly (error + lapses).
   let aiTarget = 0, aiError = 0, aiAimDir = 1, aiWasApproaching = false;
   let aiFlickVel = 0, aiBaseY = 0;        // shot sweep: a fixed speed + the centre it covers around
-  let aiMode = 'smart', aiModeCD = 3;     // ciclo bueno/malo (ver constantes AI_SMART/AI_DUMB)
+  let aiMode = 'smart', aiModeCD = 3;     // a good/bad cycle (see the AI_SMART/AI_DUMB constants)
   let aiSpeedScale = 1;                   // 1 normal, <1 during a bad period (updatePaddle reads it)
   let aiSleeping = false, aiSleepCD = 5;  // nap: asleep without moving (it overrides the movement)
 
@@ -990,7 +990,7 @@
     nb.y = self.cy;
     const fast = VX0_FRAC * W * 1.9 * BRICK_SPEED;          // it comes out hard and keeps its momentum (it is not normalised)
     nb.vx = dir * fast;
-    nb.vy = (Math.random() < 0.5 ? -1 : 1) * fast * 0.8;    // fuerte componente vertical → diagonal + rebote
+    nb.vy = (Math.random() < 0.5 ? -1 : 1) * fast * 0.8;    // a strong vertical component → a diagonal + a bounce
     nb.last = side; nb.entry = 0.34;                        // a window with no vy clamp (the diagonal survives)
     nb.extra = true;                                        // a power-up ball: one life only
     nb.px = nb.x; nb.py = nb.y; nb.rx = nb.x; nb.ry = nb.y;
@@ -1114,7 +1114,7 @@
       roundRect(-sz / 2, -sz / 2, sz, sz, sz * 0.3); ctx.stroke();
       ctx.strokeStyle = rgba(col, 0.85); ctx.lineWidth = Math.max(1, r * 0.07);
       roundRect(-sz / 2 - r * 0.14, -sz / 2 - r * 0.14, sz + r * 0.28, sz + r * 0.28, sz * 0.34); ctx.stroke();
-      // sheen superior (vidrio)
+      // a top sheen (glass)
       ctx.fillStyle = 'rgba(255,255,255,0.28)';
       roundRect(-sz * 0.38, -sz * 0.43, sz * 0.76, sz * 0.30, sz * 0.16); ctx.fill();
 
@@ -1320,7 +1320,7 @@
       const rows = menuLevel0();
       for (let i = 0; i < rows.length; i++) if (near(rows[i].y)) { menuOption = i; menuConfirm(); return; }
     } else {
-      const dir = lx < W / 2 ? -1 : 1;                  // mitad izq/der = anterior/siguiente valor
+      const dir = lx < W / 2 ? -1 : 1;                  // the left/right half = the previous/next value
       const rows = menuSetupRows();
       for (let i = 0; i < rows.length; i++) if (near(rows[i].y)) { menuOption = i; setupCycle(rows[i].key, dir); return; }
       if (near(PLAY_BTN_Y)) startGame();
@@ -1465,7 +1465,7 @@
     if (e.data && e.data.type === 'arcade:fs-state') document.body.classList.toggle('fs-on', !!e.data.on);
   });
 
-  // Abierto suelto + PWA instalada: intentar landscape + Fullscreen API real apenas carga.
+  // Opened loose + the PWA installed: try landscape + the real Fullscreen API as soon as it loads.
   // The orientation is always fixed; the real fullscreen depends on Chrome accepting it without a
   // gesture. If it rejects it, the first-touch fallback (below) remains and nothing breaks.
   if (!EMBEDDED && isPWA()) enterFs();
@@ -1796,8 +1796,8 @@
     const fs0 = Math.round(Math.min(60, H * 0.082));
     ctx.textAlign = 'center';
     ctx.textBaseline = 'top';
-    const c2 = fireNet ? [255, 180, 50] : leftGlow();   // izq = jug.2 / contrincante
-    const c1 = fireNet ? [255, 180, 50] : NEON_P1;      // der = jug.1 (cian)
+    const c2 = fireNet ? [255, 180, 50] : leftGlow();   // left = player 2 / the opponent
+    const c1 = fireNet ? [255, 180, 50] : NEON_P1;      // right = player 1 (cyan)
     ctx.save();
     drawScoreNum(String(j2score), W * 0.25, c2, j2pulse, fs0);
     drawScoreNum(String(j1score), W * 0.75, c1, j1pulse, fs0);
@@ -1893,7 +1893,7 @@
       } else {
         big = oppName.toUpperCase() + ' WINS'; sub = `opponents beaten: ${challengeIdx}/${total} · tap: menu`;
       }
-    } else if (twoPlayers) big = winner === 1 ? 'GANA JUGADOR 1' : 'GANA JUGADOR 2';
+    } else if (twoPlayers) big = winner === 1 ? 'PLAYER 1 WINS' : 'PLAYER 2 WINS';
     else                   big = winner === 1 ? 'YOU WIN!' : 'GANA ' + OPPONENTS[oppIdx].name.toUpperCase();
     const s = Math.min(W, H);
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -1920,7 +1920,7 @@
         mtext('NEW RECORD!', Math.round(Math.min(18, s * 0.034)), OPPONENTS[oppIdx].glow, W / 2, yLine, s * 0.02, 1, 900);
       } else {
         const rec = records[OPPONENTS[oppIdx].name];
-        if (rec) mtext(`mejor peloteo: ${rec.rally || 0}`, Math.round(Math.min(14, s * 0.026)), [180, 190, 210], W / 2, yLine, 0, 0.65, 500);
+        if (rec) mtext(`best rally: ${rec.rally || 0}`, Math.round(Math.min(14, s * 0.026)), [180, 190, 210], W / 2, yLine, 0, 0.65, 500);
       }
     }
   }
@@ -1971,7 +1971,7 @@
         }
       });
       const pp = 0.6 + 0.4 * Math.sin(t * 4);
-      mtext('▶ JUGAR', Math.min(40, s * 0.058), [120 + 120 * pp, 235, 150], W / 2, PLAY_BTN_Y * H, s * 0.03, 1, 900);
+      mtext('▶ PLAY', Math.min(40, s * 0.058), [120 + 120 * pp, 235, 150], W / 2, PLAY_BTN_Y * H, s * 0.03, 1, 900);
       mtext('‹ › change  ·  Enter / PLAY starts  ·  back returns', Math.min(13, s * 0.022), dim, W / 2, H * 0.93, 0, 0.55, 500);
     }
   }
@@ -2288,7 +2288,7 @@
         if (type === 'fire')       { noiseSweep(0.18, 0.05, 500, 2200, 1.2); note(165, 495, 0, 0.18, 'sawtooth', 0.040); }
         else if (type === 'speed')   note(330, 1320, 0, 0.16, 'sawtooth', 0.045);                 // a glide upwards
         else if (type === 'ball')  { note(880, 1760, 0, 0.07, 'square', 0.050); note(1320, 1320, 0.06, 0.05, 'square', 0.040); }
-        else                       { note(147, 294, 0, 0.45, 'sine', 0.045); note(588, 588, 0.05, 0.40, 'triangle', 0.025); }  // escudo: swell + campana
+        else                       { note(147, 294, 0, 0.45, 'sine', 0.045); note(588, 588, 0.05, 0.40, 'triangle', 0.025); }  // the shield: a swell + a bell
       });
     },
     // The whole wall regenerates: 18-21 bricks at once. A construction swell, low and rising.

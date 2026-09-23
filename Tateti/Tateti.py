@@ -175,7 +175,7 @@ class Manager(Sprite):
         self.z = -2
         self.state = 'menu'
         self.mode = 'pvp'        # 'pvp' o 'cpu'
-        self.cpuMark = 2          # qué marca usa la CPU (1 X, 2 O)
+        self.cpuMark = 2          # which mark the CPU uses (1 X, 2 O)
         self.menuIdx = 0
         self.showFPS = False
         self.fPressed = False

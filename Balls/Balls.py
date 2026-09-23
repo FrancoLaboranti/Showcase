@@ -350,12 +350,12 @@ class Ball(Sprite):
         r = self.radius
         pos = self.body.position
         x, y = pos.x, pos.y
-        if WALL_MODE in (2, 4):                                                     # x-axis wrap en los modos sin laterales (2 = techo+piso, 4 = sin nada)
+        if WALL_MODE in (2, 4):                                                     # x-axis wrap in the modes with no side walls (2 = ceiling+floor, 4 = nothing at all)
             if x < -r:
                 x = screenX + r
             elif x > screenX + r:
                 x = -r
-        if WALL_MODE in (3, 4):                                                     # y-axis wrap en los modos sin techo/piso (3 = sólo laterales, 4 = sin nada)
+        if WALL_MODE in (3, 4):                                                     # y-axis wrap in the modes with no ceiling/floor (3 = sides only, 4 = nothing at all)
             if y < -r:
                 y = screenY + r
             elif y > screenY + r:
@@ -927,9 +927,9 @@ def buildWalls():
     segs = []
     if WALL_MODE == 1:
         segs = sides + topbot
-    elif WALL_MODE == 2:                                                            # sin laterales: techo y piso, wrap horizontal
+    elif WALL_MODE == 2:                                                            # no sides: ceiling and floor, horizontal wrap
         segs = topbot
-    elif WALL_MODE == 3:                                                            # sin techo/piso: laterales, wrap vertical
+    elif WALL_MODE == 3:                                                            # no ceiling/floor: the sides, vertical wrap
         segs = sides
     # MODE 4: no walls, wrap on both axes — segs stays empty.
     for (a, b) in segs:
@@ -1028,7 +1028,7 @@ while True:
     if keys[pygame.K_1]:   newMode = 1
     elif keys[pygame.K_2]: newMode = 2
     elif keys[pygame.K_3]: newMode = 3
-    elif keys[pygame.K_4]: newMode = 4                                              # sin paredes ni wrap — las bolas se van al vacío y se quedan ahí
+    elif keys[pygame.K_4]: newMode = 4                                              # no walls and no wrap — the balls go off into the void and stay there
     if newMode != WALL_MODE:
         WALL_MODE = newMode
         buildWalls()

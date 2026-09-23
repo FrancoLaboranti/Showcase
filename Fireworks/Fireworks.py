@@ -295,19 +295,19 @@ spritesToRemove = []
 
 
 colors = (
-    (75,155,0,0,0,0),       # Rojo oscuro
-    (0,0,75,155,0,0),       # Verde oscuro
-    (0,0,0,0,75,155),       # Azul oscuro
-    (75,155,75,155,0,0),    # Rojo y verde oscuro
-    (0,0,75,155,75,155),    # Verde y azul oscuro
-    (75,155,0,0,75,155),    # Rojo y azul oscuro
-    (200,255,0,0,0,0),      # Rojo claro
-    (0,0,200,255,0,0),      # Verde claro
-    (0,0,0,0,200,255),      # Azul claro
-    (200,255,200,255,0,0),  # Rojo y verde claro
-    (0,0,200,255,200,255),  # Verde y azul claro
-    (200,255,0,0,200,255),  # Rojo y azul claro
-    (75,255,75,255,75,255), # Rojo, verde y azul claro
+    (75,155,0,0,0,0),       # Dark red
+    (0,0,75,155,0,0),       # Dark green
+    (0,0,0,0,75,155),       # Dark blue
+    (75,155,75,155,0,0),    # Dark red and green
+    (0,0,75,155,75,155),    # Dark green and blue
+    (75,155,0,0,75,155),    # Dark red and blue
+    (200,255,0,0,0,0),      # Light red
+    (0,0,200,255,0,0),      # Light green
+    (0,0,0,0,200,255),      # Light blue
+    (200,255,200,255,0,0),  # Light red and green
+    (0,0,200,255,200,255),  # Light green and blue
+    (200,255,0,0,200,255),  # Light red and blue
+    (75,255,75,255,75,255), # Light red, green and blue
 )
 
 # MAIN LOOP ..........................................................................

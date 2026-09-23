@@ -95,7 +95,7 @@ while True:
 				apretado = True
 
 				if opcion_menu == 3:
-					if opcion_puntos < 4: #para llegar a la ultima y saltear a la primera con el enter opcion_puntos = (opcion_puntos+1) % len(a_cuantos_puntos)
+					if opcion_puntos < 4: # to get to the last one and jump back to the first with enter opcion_puntos = (opcion_puntos+1) % len(a_cuantos_puntos)
 						opcion_puntos += 1
 				
 				if opcion_menu == 4:
@@ -246,7 +246,7 @@ while True:
 			if not j1onfire:
 				firetrail = False
 			if pelota[0] > SCREEN_WIDTH-20 - pelota[2]:
-				pelota[0] = SCREEN_WIDTH-20 - pelota[2] #correccion bug que se trababa la pelota en la paleta dandole justo con el borde
+				pelota[0] = SCREEN_WIDTH-20 - pelota[2] # a fix for the bug where the ball got stuck in the paddle when hit right on the edge
 			if veljugador1_y < 1:
 				pelota[4] *= 0.5
 			pelota[3] = -pelota[3] * 1.05
@@ -255,7 +255,7 @@ while True:
 		if colision_rectangular(5,jugador2_y, 15, altojugador,pelota[0]-pelota[2],pelota[1]-pelota[2],pelota[2]*2,pelota[2]*2):
 			if j2onfire:
 				pelota[3] *= 1.25
-				pelota[4] += veljugador1_y/4 #le damos jugabilidad al movimiento de la pelota cuando rebotan con las paletas
+				pelota[4] += veljugador1_y/4 # we give playability to the ball's movement when it bounces off the paddles
 				fireball = True
 				firetrail = True
 			if not j2onfire:
@@ -269,7 +269,7 @@ while True:
 
 		if pelota[1] > SCREEN_HEIGHT - pelota[2]:
 			pelota[1] = SCREEN_HEIGHT - pelota[2]
-			pelota[4] *= 1.10	#modificador a vel_y de pelota para evitar que se estanque en los bordes sup e inf de la pantalla
+			pelota[4] *= 1.10	# a modifier on the ball's vel_y to stop it stalling on the top and bottom edges of the screen
 			pelota[4] = -pelota[4]
 		if pelota[1] < pelota[2]:
 			pelota[1] = pelota[2]
@@ -309,7 +309,7 @@ while True:
 		if pelota[4] > 1.25:
 			pelota[4] = 1.25
 		elif pelota[4] < -1.25:
-			pelota[4] = -1.25  #limitamos la velocidad maxima de la pelota
+			pelota[4] = -1.25  # we cap the ball's maximum speed
 
 		veljugador1_y *= 0.97
 		if j1onfire:

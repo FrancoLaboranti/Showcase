@@ -323,7 +323,7 @@
     let placed = 0, guard = 0;
     while (placed < MINES_COUNT && guard++ < 100000) {
       let pick = null;
-      if (Math.random() < SPREAD_BIAS) {                                          // azar: permite adyacencias ocasionales
+      if (Math.random() < SPREAD_BIAS) {                                          // chance: it allows the occasional adjacency
         const c = candidates[ri(0, candidates.length - 1)];
         if (!c.isMine) pick = c;
       } else {                                                                    // gentle blue-noise: the least crowded of 4 samples
@@ -474,7 +474,7 @@
     const poleX = cx - r * 0.32;
     ctx.fillStyle = '#3a3a3a';
     ctx.fillRect(cx - r * 0.6, cy + r * 0.72, r * 1.2, r * 0.3);                  // base
-    ctx.fillRect(cx - r * 0.28, cy + r * 0.5, r * 0.56, r * 0.26);               // base superior
+    ctx.fillRect(cx - r * 0.28, cy + r * 0.5, r * 0.56, r * 0.26);               // the top base
     ctx.fillRect(poleX, cy - r, r * 0.16, r * 1.7);                              // flagpole
     ctx.fillStyle = '#e8413a';
     ctx.beginPath();
@@ -511,13 +511,13 @@
     const age = now - t.goldAt;
     if (age < 0 || age >= GOLD_FX) return;
     const fp = age / GOLD_FX, a = 1 - fp;
-    // halo dorado
+    // a golden halo
     const gr = r * (1.4 + 1.3 * fp);
     const halo = ctx.createRadialGradient(cx, cy, r * 0.2, cx, cy, gr);
     halo.addColorStop(0, 'rgba(255,221,90,' + (0.5 * a).toFixed(3) + ')');
     halo.addColorStop(1, 'rgba(255,221,90,0)');
     ctx.fillStyle = halo; ctx.beginPath(); ctx.arc(cx, cy, gr, 0, TAU); ctx.fill();
-    // anillo expansivo + chispas
+    // an expanding ring + sparks
     ctx.save();
     ctx.globalAlpha = a;
     ctx.strokeStyle = '#fff7cc'; ctx.lineWidth = Math.max(1.5, r * 0.16 * a);
@@ -580,7 +580,7 @@
       // content (visible once the cover lifts)
       if (t.isRevealed) {
         if (t.isMine) {
-          if (t.isFlagged && (gameOver || victory)) drawFlag(cx, cy, tile * 0.3);  // mina bien marcada
+          if (t.isFlagged && (gameOver || victory)) drawFlag(cx, cy, tile * 0.3);  // the mine clearly marked
           else drawMine(cx, cy, r, t === explodedTile);
         } else {
           // the coin is NOT drawn here: on being revealed it is "grabbed" (pop + wave + rises and fades) in the effects pass
@@ -616,8 +616,8 @@
         ctx.globalAlpha = Math.min(1, amt * 1.6);
         ctx.fillStyle = parity ? GRASS_D : GRASS_L;
         ctx.fillRect(x, y, s, s);
-        ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(x, y, s, s * 0.16);          // brillo superior (bisel)
-        ctx.fillStyle = 'rgba(0,0,0,0.12)';       ctx.fillRect(x, y + s * 0.84, s, s * 0.16); // sombra inferior
+        ctx.fillStyle = 'rgba(255,255,255,0.18)'; ctx.fillRect(x, y, s, s * 0.16);          // a top highlight (the bevel)
+        ctx.fillStyle = 'rgba(0,0,0,0.12)';       ctx.fillRect(x, y + s * 0.84, s, s * 0.16); // a bottom shadow
         ctx.strokeStyle = 'rgba(0,0,0,0.08)'; ctx.lineWidth = 1;
         ctx.strokeRect(x + 0.5, y + 0.5, s - 1, s - 1);                                       // separates the grass squares
         ctx.globalAlpha = 1;
@@ -638,7 +638,7 @@
       if (age < 0 || age >= GOLD_FX) continue;                                    // after the effect, the coin counts as collected (it is not drawn)
       const cx = offX + t.gx * tile + tile / 2, cy = offY + t.gy * tile + tile / 2;
       const p = age / GOLD_FX;
-      drawGoldFx(cx, cy, r * 1.08, t, now);                                       // halo + onda expansiva + chispas
+      drawGoldFx(cx, cy, r * 1.08, t, now);                                       // a halo + a shockwave + sparks
       const rise = tile * 0.5 * easeOut(p);                                       // rises "as if it were being grabbed"
       const alpha = p < 0.55 ? 1 : Math.max(0, 1 - (p - 0.55) / 0.45);            // it fades in the last stretch
       ctx.save();
@@ -817,7 +817,7 @@
     timerTextEl.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
   }
 
-  // ════════════════ SONIDO (WebAudio sintetizado) ════════════════
+  // ════════════════ SOUND (synthesised WebAudio) ════════════════
   let actx = null, muted = false;
   function audioOn() {
     // try/catch MANDATORY: `audioOn()` is the first statement in all five of the game's
@@ -977,13 +977,13 @@
   // === INIT ===
   refreshSound();
   refreshMode();                                                                 // mode icon + the initial hint
-  applyDiff();                                                                   // setea grid + label + reset + resize
+  applyDiff();                                                                   // it sets the grid + the label + reset + resize
   requestAnimationFrame(render);
 
   canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
   </script>
 
-  <!-- Shell del Arcade (exit + fullscreen + lock de orientación). data-orient: landscape/portrait/any. -->
+  <!-- The Arcade's shell (exit + fullscreen + orientation lock). data-orient: landscape/portrait/any. -->
   <script src="../../Arcade/arcade-shell.js" data-orient="portrait"></script>
 
   <div id="fpsOverlay">FPS: --</div>

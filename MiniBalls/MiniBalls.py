@@ -152,7 +152,7 @@ class Ball(Sprite):
 
 pygame.init()
 
-WALL_MODE = 1                                                                      # 1=todas las paredes, 2=sin laterales (techo+piso, wrap horizontal), 3=sin techo/piso (laterales, wrap vertical), 4=sin paredes (wrap en ambos ejes). Teclas 1/2/3/4 para cambiar.
+WALL_MODE = 1                                                                      # 1=all the walls, 2=no sides (ceiling+floor, horizontal wrap), 3=no ceiling/floor (sides, vertical wrap), 4=none
 
 screenX = 1280
 screenY = 720

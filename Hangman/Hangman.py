@@ -32,16 +32,16 @@ LANG_LABELS = {
 UI_TEXT = {
     'es': {
         'title':     'AHORCADO',
-        'choose':    'CHOOSE LANGUAGE',
-        'arrows':    '← →  TO CHANGE    ENTER TO PLAY',
+        'choose':    'ELEGÍ IDIOMA',
+        'arrows':    '← →  PARA CAMBIAR    ENTER PARA JUGAR',
         'fails':     'FALLOS',
         'used':      'LETRAS USADAS',
-        'won':       'YOU WIN!',
+        'won':       '¡GANASTE!',
         'lost':      'PERDISTE',
-        'word_was':  'THE WORD WAS',
-        'play':      'ENTER FOR ANOTHER ROUND',
-        'menu':      'ESC TO GO BACK TO THE MENU',
-        'esc_quit':  'ESC TO QUIT',
+        'word_was':  'LA PALABRA ERA',
+        'play':      'ENTER PARA OTRA PARTIDA',
+        'menu':      'ESC PARA VOLVER AL MENÚ',
+        'esc_quit':  'ESC PARA SALIR',
     },
     'en': {
         'title':     'HANGMAN',
@@ -357,8 +357,8 @@ class Manager(Sprite):
 
 
 def load_words(filename):
-    """Lee `PALABRA|CATEGORIA|pista` por linea. Categoria y pista son opcionales.
-       Devuelve lista de tuplas (word, category, hint)."""
+    """Reads `WORD|CATEGORY|hint` per line. The category and the hint are optional.
+       Returns a list of (word, category, hint) tuples."""
     path = os.path.join(HERE, filename)
     entries = []
     with open(path, encoding='utf-8') as f:

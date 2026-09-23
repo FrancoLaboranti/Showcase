@@ -28,7 +28,7 @@ PIECE_CHARS = {
     'B': '♝', 'N': '♞', 'P': '♟',
 }
 PIECE_VALUES = {'P': 100, 'N': 320, 'B': 330, 'R': 500, 'Q': 900, 'K': 0}
-AI_TIME_BUDGET_S = 1.5         # tiempo por jugada de la IA (todos los modos)
+AI_TIME_BUDGET_S = 1.5         # the AI's time per move (every mode)
 AI_MAX_DEPTH = 10
 SAMPLE_RATE = 22050
 MOVE_ANIM_DURATION = 0.18
@@ -727,7 +727,7 @@ class Game(Sprite):
             ('b', pygame.Rect(int(cx - bw/2), int(by + 2*(bh+gap)), int(bw), int(bh)),
              'Play as Black  (vs AI)'),
             ('aiva', pygame.Rect(int(cx - bw/2), int(by + 3*(bh+gap)), int(bw), int(bh)),
-             'IA vs IA  (espectador)'),
+             'AI vs AI  (spectator)'),
         ]
 
     def process(self):
