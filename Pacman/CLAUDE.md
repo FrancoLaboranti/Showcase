@@ -26,7 +26,7 @@ Open [PacmanWeb/index.html](PacmanWeb/index.html) in a browser, or launch it fro
 
 These were layered on top of the classic game without touching `lvlSpec(L)` (the base balance). The only difficulty hook is `spec()`, which returns `lvlSpec(gh.level)` adjusted *per mode*; everything that needs per-level numbers calls `spec()`, not `lvlSpec()` directly.
 
-- **Modes (`gh.mode`, `MODE_NAMES`/`MODE_TAG`):** Clásico (base), Difícil (`spec()` bumps ghost speed +0.06 and cuts `fright` ×0.7), Maratón (starts at level 6), Diario (seeded). Chosen on the menu's selectable rows; the HUD shows the tag.
+- **Modes (`gh.mode`, `MODE_NAMES`/`MODE_TAG`):** Classic (base), Hard (`spec()` bumps ghost speed +0.06 and cuts `fright` ×0.7), Marathon (starts at level 6), Daily (seeded). Chosen on the menu's selectable rows; the HUD shows the tag.
 - **Daily seed:** all randomness goes through `ri()` → `rng`. `startGame()` sets `rng = mulberry32(todaySeed())` in Diario mode (reproducible run per calendar day), else `Math.random`.
 - **Rotating mazes:** see `MAZES`/`mazeForLevel` above.
 - **Skins (`SKINS`, `applySkin`):** pure color (`PAC_COL`/`WALL_COL`/`WALL_GLOW`/`DOT_COL` are `let`, reassigned by `applySkin`). Unlocked by all-time top score (`skinUnlocked`). Re-bake (`bakeMazeLayers`) picks up the new wall colors.
@@ -38,7 +38,7 @@ These were layered on top of the classic game without touching `lvlSpec(L)` (the
 
 ## Conventions kept from the repo
 
-- **Spanish UI strings, English identifiers** (`¡LISTO!`, `PUNTOS`, `RECORD`, `NIVEL`).
+- **English UI, English identifiers.** The drawn strings were Spanish until the language pass (`READY!`, `SCORE`, `RECORD`, `LEVEL`); `MODE_TAG` stayed as `C`/`D`/`M`/`*` because it is the key stored in the high-score table.
 - **Resolution independence:** all geometry is in tile units; `resize()` recomputes tile size `ts` + maze origin `ox`/`oy` and re-bakes the maze/pellets. No hardcoded pixel layout.
 - **Arcade shell wiring** follows Tron V1 — a thin bottom `#bar` (`--bar-height: 66px`) in centered order `✕ salir · ⟳ · 🔊 · ⛶ · ⓘ`, `data-orient="portrait"`, FPS overlay toggled by `ⓘ`. **There are no on-screen movement buttons** (Tron's `◄ ►` turn pair is gone): movement is keyboard (arrows/WASD) on desktop and **swipe on the canvas** on mobile. The bar holds only utility buttons; the **sound toggle** (`#btnSound`) and **reset** (`#btnReset`) are what this game adds over the base Tron set (`✕ ⛶ ⓘ`).
 

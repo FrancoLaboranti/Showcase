@@ -6,13 +6,13 @@ import pygame.freetype
 from pygame.locals import *
 
 # Tateti / Tic-tac-toe ------------------------------------------------------
-# Sigue el esqueleto compartido del repo (Sprite, deltaT, xper/yper/sper,
-# createText, manager[0]). Estados del juego en Manager.state:
-#   'menu'  -> elegir modo (2 jugadores / vs CPU)
-#   'play'  -> partida en curso
-#   'over'  -> partida terminada (gana X, gana O, o empate)
-# El tablero es una lista de 9 enteros: 0 vacío, 1 X, 2 O.
-# CPU usa minimax completo (3x3 es chico, ~ms).
+# It follows the repo's shared skeleton (Sprite, deltaT, xper/yper/sper,
+# createText, manager[0]). The game states live in Manager.state:
+#   'menu'  -> choose a mode (2 players / vs CPU)
+#   'play'  -> a round in progress
+#   'over'  -> the round is finished (X wins, O wins, or a draw)
+# The board is a list of 9 integers: 0 empty, 1 X, 2 O.
+# The CPU uses full minimax (3x3 is small, ~ms).
 
 class Sprite:
     def process(self):
@@ -244,7 +244,7 @@ class Manager(Sprite):
             self.menuIdx = (self.menuIdx + 1) % options
             self.downPressed = True
 
-        # Mouse hover sobre opciones del menú
+        # Mouse hover over the menu options
         for i in range(options):
             ox, oy = xper(0.5), yper(0.45) + i*yper(0.09)
             if abs(mouseX - ox) < xper(0.18) and abs(mouseY - oy) < yper(0.04):
@@ -383,7 +383,7 @@ class Manager(Sprite):
             pygame.draw.circle(windowSurface, col, (cx, cy), r, thick)
 
 
-# Lógica del tateti -----------------------------------------------------------
+# Tic-tac-toe logic ------------------------------------------------------------
 
 WIN_LINES = (
     (0,1,2), (3,4,5), (6,7,8),
@@ -403,7 +403,7 @@ def checkWinner(cells):
 
 
 def bestMove(cells, mark):
-    # Minimax con poda alfa-beta. 3x3 es trivial pero queda prolijo.
+    # Minimax with alpha-beta pruning. 3x3 is trivial but it keeps things tidy.
     best = -10
     bestMoves = []
     other = 2 if mark == 1 else 1

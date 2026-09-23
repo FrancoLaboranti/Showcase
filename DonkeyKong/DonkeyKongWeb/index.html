@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../../Arcade/arcade-shell.css">
 <style>
-  :root { --bar-height: 122px; }   /* alto para los dos pulgares (D-pad grande) */
+  :root { --bar-height: 122px; }   /* tall enough for both thumbs (a big D-pad) */
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     width: 100%; height: 100%;
@@ -19,7 +19,7 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Press Start 2P', 'Segoe UI', system-ui, sans-serif;
   }
-  /* El canvas ocupa sólo el área SOBRE la barra. Tamaños seteados explícito desde JS en cada resize. */
+  /* The canvas takes only the area ABOVE the bar. Sizes are set explicitly from JS on each resize. */
   #c {
     display: block; position: absolute;
     top: 0; left: 0;
@@ -36,8 +36,8 @@
     box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
-  /* Barra inferior a DOS PULGARES: cluster izquierdo ◄ ► (pulgar izq) · utilidades al centro · cluster
-     derecho ▲ ▼ (pulgar der). Saltar = tocar la pantalla. Botones grandes, look moderno (gradiente + relieve). */
+  /* A TWO-THUMB bottom bar: the left cluster ◄ ► (left thumb) · utilities in the middle · the right
+     cluster ▲ ▼ (right thumb). Jump = touch the screen. Big buttons, a modern look (a gradient + relief). */
   #bar {
     position: absolute; left: 0; right: 0; bottom: 0;
     height: calc(var(--bar-height) + env(safe-area-inset-bottom));
@@ -64,12 +64,12 @@
     border-color: rgba(255,120,150,0.7); transform: scale(0.93);
     box-shadow: inset 0 2px 12px rgba(0,0,0,0.5), 0 0 20px rgba(255,80,115,0.5);
   }
-  /* utilidades (✕ ⛶ ⓘ) compactas y centradas; neutralizamos el align-self del arcade-shell */
+  /* utilities (✕ ⛶ ⓘ) compact and centred; we neutralise arcade-shell's align-self */
   .util { display: flex; align-items: center; gap: 8px; }
   .util button { align-self: center !important; margin-bottom: 0 !important; }
 
-  /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
-  /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
+  /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css. */
+  /* FPS HUD — Pong format: a monospaced panel at the top left, no border-radius. */
   #fpsOverlay {
     position: absolute;
     left: calc(8px + env(safe-area-inset-left));
@@ -130,7 +130,7 @@
   })();
   </script>
   <canvas id="c"></canvas>
-  <div id="hint">◄ ► caminar · ▲ ▼ trepar escaleras<br>tap the screen to JUMP</div>
+  <div id="hint">◄ ► walk · ▲ ▼ climb ladders<br>tap the screen to JUMP</div>
   <div id="bar">
     <!-- pulgar IZQUIERDO: caminar ◄ ► -->
     <div class="pad padL">
@@ -174,7 +174,7 @@
   //  · Hammers to smash barrels, fireballs from the oil drum,
   //    a BONUS that counts down, lives and a high score (localStorage).
   //  · All the art is pixel-art sprites defined as strings and
-  //    horneados en canvas offscreen (imageSmoothing off = look arcade).
+  // baked into offscreen canvases (imageSmoothing off = an arcade look).
   //  · ALL the geometry is in FRACTIONS of the playfield (PF) — the analogue
   //    of the .py's xper/yper — so a resize mid-game breaks nothing.
   // ════════════════════════════════════════════════════════════════════
@@ -190,13 +190,13 @@
   const RUN_DECEL   = 0.85;     // friction on release → it slides for ~0.19 s before stopping (it keeps its speed)
   const AIR_ACCEL   = 0.9;      // air control (less than on the ground, but it exists)
   const TURN_BOOST  = 2.4;      // × acceleration when changing direction (a snappy turn, modern platformer)
-  const CLIMB       = 0.085;    // velocidad trepando (PF.h / s)
+  const CLIMB       = 0.085;    // climbing speed (PF.h / s)
   const GRAV        = 0.85;     // gravedad (PF.h / s²)
   const JUMP_V      = 0.26;     // jump impulse (PF.h / s) → apex ≈ 0.04 PF.h
   const FALL_DEATH  = 0.075;    // a fall (from the peak) greater than this = DEATH (PF.h) — as in the original: your own
                                 //   jump (apex ~0.04) is survivable, but FALLING off a girder (~0.11+) kills you.
   const BARREL_SPD  = 0.19;     // base speed of the barrels (PF.w / s)
-  const BARREL_DESC = 0.16;     // barril bajando escalera (PF.h / s)
+  const BARREL_DESC = 0.16;     // a barrel going down a ladder (PF.h / s)
   const FIRE_SPD    = 0.055;    // fireball (PF.w / s)
   const HAMMER_TIME = 8;        // s of hammer
   const HAMMER_HOVER= 0.082;    // how far the hammer floats above the girder (PF.h) — you can only grab it by jumping
@@ -721,7 +721,7 @@
   function gpScore(n, fx, fy, color) { addScore(Math.round(n * hazMult()), fx, fy, color); }
 
   // ════════════════ INPUT ════════════════
-  const keys = {};                                  // e.code → bool (teclado)
+  const keys = {};                                  // e.code → bool (the keyboard)
   const vk = { left: false, right: false, up: false, down: false };   // bar buttons
   let jumpBuf = 0;                                  // jump buffer (s) — a touch or Space
 
@@ -906,7 +906,7 @@
       }
       let spr = M_IDLE, flip = this.dir < 0;
       if (this.state === 'climb') {
-        spr = M_CLIMB; flip = (Math.floor(this.animT / 0.22) % 2) === 0;   // alterna manos espejando
+        spr = M_CLIMB; flip = (Math.floor(this.animT / 0.22) % 2) === 0;   // it alternates hands by mirroring
       } else if (this.state === 'air') {
         spr = M_JUMP;
       } else if (this.animT > 0) {
@@ -915,7 +915,7 @@
       // a blink when the hammer is about to run out
       const flash = this.hammerT > 0 && this.hammerT < 2 && (Math.floor(this.hammerT / 0.12) % 2) === 0;
       drawSpr(spr, px, py, mh, flip, 0, flash ? 0.45 : 1);
-      // martillo en mano
+      // the hammer in hand
       if (this.hammerT > 0) {
         const up = (Math.floor(this.hamSwing / 0.16) % 2) === 0;
         const hh = HAMH * PF.h;
@@ -938,7 +938,7 @@
   class Barrel {
     constructor(wild = false) {
       this.g = 5; this.fx = DK_X + 0.10; this.fy = surfY(5, this.fx);
-      this.wild = wild;                                                      // #2 barril salvaje
+      this.wild = wild;                                                      // #2 a wild barrel
       this.dir = rollDir(5);
       // speed: level × hazard, ×1.5 if wild, ×1.25 in rage — but clamped to 1.9× the base so that
       // the peak is never unavoidable (a balance gotcha from the review).
@@ -1013,7 +1013,7 @@
         if (gh.comboN >= 2) popups.push({ text: 'COMBO x' + gh.comboN, fx: this.fx, fy: this.fy - 0.10, t: 0, color: '#7fd4ff' });
         sfx.score();
       }
-      // martillazo
+      // a hammer blow
       const hb = mario.hammerBox();
       if (hb) {
         const bx = ppx(this.fx), by = ppy(this.fy) - BH * PF.h / 2;
@@ -1076,7 +1076,7 @@
         if (this.climbDir < 0 && this.fy <= top)  { this.fy = top;  this.g = this.l.hi; this.state = 'walk'; }
         if (this.climbDir > 0 && this.fy >= foot) { this.fy = foot; this.g = this.l.lo; this.state = 'walk'; }
       }
-      // martillazo
+      // a hammer blow
       const hb = mario.hammerBox();
       if (hb) {
         const fx = ppx(this.fx), fy = ppy(this.fy) - FBH * PF.h / 2;
@@ -1233,7 +1233,7 @@
   }
   function startLevel() {
     barrels = []; fireballs = []; popups = []; pies = [];
-    applyLevelLayout();                                      // #3 reroll escaleras/jitter/martillos sembrados + bakeLevel
+    applyLevelLayout();                                      // #3 reroll the seeded ladders/jitter/hammers + bakeLevel
     hammers = hammerSpots.map(s => ({ g: s.g, x: s.x, taken: false }));
     setupRivetsItems();                                     // #4 rivets / #6 collectibles (depending on the level)
     belt = beltFor(gh.level); pieT = 1.5;                   // #9 conveyor girder + the initial cake delay
@@ -1346,7 +1346,7 @@
     }
   }
 
-  // ════════════════ #5 FURIA (pacing intra-nivel) ════════════════
+  // ════════════════ #5 RAGE (intra-level pacing) ════════════════
   // Once per level: it warns 1.5 s ahead (a card + a sound), then 6 s of spiked cadence/speed
   // (clamped in spawnGap()/Barrel). The speed does NOT rise during the warning → honest telegraphing.
   function updateFrenzy(dt) {
@@ -1491,7 +1491,7 @@
     canvas.style.width = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    // playfield portrait centrado (bandas tipo gabinete en desktop)
+    // a centred portrait playfield (cabinet-style bands on desktop)
     const pw = Math.min(W, H * ASPECT);
     PF.w = pw; PF.h = pw / ASPECT;
     PF.x = (W - PF.w) / 2; PF.y = (H - PF.h) / 2;
@@ -1535,7 +1535,7 @@
     ptext(pad(gh.hi, 6), 0.5, 0.047, 0.015, gh.newHi ? '#ffd23f' : '#ffffff');
     ptext('NIVEL ' + pad(gh.level, 2), 0.965, 0.022, 0.014, '#7fd4ff', 'right');
     ptext('BONUS ' + pad(gh.bonus, 4), 0.965, 0.047, 0.013, '#ffd23f', 'right');
-    // vidas en reserva (izq)
+    // the lives in reserve (left)
     const ih = 0.020 * PF.h;
     for (let i = 0; i < gh.lives - 1; i++) drawSpr(M_IDLE, ppx(0.045 + i * 0.05), ppy(0.078), ih);
     // third line: combo (centre) · rivets (centre-bottom) · active hazard (right)
@@ -1595,7 +1595,7 @@
     for (const p of pies) p.draw();    // #9
     for (const f of fireballs) f.draw();
     mario.draw();
-    drawFrenzy();            // #5 borde pulsante + cartel RAGE!
+    drawFrenzy();            // #5 a pulsing border + a RAGE! card
     drawPopups(dt);
     drawHUD();
 
@@ -1891,7 +1891,7 @@ close pass is worth more than a wide one. Some ladders are broken and cannot be 
 </ul>
 <h5>Mobile</h5>
 <ul>
-  <li><b>Walk left</b> and <b>Walk right</b> move; <b>Climb up</b> and <b>Climb down</b> take ladders.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></span> <b>Walk left</b> and <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span> <b>Walk right</b> move; <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 15l7-7 7 7"/></svg></span> <b>Climb up</b> and <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l7 7 7-7"/></svg></span> <b>Climb down</b> take ladders.</li>
   <li><b>Tap the screen</b> to jump.</li>
 </ul>
 </div>
@@ -1938,7 +1938,7 @@ close pass is worth more than a wide one. Some ladders are broken and cannot be 
         var izq = Math.max(m, Math.min(Math.round(rb.left), vw - ancho - m));
         panel.style.right = 'auto'; panel.style.left = izq + 'px';
       }
-      if ((rb.top + rb.height / 2) < vh / 2) {          // boton arriba -> panel colgando debajo
+      if ((rb.top + rb.height / 2) < vh / 2) {          // button at the top -> panel hanging below
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';

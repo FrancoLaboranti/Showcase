@@ -14,7 +14,7 @@
 //   · <button id="btnFs">   — the ⛶ button (in the bar; it carries <g class="ic-enter">/<g class="ic-exit">)
 //   · <button id="btnInfo"> — the ⓘ button (in the bar) [optional]
 //
-//  Comportamiento:
+//  Behaviour:
 //   · Embedded in the Arcade's iframe → the parent shell handles fullscreen and
 //     orientation; this script only toggles/reflects via postMessage. It hides
 //     the ⛶ button (toggling it inside the iframe makes no sense).

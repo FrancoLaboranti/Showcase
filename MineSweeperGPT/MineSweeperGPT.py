@@ -1,7 +1,7 @@
 import pygame, random, sys
 from pygame.locals import *
 
-# === CONFIGURACIÓN ===
+# === CONFIGURATION ===
 TILE_SIZE = 40
 GRID_WIDTH = 13
 GRID_HEIGHT = 13
@@ -14,7 +14,7 @@ screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("MineSweeper")
 clock = pygame.time.Clock()
 
-# === COLORES ===
+# === COLOURS ===
 WHITE = (255, 255, 255)
 GRAY = (225, 225, 225)
 DARK_GRAY = (80, 80, 80)
@@ -23,7 +23,7 @@ BLACK = (0, 0, 0)
 RED = (255, 0, 0)
 GREEN = (0, 180, 0)
 
-# Paleta estilo clásico
+# Classic-style palette
 NUMBER_COLORS = {
     1: (0, 100, 255),     # Turquesa
     2: (0, 200, 0),       # Verde
@@ -57,10 +57,10 @@ class Tile(Sprite):
         pygame.draw.rect(screen, DARK_GRAY if self.is_revealed else GRAY, self.rect)
         pygame.draw.rect(screen, BLACK, self.rect, 2)
 
-        # Si el juego terminó, y la mina es revelada, la pintamos en negro
+        # If the game is over and the mine is revealed, we paint it black
         if self.is_revealed:
             if self.is_mine:
-                # Si el juego terminó, colorea la mina de negro, si no está marcada con bandera
+                # If the game is over, colour the mine black unless it is flagged
                 color = BLACK if manager.game_over else DARKER_GRAY
                 pygame.draw.circle(screen, color, self.rect.center, TILE_SIZE // 4)
             elif self.adjacent_mines > 0:
@@ -69,9 +69,9 @@ class Tile(Sprite):
         elif self.is_flagged:
             pygame.draw.circle(screen, RED, self.rect.center, TILE_SIZE // 4)
 
-        # Si la mina no está revelada y el juego terminó, dibujarla en negro
+        # If the mine is not revealed and the game is over, draw it black
         if manager.game_over and self.is_mine and not self.is_revealed:
-            pygame.draw.circle(screen, BLACK, self.rect.center, TILE_SIZE // 4)  # Dibuja en negro
+            pygame.draw.circle(screen, BLACK, self.rect.center, TILE_SIZE // 4)  # Draws in black
 
 
     def reveal(self):
@@ -110,7 +110,7 @@ class GameManager(Sprite):
         placed = 0
 
         while placed < MINES_COUNT:
-            # Decidimos aleatoriamente si colocar una mina suelta o un cluster
+            # We randomly decide whether to place a loose mine or a cluster
             if random.random() < 0.2:  # 20% de chance de que sea un cluster
                 start = random.choice(list(candidates))  # Seleccionamos aleatoriamente de los candidatos
                 if start in visited:
@@ -200,17 +200,17 @@ class GameManager(Sprite):
             self.show_message("You Win!", GREEN)
 
     def show_message(self, text, color):
-        # Renderizar el texto
+        # Render the text
         render = font.render(text, True, WHITE)  # Color blanco para el texto
         text_rect = render.get_rect(center=(WIDTH // 2, HEIGHT // 2))  # Centrar el texto
 
-        # Crear un fondo sólido detrás del texto
+        # Create a solid background behind the text
         background_rect = pygame.Rect(text_rect.x - 10, text_rect.y - 10, text_rect.width + 20, text_rect.height + 20)
         
-        # Dibujar el fondo sólido (puedes cambiar el color de fondo a lo que prefieras)
+        # Draw the solid background (you can change the background colour to whatever you prefer)
         pygame.draw.rect(screen, color, background_rect)
 
-        # Dibujar el texto encima del fondo
+        # Draw the text over the background
         screen.blit(render, text_rect)
 
     def reveal_all_tiles(self):
@@ -218,7 +218,7 @@ class GameManager(Sprite):
             for tile in row:
                 tile.is_revealed = True
 
-# === INSTANCIACIÓN ===
+# === INSTANTIATION ===
 manager = GameManager()
 
 # === LOOP PRINCIPAL ===

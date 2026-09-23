@@ -9,7 +9,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../../Arcade/arcade-shell.css">
 <style>
-  :root { --bar-height: 66px; }             /* barra inferior fina estilo Tron V1 (sólo botones de utilidad) */
+  :root { --bar-height: 66px; }             /* a thin Tron V1-style bottom bar (utility buttons only) */
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     width: 100%; height: 100%;
@@ -19,8 +19,8 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Press Start 2P', 'Courier New', monospace;
   }
-  /* El canvas ocupa sólo el área SOBRE la barra inferior (UI estilo Tron V1). Tamaños seteados
-     explícito desde JS en cada resize: W × (innerHeight − barH). */
+  /* The canvas takes only the area ABOVE the bottom bar (Tron V1-style UI). Sizes are set
+     explicitly from JS on each resize: W × (innerHeight − barH). */
   #c { display: block; position: absolute; top: 0; left: 0; }
 
   #hint {
@@ -30,9 +30,9 @@
     transition: opacity 0.8s; z-index: 2; padding: 0 16px;
   }
 
-  /* ── Barra inferior estilo Tron V1 ── fila centrada de botones de utilidad: ✕ salir · ⟳ · 🔊 · ⛶ · ⓘ.
-     Mismo look que TronWeb (negro translúcido + borde superior). NO hay botones de movimiento:
-     en desktop se juega con flechas/WASD y en mobile con swipe sobre el canvas. */
+  /* ── Tron V1-style bottom bar ── a centred row of utility buttons: ✕ exit · ⟳ · 🔊 · ⛶ · ⓘ.
+     Same look as TronWeb (translucent black + a top border). There are NO movement buttons: on
+     desktop you play with arrows/WASD and on mobile with a swipe on the canvas. */
   #bar {
     position: absolute; left: 0; right: 0; bottom: 0;
     height: calc(var(--bar-height) + env(safe-area-inset-bottom));
@@ -42,10 +42,10 @@
     border-top: 1px solid rgba(255,225,80,0.18);
     z-index: 3;
   }
-  /* el shell pone ✕/⛶/ⓘ con align-self:flex-end; los centramos verticalmente para alinearlos con ⟳/🔊 */
+  /* the shell places ✕/⛶/ⓘ with align-self:flex-end; we centre them vertically to line them up with ⟳/🔊 */
   #bar > #btnExit, #bar > #btnFs, #bar > #btnInfo { align-self: center; margin-bottom: 0; }
 
-  /* Reset + Sonido (custom): círculos tenues como ✕/⛶/ⓘ, con acento amarillo en activo */
+  /* Reset + Sound (custom): faint circles like ✕/⛶/ⓘ, with a yellow accent when active */
   #btnReset, #btnSound {
     width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; align-self: center;
     border: 1px solid rgba(255,255,255,0.16);
@@ -96,7 +96,7 @@
     <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
-    <button id="btnReset" aria-label="restart" title="Restart the run">
+    <button id="btnReset" aria-label="back to menu" title="Back to the menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
     </button>
     <button id="btnSound" aria-label="sound" title="Sound on/off">
@@ -137,7 +137,7 @@
   const FONT = "'Press Start 2P', 'Courier New', monospace";
 
   // ── TUNING ──
-  const BASE        = 9.0;                                                       // velocidad 100% (tiles/seg)
+  const BASE        = 9.0;                                                       // speed 100% (tiles/sec)
   const TUNNEL_ROW  = 14;                                                        // tunnel row (and the house's)
   // SKIN colours (#6): mutable — applySkin() reassigns them and the rest of the code reads them as they are.
   let WALL_COL  = '#2434f0';                                                     // maze blue
@@ -150,17 +150,17 @@
 
   // ── Cosmetic SKINS (#6): PURE colour, zero mechanical effect. Unlocked by all-time high score. ──
   const SKINS = [
-    { name: 'Clasico', pac: '#ffe300', wall: '#2434f0', wallGlow: '#3b4cff', dot: '#ffc7a8', unlock: 0 },
+    { name: 'Classic', pac: '#ffe300', wall: '#2434f0', wallGlow: '#3b4cff', dot: '#ffc7a8', unlock: 0 },
     { name: 'Neon',    pac: '#ffe300', wall: '#12d6a0', wallGlow: '#1effc4', dot: '#bdfff0', unlock: 15000 },
     { name: 'Synth',   pac: '#ff5ad6', wall: '#7a2bff', wallGlow: '#b06bff', dot: '#ffd0f4', unlock: 30000 },
-    { name: 'Fuego',   pac: '#ffd23f', wall: '#b02418', wallGlow: '#ff5a32', dot: '#ffd9b0', unlock: 60000 },
-    { name: 'Hielo',   pac: '#eafcff', wall: '#1f6fe0', wallGlow: '#7fc8ff', dot: '#dff4ff', unlock: 100000 },
+    { name: 'Fire',    pac: '#ffd23f', wall: '#b02418', wallGlow: '#ff5a32', dot: '#ffd9b0', unlock: 60000 },
+    { name: 'Ice',     pac: '#eafcff', wall: '#1f6fe0', wallGlow: '#7fc8ff', dot: '#dff4ff', unlock: 100000 },
   ];
   function applySkin(i) {
     const s = SKINS[i] || SKINS[0];
     PAC_COL = s.pac; WALL_COL = s.wall; WALL_GLOW = s.wallGlow; DOT_COL = s.dot;
   }
-  const MODE_NAMES = ['Clasico', 'Dificil', 'Maraton', 'Diario'];
+  const MODE_NAMES = ['Classic', 'Hard', 'Marathon', 'Daily'];
   const MODE_TAG   = ['C', 'D', 'M', '*'];
 
   // ── The classic 28×31 MAP. '#' wall · '.' dot · 'o' energiser · '-' door · ' ' corridor/empty ──
@@ -272,14 +272,14 @@
 
   // Achievements (#7): a set of unlocked ids + toasts.
   const ACH = {
-    firstGhost: 'Ate a ghost', allFour: 'All four in one go', fruit: 'Fruta jugosa',
-    level5: 'Nivel 5', level10: 'Nivel 10', score10k: '10.000 puntos', score50k: '50.000 puntos',
-    perfect: 'Nivel perfecto', bonus: 'Ronda bonus',
+    firstGhost: 'Ate a ghost', allFour: 'All four in one go', fruit: 'Juicy fruit',
+    level5: 'Level 5', level10: 'Level 10', score10k: '10,000 points', score50k: '50,000 points',
+    perfect: 'Perfect level', bonus: 'Bonus round',
   };
   let achUnlocked = (function () { try { return new Set(JSON.parse(lsGet('pacmanAch', '[]'))); } catch (e) { return new Set(); } })();
   let toasts = [];
   function toast(txt) { toasts.push({ txt, t: 0 }); }
-  function unlockAch(id) { if (achUnlocked.has(id)) return; achUnlocked.add(id); lsSet('pacmanAch', JSON.stringify([...achUnlocked])); toast('LOGRO - ' + (ACH[id] || id)); }
+  function unlockAch(id) { if (achUnlocked.has(id)) return; achUnlocked.add(id); lsSet('pacmanAch', JSON.stringify([...achUnlocked])); toast('ACHIEVEMENT - ' + (ACH[id] || id)); }
 
   // Skins (#6): unlocked by all-time high score.
   function skinUnlocked(i) { return topScore() >= SKINS[i].unlock; }
@@ -317,7 +317,7 @@
     initials: ['A', 'A', 'A'], initialSlot: 0, pendingScore: 0,  // initials entry (#5)
   };
   let pac = null, ghosts = [];
-  let dots = new Uint8Array(COLS * ROWS);                                        // 0 nada · 1 punto · 2 energizante
+  let dots = new Uint8Array(COLS * ROWS);                                        // 0 nothing · 1 a dot · 2 an energiser
   let popups = [];                                                               // floating score texts
 
   // ── Per-level specs (speeds as a fraction of BASE, fright in seconds, house releases) ──
@@ -724,7 +724,7 @@
     }
   }
 
-  // ════════════════ REGLAS (comer, colisiones, niveles) ════════════════
+  // ════════════════ RULES (eating, collisions, levels) ════════════════
   function addScore(n) {
     gh.score += n;
     if (!gh.extraGiven && gh.score >= 10000) { gh.extraGiven = true; gh.lives++; sndLife(); popup(14, 20.5, '+1 VIDA', '#ffe300'); }
@@ -1001,7 +1001,7 @@
       const q = (gh.stateT - 0.5) / 1.2;
       if (q < 0) { drawWrapped(p, x => drawPacBody(x, py(p.y), r, pac.ang, 0.25)); return; }
       if (q > 1) {
-        if (gh.stateT < 2.0) {                                                   // "pop" final: rayitos
+        if (gh.stateT < 2.0) {                                                   // the final "pop": little rays
           const e = (gh.stateT - 1.7) / 0.3, x = px(p.x), y = py(p.y);
           ctx.strokeStyle = `rgba(255,227,0,${1 - e})`; ctx.lineWidth = Math.max(1.5, ts * 0.1);
           ctx.beginPath();
@@ -1064,7 +1064,7 @@
       }
       ctx.stroke();
     } else {
-      // ojos blancos + pupilas mirando hacia dir
+      // white eyes + pupils looking towards dir
       const ex = r * 0.4, eyeY = yTop - r * 0.05;
       const dx = dir.x * r * 0.16, dy = dir.y * r * 0.16;
       ctx.fillStyle = '#fff';
@@ -1161,12 +1161,12 @@
   function drawHud() {
     const fp = Math.max(8, ts * 0.55);
     const yTop = oy - ts * 1.1;
-    text(ox + ts * 0.2, yTop, fp, 'PUNTOS ' + gh.score, '#fff', 0, 'left');
+    text(ox + ts * 0.2, yTop, fp, 'SCORE ' + gh.score, '#fff', 0, 'left');
     text(ox + COLS * ts - ts * 0.2, yTop, fp, 'RECORD ' + gh.high, '#ffb8de', 0, 'right');
     const yBot = oy + ROWS * ts + ts * 1.0;
     for (let i = 0; i < Math.min(5, gh.lives - 1); i++)
       drawPacBody(ox + ts * (1 + i * 1.5), yBot, ts * 0.5, Math.PI, 0.5);
-    text(ox + COLS * ts * 0.5, yBot, fp, 'NIVEL ' + gh.level + (gh.mode ? ' ' + MODE_TAG[gh.mode] : ''), 'rgba(255,255,255,0.65)');
+    text(ox + COLS * ts * 0.5, yBot, fp, 'LEVEL ' + gh.level + (gh.mode ? ' ' + MODE_TAG[gh.mode] : ''), 'rgba(255,255,255,0.65)');
     const kMax = fruitKind(gh.level);
     const nIcons = Math.min(3, gh.level);
     for (let i = 0; i < nIcons; i++)
@@ -1176,7 +1176,7 @@
   function drawGame(T) {
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, W, H);
-    // laberinto (en flash alterna azul/blanco)
+    // the maze (in the flash it alternates blue/white)
     const flashing = gh.state === 'flash' && Math.floor(gh.stateT * 4) % 2 === 1;
     ctx.drawImage(flashing ? mazeFlashCv : mazeCv, ox, oy);
     if (gh.state !== 'flash') {
@@ -1212,9 +1212,9 @@
     }
     if (vignette) { ctx.fillStyle = vignette; ctx.fillRect(0, 0, W, H); }         // atmosphere (before the HUD → a crisp HUD)
     drawHud();
-    if (gh.state === 'ready') text(px(14), py(17.5), Math.max(10, ts * 0.8), gh.bonusRound ? 'BONUS!' : 'LISTO!', PAC_COL, 12);
+    if (gh.state === 'ready') text(px(14), py(17.5), Math.max(10, ts * 0.8), gh.bonusRound ? 'BONUS!' : 'READY!', PAC_COL, 12);
     if (gh.bonusRound && (gh.state === 'play' || gh.state === 'ready')) {        // #3: banner + stopwatch
-      text(px(14), py(8.5), Math.max(9, ts * 0.6), 'RONDA BONUS', '#ffe300', 10);
+      text(px(14), py(8.5), Math.max(9, ts * 0.6), 'BONUS ROUND', '#ffe300', 10);
       text(px(14), py(22), Math.max(10, ts * 0.8), Math.max(0, Math.ceil(gh.bonusT)) + 's', '#9effa0', 8);
     }
     if (gh.state === 'gameover') drawGameOver();
@@ -1238,7 +1238,7 @@
   function drawInitials() {
     ctx.fillStyle = 'rgba(0,0,0,0.82)'; ctx.fillRect(0, 0, W, H);
     const cx = W / 2;
-    text(cx, H * 0.20, Math.max(13, 19 * scl), 'NUEVO RECORD!', '#ffe300', 14);
+    text(cx, H * 0.20, Math.max(13, 19 * scl), 'NEW RECORD!', '#ffe300', 14);
     text(cx, H * 0.28, Math.max(10, 13 * scl), gh.pendingScore + ' PTS', '#fff');
     text(cx, H * 0.36, Math.max(8, 10 * scl), 'tap the arrows or type', 'rgba(180,190,205,0.8)');
     const sw = Math.max(38, 46 * scl), gap = sw * 0.45, totalw = sw * 3 + gap * 2, sx0 = cx - totalw / 2;
@@ -1309,7 +1309,7 @@
   function drawPlayBtn(fy, sel, T) {
     const fp = Math.max(12, 22 * scl);
     ctx.font = `${Math.round(fp)}px ${FONT}`;
-    const tw = ctx.measureText('JUGAR').width;
+    const tw = ctx.measureText('PLAY').width;
     const bw = tw + fp * 1.9, bh = fp * 2.1, bx = W / 2 - bw / 2, by = H * fy - bh / 2;
     playBox = { x: bx, y: by, w: bw, h: bh };
     const pulse = 0.6 + 0.4 * Math.sin(T * 4);
@@ -1321,7 +1321,7 @@
     ctx.shadowBlur = 10;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = `rgba(255,255,255,${0.8 + 0.2 * pulse})`;
-    ctx.fillText('JUGAR', W / 2, by + bh / 2);
+    ctx.fillText('PLAY', W / 2, by + bh / 2);
     ctx.restore();
   }
   function drawMenu(T) {
@@ -1335,7 +1335,7 @@
     drawChase(T);
     // filas seleccionables: modo (#4) · skin (#6) · jugar
     const sk = SKINS[gh.skin];
-    drawMenuRow('MODO', MODE_NAMES[gh.mode], MENU_Y.mode, gh.menuSel === 0);
+    drawMenuRow('MODE', MODE_NAMES[gh.mode], MENU_Y.mode, gh.menuSel === 0);
     drawMenuRow('SKIN', sk.name + (skinUnlocked(gh.skin) ? '' : ' 🔒'), MENU_Y.skin, gh.menuSel === 1);
     drawPlayBtn(MENU_Y.play, gh.menuSel === 2, T);
     // mini high-score table (#5)
@@ -1349,7 +1349,7 @@
     } else {
       text(W / 2, H * 0.745, Math.max(8, 10 * scl), 'none yet', 'rgba(150,160,175,0.7)');
     }
-    text(W / 2, H * 0.90, Math.max(8, 9 * scl), 'flechas/WASD o swipe · tocá una fila', 'rgba(150,160,175,0.7)');
+    text(W / 2, H * 0.90, Math.max(8, 9 * scl), 'arrows/WASD or swipe · tap a row', 'rgba(150,160,175,0.7)');
   }
   // ── menu input helpers ──
   function menuChangeSkin(dir) {
@@ -1425,7 +1425,7 @@
     if (gh.state === 'menu') { tapMenu(lx, ly); return; }
     if (gh.state === 'initials') { tapInitials(lx, ly); return; }
     if (gh.state === 'gameover') { if (gh.stateT > 0.6) startGame(); return; }
-    swipe = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };       // en juego: swipe
+    swipe = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false };       // in game: a swipe
   });
   canvas.addEventListener('pointermove', e => {
     if (!swipe || e.pointerId !== swipe.id) return;
@@ -1441,7 +1441,9 @@
   canvas.addEventListener('pointercancel', endSwipe);
 
   function tappable(el, fn) { el && el.addEventListener('pointerdown', e => { e.preventDefault(); fn(); }); }
-  tappable(document.getElementById('btnReset'), () => { ensureAudio(); if (gh.state !== 'menu') startGame(); });
+  // It goes back to the MENU, it does not restart: the menu is where the mode and the skin are chosen, and without this button the
+  // only way out was Escape — that is, none at all on a phone.
+  tappable(document.getElementById('btnReset'), () => { ensureAudio(); if (gh.state !== 'menu') backToMenu(); });
   const btnSound = document.getElementById('btnSound');
   btnSound.classList.toggle('off', muted);
   tappable(btnSound, () => {
@@ -1515,7 +1517,7 @@ Clearing the maze moves you to the next one.
 <h5>Desktop</h5>
 <ul>
   <li><b>Arrow keys</b> or <b>W A S D</b> set the direction. Pac-Man keeps going until the next turn.</li>
-  <li><b>Restart the run</b> in the bar.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span> <b>Back to the menu</b> in the bar, where the mode and the skin are chosen.</li>
 </ul>
 <h5>Mobile</h5>
 <ul>
@@ -1567,7 +1569,7 @@ Clearing the maze moves you to the next one.
         var izq = Math.max(m, Math.min(Math.round(rb.left), vw - ancho - m));
         panel.style.right = 'auto'; panel.style.left = izq + 'px';
       }
-      if ((rb.top + rb.height / 2) < vh / 2) {          // boton arriba -> panel colgando debajo
+      if ((rb.top + rb.height / 2) < vh / 2) {          // button at the top -> panel hanging below
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';

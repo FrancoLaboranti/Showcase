@@ -80,7 +80,7 @@ class Ball(Sprite):
         self.x += math.cos(self.forceAng)*self.forceSpeed*deltaT
         self.y += math.sin(self.forceAng)*self.forceSpeed*deltaT + math.sin(-math.pi/2)*self.floorBounce*deltaT
 
-        # Rebote contra laterales (sólo en los modos que tienen pared lateral: 1 y 3)
+        # Bounce off the sides (only in the modes that have side walls: 1 and 3)
         if WALL_MODE in (1, 3) and (self.x < 0 + self.radius or self.x > screenX - self.radius):
             self.x = 0 + self.radius if self.x < 0 + self.radius else screenX - self.radius
             self.forceSpeed *= 0.9
@@ -104,7 +104,7 @@ class Ball(Sprite):
             else:                                                              # direct horizontal bounce
                 self.forceAng += math.pi
 
-        # Rebote contra techo/piso (sólo en los modos que los tienen: 1 y 2)
+        # Bounce off the ceiling/floor (only in the modes that have them: 1 and 2)
         if WALL_MODE in (1, 2) and (self.y < 0 + self.radius or self.y > screenY - self.radius):
             self.y = 0 + self.radius if self.y < 0 + self.radius else screenY - self.radius
 
@@ -118,12 +118,12 @@ class Ball(Sprite):
 
                 self.floorBounce = min(self.fallTime * 1000, 600) if self.fallTime > 0.01 else 0
 
-        # Wrap horizontal (modos sin laterales: 2 y 4)
+        # Horizontal wrap (modes without side walls: 2 and 4)
         if WALL_MODE in (2, 4):
             if self.x < -self.radius:   self.x = screenX + self.radius
             elif self.x > screenX + self.radius: self.x = -self.radius
 
-        # Wrap vertical (modos sin techo/piso: 3 y 4)
+        # Vertical wrap (the modes with no ceiling/floor: 3 and 4)
         if WALL_MODE in (3, 4):
             if self.y < -self.radius:   self.y = screenY + self.radius
             elif self.y > screenY + self.radius: self.y = -self.radius
@@ -227,8 +227,8 @@ while True:
 
     keys = pygame.key.get_pressed()
     showInfo = keys[pygame.K_SPACE]
-    # WALL_MODE se cambia más abajo en el loop de eventos (KEYDOWN, no polling) — el get_pressed()
-    # parecía tener un comportamiento raro con K_2 puntual en este setup.
+    # WALL_MODE is changed further down in the event loop (KEYDOWN, not polling) — get_pressed()
+    # seemed to behave oddly with a single K_2 press in this setup.
 
     mouseX, mouseY = pygame.mouse.get_pos()
     mouseLeft, _, mouseRight = pygame.mouse.get_pressed()
@@ -249,9 +249,9 @@ while True:
         sprite.process()
         sprite.draw()
 
-    # Indicador permanente del WALL_MODE actual (esquina arriba-derecha) — útil para confirmar que las
-    # teclas 1/2/3/4 están cambiando algo, especialmente cuando el cambio visual es sutil.
-    createText(16, "MODO: %d" % WALL_MODE, 'topright', (180,180,180), xper(0.99), yper(0.02))
+    # A permanent indicator of the current WALL_MODE (top-right corner) — useful to confirm that keys
+    # 1/2/3/4 are changing something, especially when the visual change is subtle.
+    createText(16, "MODE: %d" % WALL_MODE, 'topright', (180,180,180), xper(0.99), yper(0.02))
 
     if showInfo:
         createText(20, "Previous point: %s" % str(prevMousePos),'topleft',(0,200,0),xper(0.01),yper(0.015))

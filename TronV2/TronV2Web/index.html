@@ -19,7 +19,7 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
   }
-  /* Canvas a PANTALLA COMPLETA (sin barra que ocupe alto) — UI = botones de esquina + control por toque,
+  /* FULL-SCREEN canvas (no bar taking up height) — UI = corner buttons + touch control,
      estilo CrazyTanks/Pong. */
   #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
 
@@ -30,8 +30,8 @@
     transition: opacity 0.8s; z-index: 2; padding: 0 16px;
   }
 
-  /* Cluster de botones de esquina (arriba-derecha): ⟳ reiniciar · ⓘ info · ⛶ pantalla · ✕ salir.
-     El look tenue de ✕/⛶/ⓘ lo da arcade-shell.css; acá sólo los posicionamos. */
+  /* Corner button cluster (top right): ⟳ restart · ⓘ info · ⛶ fullscreen · ✕ exit.
+     arcade-shell.css gives ✕/⛶/ⓘ their faint look; here we only position them. */
   #corner {
     position: absolute; z-index: 10;
     top: calc(8px + env(safe-area-inset-top));
@@ -54,8 +54,8 @@
   #btnMute .ic-off { display: none; }
   #btnMute.muted .ic-on { display: none; }
   #btnMute.muted .ic-off { display: block; }
-  /* pausa + menu sólo en juego (no en el menú). El mute NO va acá a propósito: el jugador lo busca
-     ANTES de arrancar, que es justo cuando body no tiene .playing. */
+  /* pause + menu only in game (not in the menu). The mute is deliberately NOT here: the player
+     looks for it BEFORE starting, which is exactly when body has no .playing. */
   body:not(.playing) #btnPause, body:not(.playing) #btnMenu { display: none; }
   #fpsOverlay {
     position: absolute;
@@ -93,7 +93,7 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
     </button>
     <button id="btnPause" aria-label="pause" title="Pause">
-      <svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg>
     </button>
     <button id="btnMenu" aria-label="back to menu" title="Back to menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg>
@@ -129,7 +129,7 @@
   const HEAD_GLOW   = 16;                                                          // shadowBlur of the head's core
   const HEAD_DOT    = 2.0;                                                         // radius of the head's white core
   const TRAIL_BLOOM = 6;                                                           // blur of the neon halo (0 = no glow)
-  const BG          = '#03060d';                                                   // fondo casi negro
+  const BG          = '#03060d';                                                   // an almost black background
   const FONT        = "'Orbitron', 'Segoe UI', system-ui, sans-serif";
 
   // ── WORLD ── bigger than the screen; the camera follows the player and clamps to the world.
@@ -214,7 +214,7 @@
   const rgb  = c => `rgb(${c[0]|0},${c[1]|0},${c[2]|0})`;
   const rgba = (c, a) => `rgba(${c[0]|0},${c[1]|0},${c[2]|0},${a})`;
   const lerpC = (a, b, t) => [ a[0]+(b[0]-a[0])*t, a[1]+(b[1]-a[1])*t, a[2]+(b[2]-a[2])*t ];
-  function hot(base, t) {                                                          // cola → base ; cabeza → casi blanco
+  function hot(base, t) {                                                          // the tail → the base ; the head → almost white
     const wt = Math.max(0, t) * Math.max(0, t) * 0.75;
     return [ base[0]+(255-base[0])*wt, base[1]+(255-base[1])*wt, base[2]+(255-base[2])*wt ];
   }
@@ -277,7 +277,7 @@
       } else if (kind === 1) {                                                     // disco
         const r = rnd(WORLD_W * 0.03, WORLD_W * 0.065);
         o = { kind, cx: rnd(margin + r, WORLD_W - margin - r), cy: rnd(margin + r, WORLD_H - margin - r), r };
-      } else {                                                                     // barra (horizontal o vertical)
+      } else {                                                                     // a bar (horizontal or vertical)
         const long = rnd(WORLD_W * 0.16, WORLD_W * 0.26), thin = rnd(20, 34);
         const horiz = kind === 2;
         const w = horiz ? long : thin, h = horiz ? thin : long;
@@ -426,10 +426,10 @@
   // directions[dir] = [vx, vy, dx2,dy2, dx4,dy4, dx100,dy100]
   function dirTemplate() {
     return {
-      0: [0,-150, 0,-2, 0,-4, 0,-100],   // arriba
-      1: [150,0, 2,0, 4,0, 100,0],       // derecha
-      2: [0,150, 0,2, 0,4, 0,100],       // abajo
-      3: [-150,0, -2,0, -4,0, -100,0],   // izquierda
+      0: [0,-150, 0,-2, 0,-4, 0,-100],   // up
+      1: [150,0, 2,0, 4,0, 100,0],       // right
+      2: [0,150, 0,2, 0,4, 0,100],       // down
+      3: [-150,0, -2,0, -4,0, -100,0],   // left
     };
   }
 
@@ -582,7 +582,7 @@
   // ════════════════ GAME HANDLER (menu + state) ════════════════
   const gh = {
     menu: true,
-    currentOption: 0,           // fila seleccionada: 0 = cantidad, 1 = best-of
+    currentOption: 0,           // the selected row: 0 = the count, 1 = best-of
     currentPlayers: 0,          // +2 → 2..4
     currentMode: 0,             // 0 = single, 1 = multi (always 0: AI only)
     bestOfIdx: 1,               // index into BEST_OF (default 3)
@@ -971,7 +971,7 @@
     const youCol = PLAYER_COLORS[0], youW = gh.lastWinner === 'you';
     if (gh.targetWins > 1) drawScoreboard(0.28, 1.05);
     if (setOver()) {                                                               // end of the set
-      createText(90, youW ? 'YOU WIN!' : 'CPU GANA', youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 22, 'rgba(0,0,0,0.55)');
+      createText(90, youW ? 'YOU WIN!' : 'CPU WINS', youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 22, 'rgba(0,0,0,0.55)');
       createText(36, 'tap or press Enter for a rematch', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
     } else {                                                                       // a round within the set
       const msg = youW ? 'Round to you!' : ('Round to ' + (gh.lastWinnerName || 'CPU'));
@@ -1091,7 +1091,7 @@
       } else {
         if (gh.targetWins > 1) drawScoreboard(0.06, 0.8);                          // small scoreboard at the top during the round
         if (gh.paused) {
-          createText(80, 'PAUSA', 'rgb(235,235,235)', 0.5, 0.45, 20, 'rgba(0,0,0,0.5)');
+          createText(80, 'PAUSED', 'rgb(235,235,235)', 0.5, 0.45, 20, 'rgba(0,0,0,0.5)');
           createText(34, 'tap ⏸ to continue', 'rgb(200,200,200)', 0.5, 0.56, 0, 'rgba(0,0,0,0.5)');
         }
       }
@@ -1144,7 +1144,7 @@ open up, you are about to clip something. The minimap shows where everyone is.
 <h5>Mobile</h5>
 <ul>
   <li><b>Tap the left or right half of the screen</b> to turn that way.</li>
-  <li><b>Pause</b> and <b>Back to menu</b> sit in the top-right cluster.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg></span> <b>Pause</b> and <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg></span> <b>Back to menu</b> sit in the top-right cluster.</li>
 </ul>
 </div>
 
@@ -1190,7 +1190,7 @@ open up, you are about to clip something. The minimap shows where everyone is.
         var izq = Math.max(m, Math.min(Math.round(rb.left), vw - ancho - m));
         panel.style.right = 'auto'; panel.style.left = izq + 'px';
       }
-      if ((rb.top + rb.height / 2) < vh / 2) {          // boton arriba -> panel colgando debajo
+      if ((rb.top + rb.height / 2) < vh / 2) {          // button at the top -> panel hanging below
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';

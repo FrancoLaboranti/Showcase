@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -23,8 +23,8 @@
     top: 0; left: 0;
   }
 
-  /* Bar inferior (sentada arriba del teclado): nueva-ronda + cambio de idioma + salir.
-     Layout flex centrado igual que los demás juegos — la shell agrega gap:8px. */
+  /* Bottom bar (sitting above the keyboard): new round + language change + exit.
+     A centred flex layout like the other games — the shell adds gap:8px. */
   #bar {
     position: absolute; left: 0; right: 0;
     bottom: calc(var(--kb-height) + env(safe-area-inset-bottom));
@@ -50,15 +50,15 @@
   }
   #bar #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.94); }
   #bar #ui #btnNew { font-size: 19px; padding: 0; width: 38px; }
-  /* Los botones de #ui están hechos para texto (↻, ES): un SVG sin medidas
-     se estira, y arcade-shell.css sólo dimensiona los de ✕/⛶/ⓘ. */
+  /* #ui's buttons are made for text (↻, ES): an SVG with no dimensions stretches, and
+     arcade-shell.css only sizes the ✕/⛶/ⓘ ones. */
   #bar #ui #btnMute { padding: 0; width: 38px; }
   #bar #ui #btnMute svg { display: block; width: 18px; height: 18px; pointer-events: none; }
   #btnMute .ic-off { display: none; }
   #btnMute.muted .ic-on { display: none; }
   #btnMute.muted .ic-off { display: block; }
 
-  /* Teclado virtual abajo. Las teclas se generan desde JS según el idioma. */
+  /* Virtual keyboard at the bottom. The keys are generated from JS according to the language. */
   #keyboard {
     position: absolute; left: 0; right: 0; bottom: 0;
     height: calc(var(--kb-height) + env(safe-area-inset-bottom));
@@ -72,8 +72,8 @@
   .kbrow { display: flex; justify-content: center; gap: 4px; flex: 1; padding: 0 4px; }
   .key {
     flex: 1 1 0; min-width: 0;
-    /* Tope para que las filas QWERTY más cortas (7 teclas) no las inflen — el
-       ancho lo marca la fila de 10. `justify-content: center` en .kbrow centra. */
+    /* A cap so the shorter QWERTY rows (7 keys) do not blow them up — the width is set by the
+       row of 10. `justify-content: center` on .kbrow centres them. */
     max-width: calc((100% - 36px) / 10);
     border: 1px solid rgba(255,255,255,0.22);
     background: rgba(255,255,255,0.08);
@@ -91,60 +91,8 @@
   .key.wrong   { background: rgba(230,90,90,0.22);  border-color: rgba(230,90,90,0.55);  color: #ffc8c8; }
   .key:disabled { cursor: default; opacity: 0.85; }
 
-  /* Menú inicial: tapa todo, se oculta una vez elegido el idioma. */
-  #menu {
-    position: absolute; inset: 0;
-    background: #14161e;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 14px; padding: 24px;
-    z-index: 5;
-  }
-  #menu.hidden { display: none; }
-  #menu h1 {
-    font-size: clamp(40px, 11vw, 84px);
-    font-weight: 800; letter-spacing: 0.06em;
-  }
-  #menu .sub {
-    font-size: clamp(14px, 4vw, 18px);
-    color: rgba(255,255,255,0.55);
-    margin-top: 4px; margin-bottom: 18px;
-  }
-  #menu .lang-row { display: flex; gap: 14px; }
-  #menu .lang-btn {
-    padding: 16px 32px;
-    font-size: clamp(16px, 4.5vw, 20px);
-    font-weight: 800; letter-spacing: 0.05em;
-    border: 2px solid rgba(150,150,150,0.4);
-    background: rgba(255,255,255,0.03);
-    color: rgba(255,255,255,0.55);
-    border-radius: 14px;
-    cursor: pointer; touch-action: manipulation;
-    transition: all 0.12s;
-  }
-  #menu .lang-btn.selected {
-    border-color: rgba(110,230,110,0.85);
-    color: #b8ffc8;
-    background: rgba(110,230,110,0.10);
-  }
-  #menu .play-btn {
-    margin-top: 24px;
-    padding: 16px 48px;
-    font-size: clamp(18px, 5vw, 22px);
-    font-weight: 800; letter-spacing: 0.08em;
-    background: rgba(110,180,255,0.15);
-    border: 2px solid rgba(110,180,255,0.6);
-    color: #e6f2ff;
-    border-radius: 14px;
-    cursor: pointer; touch-action: manipulation;
-  }
-  #menu .play-btn:active { transform: scale(0.96); background: rgba(110,180,255,0.28); }
-  #menu .foot {
-    position: absolute; bottom: calc(18px + env(safe-area-inset-bottom));
-    font-size: 12px; color: rgba(255,255,255,0.3);
-  }
-  /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css (incluido en <head>). */
-  /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
+  /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css (included in <head>). */
+  /* FPS HUD — Pong format: a monospaced panel at the top left, no border-radius. */
   #fpsOverlay {
     position: absolute;
     left: calc(8px + env(safe-area-inset-left));
@@ -202,16 +150,6 @@
 
   <div id="keyboard"></div>
 
-  <div id="menu">
-    <h1 id="menuTitle">AHORCADO</h1>
-    <div class="sub" id="menuSub">CHOOSE LANGUAGE</div>
-    <div class="lang-row">
-      <button class="lang-btn selected" data-lang="es">SPANISH</button>
-      <button class="lang-btn" data-lang="en">ENGLISH</button>
-    </div>
-    <button class="play-btn" id="btnPlay">JUGAR</button>
-    <div class="foot" id="menuFoot">type a letter or tap the keys</div>
-  </div>
 
   <script>
   // ════════════════════════════════════════════════════════════════════
@@ -233,12 +171,10 @@
     en: ['QWERTYUIOP', 'ASDFGHJKL',  'ZXCVBNM'],
   };
   const UI = {
-    es: { title:'AHORCADO', sub:'CHOOSE LANGUAGE', play:'JUGAR',
-          misses:'FALLOS', used:'LETRAS USADAS',
+    es: { misses:'FALLOS', used:'LETRAS USADAS',
           won:'YOU WIN!', lost:'PERDISTE',
           wordWas:'THE WORD WAS', tryAgain:'TAP FOR ANOTHER' },
-    en: { title:'HANGMAN', sub:'CHOOSE LANGUAGE', play:'PLAY',
-          misses:'MISSES', used:'LETTERS USED',
+    en: { misses:'MISSES', used:'LETTERS USED',
           won:'YOU WIN!', lost:'YOU LOSE',
           wordWas:'THE WORD WAS', tryAgain:'TAP FOR ANOTHER' },
   };
@@ -246,7 +182,7 @@
   // ---------- Game state ----------
   const state = {
     screen: 'menu',        // 'menu' | 'playing' | 'won' | 'lost'
-    lang:   'es',
+    lang:   'en',        // starts in English; the bar's ES/EN button changes it
     word:   '',
     category: '',
     hint:   '',
@@ -298,10 +234,8 @@
   // ════════════════════════════════════════════════════════════════════
   let AC = null, masterGain = null, muted = false, sndThisFrame = 0;
   const voiceLast = {};                    // cooldown per voice
-  // The mute button lives in the bar, and the bar is COVERED by #menu
-  // (z-index 5 against 3): from the first screen there is no way to unmute.
-  // That is why persistence is not optional — it is the only thing that respects the
-  // previous session's mute while the menu is on top.
+  // Persisted because the mute has to survive the round-to-round restarts: every path that
+  // starts a round rebuilds the board, and a mute that reset there would be useless.
   try { muted = localStorage.getItem('hangmanMuted') === '1'; } catch (e) {}
 
   // Per-frame voice ceiling. 14 and not 4 (StickFight) or 5 (Loop) because here
@@ -950,7 +884,6 @@
     state.screen = 'playing';
     buildKeyboard();
     document.getElementById('keyboard').classList.remove('hidden');
-    document.getElementById('menu').classList.add('hidden');
     resize();
     // A single point covers the FIVE routes that start a round: PLAY, ↻, the
     // bar's language button, tap-to-continue and Enter/Space.
@@ -994,7 +927,7 @@
     refreshKeyboardKeys();
   }
 
-  // ---------- Teclado virtual ----------
+  // ---------- Virtual keyboard ----------
   function buildKeyboard() {
     const kb = document.getElementById('keyboard');
     kb.innerHTML = '';
@@ -1031,23 +964,9 @@
 
   // ---------- Physical input ----------
   window.addEventListener('keydown', e => {
-    if (e.key === 'Escape') {
-      if (state.screen === 'menu') return;
-      showMenu();
-      return;
-    }
-    if (state.screen === 'menu') {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        startRound();
-      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Tab') {
-        e.preventDefault();
-        state.lang = state.lang === 'es' ? 'en' : 'es';
-        applyLangToMenu();
-        sfx.uiTick();       // the same event as tapping SPANISH/ENGLISH
-      }
-      return;
-    }
+    // Esc used to go back to the language screen. There is no screen to go back to: the ✕ in
+    // the bar is the way out, and swallowing Esc here would only hide that.
+    if (e.key === 'Escape') return;
     if (state.screen === 'won' || state.screen === 'lost') {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
@@ -1060,39 +979,13 @@
     if (ch.length === 1) guess(ch);
   });
 
-  // ---------- Menu ----------
-  function applyLangToMenu() {
-    const t = UI[state.lang];
-    document.getElementById('menuTitle').textContent = t.title;
-    document.getElementById('menuSub').textContent   = t.sub;
-    document.getElementById('btnPlay').textContent   = t.play;
-    document.querySelectorAll('#menu .lang-btn').forEach(b => {
-      b.classList.toggle('selected', b.dataset.lang === state.lang);
-    });
+  // ---------- Language ----------
+  // There is no language screen any more: the game opens in English and the ES/EN button in the
+  // bar switches it mid-run. All this has to keep in sync is that button and the <html lang>.
+  function applyLang() {
     document.getElementById('btnLang').textContent = state.lang.toUpperCase();
     document.documentElement.lang = state.lang;
   }
-  function showMenu() {
-    state.screen = 'menu';
-    document.getElementById('menu').classList.remove('hidden');
-    document.getElementById('keyboard').classList.add('hidden');
-    applyLangToMenu();
-    resize();
-    sfx.uiTick();          // screen transition: it reuses the tick, it does not invent a voice
-  }
-
-  document.querySelectorAll('#menu .lang-btn').forEach(b => {
-    b.addEventListener('pointerdown', e => {
-      e.preventDefault();
-      state.lang = b.dataset.lang;
-      applyLangToMenu();
-      sfx.uiTick();
-    });
-  });
-  document.getElementById('btnPlay').addEventListener('pointerdown', e => {
-    e.preventDefault();
-    startRound();
-  });
   document.getElementById('btnNew').addEventListener('pointerdown', e => {
     e.preventDefault();
     startRound();
@@ -1100,12 +993,12 @@
   document.getElementById('btnLang').addEventListener('pointerdown', e => {
     e.preventDefault();
     state.lang = state.lang === 'es' ? 'en' : 'es';
-    applyLangToMenu();
+    applyLang();
     startRound();          // no uiTick: startRound already sounds, it would be two hits
   });
 
-  // Mute. The button cannot be reached from the menu (#menu covers it), so what
-  // keeps the state between sessions is localStorage, not the button.
+  // Mute. It persists in localStorage so it survives the restarts, not because the button is
+  // unreachable — since the language screen went away, the bar is there from the first frame.
   const btnMute = document.getElementById('btnMute');
   if (btnMute) {
     btnMute.classList.toggle('muted', muted);
@@ -1139,7 +1032,8 @@
   function init() {
     WORDS.es = parseWords(RAW_WORDS_ES);
     WORDS.en = parseWords(RAW_WORDS_EN);
-    applyLangToMenu();
+    applyLang();
+    startRound();          // no language screen: the first round starts on load
     resize();
     requestAnimationFrame(frame);
   }
@@ -2029,13 +1923,13 @@ nothing</b> — it neither adds a miss nor uses a turn. Each word comes with its
 <h5>Desktop</h5>
 <ul>
   <li><b>Type a letter</b>, or click it on the on-screen keyboard.</li>
-  <li><b>New word</b> deals another one; <b>Change language</b> switches between Spanish and English.</li>
-  <li><b>Esc</b> goes back to the menu.</li>
+  <li><span class="k">↻</span> deals another word; <span class="k">EN</span>/<span class="k">ES</span> switches language.</li>
+  
 </ul>
 <h5>Mobile</h5>
 <ul>
   <li><b>Tap the letters</b> on the on-screen keyboard.</li>
-  <li><b>New word</b> and <b>Change language</b> are in the bar.</li>
+  <li><span class="k">↻</span> and <span class="k">EN</span>/<span class="k">ES</span> are in the bar.</li>
 </ul>
 </div>
 
@@ -2081,7 +1975,7 @@ nothing</b> — it neither adds a miss nor uses a turn. Each word comes with its
         var izq = Math.max(m, Math.min(Math.round(rb.left), vw - ancho - m));
         panel.style.right = 'auto'; panel.style.left = izq + 'px';
       }
-      if ((rb.top + rb.height / 2) < vh / 2) {          // boton arriba -> panel colgando debajo
+      if ((rb.top + rb.height / 2) < vh / 2) {          // button at the top -> panel hanging below
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';

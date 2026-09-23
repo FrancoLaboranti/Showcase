@@ -16,7 +16,7 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Segoe UI', system-ui, sans-serif;
   }
-  /* Canvas ocupa sólo el espacio ARRIBA de la barra — mismo layout que BallsWeb/TatetiWeb. */
+  /* The canvas takes only the space ABOVE the bar — same layout as BallsWeb/TatetiWeb. */
   #c { display: block; position: absolute; top: 0; left: 0; }
 
   #hint {
@@ -30,7 +30,7 @@
     box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
-  /* Barra inferior (mismo estilo que BallsWeb/TatetiWeb) */
+  /* Bottom bar (same style as BallsWeb/TatetiWeb) */
   #bar {
     position: absolute; left: 0; right: 0; bottom: 0;
     height: calc(var(--bar-height) + env(safe-area-inset-bottom));
@@ -55,14 +55,14 @@
   #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
   #ui #btnMute.off { background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.4); }
 
-  /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
+  /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css. */
   :root { --shell-accent: rgba(255,210,80,0.62); --shell-accent-soft: rgba(255,210,80,0.26); --shell-accent-text: #ffd85c; }
 
 
-  /* El boton de mute nacio en la pasada de audio y quedo SIN TAMANO: `arcade-shell.css` solo
-     estiliza ✕ / ⛶ / ⓘ, y en este juego el mute cae fuera de las reglas de la barra. Se veia como
-     una tira fina de un pixel. Se le da el mismo cuerpo que a los tres del shell — no se agrega al
-     shell para no pisar a los nueve juegos que ya le dan estilo propio. */
+  /* The mute button was born in the audio pass and ended up WITH NO SIZE: `arcade-shell.css` only
+     styles ✕ / ⛶ / ⓘ, and in this game the mute falls outside the bar's rules. It looked like a
+     one-pixel sliver. It gets the same body as the shell's three — it is not added to the shell so
+     as not to tread on the nine games that already give it a style of their own. */
   #btnMute {
     width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
     align-self: flex-end; margin-bottom: 6px;
@@ -126,19 +126,19 @@
   // ════════════════════════════════════════════════════════════════════
   const TAU = Math.PI * 2;
 
-  // ── COLORES ──
+  // ── COLOURS ──
   const COL_BG    = '#0e1016';
   const COL_TEXT  = '#ebebf5';
   const COL_DIM   = '#9094a4';
 
-  // 4 pads en disco. ang = [inicio, fin] en radianes (0=derecha, +=horario/abajo).
-  //  id0 rojo  → TL (arriba-izq)   id1 verde → TR (arriba-der)
-  //  id2 azul  → BR (abajo-der)    id3 amarillo → BL (abajo-izq)
+  // 4 pads on a disc. ang = [start, end] in radians (0=right, +=clockwise/down).
+  // id0 red   → TL (top-left)     id1 green → TR (top-right)
+  // id2 blue  → BR (bottom-right) id3 yellow → BL (bottom-left)
   // Authentic Simon tones: green 415, red 310, blue 209.7, yellow 252.
   const PADS = [
-    { base:[235, 50, 55],  tone:310.07, ang:[Math.PI,        1.5*Math.PI] },  // 0 rojo  TL
-    { base:[45, 205, 95],  tone:415.30, ang:[1.5*Math.PI,    TAU] },          // 1 verde TR
-    { base:[60, 120, 255], tone:209.70, ang:[0,              0.5*Math.PI] },  // 2 azul  BR
+    { base:[235, 50, 55],  tone:310.07, ang:[Math.PI,        1.5*Math.PI] },  // 0 red   TL
+    { base:[45, 205, 95],  tone:415.30, ang:[1.5*Math.PI,    TAU] },          // 1 green TR
+    { base:[60, 120, 255], tone:209.70, ang:[0,              0.5*Math.PI] },  // 2 blue  BR
     { base:[248, 216, 45], tone:252.00, ang:[0.5*Math.PI,    Math.PI] },      // 3 amar  BL
   ];
   const PAD_GAP = 0.05;   // angular gap between pads (rad)
@@ -250,7 +250,7 @@
     }
   }
   function playWrong() {                // gentle defeat: a descending arpeggio of the Simon chord
-    if (!soundOn) return;               // (G#4→D#4→B3→G#3) + glissando final hacia abajo
+    if (!soundOn) return;               // (G#4→D#4→B3→G#3) + a final glissando downwards
     audioResume();
     if (!actx) return;
     const notes = [415.30, 311.13, 252.00, 207.65];
@@ -316,7 +316,7 @@
       return;
     }
     inputPos++;
-    if (inputPos >= sequence.length) {             // secuencia completa
+    if (inputPos >= sequence.length) {             // the sequence is complete
       score++;
       playCorrect();
       nicePulse = 1;
@@ -506,7 +506,7 @@
       label = 'MENU'; labelCol = '#ff6b74';
     } else {
       grad.addColorStop(0, '#1b1e29'); grad.addColorStop(1, '#0d0f15');
-      label = String(score); sub = 'NIVEL'; labelCol = COL_TEXT;
+      label = String(score); sub = 'LEVEL'; labelCol = COL_TEXT;
     }
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, TAU);
     ctx.fillStyle = grad; ctx.fill();
@@ -551,16 +551,16 @@
     if (phase === 'menu') {
       ctx.fillStyle = COL_DIM;
       ctx.font = font(600, Math.min(15, H * 0.02));
-      ctx.fillText(best > 0 ? `MEJOR  ${best}` : 'memorise the sequence', W/2, subY);
+      ctx.fillText(best > 0 ? `BEST  ${best}` : 'memorise the sequence', W/2, subY);
     } else if (phase === 'gameover') {
       if (newRecord) {
         ctx.fillStyle = '#ffd54a';
         ctx.font = font(800, Math.min(19, H * 0.025));
-        ctx.fillText(`¡NUEVO RÉCORD!  ${score}`, W/2, subY);
+        ctx.fillText(`NEW RECORD!  ${score}`, W/2, subY);
       } else {
         ctx.fillStyle = COL_TEXT;
         ctx.font = font(700, Math.min(17, H * 0.023));
-        ctx.fillText(`SCORE ${score}    ·    MEJOR ${best}`, W/2, subY);
+        ctx.fillText(`SCORE ${score}    ·    BEST ${best}`, W/2, subY);
       }
     } else {
       // 3 lives (dots with glow)
@@ -595,16 +595,16 @@
     const lines = [
       'SIMON',
       '',
-      'Mirá la secuencia de colores que se',
-      'enciende y repetila tocando los pads.',
-      'Cada acierto suma un color más.',
+      'Watch the sequence of colours that',
+      'lights up and repeat it on the pads.',
+      'Each correct round adds one more colour.',
       '',
-      'Tenés 3 vidas — al 3er error, game over.',
-      'Tu mejor score queda guardado.',
+      'You have 3 lives — on the 3rd mistake, game over.',
+      'Your best score is saved.',
       '',
-      'Centro: empezar / volver al menú.',
-      'Botón ↻ : volver al menú',
-      'Botón 🔊 : sonido on/off',
+      'Centre: start / back to the menu.',
+      '↻ button: back to the menu',
+      '🔊 button: sound on/off',
     ];
     const fs = Math.round(Math.min(14, H*0.020));
     const lh = fs * 1.5;
@@ -741,7 +741,7 @@ the sequence can be remembered by ear as well as by sight — that is how the re
 <ul>
   <li><b>Click the centre</b> to start.</li>
   <li><b>Click the coloured quarters</b> in the order they lit up.</li>
-  <li><b>Back to menu</b> in the bar.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span> <b>Back to menu</b> in the bar.</li>
 </ul>
 <h5>Mobile</h5>
 <ul>
@@ -791,7 +791,7 @@ the sequence can be remembered by ear as well as by sight — that is how the re
         var izq = Math.max(m, Math.min(Math.round(rb.left), vw - ancho - m));
         panel.style.right = 'auto'; panel.style.left = izq + 'px';
       }
-      if ((rb.top + rb.height / 2) < vh / 2) {          // boton arriba -> panel colgando debajo
+      if ((rb.top + rb.height / 2) < vh / 2) {          // button at the top -> panel hanging below
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';

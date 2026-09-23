@@ -63,8 +63,8 @@
   #ui #btnMinus svg, #ui #btnPlus svg { width: 24px; height: 24px; }
   /* visual indicator for toggled-on state */
   #ui button.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); }
-  /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
-  /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
+  /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css. */
+  /* FPS HUD — Pong format: a monospaced panel at the top left, no border-radius. */
   #fpsOverlay {
     position: absolute;
     left: calc(8px + env(safe-area-inset-left));
@@ -103,7 +103,7 @@
 </head>
 <body>
   <canvas id="c"></canvas>
-  <div id="hint">levantá una bola y soltala para impulsar las otras · +/− cambia la cantidad · 👻 fantasma · ⏸ pausa</div>
+  <div id="hint">lift a ball and let it go to drive the others · +/− changes how many · 👻 ghost · ⏸ pause</div>
   <div id="bar">
   <button id="btnExit" aria-label="exit to menu" title="Exit to menu">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
@@ -593,7 +593,7 @@
       const db = s.createRadialGradient(_sunX, _sunY, 0, _sunX, _sunY, H * 0.6);
       db.addColorStop(0, 'rgba(255,238,180,0.34)'); db.addColorStop(0.45, 'rgba(255,212,150,0.13)'); db.addColorStop(1, 'rgba(255,200,140,0)');
       s.fillStyle = db; s.fillRect(gx, Math.max(0, gy), gw, gh);
-      // sol bajo + resplandor
+      // a low sun + a glow
       const sun = s.createRadialGradient(gx + gw * 0.42, horizonY, 0, gx + gw * 0.42, horizonY, H * 0.45);
       sun.addColorStop(0, 'rgba(255,238,200,0.95)'); sun.addColorStop(0.5, 'rgba(255,210,150,0.4)'); sun.addColorStop(1, 'rgba(255,210,150,0)');
       s.fillStyle = sun; s.fillRect(gx, Math.max(0, gy), gw, gh);
@@ -698,7 +698,7 @@
     // SWORD LEAF: a curved shape tapered with an arch + gravity,
     // a variegated central band (lime green) and a dark midrib.
     // baseX/baseY = the origin (the crown). ang = the direction it leaves in (rad,
-    // 0 = derecha, -PI/2 = arriba). len, w, arch (curvatura/caida).
+    // 0 = right, -PI/2 = up). len, w, arch (curvature/droop).
     // backLayer => darker. seed for micro-variation of tone.
     // ============================================================
     function swordLeaf(baseX, baseY, ang, len, w, arch, backLayer, seed) {
@@ -746,7 +746,7 @@
 
       // --- relleno: gradiente longitudinal (base->punta) ---
       const baseLight = backLayer ? -16 : 0;
-      const tone = ((seed * 23) % 11) - 5; // -5..+5 micro-variacion
+      const tone = ((seed * 23) % 11) - 5; // -5..+5 micro-variation
       const g = s.createLinearGradient(0, 0, tipX, tipY);
       g.addColorStop(0.00, C(28 + baseLight + tone, 64 + baseLight, 34 + baseLight));
       g.addColorStop(0.45, C(40 + baseLight + tone, 96 + baseLight + tone, 46 + baseLight));
@@ -766,7 +766,7 @@
       s.closePath();
       s.fill();
 
-      // --- VARIEGADO: franja central verde lima en degrade ---
+      // --- VARIEGATED: a lime-green central stripe in a gradient ---
       const stripeLight = backLayer ? -22 : 0;
       const sg = s.createLinearGradient(0, 0, tipX, tipY);
       sg.addColorStop(0.00, C(70 + stripeLight, 130 + stripeLight, 58 + stripeLight, 0.0));
@@ -897,12 +897,12 @@
         ang += (rng() - 0.5) * 0.16;
         const horiz = Math.abs(Math.cos(ang));
         const len = scale * (1.18 + horiz * 0.6) * (0.9 + rng() * 0.16);            // longer
-        const w = scale * (0.055 + rng() * 0.085);                                  // ancho variado (0.055–0.14): planta real
+        const w = scale * (0.055 + rng() * 0.085);                                  // a varied width (0.055–0.14): a real plant
         const arch = 0.95 + horiz * 1.25 + rng() * 0.3;                             // they fall further (with gs ⇒ downwards)
         swordLeaf(cxr, cyr, ang, len, w, arch, true, (i * 7 + 3) | 0);
       }
 
-      // ---- CAPA DELANTERA (corona erguida + caida) ----
+      // ---- FRONT LAYER (an upright crown + the fall) ----
       const frontN = 18;
       for (let i = 0; i < frontN; i++) {
         const t = i / (frontN - 1);
@@ -913,7 +913,7 @@
         const up = Math.max(0, -Math.sin(ang));
         const horiz = Math.abs(Math.cos(ang));
         const len = scale * (0.82 + horiz * 0.78 + (1 - up) * 0.16) * (0.92 + rng() * 0.14);  // longer
-        const w = scale * (0.048 + rng() * 0.08);                                   // ancho variado (0.048–0.128)
+        const w = scale * (0.048 + rng() * 0.08);                                   // a varied width (0.048–0.128)
         const arch = 0.6 + horiz * 1.5 + (rng() - 0.5) * 0.3;                       // they fall further
         swordLeaf(cxr, cyr, ang, len, w, arch, false, (i * 13 + 5) | 0);
       }
@@ -925,7 +925,7 @@
         let ang = lr > 0 ? -0.05 - rng() * 0.45 : Math.PI + 0.05 + rng() * 0.45;    // almost horizontal on each side
         ang += sideBias * 0.1;
         const len = scale * (1.45 + rng() * 0.45);                                  // the longest in the bunch
-        const w = scale * (0.05 + rng() * 0.06);                                    // ancho variado (0.05–0.11)
+        const w = scale * (0.05 + rng() * 0.06);                                    // a varied width (0.05–0.11)
         const arch = 1.5 + rng() * 0.7;                                             // cuelgan fuerte
         swordLeaf(cxr, cyr, ang, len, w, arch, lr > 0, (i * 29 + 7) | 0);
       }
@@ -941,7 +941,7 @@
         ang += (rng() - 0.5) * 0.10;
         const horiz = Math.abs(Math.cos(ang));
         const len = scale * (0.84 + horiz * 0.4) * (0.9 + rng() * 0.16);            // at the height of the side ones
-        const w = scale * (0.05 + rng() * 0.07);                                    // ancho variado
+        const w = scale * (0.05 + rng() * 0.07);                                    // a varied width
         const arch = 0.26 + horiz * 0.55 + rng() * 0.18;                            // a low arch ⇒ upright, they fill the top
         swordLeaf(cxr, cyr, ang, len, w, arch, false, (i * 17 + 9) | 0);
       }
@@ -1163,7 +1163,7 @@
     const sh = c.createLinearGradient(0, top + thk, 0, top + thk + radio * 1.2);
     sh.addColorStop(0, 'rgba(0,0,0,0.4)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
     c.fillStyle = sh; c.fillRect(xL - radio, top + thk - 2, w + radio * 2, radio * 1.3);
-    // cuerpo madera (cara iluminada arriba → canto oscuro abajo)
+    // wooden body (lit face on top → dark edge below)
     const g = c.createLinearGradient(0, top, 0, top + thk);
     g.addColorStop(0,    'rgb(108,48,30)');
     g.addColorStop(0.16, 'rgb(78,32,20)');
@@ -1251,7 +1251,7 @@
     ctx.save();
     ctx.beginPath(); ctx.rect(xL, baseY - radio * 0.4, xR - xL, radio * 0.9); ctx.clip();
     for (const ball of balls) {
-      const t = Math.max(0, Math.min(1, (ball.y - origY) / L));                    // 0 = arriba, 1 = reposo
+      const t = Math.max(0, Math.min(1, (ball.y - origY) / L));                    // 0 = up, 1 = at rest
       let liftFade = (t - 0.66) / (0.94 - 0.66);
       liftFade = Math.max(0, Math.min(1, liftFade));
       liftFade = liftFade * liftFade * (3 - 2 * liftFade);                          // smoothstep: a plateau + a falloff
@@ -1368,7 +1368,7 @@
     drawStrings();
     ctx.globalAlpha = ghosted ? 0.4 : 1;
     const bh = ballSpriteHalf;
-    for (const ball of balls) ctx.drawImage(ballSprite, ball.x - bh, ball.y - bh, bh * 2, bh * 2); // esfera bakeada
+    for (const ball of balls) ctx.drawImage(ballSprite, ball.x - bh, ball.y - bh, bh * 2, bh * 2); // a baked sphere
     ctx.globalAlpha = 1;
     // contact occlusion between touching balls (it reads them as solid spheres, not translucent)
     drawContactOcclusion();
@@ -1585,10 +1585,10 @@ same number swings out the other side.</b> Nothing to win — it is there to be 
 <h5>Desktop</h5>
 <ul>
   <li><b>Drag a sphere aside and release it</b> to set the others going.</li>
-  <li><b>Add a ball</b> / <b>Remove a ball</b> change how many hang.</li>
-  <li><b>Ghost mode</b> makes them pass through each other instead of colliding.</li>
-  <li><b>Freeze</b> pauses gravity and leaves them where they are.</li>
-  <li><b>Restart</b> hangs them back at rest.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg></span> <b>Add a ball</b> / <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 12h12"/></svg></span> <b>Remove a ball</b> change how many hang.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" clip-rule="evenodd" d="M12 3a7 7 0 0 0-7 7v9l2-1.6 2 1.6 2-1.6 1 1.6 1-1.6 2 1.6 2-1.6V10a7 7 0 0 0-7-7zm-2.2 6.2a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2zm4.4 0a1.1 1.1 0 1 0 0 2.2 1.1 1.1 0 0 0 0-2.2z"/></svg></span> <b>Ghost mode</b> makes them pass through each other instead of colliding.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></span> <b>Freeze</b> pauses gravity and leaves them where they are.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span> <b>Restart</b> hangs them back at rest.</li>
 </ul>
 <h5>Mobile</h5>
 <ul>
@@ -1641,7 +1641,7 @@ so you can tell time is passing.</span>
         var izq = Math.max(m, Math.min(Math.round(rb.left), vw - ancho - m));
         panel.style.right = 'auto'; panel.style.left = izq + 'px';
       }
-      if ((rb.top + rb.height / 2) < vh / 2) {          // boton arriba -> panel colgando debajo
+      if ((rb.top + rb.height / 2) < vh / 2) {          // button at the top -> panel hanging below
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';

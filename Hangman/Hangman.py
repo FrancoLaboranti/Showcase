@@ -7,13 +7,13 @@ import pygame.freetype
 from pygame.locals import *
 
 # Hangman / Ahorcado --------------------------------------------------------
-# Sigue el esqueleto compartido del repo (Sprite, deltaT, xper/yper/sper,
+# It follows the repo's shared skeleton (Sprite, deltaT, xper/yper/sper,
 # createText). Diferencias notables:
-#   - El input de letras se consume de KEYDOWN events (vía la lista global
-#     `key_events`) en lugar de keys[K_x] + flag, porque el alfabeto español
-#     incluye Ñ y conviene leer event.unicode directamente.
-#   - Las listas de palabras viven en words_es.txt / words_en.txt al lado del
-#     script (en mayúsculas, una por línea).
+#   - Letter input is consumed from KEYDOWN events (via the global
+#     `key_events` list) instead of keys[K_x] + a flag, because the Spanish
+#     alphabet includes Ñ and reading event.unicode directly is better.
+#   - The word lists live in words_es.txt / words_en.txt next to the script
+#     (uppercase, one per line).
 
 MAX_FAILS = 6
 
@@ -98,7 +98,7 @@ class Gallows(Sprite):
         thick = max(3, int(sper(0.006)))
         wood = (190, 150, 95)
 
-        # base, poste, travesaño, soporte diagonal
+        # base, post, crossbeam, diagonal support
         pygame.draw.line(windowSurface, wood, (cx - xper(0.09), floor_y), (cx + xper(0.09), floor_y), thick)
         pygame.draw.line(windowSurface, wood, (cx - xper(0.06), floor_y), (cx - xper(0.06), post_top), thick)
         pygame.draw.line(windowSurface, wood, (cx - xper(0.06), post_top), (cx + xper(0.08), post_top), thick)
@@ -110,7 +110,7 @@ class Gallows(Sprite):
         rope_bot = post_top + yper(0.07)
         pygame.draw.line(windowSurface, (200, 200, 200), (rope_x, rope_top), (rope_x, rope_bot), max(2, thick - 2))
 
-        # muñeco
+        # the figure
         head_r = sper(0.028)
         bx = rope_x + shake_x
         head_cy = rope_bot + head_r
@@ -163,7 +163,7 @@ class WordDisplay(Sprite):
 
         cx = xper(0.65)
 
-        # Categoria y pista arriba de la palabra
+        # Category and hint above the word
         if m.category:
             createText(int(sper(0.025)), m.category, 'center', (200, 200, 110), cx, yper(0.30))
         if m.hint:
@@ -339,7 +339,7 @@ class Manager(Sprite):
             createText(int(sper(0.018)), t['esc_quit'], 'center', (110, 110, 110), xper(0.5), yper(0.92))
             return
 
-        # HUD partido en curso o terminado
+        # HUD for a game in progress or finished
         createText(int(sper(0.022)), '%s: %d / %d' % (t['fails'], self.fails, MAX_FAILS), 'topleft', (200, 200, 200), xper(0.02), yper(0.02))
         createText(int(sper(0.022)), 'W %d  ·  L %d' % (self.wins, self.losses), 'topright', (200, 200, 200), xper(0.98), yper(0.02))
 
@@ -457,7 +457,7 @@ while True:
     m = manager[0]
     for sprite in sprites:
         sprite.process()
-        # En el menú solo dibujamos el manager (los otros sprites necesitan una palabra activa)
+        # In the menu we only draw the manager (the other sprites need an active word)
         if m.state == 'menu' and sprite is not m:
             continue
         sprite.draw()

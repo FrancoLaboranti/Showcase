@@ -92,7 +92,8 @@ A single self-contained `index.html` (HTML + CSS + JS, Canvas 2D). No build step
   canvas memory **per tab**, so the browser throws away the context of whatever is in the
   background. Without the `contextlost` / `contextrestored` pair plus a re-bake, that is a permanent
   black screen. Implemented in Loop, Pong and StickFight; **the rest still owe it.**
-- **Spanish UI, English identifiers** — same convention as the newer Python files.
+- **English UI and English comments**; the identifiers are left as they were (several folders mix
+  Spanish and English names — see the conventions below).
 
 ## Assets
 

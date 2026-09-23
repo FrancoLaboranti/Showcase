@@ -69,12 +69,12 @@
   /* visual indicator for toggled-on state */
   #ui button.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); }
 
-  /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
+  /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css. */
   :root { --shell-accent: rgba(255,190,90,0.62); --shell-accent-soft: rgba(255,190,90,0.26); --shell-accent-text: #ffc978; }
 
 
-  /* Diagnostico DENTRO del panel: antes era una tarjeta aparte sobre el lienzo. Monoespaciada y
-     `pre-line` para que las columnas queden alineadas como estaban. */
+  /* Diagnostics INSIDE the panel: it used to be a separate card over the canvas. Monospaced and
+     `pre-line` so the columns stay aligned as they were. */
   #infoPanel #fpsOverlay {
     margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,0.11);
     font: 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
@@ -162,9 +162,9 @@
   // Sound — all marble, real samples recorded by Franco in sounds/cuts/.
   const SND_MAX_PER_FRAME = 1;                                                    // hard ceiling so it does not saturate when several balls come down at once
   const PITCH_JITTER     = 0.06;                                                  // ± random on playbackRate, makes the sample repetition sound natural
-  // Umbrales en matter velocity units (px/step, ~×60 = px/s).
+  // Thresholds in matter velocity units (px/step, ~×60 = px/s).
   const VTHR_AUDIBLE     = 2.5;                                                   // below this nothing plays (numerical jitter)
-  const VTHR_MED         = 6;                                                     // bajo→medio
+  const VTHR_MED         = 6;                                                     // low→medium
   const VTHR_HARD        = 13;                                                    // medium→hard; above this MarbleClick plays at full
   // Roll loop: when a ball is "rolling" on the floor (wallMode 1 only).
   const ROLL_MIN_HSPEED  = 4;                                                     // minimum horizontal vy to start sounding
@@ -702,7 +702,7 @@
     1: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg>',
     // 2 = ceiling + floor (two horizontal lines, the sides open)
     2: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M4 7h16M4 17h16"/></svg>',
-    // 3 = laterales (dos rayas verticales, techo/piso abiertos)
+    // 3 = sides (two vertical lines, ceiling/floor open)
     3: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M7 4v16M17 4v16"/></svg>',
     // 4 = no walls (4 diagonal arrows opening outwards)
     4: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 10 4 4M4 9V4h5M14 10l6-6M15 4h5v5M10 14l-6 6M4 15v5h5M14 14l6 6M20 15v5h-5"/></svg>',
@@ -816,7 +816,7 @@
           if (!r.ok) continue;
           const arr = await r.arrayBuffer();
           soundBuffers[bucket][i] = await actx.decodeAudioData(arr);
-        } catch (_) { /* missing variant: pool just queda más chico */ }
+        } catch (_) { /* missing variant: the pool is just smaller */ }
       }
       soundBuffers[bucket] = soundBuffers[bucket].filter(Boolean);                 // compact the gaps so random picks uniformly
     }
@@ -832,8 +832,8 @@
   function pitchForBall(b) {
     const minDim = Math.min(W, H);
     const r = b.circleRadius / COLLISION_RADIUS_MULT;                              // visual radius (undoes the collider's inflation)
-    const sizeNorm = (r/minDim - R_MIN_FRAC) / (R_MAX_FRAC - R_MIN_FRAC);          // 0=chica, 1=grande
-    return 1.0 + (0.5 - sizeNorm) * 0.35;                                          // 1.175 (chica) … 0.825 (grande)
+    const sizeNorm = (r/minDim - R_MIN_FRAC) / (R_MAX_FRAC - R_MIN_FRAC);          // 0=small, 1=big
+    return 1.0 + (0.5 - sizeNorm) * 0.35;                                          // 1.175 (small) … 0.825 (big)
   }
 
   function playBuffer(buf, gain, pitch) {
@@ -918,7 +918,7 @@
       const b = e.body;
       if (e.state !== 'live' || b.isStatic) { stopRollNode(e); continue; }
       const r = b.circleRadius;
-      const distToFloor = H - b.position.y - r;                                    // 0 = tocando piso, >0 = arriba, <0 = pasado
+      const distToFloor = H - b.position.y - r;                                    // 0 = touching the floor, >0 = above, <0 = past it
       const onFloor = (wallMode === 1 || wallMode === 2) && distToFloor < r * ROLL_NEAR_FLOOR_FRAC && distToFloor > -r * 1.5;
       const hSpeed = Math.abs(b.velocity.x);
       const rolling = onFloor && hSpeed > ROLL_MIN_HSPEED * physicsScale;
@@ -1121,16 +1121,16 @@ A box of marbles with real physics. There is no goal — it is a toy.
 <h5>Desktop</h5>
 <ul>
   <li><b>Drag a marble</b> and let go to throw it; the faster the gesture, the harder the throw.</li>
-  <li><b>Q</b> pins the marble you are holding in mid-air, same as <b>Pin</b>.</li>
-  <li><b>Space</b> makes them all jump, same as <b>Jump</b>.</li>
-  <li><b>Add a ball</b> / <b>Remove a ball</b> change how many there are; <b>Wall mode</b> changes
-      how the walls behave; <b>Restart</b> puts everything back.</li>
+  <li><b>Q</b> pins the marble you are holding in mid-air, same as <span class="ik"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 3h8v1.5h-1.5v5l2.5 3.5v1h-5v6.5l-1 1-1-1v-6.5h-5v-1l2.5-3.5v-5H8z"/></svg></span> <b>Pin</b>.</li>
+  <li><b>Space</b> makes them all jump, same as <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 11l6-6 6 6"/></svg></span> <b>Jump</b>.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg></span> <b>Add a ball</b> / <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 12h12"/></svg></span> <b>Remove a ball</b> change how many there are; <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg></span> <b>Wall mode</b> changes
+      how the walls behave; <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span> <b>Restart</b> puts everything back.</li>
 </ul>
 <h5>Mobile</h5>
 <ul>
   <li><b>Drag a marble</b> and let go to throw it.</li>
-  <li><b>Jump</b>, <b>Pin</b>, <b>Wall mode</b>, <b>Add a ball</b>, <b>Remove a ball</b> and
-      <b>Restart</b> are the bar buttons, left to right.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M6 11l6-6 6 6"/></svg></span> <b>Jump</b>, <span class="ik"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 3h8v1.5h-1.5v5l2.5 3.5v1h-5v6.5l-1 1-1-1v-6.5h-5v-1l2.5-3.5v-5H8z"/></svg></span> <b>Pin</b>, <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="1.5"/></svg></span> <b>Wall mode</b>, <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 6v12M6 12h12"/></svg></span> <b>Add a ball</b>, <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M6 12h12"/></svg></span> <b>Remove a ball</b> and
+      <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span> <b>Restart</b> are the bar buttons, left to right.</li>
 </ul>
 <hr>
 <span class="dim">The bar chart at the top left is the ten fastest marbles in px/s. It is drawn on
@@ -1181,7 +1181,7 @@ of numbers does not give.</span>
         var izq = Math.max(m, Math.min(Math.round(rb.left), vw - ancho - m));
         panel.style.right = 'auto'; panel.style.left = izq + 'px';
       }
-      if ((rb.top + rb.height / 2) < vh / 2) {          // boton arriba -> panel colgando debajo
+      if ((rb.top + rb.height / 2) < vh / 2) {          // button at the top -> panel hanging below
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';

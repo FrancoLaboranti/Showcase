@@ -1,9 +1,9 @@
-// Service worker mínimo: hace la PWA "instalable" (Chrome exige un SW con handler de
-// 'fetch') y mantiene el shell SIEMPRE FRESCO. La app es chica y online, así que no
-// cacheamos; al revés, forzamos que los documentos se traigan sin caché para que un
-// deploy se vea al instante (sin tener que borrar la caché del sitio a mano).
-// OJO: el SW sólo controla su scope (/Arcade/); los juegos viven fuera y se refrescan
-// con el cache-buster del iframe (ver launch() en index.html).
+// Minimal service worker: it makes the PWA "installable" (Chrome requires a SW with a
+// 'fetch' handler) and keeps the shell ALWAYS FRESH. The app is small and online, so we do
+// not cache; the opposite — we force documents to be fetched with no cache so a deploy shows
+// up instantly (without having to clear the site's cache by hand).
+// CAREFUL: the SW only controls its scope (/Arcade/); the games live outside it and refresh
+// through the iframe's cache-buster (see launch() in index.html).
 
 self.addEventListener('install', () => {
   self.skipWaiting();
@@ -14,9 +14,9 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  // Navegaciones (el shell): network-first sin caché → siempre la última versión.
+  // Navigations (the shell): network-first with no cache → always the latest version.
   if (e.request.mode === 'navigate') {
     e.respondWith(fetch(e.request, { cache: 'no-store' }).catch(() => fetch(e.request)));
   }
-  // El resto pasa normal (deja que el navegador use su caché para assets estáticos).
+  // Everything else passes through (letting the browser use its cache for static assets).
 });

@@ -67,16 +67,16 @@
   #ui button.txt { font-weight: 700; font-size: 17px; letter-spacing: 0.02em; }
   /* visual indicator for toggled-on state */
   #ui button.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); }
-  /* Botón de sonido: alterna ícono parlante ↔ silenciado vía la clase .muted. */
+  /* Sound button: it swaps the speaker ↔ muted icon via the .muted class. */
   #btnMute .ic-off { display: none; }
   #btnMute.muted .ic-on { display: none; }
   #btnMute.muted .ic-off { display: block; }
-  /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
+  /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css. */
   :root { --shell-accent: rgba(255,170,90,0.62); --shell-accent-soft: rgba(255,170,90,0.26); --shell-accent-text: #ffc07a; }
 
 
-  /* Diagnostico DENTRO del panel: antes era una tarjeta aparte sobre el lienzo. Monoespaciada y
-     `pre-line` para que las columnas queden alineadas como estaban. */
+  /* Diagnostics INSIDE the panel: it used to be a separate card over the canvas. Monospaced and
+     `pre-line` so the columns stay aligned as they were. */
   #infoPanel #fpsOverlay {
     margin-top: 10px; padding-top: 9px; border-top: 1px solid rgba(255,255,255,0.11);
     font: 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
@@ -211,13 +211,13 @@
     skyCanvas.style.height = H + 'px';
     sky.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-    const grad = sky.createLinearGradient(0, 0, 0, H);                            // arriba casi negro, abajo azul noche
+    const grad = sky.createLinearGradient(0, 0, 0, H);                            // near-black at the top, night blue at the bottom
     grad.addColorStop(0,    '#04060e');
     grad.addColorStop(0.55, '#070b1c');
     grad.addColorStop(1,    '#0e1733');
     sky.fillStyle = grad; sky.fillRect(0, 0, W, H);
 
-    const R = Math.max(W, H) * 0.55;                                             // nebulosas: 2 manchas radiales muy suaves
+    const R = Math.max(W, H) * 0.55;                                             // nebulae: 2 very soft radial smudges
     for (const neb of [[0.26, 0.32, '120,90,200'], [0.8, 0.6, '40,120,210']]) {
       const g2 = sky.createRadialGradient(W*neb[0], H*neb[1], 0, W*neb[0], H*neb[1], R);
       g2.addColorStop(0, `rgba(${neb[2]},0.06)`); g2.addColorStop(1, `rgba(${neb[2]},0)`);
@@ -252,15 +252,15 @@
 
   // The same palette as Fireworks.py: ranges (redLow,redHigh, greenLow,greenHigh, blueLow,blueHigh).
   const COLORS = [
-    [75,155, 0,0, 0,0],        // Rojo oscuro
-    [0,0, 75,155, 0,0],        // Verde oscuro
-    [0,0, 0,0, 75,155],        // Azul oscuro
+    [75,155, 0,0, 0,0],        // Dark red
+    [0,0, 75,155, 0,0],        // Dark green
+    [0,0, 0,0, 75,155],        // Dark blue
     [75,155, 75,155, 0,0],     // Dark red and green
     [0,0, 75,155, 75,155],     // Dark green and blue
     [75,155, 0,0, 75,155],     // Dark red and blue
-    [200,255, 0,0, 0,0],       // Rojo claro
-    [0,0, 200,255, 0,0],       // Verde claro
-    [0,0, 0,0, 200,255],       // Azul claro
+    [200,255, 0,0, 0,0],       // Light red
+    [0,0, 200,255, 0,0],       // Light green
+    [0,0, 0,0, 200,255],       // Light blue
     [200,255, 200,255, 0,0],   // Light red and green
     [0,0, 200,255, 200,255],   // Light green and blue
     [200,255, 0,0, 200,255],   // Light red and blue
@@ -325,7 +325,7 @@
     if (style === 'arc') {                                                        // ballistic: solve the initial v to land on the target in T
       fw.g  = sper(rnd(ARC_GRAV_FRAC[0], ARC_GRAV_FRAC[1]));
       fw.vx = (tx - x) / T;
-      fw.vy = (ty - y) / T - 0.5 * fw.g * T;                                      // muy negativa → dispara fuerte hacia arriba
+      fw.vy = (ty - y) / T - 0.5 * fw.g * T;                                      // very negative → it fires hard upwards
     }
     playVoice('launch');                                                          // the ignition "whoomph" on launching (the cooldown limits it in salvos/×5)
     fireworks.push(fw);
@@ -337,10 +337,10 @@
   let launchCount = 0;
   const SALVO_SCHEMES = [
     [C_YELLOW, C_WHITE],                  // yellow · white (the classic)
-    [[255, 200, 95], [255, 70, 70]],      // dorado · rojo
-    [[70, 200, 255], C_WHITE],            // celeste · blanco
-    [[120, 130, 255], [200, 120, 255]],   // azul · violeta
-    [[255, 100, 210], C_WHITE],           // magenta · blanco
+    [[255, 200, 95], [255, 70, 70]],      // gold · red
+    [[70, 200, 255], C_WHITE],            // light blue · white
+    [[120, 130, 255], [200, 120, 255]],   // blue · violet
+    [[255, 100, 210], C_WHITE],           // magenta · white
     'rainbow',                            // rainbow (a colour drawn per rocket)
   ];
   const _salvoColor = (scheme, i) => scheme === 'rainbow' ? pickColor() : scheme[i % scheme.length];
@@ -396,7 +396,7 @@
       fw.y = fw.sy + fw.vy * fw.age + 0.5 * fw.g * fw.age * fw.age;
     } else {                                                                      // interpolated start→target with a curve
       const p = fw.style === 'decel' ? 1 - Math.pow(1 - u, 3)                     // rises fast and brakes on arrival
-                                     : 1 - Math.pow(1 - u, 1.5);                  // 'direct': casi recto, explota arriba
+                                     : 1 - Math.pow(1 - u, 1.5);                  // 'direct': almost straight, it explodes at the top
       fw.x = fw.sx + (fw.tx - fw.sx) * p;
       fw.y = fw.sy + (fw.ty - fw.sy) * p;
     }
@@ -436,7 +436,7 @@
     const gr = fw.radius * 5;                                                     // soft glow of the head
     ctx.globalAlpha = 0.45 * dim;
     ctx.drawImage(glowSprite(fw.color), fw.x - gr, fw.y - gr, gr*2, gr*2);
-    ctx.globalAlpha = 0.85 * dim;                                                 // cabeza
+    ctx.globalAlpha = 0.85 * dim;                                                 // the head
     ctx.fillStyle = mixWhite(fw.color, 0.4);
     ctx.beginPath(); ctx.arc(fw.x, fw.y, fw.radius * 1.25, 0, TAU); ctx.fill();
     ctx.globalAlpha = 1;
@@ -509,7 +509,7 @@
         const fr = ri(6, 8);
         for (let f = 0; f < fr; f++) {
           const baseA = TAU*f/fr;
-          const bx = Math.cos(baseA), by = -Math.abs(Math.sin(baseA))*0.7 - 0.35;   // sesgo claro hacia arriba
+          const bx = Math.cos(baseA), by = -Math.abs(Math.sin(baseA))*0.7 - 0.35;   // a clear bias upwards
           const sprays = ri(5, 8);
           for (let s = 0; s < sprays; s++) {
             const jx = bx + rnd(-0.14,0.14), jy = by + rnd(-0.1,0.1), jz = rnd(-0.5,0.5);
@@ -529,7 +529,7 @@
         for (let i = 0; i < n; i++) { const d = dir3(); P.push({ ...d, r: rnd(0.2, 1), len: 0, size: rnd(0.7,1.5), phase: rnd(0,TAU) }); }
         e.grav = 0.35; e.headSize = 1.0; break;
       }
-      case 'double': {                      // DOS ANILLOS inclinados cruzados, distinto color
+      case 'double': {                      // TWO tilted crossed RINGS, different colours
         const n = ri(34, 46);
         const ax1 = rnd(0.35,1.1)*(Math.random()<0.5?-1:1), ay1 = rnd(0,TAU);
         const ax2 = rnd(0.35,1.1)*(Math.random()<0.5?-1:1), ay2 = rnd(0,TAU);
@@ -648,7 +648,7 @@
     }
   }
 
-  // ════════════════ ACCIONES ════════════════
+  // ════════════════ ACTIONS ════════════════
   function blowAll() {                                                            // blow up every rocket in flight
     let n = 0;
     for (const fw of fireworks) {
@@ -739,7 +739,7 @@
         const r = await fetch(SOUND_DIR + encodeURIComponent(file));               // encodeURIComponent: 'fw explosion.mp3' has a space
         if (!r.ok) continue;
         soundBuffers[voice] = await actx.decodeAudioData(await r.arrayBuffer());
-      } catch (_) { /* archivo faltante: esa voz simplemente no suena */ }
+      } catch (_) { /* a missing file: that voice simply does not sound */ }
     }
     startBackground();
   }
@@ -772,7 +772,7 @@
     bgNode.connect(bgGain); bgGain.connect(masterGain); bgNode.start();
   }
 
-  function playVoice(voice, gainMul, pitch) {                                      // one-shot: lanzamiento / estallido
+  function playVoice(voice, gainMul, pitch) {                                      // a one-shot: a launch / a burst
     if (!actx || muted) return;
     const buf = soundBuffers[voice];
     if (!buf) return;
@@ -903,8 +903,8 @@ The second sky, with more burst shapes. No score and no end.
 <h5>Desktop</h5>
 <ul>
   <li><b>Click and drag</b> to launch a rocket where you aim.</li>
-  <li><b>Auto show</b> launches on its own; <b>x5</b> sends five at once.</li>
-  <li><b>Burst one at a time</b> (hold) and <b>Burst everything in the air</b> pop what is climbing.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 13.7-5.6L20 8"/><path d="M20 3.5V8h-4.5"/><path d="M20 12a8 8 0 0 1-13.7 5.6L4 16"/><path d="M4 20.5V16h4.5"/></svg></span> <b>Auto show</b> launches on its own; <span class="k">×5</span> sends five at once.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2"/></svg></span> <b>Burst one at a time</b> (hold) and <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="8.5" cy="9" r="1.7" fill="currentColor" stroke="none"/><path d="M8.5 4.5v2M8.5 11.5v2M4 9h2M11 9h2M6 6.5l1.3 1.3M9.7 10.2L11 11.5M11 6.5L9.7 7.8M7.3 10.2L6 11.5"/><circle cx="16.5" cy="15.5" r="1.3" fill="currentColor" stroke="none"/><path d="M16.5 12v1.6M16.5 17.4V19M13 15.5h1.6M18.4 15.5H20"/></svg></span> <b>Burst everything in the air</b> pop what is climbing.</li>
 </ul>
 <h5>Mobile</h5>
 <ul>
@@ -955,7 +955,7 @@ The second sky, with more burst shapes. No score and no end.
         var izq = Math.max(m, Math.min(Math.round(rb.left), vw - ancho - m));
         panel.style.right = 'auto'; panel.style.left = izq + 'px';
       }
-      if ((rb.top + rb.height / 2) < vh / 2) {          // boton arriba -> panel colgando debajo
+      if ((rb.top + rb.height / 2) < vh / 2) {          // button at the top -> panel hanging below
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';

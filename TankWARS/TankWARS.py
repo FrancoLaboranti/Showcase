@@ -122,8 +122,8 @@ class Tank(Sprite):
 
                     isPlayerShot = player and shot.isPlayerShot
                     atk = player[0].attack if isPlayerShot else shot.attack
-                    # El cañón del player dispara 4x más rápido pero cada tiro pega 1/4
-                    # (mismo DPS); misiles y disparos enemigos no se tocan.
+                    # The player's cannon fires 4x faster but each shot hits for 1/4
+                    # (the same DPS); missiles and enemy shots are untouched.
                     primaryScale = 0.25 if (isPlayerShot and not shot.missile) else 1
                     self.health = max(self.health - 0.05 * atk * self.defense * (10 if shot.missile else 1) * primaryScale,0)
                     self.hitCD = 0.03
@@ -274,8 +274,8 @@ class Player(Tank):
             if self.secondaryShot: self.secondaryShotAction()
             if self.powerMode: self.powerModeAction()
 
-            # El escudo ahora se activa solo (como la IA) cuando un disparo enemigo
-            # se acerca; en power mode es invulnerable, así que no gasta carga.
+            # The shield now arms itself (like the AI) when an enemy shot comes close;
+            # in power mode you are invulnerable, so it spends no charge.
             if self.powerModeActiveTime == 0: self.autoShield()
 
             self.missileRegenCD = max(self.missileRegenCD - deltaT, 0)
@@ -378,8 +378,8 @@ class Player(Tank):
         self.y += math.sin(recoilAng)*sper(0.012)
 
         if not powered: self.missileStack -= 1
-        # En power mode los misiles salen rápido (secondaryShotAS bajo); fuera de
-        # power, un CD corto sólo limita el ritmo al vaciar el stack.
+        # In power mode the missiles come out fast (a low secondaryShotAS); outside
+        # power, a short CD only limits the rate when emptying the stack.
         self.secondaryShotCD = 10*self.secondaryShotAS if powered else 0.25
 
 class Enemy(Tank):
@@ -2052,9 +2052,9 @@ def addSprite(sprite):
     return sprite
 
 def removeSprites():
-    # dict.fromkeys deduplica (un sprite puede agregarse varias veces en un mismo
-    # frame) preservando el orden; iterar sobre esto y no sobre `sprites` evita
-    # saltear elementos al mutar la lista durante el recorrido.
+    # dict.fromkeys deduplicates (a sprite can be added several times in the same
+    # frame) while preserving order; iterating over this and not over `sprites`
+    # avoids skipping elements when the list mutates during the walk.
     for sprite in dict.fromkeys(spritesToRemove):
         if sprite in tanks:
             tanks.remove(sprite)

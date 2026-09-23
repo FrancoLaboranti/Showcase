@@ -1,86 +1,86 @@
 # LOOP
 
-**Arena arcade roguelite** nacida de cruzar las mecánicas del resto del repo en un solo
-juego nuevo (no es un hub ni una recopilación). **Web-only** como DonkeyKong/Pacman/StickFight:
-no hay `.py`, todo vive en [LoopWeb/index.html](LoopWeb/index.html) (~4090 líneas).
-Registrado en el Arcade como `landscape`, acento `#7df9ff`. **UI enteramente en inglés**
-(el juego se llama LOOP); los comentarios del código siguen en español.
+**A roguelite arcade arena** born of crossing the rest of the repo's mechanics into a single
+new game (it is not a hub or a compilation). **Web-only** like DonkeyKong/Pacman/StickFight:
+there is no `.py`, everything lives in [LoopWeb/index.html](LoopWeb/index.html) (~4090 lines).
+Registered in the Arcade as `landscape`, accent `#7df9ff`. **The UI is entirely in English**
+(the game is called LOOP); the code's comments are in English too.
 
-Sos una **canica** que arrastra un **hilo de luz** por la **esfera de un reloj**. El hilo
-desvía orbes como una paleta de Pong; cruzarlo consigo mismo **cierra un bucle** y detona
-todo lo que quedó encerrado. Los enemigos son piezas de ajedrez que telegrafían su carril,
-la aguja del reloj marca las oleadas, y cada hora elegís **una sola cosa, alternando**:
-una **regla** para la arena o una **carta** (las 5 equipadas forman una mano de póker).
+You are a **marble** that drags a **thread of light** across the **face of a clock**. The thread
+deflects orbs like a Pong paddle; crossing it with itself **closes a loop** and detonates
+everything caught inside. The enemies are chess pieces that telegraph their lane,
+the clock's hand marks the waves, and each hour you choose **one single thing, alternating**:
+a **rule** for the arena or a **card** (the 5 equipped ones make up a poker hand).
 
-## La barrida de la flecha ahora construye tambien la PUNTA (2026-09-22)
+## The arrow's sweep now builds the TIP as well (2026-09-22)
 
-Franco: *"la punta de la flecha aparece completa desde el principio"*. Era cierto, y estaba puesto
-a proposito — el comentario del codigo lo defendia con un argumento que tambien era cierto:
+Franco: *"the arrow's tip appears complete from the start"*. It was true, and it was there
+on purpose — the code's comment defended it with an argument that was also true:
 
-> en un carril largo la cabeza mide un 8% del largo, asi que atarla al avance del cuerpo la
-> dejaria casi apagada durante el 92% del aviso, justo cuando lo unico que importa es HACIA DONDE.
+> in a long lane the head measures 8% of the length, so tying it to the body's advance would
+> leave it almost unlit during 92% of the warning, precisely when the only thing that matters is WHERE TO.
 
-Las dos cosas no se resuelven eligiendo una. Se resuelven **separando forma de relleno**:
+The two are not resolved by choosing one. They are resolved by **separating shape from fill**:
 
-- **La FORMA esta entera desde el frame 0**, como un fantasma a alpha 0.055 — cuerpo y punta. La
-  direccion se lee siempre, que era el motivo del diseno viejo.
-- **El RELLENO es UN solo recorte que avanza** sobre la silueta completa. No hay dos rellenos ni
-  dos alfas: el mismo corte revela el cuerpo y despues la punta, de corrido. Una sola animacion.
-- **El FILO del frente es la misma silueta** recortada a una franja angosta, no un rectangulo: asi
-  adentro de la cabeza se angosta solo hasta el vertice. Antes era una barra de alto fijo que no
-  sabia que forma tenia la flecha.
+- **The SHAPE is complete from frame 0**, like a ghost at alpha 0.055 — body and tip. The
+  direction always reads, which was the point of the old design.
+- **The FILL is ONE single clip that advances** over the complete silhouette. There are not two fills or
+  two alphas: the same cut reveals the body and then the tip, in one go. A single animation.
+- **The front's EDGE is the same silhouette** clipped to a narrow strip, not a rectangle: that way
+  inside the head it narrows by itself to the vertex. Before it was a bar of fixed height that did not
+  know what shape the arrow had.
 
-Medido con capturas a `u` congelado (`dbgFreeze` + dos `loop(t)` con el MISMO `t`, que da dt = 0 y
-dibuja sin avanzar): a 0.12 y 0.70 la punta es solo contorno; a 0.97 esta construida entera. A
-`u = 1` la flecha ya no esta, porque la pieza ejecuta el movimiento — eso es el juego, no un bug.
+Measured with captures at a frozen `u` (`dbgFreeze` + two `loop(t)` calls with the SAME `t`, which gives dt = 0 and
+draws without advancing): at 0.12 and 0.70 the tip is outline only; at 0.97 it is built in full. At
+`u = 1` the arrow is no longer there, because the piece is executing the move — that is the game, not a bug.
 
-### El acabado
+### The finish
 
-Cuerpo 16% mas grueso (`r*1.12` -> `r*1.30`) y cabeza proporcionalmente mas larga.
+A body 16% thicker (`r*1.12` -> `r*1.30`) and a proportionally longer head.
 
-**Las esquinas se redondean estirando el contorno**, no con curvas: se rellena Y se contornea la
-MISMA ruta con `lineJoin`/`lineCap` redondos y un trazo de `pad*2`. Eso redondea todos los
-vertices de una — la punta y los dos hombros donde el cuerpo se ensancha, que es la union que se
-veia dura.
+**The corners are rounded by stretching the outline**, not with curves: the SAME path is filled AND
+stroked with round `lineJoin`/`lineCap` and a stroke of `pad*2`. That rounds every
+vertex at once — the tip and the two shoulders where the body widens, which is the join that
+looked hard.
 
-**Por eso la silueta se construye hasta `L - pad` y no hasta `L`.** El trazo redondo sobresale
-`pad`, asi que el BORDE EXTERNO sigue cayendo exacto en el destino. Sin esa correccion la flecha
-apuntaria un poco mas alla de la casilla a la que la pieza va — un error de un par de pixeles que
-en un juego donde la telegrafia ES la mecanica se paga caro.
+**That is why the silhouette is built as far as `L - pad` and not as far as `L`.** The round stroke sticks out by
+`pad`, so the OUTER EDGE still lands exactly on the destination. Without that correction the arrow
+would point a little beyond the square the piece is going to — an error of a couple of pixels which
+in a game where the telegraph IS the mechanic comes expensive.
 
-No se toco la logica de movimiento ni las reglas de telegrafia: `u`, `e.dur`, `e.tx/ty` y el carril
-del caballo quedaron igual. Los 8 escenarios de `qa.py` pasan sin cambios.
+The movement logic and the telegraph rules were not touched: `u`, `e.dur`, `e.tx/ty` and the knight's
+lane were left as they were. The 8 scenarios of `qa.py` pass unchanged.
 
-## AUDIO: el techo de voces tenia una inversion de prioridad (2026-09-21)
+## AUDIO: the voice ceiling had a priority inversion (2026-09-21)
 
-**Te morias en silencio.** No es una forma de hablar: esta trazado frame a frame.
+**You died in silence.** It is not a figure of speech: it is traced frame by frame.
 
-`ac()` cortaba en `sndThisFrame < CFG.perf.sndPerFrame` (5) y el presupuesto se lo llevaba el que
-llegaba primero. En un frame de cierre de bucle el orden de ejecucion es
+`ac()` cut off at `sndThisFrame < CFG.perf.sndPerFrame` (5) and the budget was taken by whoever
+got there first. In a loop-closure frame the order of execution is
 
     hurtEnemy (hit, 1 nodo) -> killEnemy (kill, 2) -> detonateMine (pulse, 2) = 5
 
-y a partir de ahi se caen, **en este orden**: `claim`, `tateti`, `frenzy`, `hand` y `tight`. O sea
-el cierre de bucle entero, que es el acto central del juego. Sin minas tambien pasa:
-hit(1) + kill(2) + claim(2) = 5 y se pierden `tateti`, `frenzy` y `tight`. Y el comentario de
-`closeLoop` dice textual *"Que el bucle fue cenido ya lo dicen el fantasma dorado y EL SONIDO"* —
-en ese frame el sonido no estaba.
+and from there on they fall off, **in this order**: `claim`, `tateti`, `frenzy`, `hand` and `tight`. That is,
+the whole loop closure, which is the game's central act. Without mines it happens too:
+hit(1) + kill(2) + claim(2) = 5 and `tateti`, `frenzy` and `tight` are lost. And `closeLoop`'s comment
+says verbatim *"That the loop was tight is already said by the golden ghost and by THE SOUND"* —
+in that frame the sound was not there.
 
-Peor: `killPlayer` llama `sfx.lose()` DESPUES de `sfx.hurt()` (2 nodos). Con tres voces rutinarias
-previas en el mismo frame — `wall` + `deflect` + `clack`, perfectamente alcanzables con 14 orbes
-vivos — el presupuesto llega a 5 y **la muerte del jugador no suena**. Y `endRun` ademas llama
-`droneOff()`, asi que la habitacion tambien se calla: silencio absoluto justo en el unico momento
-que no puede pasar desapercibido.
+Worse: `killPlayer` calls `sfx.lose()` AFTER `sfx.hurt()` (2 nodes). With three previous routine
+voices in the same frame — `wall` + `deflect` + `clack`, perfectly reachable with 14 live orbs
+— the budget reaches 5 and **the player's death does not sound**. And `endRun` also calls
+`droneOff()`, so the room goes quiet too: absolute silence at precisely the one moment
+that cannot go unnoticed.
 
-### El arreglo no es subir el techo
+### The fix is not raising the ceiling
 
-Subirlo seria devolver el problema que el techo resuelve. El techo existe para defenderse de las
-voces **rutinarias** — el rebote contra el aro, el clack, el tictac, el silbido —, que se disparan
-muchas veces en el mismo frame y son las unicas que pueden ametrallar. Las voces **narrativas**
-(moriste, ganaste, cerraste el bucle, entro el frenesi) ocurren como mucho una vez por frame por
-construccion y son justamente lo que hay que oir.
+Raising it would be giving back the problem the ceiling solves. The ceiling exists to defend against the
+**routine** voices — the bounce off the hoop, the clack, the ticking, the whistle —, which fire
+many times in the same frame and are the only ones that can machine-gun. The **narrative** voices
+(you died, you won, you closed the loop, the frenzy came in) happen at most once per frame by
+construction and are exactly what has to be heard.
 
-Asi que hay **dos presupuestos**, no uno:
+So there are **two budgets**, not one:
 
 ```js
 function ac(prio) {
@@ -89,2779 +89,2779 @@ function ac(prio) {
 }
 ```
 
-`voice(name, cdMs, fn, prio)` levanta una bandera mientras corre el cuerpo (`enPrio`, restaurada en
-un `finally` para que no quede pegada si el cuerpo tira), y `note()`/`noiseHit()` llaman a `bump()`,
-que carga el disparo al carril que corresponde. Ni `note()` ni `noiseHit()` saben nada de esto.
+`voice(name, cdMs, fn, prio)` raises a flag while the body runs (`enPrio`, restored in
+a `finally` so it is not left stuck if the body throws), and `note()`/`noiseHit()` call `bump()`,
+which charges the shot to the appropriate lane. Neither `note()` nor `noiseHit()` knows anything about this.
 
-**`prio` no significa "mas fuerte" ni "antes".** Significa que no comparte presupuesto con el ruido
-de fondo. La reserva tiene su propio techo (`sndPrioPerFrame: 4`), asi que no es un agujero: se
-verifico que con `sndPrioThisFrame = 99` una voz narrativa tampoco suena.
+**`prio` does not mean "louder" or "sooner".** It means it does not share a budget with the background
+noise. The reserve has a ceiling of its own (`sndPrioPerFrame: 4`), so it is not a hole: it was
+verified that with `sndPrioThisFrame = 99` a narrative voice does not sound either.
 
-**`CFG.perf.sndPerFrame` esta expuesto en el panel de afinado (tecla T) y ahora significa otra
-cosa**: el techo de las rutinarias, no de todo. Esta documentado en el comentario de `CFG.perf`.
+**`CFG.perf.sndPerFrame` is exposed in the tuning panel (the T key) and now means something
+else**: the ceiling for the routine ones, not for everything. It is documented in `CFG.perf`'s comment.
 
-Son narrativas: `loop`, `tight`, `claim`, `tateti`, `hand`, `hurt`, `chime`, `hour`, `promote`,
-`boss`, `bossWind`, `frenzy`, `win`, `lose`, `mine`, `barrel`, `simon`, `simonGo` y la muerte de
-dama. Todo lo demas sigue compitiendo por el techo de siempre.
+These are narrative: `loop`, `tight`, `claim`, `tateti`, `hand`, `hurt`, `chime`, `hour`, `promote`,
+`boss`, `bossWind`, `frenzy`, `win`, `lose`, `mine`, `barrel`, `simon`, `simonGo` and the queen's
+death. Everything else still competes for the usual ceiling.
 
-### Cinco sonidos que estaban mal asociados
+### Five sounds that were wrongly associated
 
-El patron es el mismo en los cinco: una voz compartida entre dos eventos que el juego YA distingue
-visualmente.
+The pattern is the same in all five: one voice shared between two events the game ALREADY tells apart
+visually.
 
-| evento | usaba | problema |
+| event | used | problem |
 |---|---|---|
-| mina detonada | `pulse` | **el pulso es lo que la detona**, en el mismo frame: el cooldown de 200 ms se comia la mina SIEMPRE. El codigo se tomo el trabajo de que el fogonazo "diga MINA" y el oido no se enteraba |
-| barril que nace | `wall` | el aviso de un peligro de 21 de dano sonaba igual que el rebote del orbe contra el aro, **el ruido de fondo mas frecuente del juego**, y compartia su cooldown de 40 ms |
-| salto del caballo | `shot` | `shot` es el obus del tanque y el abanico del jefe, o sea la senal de *esquiva esto*. El caballo no dispara: SALTA |
-| aviso del jefe (`wind`) | `ui` | el segundo de lectura del climax sonaba al click de 30 ms de los botones de menu |
-| muerte de enemigo | `kill` unico | el juego distingue peon/torre/dama con chispas, anillo y sacudon distintos — y las tres sonaban igual |
+| a detonated mine | `pulse` | **the pulse is what detonates it**, in the same frame: the 200 ms cooldown ate the mine EVERY time. The code took the trouble to make the flash "say MINE" and the ear never found out |
+| a barrel being born | `wall` | the warning of a hazard doing 21 damage sounded the same as the orb's bounce off the hoop, **the game's most frequent background noise**, and it shared its 40 ms cooldown |
+| the knight's jump | `shot` | `shot` is the tank's shell and the boss's fan, that is, the signal for *dodge this*. The knight does not fire: it JUMPS |
+| the boss warning (`wind`) | `ui` | the climax's second of reading sounded like the 30 ms click of the menu buttons |
+| an enemy's death | a single `kill` | the game tells pawn/rook/queen apart with different sparks, ring and shake — and all three sounded the same |
 
-`kill(val)` ahora tiene tres escalones que salen de `e.T.score`, que es el dato que el juego ya
-tenia una linea antes y no usaba. Mas grave, mas largo y con mas cuerpo cuanto mas vale la pieza:
-**432 / 340 / 234 Hz** medidos, con volumenes 0.06 / 0.075 / 0.095. El cooldown es **por escalon**
-(`'kill' + k`): con un solo nombre, un peon muerto 20 ms antes se comia a la dama.
+`kill(val)` now has three steps that come from `e.T.score`, which is the data the game already
+had one line earlier and was not using. Lower, longer and with more body the more the piece is worth:
+**432 / 340 / 234 Hz** measured, with volumes 0.06 / 0.075 / 0.095. The cooldown is **per step**
+(`'kill' + k`): with a single name, a pawn killed 20 ms earlier swallowed the queen.
 
-### Lo demas
+### The rest
 
-- **La pestana al fondo no apagaba el colchon.** Es el unico nodo continuo del juego: dos
-  osciladores arrancados una vez y nunca detenidos. Con la pestana oculta el rAF se frena,
-  `updateAmbience` deja de correr y el zumbido de 55 Hz sigue sonando indefinidamente — en
-  escritorio el navegador no suspende el audio de una pestana de fondo, asi que no se arreglaba
-  solo. Ahora `visibilitychange` llama `droneOff()` + `AC.suspend()`, y a la vuelta `audioResume()`
-  (en movil el contexto se auto-suspende y el juego quedaba mudo hasta el primer toque).
-- **`simonFlash` y `updateSimon` llamaban `note()` directo**, salteando `voice()` y por lo tanto la
-  guarda de estado del contexto — justo la leccion de la seccion de las guardas mas abajo. Ademas
-  gastaban presupuesto de frame sin poder ser frenados por el. Ahora son `sfx.simon(f)` y
+- **A backgrounded tab did not switch off the bed.** It is the game's only continuous node: two
+  oscillators started once and never stopped. With the tab hidden the rAF stops,
+  `updateAmbience` stops running and the 55 Hz hum keeps sounding indefinitely — on
+  desktop the browser does not suspend the audio of a background tab, so it did not fix
+  itself. Now `visibilitychange` calls `droneOff()` + `AC.suspend()`, and on the way back `audioResume()`
+  (on mobile the context auto-suspends and the game was left mute until the first touch).
+- **`simonFlash` and `updateSimon` called `note()` directly**, skipping `voice()` and therefore the
+  context's state guard — precisely the lesson of the guards section further down. They also
+  spent frame budget without being able to be held back by it. Now they are `sfx.simon(f)` and
   `sfx.simonGo()`.
-- **`noiseHit` no clampeaba el volumen** antes de la rampa exponencial y `note()` si, a medio
-  archivo de distancia. Hoy ningun llamador puede pasar 0 (el mas bajo es `wall` con 0.005), asi
-  que era una mina latente y no un sintoma — pero el proximo `noiseHit` escalado por intensidad la
-  pisaba, y falla en silencio.
-- **`sndThisFrame = 0` estaba DESPUES de los returns tempranos de `loop()`.** Con el contexto de
-  canvas perdido el frame se va por el return, pero los handlers de DOM siguen disparando sonidos
-  (`onCanvasTap` toca `ui`/`hour`/`card`) y el contador se clavaba por encima del techo. Se
-  auto-curaba al restaurarse el contexto, por eso era menor — pero resetear arriba de todo no
-  cuesta nada y el par `contextlost`/`contextrestored` ya existe, o sea que el estado es real.
+- **`noiseHit` did not clamp the volume** before the exponential ramp and `note()` did, half a
+  file away. Today no caller can pass 0 (the lowest is `wall` at 0.005), so
+  it was a latent mine and not a symptom — but the next `noiseHit` scaled by intensity would step on
+  it, and it fails silently.
+- **`sndThisFrame = 0` was AFTER `loop()`'s early returns.** With the canvas context
+  lost the frame leaves through the return, but the DOM handlers keep firing sounds
+  (`onCanvasTap` touches `ui`/`hour`/`card`) and the counter pinned above the ceiling. It
+  healed itself when the context was restored, which is why it was minor — but resetting right at the top
+  costs nothing and the `contextlost`/`contextrestored` pair already exists, so the state is real.
 
-### Como se verifico
+### How it was verified
 
-Con un arnes headless que envuelve el `AudioContext` y anota cada nodo, cada rampa y cada
-start/stop, corriendo un escenario que provoca los eventos de a uno. La prueba decisiva fuerza
-`sndThisFrame = 99` y comprueba que **las rutinarias se caen (0 voces) y `lose()` suena igual**
-(2 osciladores a 330 y 247 Hz, que son sus dos notas). Vive fuera del repo, en el scratchpad, junto
+With a headless harness that wraps the `AudioContext` and notes every node, every ramp and every
+start/stop, running a scenario that provokes the events one at a time. The decisive test forces
+`sndThisFrame = 99` and checks that **the routine ones fall off (0 voices) and `lose()` sounds just the same**
+(2 oscillators at 330 and 247 Hz, which are its two notes). It lives outside the repo, in the scratchpad, alongside
 a `qa.py`/`qa2.py`.
 
-**Ninguno de los 68 escenarios de la suite mide audio** — miden comportamiento y recursos. Estos
-cambios no los tocan: no se movio una sola mecanica, ni un numero de balance, ni una condicion de
-victoria. Lo unico que cambio de semantica es que `sndPerFrame` ahora cuenta solo las rutinarias.
+**None of the suite's 68 scenarios measures audio** — they measure behaviour and resources. These
+changes do not touch them: not one mechanic was moved, nor one balance number, nor one victory
+condition. The only thing that changed semantically is that `sndPerFrame` now counts only the routine ones.
 
-**Esto no se escucho.** El arnes verifica que suene lo que se diseno, cuando se diseno y con los
-parametros que se disenaron; no tiene placa de sonido. La evaluacion auditiva es de Franco.
+**This was not listened to.** The harness verifies that what was designed sounds, when it was designed and with the
+parameters that were designed; it has no sound card. The listening evaluation is Franco's.
 
-## BARRILES: lo que DonkeyKong aportaba de mecánica (2026-09-18)
+## BARRELS: what DonkeyKong contributed as a mechanic (2026-09-18)
 
-DonkeyKong venía dando sólo estructura — el draft, las semillas, la ventana de combo — y ni una
-mecánica. La regla `barrels` (×1.55) es la primera que entra de verdad: barriles que llegan desde
-afuera del reloj, cruzan en línea recta y **le pegan a todo**, al jugador y a las piezas.
+DonkeyKong had been contributing only structure — the draft, the seeds, the combo window — and not one
+mechanic. The `barrels` rule (×1.55) is the first that really comes in: barrels that arrive from
+outside the clock, cross in a straight line and **hit everything**, the player and the pieces.
 
-Eso último es lo que los hace de Donkey Kong y no un proyectil más: **un barril no es del enemigo
-ni tuyo, es del escenario.** Pararte del lado correcto de uno que viene convierte un peligro en
-una herramienta, que es exactamente el juego que propone DK.
+That last part is what makes them Donkey Kong's and not just another projectile: **a barrel is neither the enemy's
+nor yours, it is the stage's.** Standing on the right side of one that is coming turns a hazard into
+a tool, which is exactly the game DK proposes.
 
-- **No apuntan al centro** (`a + PI + rnd(-0.55, 0.55)`). Si todos pasaran por el eje el patrón
-  sería siempre el mismo y se esquivarían de memoria en dos horas.
-- El daño AL JUGADOR es fijo (21, el de la dama, por `scaleDmg` como cualquier pieza). El daño A
-  LAS PIEZAS va por **`scaleHp()`**: fijo, pasada la hora 8 el barril dejaría de matar nada y
-  media regla se apagaría sola. Quinta vez que aparece el mismo error en este proyecto (bucle,
-  pulso, orbe, curación del frenesí, barril), así que queda como regla de la casa: **lo que tiene
-  que seguir importando cuando la vida enemiga crece, escala con ella.**
-- Enfriamiento corto al golpear: sin él un barril arrasa una fila en un frame; con él la ARA.
-- **El jefe, excluido.**
-- Rotar el sprite horneado acá es lo CORRECTO, al revés que en la moto o la aguja: un barril que
-  rueda tiene que girar su propio brillo, porque está girando de verdad.
+- **They do not aim at the centre** (`a + PI + rnd(-0.55, 0.55)`). If they all passed through the axis the pattern
+  would always be the same and they would be dodged from memory within two hours.
+- The damage TO THE PLAYER is fixed (21, the queen's, through `scaleDmg` like any piece). The damage TO
+  THE PIECES goes through **`scaleHp()`**: fixed, past hour 8 the barrel would stop killing anything and
+  half a rule would switch itself off. The fifth time the same mistake has turned up in this project (the loop,
+  the pulse, the orb, the frenzy's healing, the barrel), so it stands as a house rule: **what has
+  to keep mattering when enemy health grows, scales with it.**
+- A short cooldown on hitting: without it a barrel wipes out a row in one frame; with it, it PLOUGHS it.
+- **The boss, excepted.**
+- Rotating the baked sprite here is the RIGHT thing, unlike on the bike or the hand: a barrel that
+  rolls has to turn its own shine, because it really is turning.
 
-### Un test que midió un mundo congelado
+### A test that measured a frozen world
 
-La primera versión del escenario puso la prueba que MATA al jugador en segundo lugar. El jugador
-murió, `stepSim` dejó de correr con el estado en `'over'`, y las dos pruebas siguientes midieron
-una simulación detenida — reportando "el barril no le pega a las piezas" cuando en realidad no
-pasaba nada en absoluto. **En un escenario con varias pruebas, la que puede terminar la partida va
-última**; si no, todo lo que venga después mide un mundo que ya no simula.
+The scenario's first version put the test that KILLS the player second. The player
+died, `stepSim` stopped running with the state at `'over'`, and the two following tests measured
+a stopped simulation — reporting "the barrel does not hit the pieces" when in fact nothing
+was happening at all. **In a scenario with several tests, the one that can end the game goes
+last**; otherwise everything that comes after measures a world that is no longer simulating.
 
-## UI 2026-09-18 — ranuras fijas, reserva de espacio y feedback asimétrico
+## UI 2026-09-18 — fixed slots, reserved space and asymmetric feedback
 
-### El HUD no puede recolocarse solo
+### The HUD cannot reposition itself
 
-La tira de la mano vivía en `pad + S * (run.combo >= 2 ? 0.178 : 0.118)`: cada vez que se cortaba
-el combo, **saltaba hacia arriba**. Ahora hay tres ranuras con Y fijo (`Y_SCORE`, `Y_MULT`,
-`Y_HAND`) y el hueco del multiplicador existe esté visible o no. Medido: 112.3 px en los dos
-estados, y vuelve exacto.
+The hand's strip lived at `pad + S * (run.combo >= 2 ? 0.178 : 0.118)`: every time the combo broke,
+**it jumped upwards**. Now there are three slots with a fixed Y (`Y_SCORE`, `Y_MULT`,
+`Y_HAND`) and the multiplier's gap exists whether it is visible or not. Measured: 112.3 px in both
+states, and it comes back exactly.
 
-Regla: **si un elemento del HUD aparece y desaparece, lo de abajo no puede depender de él.** Un
-ternario en la coordenada Y es la forma más fácil de escribir un reflow sin darse cuenta.
+The rule: **if a HUD element appears and disappears, what is below it cannot depend on it.** A
+ternary in a Y coordinate is the easiest way to write a reflow without noticing.
 
-### El espacio se reserva de AFUERA hacia adentro
+### Space is reserved from the OUTSIDE in
 
-La lista de jugadas al costado de la mano quedó pegada al margen dos veces seguidas, porque la
-calculaba al revés: las cartas tomaban su tamaño y la lista se acomodaba con lo que sobrara. Con
-la mano centrada, el hueco de la izquierda mide `(W - total) / 2` — o sea que lo fija el tamaño de
-las cartas, y la lista no tiene voz.
+The list of hands beside the hand ended up flush with the margin twice in a row, because it was
+calculated the wrong way round: the cards took their size and the list made do with whatever was left. With
+the hand centred, the left-hand gap measures `(W - total) / 2` — that is, the card size fixes it,
+and the list has no say.
 
-La cuenta correcta va de afuera hacia adentro: `margen + lista + separación` es lo que la mano NO
-puede ocupar **de cada lado** (de cada lado, porque va centrada), y el ancho de carta sale de lo
-que queda. Así la lista siempre tiene su aire y la mano nunca se mueve.
+The right calculation goes from the outside in: `margin + list + separation` is what the hand can NOT
+occupy **on each side** (on each side, because it goes centred), and the card width comes from what
+is left. That way the list always has its air and the hand never moves.
 
-### El marco del naipe cruzaba los números
+### The card's frame crossed the numbers
 
-El rango de esquina estaba en `bh*0.078` con cuerpo `0.185·bw`: su borde superior caía a
-`0.022·bw` del borde del naipe, y la regla interior estaba a `0.058·bw`. Se cruzaban por
-construcción. Resuelto por layout y sin agrandar el naipe: el marco salió a `0.046` y el contenido
-entró a `bh*0.125` (que es exactamente `(0.046 + holgura + 0.5·cs) / bh`), más los anchos máximos
-del nombre y del efecto, que llegaban a tocar la segunda regla.
+The corner rank was at `bh*0.078` with a body of `0.185·bw`: its top edge landed at
+`0.022·bw` from the card's edge, and the inner rule was at `0.058·bw`. They crossed by
+construction. Solved by layout and without enlarging the card: the frame went out to `0.046` and the content
+came in to `bh*0.125` (which is exactly `(0.046 + clearance + 0.5·cs) / bh`), plus the maximum widths
+of the name and the effect, which were reaching the second rule.
 
-### En frenesí, TODO lo tuyo se los come
+### In a frenzy, EVERYTHING of yours eats them
 
-El contacto directo hacía `hurtEnemy(e, 999)` pero el orbe y el pulso seguían con su daño normal:
-dos reglas distintas para el mismo estado. Ahora los tres matan de un toque durante el frenesí —
-**el jefe explícitamente afuera**, porque el frenesí no puede saltearse la pelea. Medido: orbe
-120/141 → muerto, pulso 138/141 → muerto, jefe 2600 → 1776.
+Direct contact did `hurtEnemy(e, 999)` but the orb and the pulse carried on with their normal damage:
+two different rules for the same state. Now all three kill in one touch during a frenzy —
+**the boss explicitly excepted**, because the frenzy cannot skip the fight. Measured: an orb
+120/141 → dead, a pulse 138/141 → dead, the boss 2600 → 1776.
 
-### El número del TIGHT se va; el multiplicador se queda
+### The TIGHT number goes; the multiplier stays
 
-Antes de sacarlo había que mirar qué hacía: `tight` **multiplica el daño del bucle** hasta ×3.3,
-no es decorativo. Lo que no aportaba era el NÚMERO — un "x2.4" al lado de un "148" agrega una
-incógnita en vez de información, y el daño ya está a la vista. Que el bucle fue ceñido lo dicen el
-fantasma dorado y el sonido. El test lo verifica inspeccionando la fuente de `closeLoop`: el
-multiplicador tiene que estar, el cartel no.
+Before taking it out I had to look at what it did: `tight` **multiplies the loop's damage** up to ×3.3,
+it is not decorative. What it was not contributing was the NUMBER — an "x2.4" next to a "148" adds an
+unknown instead of information, and the damage is already in view. That the loop was tight is said by the
+golden ghost and by the sound. The test verifies it by inspecting `closeLoop`'s source: the
+multiplier has to be there, the card must not.
 
-(Primer intento del test: cerrar bucles con el bot y mirar los carteles. Dio verde con **cero
-bucles cerrados** — un test que casi nunca dispara la rama que dice cuidar no prueba nada.)
+(The test's first attempt: close loops with the bot and look at the cards. It came out green with **zero
+loops closed** — a test that almost never fires the branch it claims to watch proves nothing.)
 
-### Feedback asimétrico a propósito
+### Asymmetric feedback on purpose
 
-`healPlayer(n, callado)`. El goteo del frenesí son treinta y pico de ticks de 1 HP, y treinta y
-pico de "+1" verdes saltando encima de la canica tapan justo lo que hay que mirar. El daño
-RECIBIDO sigue sacando su número: **el golpe hay que registrarlo, la curación se lee sola en la
-barra.**
+`healPlayer(n, callado)`. The frenzy's drip is thirty-odd ticks of 1 HP, and thirty-odd
+green "+1"s jumping over the marble cover exactly what you need to be looking at. Damage
+TAKEN still puts out its number: **a hit has to be registered, healing reads by itself on
+the bar.**
 
-### El joystick es el plato en miniatura
+### The joystick is the face in miniature
 
-Más chico (0.155 → 0.125 del lado corto) con la zona muerta bajada de 0.10 a 0.075 para no perder
-control fino — el radio ES la resolución de la palanca, así que achicarla se paga y hay que
-compensarlo. Visualmente: fieltro oscuro, aro de latón, filo de luz arriba, y el pomo es **la
-canica** con el mismo degradado y el mismo brillo especular. Lo que arrastrás se parece a lo que
-estás arrastrando.
+Smaller (0.155 → 0.125 of the short side) with the dead zone lowered from 0.10 to 0.075 so as not to lose
+fine control — the radius IS the stick's resolution, so shrinking it is paid for and has to be
+compensated. Visually: dark felt, a brass hoop, an edge of light on top, and the knob is **the
+marble** with the same gradient and the same specular highlight. What you drag looks like what
+you are dragging.
 
-Dos detalles que importan:
-- Se mueve con **`transform`**, no con `left`/`top`: left/top fuerza recálculo de layout en cada
-  movimiento del dedo.
-- El pomo viaja hasta `BASE_R - KNOB_R`, o sea que queda **siempre dentro del aro**, mientras el
-  input sigue midiéndose sobre `BASE_R` completo. Es un remapeo lineal de lo que se ve: no se
-  pierde ni un paso de precisión y deja de parecer que el pomo se escapa.
+Two details that matter:
+- It moves with **`transform`**, not with `left`/`top`: left/top forces a layout recalculation on every
+  movement of the finger.
+- The knob travels as far as `BASE_R - KNOB_R`, that is, it stays **always inside the hoop**, while the
+  input is still measured over the full `BASE_R`. It is a linear remap of what you see: not a single
+  step of precision is lost and it stops looking as if the knob were escaping.
 
-## Pasada de ASIGNACIONES (2026-09-17, noche)
+## ALLOCATIONS pass (2026-09-17, evening)
 
-Hasta acá siempre había medido operaciones de canvas. Nunca **asignaciones** — y en un móvil el
-recolector se paga en tirones, o sea que la basura constante es justo lo que produce los picos
-hacia abajo. Seis fuentes, y **tres las había metido yo optimizando**:
+Up to here I had always measured canvas operations. Never **allocations** — and on a phone the
+collector is paid for in stutters, that is, constant garbage is exactly what produces the dips
+downwards. Six sources, and **three of them I had introduced myself while optimising**:
 
-| dónde | qué hacía | ahora |
+| where | what it did | now |
 |---|---|---|
-| `autoDpr` | `Array.from(40).sort()` **en cada frame** | typed array reusado, evalúa cada `dprEvery` |
-| cachés de sprite | armaba la clave concatenando strings por pieza/orbe/obús **por frame** | el sprite se recuerda en la entidad y se compara un NÚMERO |
-| chispas | un string `rgba(...)` por chispa por frame (~50) | `globalAlpha` + color cacheado por valor |
-| drafts | `hand.concat()` + `evalHand` (con `map`+`sort`) por carta **por frame** | se calcula al ABRIR |
-| viñeta de vida baja | gradiente nuevo + dos strings por frame | gradiente cacheado + `globalAlpha` |
-| cierre del jefe | `enemies.some(e => …)` = un closure por frame | bucle plano |
+| `autoDpr` | `Array.from(40).sort()` **on every frame** | a reused typed array, it evaluates every `dprEvery` |
+| sprite caches | it built the key by concatenating strings per piece/orb/shell **per frame** | the sprite is remembered on the entity and a NUMBER is compared |
+| sparks | one `rgba(...)` string per spark per frame (~50) | `globalAlpha` + a colour cached by value |
+| drafts | `hand.concat()` + `evalHand` (with `map`+`sort`) per card **per frame** | it is computed on OPENING |
+| low-health vignette | a new gradient + two strings per frame | a cached gradient + `globalAlpha` |
+| the boss's closing check | `enemies.some(e => …)` = one closure per frame | a flat loop |
 
-**Lección de método, la más cara de la sesión: un perfilador que no mide algo no dice que sea
-barato — dice que no lo mide.** Pasó dos veces seguidas: primero con la construcción de paths (el
-hilo era el 34 % del render y no aparecía), ahora con las asignaciones. Y las dos veces la mitad
-de lo que encontré lo había introducido yo en la pasada anterior "optimizando". Cada optimización
-hay que medirla con la vara que corresponde a lo que toca.
+**The most expensive lesson of method in the session: a profiler that does not measure something does not say it is
+cheap — it says it does not measure it.** It happened twice in a row: first with path construction (the
+thread was 34% of the render and did not show up), now with the allocations. And both times half
+of what I found I had introduced myself in the previous "optimising" pass. Every optimisation
+has to be measured with the yardstick that matches what it touches.
 
-### Cachear por VALOR, no por identidad
+### Cache by VALUE, not by identity
 
-El caché de strings de color arrancó con un `WeakMap` sobre el array de color. No servía: casi
-todos los llamados a `spawnSparks` pasan un literal nuevo (`[120,170,230]`), así que la referencia
-nunca se repite. La clave es el color empaquetado en un entero — buscar con un número no asigna
-nada, que es todo el punto del ejercicio.
+The colour-string cache started as a `WeakMap` over the colour array. It was no use: almost
+every call to `spawnSparks` passes a new literal (`[120,170,230]`), so the reference
+never repeats. The key is the colour packed into an integer — looking something up with a number allocates
+nothing, which is the whole point of the exercise.
 
-### Lo que NO se encontró
+### What was NOT found
 
-Nada significativo en física, animaciones ni "elementos fuera de pantalla": el juego tiene UNA
-arena y todo lo que existe está a la vista, así que no hay culling que hacer. Post-processing son
-sólo las dos viñetas. Vale registrarlo para no volver a buscar ahí.
+Nothing significant in physics, animations or "off-screen elements": the game has ONE
+arena and everything that exists is in view, so there is no culling to do. Post-processing is
+only the two vignettes. Worth recording so as not to go looking there again.
 
-## La curación del frenesí va de a 1 HP
+## The frenzy's healing goes 1 HP at a time
 
-Mismo total (`healFrac` = 1/3 de la barra) y mismo tiempo; cambia el GRANO. Medido: con 100 de
-vida máxima son 33 ticks de exactamente 1 HP repartidos en 6.30 s de los 6.5; con 220, **74 ticks**
-— más ticks, no ticks más gordos, que es lo que hace que la fracción sea la unidad correcta.
-El `while` que los entrega tiene tope de 4 por frame para que un frame largo no dispare una ráfaga.
+The same total (`healFrac` = 1/3 of the bar) and the same time; what changes is the GRAIN. Measured: with 100
+maximum health it is 33 ticks of exactly 1 HP spread over 6.30 s of the 6.5; with 220, **74 ticks**
+— more ticks, not fatter ticks, which is what makes the fraction the right unit.
+The `while` that hands them out has a cap of 4 per frame so a long frame does not fire a burst.
 
-## El mismo layout no sirve para las dos orientaciones
+## The same layout does not work for both orientations
 
-La tabla de jugadas del panel del mazo va a la IZQUIERDA en apaisado (donde sobra ancho): no se
-come alto y los naipes crecen. En VERTICAL va abajo, porque ahí lo escaso es el ancho y una
-columna lateral les robaba más de lo que les liberaba — medido, dejaba las cartas **19 % más
-chicas** que antes. Es el mismo patrón que ya había aparecido con `panelRects`: cuando una medida
-sale de `min(fracción_de_W, fracción_de_S)`, en cada orientación manda una distinta.
+The deck panel's table of hands goes on the LEFT in landscape (where there is width to spare): it does not
+eat height and the cards grow. In PORTRAIT it goes underneath, because there what is scarce is width and a
+side column stole more from them than it freed up — measured, it left the cards **19%
+smaller** than before. It is the same pattern that had already turned up with `panelRects`: when a measurement
+comes from `min(fraction_of_W, fraction_of_S)`, in each orientation a different one is in charge.
 
-## Resolución de mobile: base fija, adaptativo sólo como red
+## Mobile resolution: a fixed base, adaptive only as a net
 
-`CFG.perf.dprMobile = 1.4` es con lo que ARRANCA un táctil y lo que mantiene: una resolución
-estable se siente mejor que uná que se mueve sola a mitad de partida. `dprCeil` es además el
-TECHO del afinador, así que lo adaptativo sólo puede bajar, nunca subir por encima de la base.
-Verificado para devicePixelRatio 1 / 1.5 / 2 / 2.625 / 3 / 4: todos los de 1.5 o más quedan
-exactos en 1.40, y el de 1x se queda en 1.00 porque no se puede renderizar por encima de lo
-nativo (`dprMin` acota cuánto puede BAJAR el afinador, no la resolución nativa — mi primer
-chequeo confundía las dos cosas y marcaba un falso positivo).
+`CFG.perf.dprMobile = 1.4` is what a touch device STARTS with and what it keeps: a stable
+resolution feels better than one that moves by itself halfway through a game. `dprCeil` is also the
+tuner's CEILING, so the adaptive part can only go down, never up above the base.
+Verified for devicePixelRatio 1 / 1.5 / 2 / 2.625 / 3 / 4: all those of 1.5 or more come out
+exactly at 1.40, and the 1x one stays at 1.00 because you cannot render above the
+native resolution (`dprMin` bounds how far the tuner can go DOWN, not the native resolution — my first
+check confused the two and flagged a false positive).
 
-## Playtest 2026-09-17 (tarde)
+## Playtest 2026-09-17 (afternoon)
 
-### El joystick se comía la tira de la mano — y sólo en APAISADO
+### The joystick was eating the hand's strip — and only in LANDSCAPE
 
-`elementFromPoint` sobre el centro de la tira devolvía `jMove`. La zona mide 52 % × 84 %, y con
-`H` chico —que es lo que pasa en apaisado, que es **como está registrado Loop en el Arcade**— ese
-84 % trepa hasta el HUD. En vertical no pasa. Regla: cuando una zona táctil se define en
-PORCENTAJE de pantalla, hay que probarla en las dos orientaciones; el mismo número tapa cosas
-distintas según cuál sea el lado corto.
+`elementFromPoint` over the strip's centre returned `jMove`. The zone measures 52% × 84%, and with
+a small `H` —which is what happens in landscape, which is **how Loop is registered in the Arcade**— that
+84% climbs up to the HUD. In portrait it does not happen. The rule: when a touch zone is defined as a
+PERCENTAGE of the screen, it has to be tested in both orientations; the same number covers different
+things depending on which is the short side.
 
-La solución no es achicar la zona (empeora el control, que es lo que se quería arreglar): el
-joystick **pregunta** si el punto pertenece a algo tocable del HUD (`hudTap`) y le cede el toque.
-Vive en `p04_input` y no adentro del joystick, para que cualquier zona futura consulte lo mismo.
+The solution is not shrinking the zone (it makes the control worse, which is what we wanted to fix): the
+joystick **asks** whether the point belongs to something touchable in the HUD (`hudTap`) and yields the touch to it.
+It lives in `p04_input` and not inside the joystick, so any future zone consults the same thing.
 
-**Ojo al verificarlo**: el arreglo actúa a nivel de EVENTO, así que `elementFromPoint` **sigue**
-devolviendo `jMove` y no prueba nada. Hay que despachar un `pointerdown` de verdad y mirar la
-conducta. Y `moveStick.active` tampoco sirve como señal — el joystick lo prende recién al salir
-de la zona muerta. La señal honesta es mandar un `pointermove` y ver si la palanca respondió.
+**Careful when verifying it**: the fix acts at EVENT level, so `elementFromPoint` **still**
+returns `jMove` and proves nothing. You have to dispatch a real `pointerdown` and look at the
+behaviour. And `moveStick.active` is no use as a signal either — the joystick only turns it on when leaving
+the dead zone. The honest signal is to send a `pointermove` and see whether the stick responded.
 
-### El Simón ya no castiga
+### The Simon no longer punishes
 
-Franco: *"que la penalización venga dada orgánicamente de perder el beneficio extra"*. Se fue todo:
-no hay sector rojo, no hay perder por quedarse parado, no hay vencimiento. La secuencia espera
-hasta que la completes o hasta que el cambio de hora se lleve la regla. Volvió la **pista** del
-sector que toca (arriba sigue sin mostrarse nada).
+Franco: *"let the penalty come organically from losing the extra benefit"*. It all went:
+there is no red sector, there is no losing by standing still, there is no expiry. The sequence waits
+until you complete it or until the hour change takes the rule away. The **hint** for the
+sector to hit is back (at the top nothing is shown, as before).
 
-El principio: **un castigo explícito encima de perder el premio es cobrar dos veces por la misma
-decisión.** Si el minijuego es opcional, no completarlo ya es la consecuencia.
+The principle: **an explicit punishment on top of losing the prize is charging twice for the same
+decision.** If the mini-game is optional, not completing it is already the consequence.
 
-### El panel del mazo LISTA las manos
+### The deck panel LISTS the hands
 
-Mostraba sólo la mano actual, en un tamaño ilegible en mobile. Pero la pregunta del jugador no es
-"qué tengo" —eso lo ve en las cartas— sino **"qué me conviene armar"**. Ahora lista las ocho con
-su efecto y marca la actual: deja de ser un cartel de estado y pasa a ser un motivo.
+It showed only the current hand, at a size illegible on mobile. But the player's question is not
+"what have I got" —they can see that in the cards— but **"what is worth building"**. Now it lists all eight with
+their effect and marks the current one: it stops being a status card and becomes a motive.
 
-### El frenesí cura
+### The frenzy heals
 
-*"Es mucha la presión de no recibir daño."* El frenesí ya es la recompensa del ta-te-ti y ya te
-hace intocable: sumarle curación lo vuelve LA ventana de recuperarse sin inventar un sistema
-nuevo, y le da una segunda razón para ir a cerrar la línea.
+*"The pressure of not taking damage is a lot."* The frenzy is already the noughts-and-crosses reward and already
+makes you untouchable: adding healing to it makes it THE window to recover without inventing a new
+system, and it gives you a second reason to go and close the line.
 
-`CFG.frenzy.healFrac` va como **fracción de la barra**, no como HP/s. Con un número fijo, a más
-vida máxima (cartas de VIGOR) la curación se volvería insignificante — el mismo error que ya
-tuvieron el bucle, el pulso y la orbe: daño fijo contra vida que escala. Se cobra en tandas de
-~1/9 de barra porque `healPlayer` saca un número flotante por llamada y a 60 fps serían sesenta
-numeritos por segundo.
+`CFG.frenzy.healFrac` goes as a **fraction of the bar**, not as HP/s. With a fixed number, the more
+maximum health (VIGOUR cards) the more insignificant the healing would become — the same mistake the
+loop, the pulse and the orb already made: fixed damage against health that scales. It is collected in batches of
+~1/9 of a bar because `healPlayer` puts out a floating number per call and at 60 fps that would be sixty
+little numbers a second.
 
-### Resolución adaptativa en vez de bajar la calidad a mano
+### Adaptive resolution instead of lowering the quality by hand
 
-`autoDpr` mide la MEDIANA del frame (no el promedio: un solo frame largo no puede mover la
-decisión) y ajusta `dprScale`. Histéresis 17.5 ms / 13.5 ms para que no bombee, y enfriamiento de
-2.5 s porque cada cambio llama a `resize()` y eso re-hornea todo — **si el remedio produce el
-síntoma, no es remedio**. En un equipo que llega a 60 no baja nunca.
+`autoDpr` measures the frame's MEDIAN (not the average: a single long frame cannot move the
+decision) and adjusts `dprScale`. Hysteresis of 17.5 ms / 13.5 ms so it does not pump, and a cooldown of
+2.5 s because each change calls `resize()` and that re-bakes everything — **if the cure produces the
+symptom, it is not a cure**. On a machine that reaches 60 it never drops.
 
-Trampa aritmética que casi se me pasa: el piso `dprMin / base` puede quedar **por encima de 1** en
-un equipo con `devicePixelRatio` 1, y entonces "bajar" terminaría SUBIENDO la escala. Va acotado
-con `Math.min(1, ...)`.
+An arithmetic trap I nearly missed: the floor `dprMin / base` can end up **above 1** on
+a machine with `devicePixelRatio` 1, and then "lowering" would end up RAISING the scale. It goes bounded
+with `Math.min(1, ...)`.
 
-### Un invariante no puede depender del ORDEN
+### An invariant cannot depend on the ORDER
 
-`ORB-SPD: v=3.08 contra un tope de 1.75` volvió después de darlo por arreglado. El primer intento
-puso el clamp después de los pares orbe-orbe, pero el problema nunca fue ese lugar puntual: hay
-**cinco** cosas que empujan orbes (pares, péndulos, bengalas, el tirón del frenesí, las
-campanadas) y varias corren DESPUÉS de `updateOrbs` — `frenzyBurst` las empuja con +1.4.
+`ORB-SPD: v=3.08 against a cap of 1.75` came back after being declared fixed. The first attempt
+put the clamp after the orb-orb pairs, but the problem was never that particular place: there are
+**five** things that push orbs (pairs, pendulums, flares, the frenzy's pull, the
+chimes) and several run AFTER `updateOrbs` — `frenzyBurst` pushes them with +1.4.
 
-`clampOrbSpeeds()` es ahora la última palabra de `stepSim`, cuando ya empujó todo el mundo.
+`clampOrbSpeeds()` is now `stepSim`'s last word, when everybody has already pushed.
 
-**Un invariante que depende de en qué orden corran las cosas, o de cuántas veces por frame corran,
-no es un invariante.** Se aplica una vez, al final.
+**An invariant that depends on what order things run in, or on how many times per frame they run,
+is not an invariant.** It is applied once, at the end.
 
-### Y borrar por rango se lleva vecinos
+### And deleting by range takes neighbours with it
 
-Sacar el cartel de hora borrando de `function drawIntro` hasta `function onCanvasTap` se llevó
-puesta `drawEndScreen`, que vivía en el medio. Lo cazó la regresión (`drawEndScreen is not
-defined`), no yo. Cuando se borra un bloque por rango, hay que mirar qué hay adentro del rango.
+Taking out the hour card by deleting from `function drawIntro` to `function onCanvasTap` took
+`drawEndScreen` with it, which lived in the middle. The regression caught it (`drawEndScreen is not
+defined`), not me. When a block is deleted by range, you have to look at what is inside the range.
 
-## El costo que no dependía de nada (2026-09-17)
+## The cost that did not depend on anything (2026-09-17)
 
-Franco, después de la pasada anterior: *"está un poco lento todavía y eso que al principio sin
-mucho en pantalla"*. **Esa frase es el diagnóstico**: si cuesta igual con la arena vacía, lo caro
-no es por objeto — es POR FRAME FIJO, y todo lo optimizado antes escalaba con la cantidad de
-objetos. Cuando alguien reporta lentitud, la primera pregunta útil es *¿con qué escala?*
+Franco, after the previous pass: *"it's still a bit slow and that's with not much on screen at the
+start"*. **That sentence is the diagnosis**: if it costs the same with the arena empty, what is expensive
+is not per object — it is FIXED PER FRAME, and everything optimised before scaled with the number of
+objects. When someone reports slowness, the first useful question is *with what does it scale?*
 
-### El perfilador tenía un agujero
+### The profiler had a hole
 
-Contaba `fill`, `stroke`, `clip`, gradientes y `drawImage` — pero **no la construcción de paths**.
-`moveTo`/`lineTo`/`quadraticCurveTo` son trabajo de CPU por vértice y no aparecían por ningún
-lado. Al agregarlos:
+It counted `fill`, `stroke`, `clip`, gradients and `drawImage` — but **not path construction**.
+`moveTo`/`lineTo`/`quadraticCurveTo` are per-vertex CPU work and they did not show up
+anywhere. On adding them:
 
-    34.2%  drawThread   412 comandos de path por frame
+    34.2%  drawThread   412 path commands per frame
 
-El hilo tiene hasta 195 puntos y se recorre tres veces (una pasada de resplandor con cuadráticas
-más la cinta rellena, que va de ida y de vuelta). **Estaba siempre ahí**, con o sin enemigos. Es
-decir: el mayor gasto del render nunca había aparecido en el perfil, y era justo el que explicaba
-el síntoma. Un perfilador que no mide algo no dice que sea barato — dice que no lo mide.
+The thread has up to 195 points and is walked three times (a glow pass with quadratics
+plus the filled ribbon, which goes out and back). **It was always there**, with or without enemies. That
+is: the render's biggest cost had never appeared in the profile, and it was precisely the one that explained
+the symptom. A profiler that does not measure something does not say it is cheap — it says it does not measure it.
 
-### Las dos correcciones
+### The two corrections
 
-**1. Decimado adaptativo del dibujo.** Los puntos están a `CFG.thread.spacing` (0.010 u), que en
-pantalla es `spacing * PXR`: ~4.8 px en un monitor y ~2.3 px en un teléfono. Mandar un vértice
-cada 2 px es tirar resolución que ningún ojo ve. El paso se calcula para que los vértices queden a
-~5.5 px, así que da 1 en desktop (no cambia nada) y 2 en pantallas chicas — el recorte cae solo
-donde hace falta. **La simulación sigue con todos los puntos**: esto es sólo cuántos vértices se
-mandan a dibujar. 412 → 214 comandos, y en una curva cerrada no se ve facetado.
+**1. Adaptive decimation of the drawing.** The points are `CFG.thread.spacing` apart (0.010 u), which on
+screen is `spacing * PXR`: ~4.8 px on a monitor and ~2.3 px on a phone. Sending a vertex
+every 2 px is throwing away resolution no eye sees. The step is computed so the vertices end up
+~5.5 px apart, so it gives 1 on desktop (nothing changes) and 2 on small screens — the trim falls exactly
+where it is needed. **The simulation still runs with all the points**: this is only how many vertices are
+sent to be drawn. 412 → 214 commands, and on a tight curve no faceting is visible.
 
-Detalle que importa: la tangente se toma contra los vecinos **dibujados** (`i ± step`), no contra
-los originales. Si no, la normal no corresponde al polígono que de verdad se traza y la cinta se
-abre en las curvas.
+A detail that matters: the tangent is taken against the **drawn** neighbours (`i ± step`), not against
+the originals. Otherwise the normal does not correspond to the polygon that is really traced and the ribbon
+opens up on the curves.
 
-**2. La simulación corría DOS VECES por frame.** `steps = min(3, max(1, ceil(simDt / (1/70))))`:
-con `1/70`, un frame de 60 fps da `ceil(1.167) = 2` **siempre**. O sea que la soga entera — medidas
-713 resoluciones de restricción + 237 integraciones por frame con la arena vacía — se resolvía dos
-veces en el caso normal. Con `1/50` el frame de 60 fps entra en un subpaso y el segundo aparece
-recién por debajo de 50 fps. El trabajo por SEGUNDO en un equipo lento no cambia; lo que se va es
-el doble gasto cuando todo va bien.
+**2. The simulation was running TWICE per frame.** `steps = min(3, max(1, ceil(simDt / (1/70))))`:
+with `1/70`, a 60 fps frame gives `ceil(1.167) = 2` **always**. That is, the whole rope — a measured
+713 constraint resolutions + 237 integrations per frame with the arena empty — was resolved twice
+in the normal case. With `1/50` the 60 fps frame fits in one substep and the second only appears
+below 50 fps. The work per SECOND on a slow machine does not change; what goes away is
+the double cost when everything is fine.
 
-Verificado antes de darlo por bueno, porque los subpasos existen para algo: **tunneling 0/50** con
-hilo quieto (5 velocidades × 2 timesteps) y **0/56** con hilo en movimiento, 14/14 rebotando.
+Verified before calling it good, because the substeps exist for a reason: **tunneling 0/50** with
+a still thread (5 speeds × 2 timesteps) and **0/56** with a moving thread, 14/14 bouncing.
 
-### Bajar el costo destapó un bug que el costo tapaba
+### Lowering the cost uncovered a bug the cost was covering
 
-Al pasar a un subpaso, `frenzy50` marcó **ORB-SPD: v=3.08 con el tope en 1.75**. No lo rompió el
-cambio: lo *reveló*. El clamp de velocidad vive DENTRO del bucle por orbe de `updateOrbs`, y
-`resolveOrbPair` corre **después** de ese bucle — así que el impulso de un choque encadenado se
-iba sin tope hasta el frame siguiente. Con dos subpasos, el segundo lo clampeaba dentro del mismo
-frame y el agujero nunca se veía.
+On going to one substep, `frenzy50` flagged **ORB-SPD: v=3.08 with the cap at 1.75**. The change did not
+break it: it *revealed* it. The speed clamp lives INSIDE `updateOrbs`'s per-orb loop, and
+`resolveOrbPair` runs **after** that loop — so the impulse from a chained collision
+went uncapped until the next frame. With two substeps, the second clamped it within the same
+frame and the hole was never visible.
 
-O sea: **el tope estaba tapado por el costo, no cerrado.** Un tope que depende de cuántas veces
-por frame corra la física no es un tope. Se arregla aplicándolo también después de resolver los
-pares, no volviendo a los dos subpasos.
+That is: **the cap was covered by the cost, not closed.** A cap that depends on how many times
+per frame the physics runs is not a cap. It is fixed by applying it after resolving the
+pairs as well, not by going back to two substeps.
 
-Tercera vez en este proyecto que aparece la misma forma: algo defensivo (un `|| 1`, un subpaso de
-más, un `chk` que comparte el error con el código que audita) **oculta** el problema en vez de
-delatarlo. Cuando una optimización rompe un test, vale la pena preguntarse si lo rompió o si lo
-destapó.
+The third time in this project the same shape has turned up: something defensive (a `|| 1`, an extra
+substep, a `chk` that shares the error with the code it audits) **hides** the problem instead of
+exposing it. When an optimisation breaks a test, it is worth asking whether it broke it or
+uncovered it.
 
-### Y de paso
+### And along the way
 
-- Cinco `new Array(n)` por frame en `drawThread` (~1000 números) pasaron a `Float32Array` que viven
-  entre frames. A 60 fps eso era basura constante para el recolector, y en un móvil el recolector
-  se paga en tirones.
-- Los filos de las celdas de mina pasaron de polilíneas trazadas a `fillRect`: una línea de un
-  píxel y un rectángulo de un píxel se ven igual, pero `fillRect` no construye path (eran ~125
-  comandos por frame, ahora cero).
+- Five `new Array(n)` per frame in `drawThread` (~1000 numbers) became `Float32Array`s that live
+  between frames. At 60 fps that was constant garbage for the collector, and on a phone the collector
+  is paid for in stutters.
+- The mine cells' edges went from stroked polylines to `fillRect`: a one-pixel line and a
+  one-pixel rectangle look the same, but `fillRect` builds no path (it was ~125
+  commands per frame, now zero).
 
-## Pasada MOBILE (2026-09-16) — medir antes de tocar
+## MOBILE pass (2026-09-16) — measure before touching
 
-Franco reportó FPS bajos en teléfono. Lo primero fue un **perfilador**, no una corazonada:
-`s_prof.py` envuelve cada función del render y atribuye las operaciones de canvas caras contando
-los contadores antes y después de cada llamada. (Los TIEMPOS no sirven en headless — el
-virtual-time congela `performance.now()` — pero los CONTEOS son objetivos: 24 clips por frame son
-24 clips en cualquier lado.)
+Franco reported low FPS on a phone. The first thing was a **profiler**, not a hunch:
+`s_prof.py` wraps each render function and attributes the expensive canvas operations by counting
+the counters before and after each call. (TIMES are no use in headless — the
+virtual time freezes `performance.now()` — but COUNTS are objective: 24 clips per frame are
+24 clips anywhere.)
 
-El perfil dijo algo que ninguna intuición habría dicho: **`drawEnemy` era el 43,6 % del render**, y
-buena parte de eso era el `clip()` del bisel que había metido la pasada de arte. Segundo lugar
-inesperado: casi todos los `fill` de `drawEnemy` **no eran la pieza sino su sombra**.
+The profile said something no intuition would have said: **`drawEnemy` was 43.6% of the render**, and
+a good part of that was the bevel's `clip()` the art pass had put in. An unexpected second place:
+almost all of `drawEnemy`'s `fill`s **were not the piece but its shadow**.
 
-Resultado, misma escena (14 piezas, 8 orbes, hilo de 109, 14 minas):
+The result, the same scene (14 pieces, 8 orbs, a 109-point thread, 14 mines):
 
-| | antes | después |
+| | before | after |
 |---|---|---|
-| peso total | 459 | **172** (−62 %) |
+| total weight | 459 | **172** (−62 %) |
 | `clip` | 16,9 | **4,0** |
 | `fill` | 154,8 | **57,0** |
 | `stroke` | 147,8 | **66,7** |
-| gradientes | 30,0 | **8,2** |
+| gradients | 30.0 | **8.2** |
 
-### El principio: lo que se ve igual en todos los frames se dibuja UNA vez
+### The principle: what looks the same in every frame is drawn ONCE
 
-Ninguna de las correcciones baja la calidad — son la misma imagen con menos operaciones.
-`bakeSprite(key, half, dibujar)` (en `p03_engine`) es el único lugar donde se hornea.
+None of the corrections lowers the quality — they are the same image with fewer operations.
+`bakeSprite(key, half, dibujar)` (in `p03_engine`) is the only place where anything is baked.
 
-- **Piezas**: una pieza siempre se ve igual y sólo tiene cuatro estados de color (propio, flash
-  blanco, frenesí azul, frenesí titilando). Horneada, un `drawImage` reemplaza cuatro fills, tres
-  strokes, un gradiente y un clip. **La sombra de contacto va DENTRO del sprite** (era constante
-  para todo lo que no salta). El caballo queda afuera: su sombra depende del salto.
-- **Casco del tanque**: no rota, sólo la torreta. Horneado se van los últimos clips del render.
-- **Orbes y cabezas de obús**: mismo criterio.
-- **Lo que NO se hornea**: lo que rota (moto, aguja) o lo que mira (los ojos del fantasma). Un
-  sprite rotado gira su propio brillo, y eso rompe la regla de la luz clave fija.
+- **Pieces**: a piece always looks the same and has only four colour states (its own, a white
+  flash, frenzy blue, frenzy flickering). Baked, one `drawImage` replaces four fills, three
+  strokes, a gradient and a clip. **The contact shadow goes INSIDE the sprite** (it was constant
+  for everything that does not jump). The knight is excepted: its shadow depends on the jump.
+- **The tank's hull**: it does not rotate, only the turret. Baked, the render's last clips go.
+- **Orbs and shell heads**: the same criterion.
+- **What is NOT baked**: what rotates (the bike, the hand) or what looks (the ghost's eyes). A
+  rotated sprite turns its own shine, and that breaks the fixed key-light rule.
 
-**`resize()` tiene que vaciar los cachés** (`clearBakes`): todo lo horneado depende de PXR, y si no
-crecen sin techo y encima quedan a la escala vieja.
+**`resize()` has to empty the caches** (`clearBakes`): everything baked depends on PXR, and otherwise
+they grow without a ceiling and on top of that are left at the old scale.
 
-**Un gradiente cacheado guarda COORDENADAS.** Los de la aguja viven en espacio local, así que sólo
-dependen del ángulo de la luz contrarrotada: cuantizarlo en 32 pasos (11° de escalón, invisible en
-algo que da una vuelta por hora) los saca del frame. Se vacían en el mismo `clearBakes`, y se
-declaran **en el mismo archivo** que su limpieza: `typeof` NO protege contra el TDZ de un `const`.
+**A cached gradient stores COORDINATES.** The hand's live in local space, so they only
+depend on the counter-rotated light's angle: quantising it into 32 steps (an 11° step, invisible on
+something that goes round once an hour) takes them out of the frame. They are emptied in the same `clearBakes`, and they are
+declared **in the same file** as their cleanup: `typeof` does NOT protect against a `const`'s TDZ.
 
-### Otras dos que valen para cualquier canvas
+### Two more that hold for any canvas
 
-- **Hoisting de `clip`.** `drawSectors` recortaba contra el MISMO círculo una vez por sector (nueve
-  por frame), y la telegrafía de las piezas una vez por pieza que apunta (~16 por frame). Los dos
-  pasaron a un solo clip afuera del bucle. Efecto lateral bienvenido en la telegrafía: las piezas
-  quedan siempre por encima de los carriles.
-- **Lotes por alfa.** Las celdas de mina encendidas del todo comparten alfa, así que sus filos se
-  acumulan en un path. **OJO CON EL ORDEN**: la primera versión trazaba los filos en lote ANTES de
-  los rellenos y el propio relleno se los comía. Van tres pasadas: rellenos, filos en lote, y
-  las que se están apagando una por una.
-- **`arc` de 1-3 px → `fillRect`.** En aditivo y en movimiento son el mismo pixel, pero `arc` hay
-  que teselarlo. Las chispas grandes siguen redondas.
+- **Hoisting `clip`.** `drawSectors` clipped against the SAME circle once per sector (nine
+  per frame), and the pieces' telegraph once per aiming piece (~16 per frame). Both
+  went to a single clip outside the loop. A welcome side effect in the telegraph: the pieces
+  always end up above the lanes.
+- **Batching by alpha.** The fully lit mine cells share an alpha, so their edges
+  accumulate in one path. **CAREFUL WITH THE ORDER**: the first version stroked the edges in a batch BEFORE
+  the fills and the fill itself ate them. There are three passes: fills, edges in a batch, and
+  the ones fading out one by one.
+- **A 1-3 px `arc` → `fillRect`.** Additive and in motion they are the same pixel, but `arc` has
+  to be tessellated. The big sparks stay round.
 
-### Escalón táctil
+### The touch step
 
-`CFG.perf.sparkMul` (0.62 en táctil) es el ÚNICO lugar donde se baja algo. No toca resolución ni
-saca efectos: baja la cantidad de partículas de un efecto aditivo, donde veinte y treinta se ven
-casi igual y la diferencia la paga el relleno de píxeles — justo lo que escasea en un móvil.
+`CFG.perf.sparkMul` (0.62 on touch) is the ONLY place where anything is lowered. It touches neither resolution nor
+removes effects: it lowers the number of particles in an additive effect, where twenty and thirty look
+almost the same and the difference is paid for in pixel fill — exactly what is scarce on a phone.
 
-## Layout VERTICAL: dos bugs que sólo aparecen en teléfono
+## PORTRAIT layout: two bugs that only appear on a phone
 
-Toda la sesión se revisó a 1280×720 y 1920×1080. A 500×905 aparecieron dos cosas que en apaisado
-no se ven, y ninguna la detecta el QA de invariantes — hay que MIRAR:
+The whole session was reviewed at 1280×720 and 1920×1080. At 500×905 two things appeared that in landscape
+are not visible, and the invariant QA detects neither — you have to LOOK:
 
-- **La línea de racha caía encima de la placa siguiente.** En vertical `panelRects` apila las
-  placas con `gap = H*0.016`, pero abajo de cada una se dibuja la racha en `b.y + b.h + S*0.026`.
-  El hueco entre placas **no es decorativo**: tiene que dejar lugar a lo que se dibuja ahí.
-- **Los naipes del draft usaban el 63 % del ancho.** `cw = min(W*0.19, S*0.25)`: en desktop manda
-  el tope `S*0.25` y no se nota, pero en un teléfono (donde `S == W`) mandaba el `0.19` y los
-  naipes quedaban chicos, con el texto del efecto ilegible y 37 % del ancho sin usar. Subir el
-  factor a `0.26` sólo cambia las pantallas angostas.
+- **The streak line landed on top of the next plate.** In portrait `panelRects` stacks the
+  plates with `gap = H*0.016`, but beneath each one the streak is drawn at `b.y + b.h + S*0.026`.
+  The gap between plates **is not decorative**: it has to leave room for what is drawn there.
+- **The draft's cards used 63% of the width.** `cw = min(W*0.19, S*0.25)`: on desktop the
+  `S*0.25` cap is in charge and it is not noticeable, but on a phone (where `S == W`) the `0.19` was in charge and the
+  cards came out small, with the effect text illegible and 37% of the width unused. Raising the
+  factor to `0.26` only changes narrow screens.
 
-**Moraleja de método**: un `min(fracción_de_W, fracción_de_S)` se comporta distinto según cuál de
-los dos manda, y en apaisado manda uno y en vertical el otro. Cada vez que aparezca ese patrón hay
-que preguntarse cuál gana en cada orientación.
+**The lesson of method**: a `min(fraction_of_W, fraction_of_S)` behaves differently depending on which of
+the two is in charge, and in landscape one is and in portrait the other. Every time that pattern turns up you have
+to ask which one wins in each orientation.
 
-### Trampas al verificar mobile en headless
+### Traps when verifying mobile in headless
 
-- **Chrome headless tiene un ancho mínimo de 500 px.** Pedir `--window-size=390,...` da una captura
-  de 390 px pero la página reporta `innerWidth = 500`: el layout se calcula para 500 y la captura
-  muestra 390, así que todo aparece corrido y cortado. Parece un bug de centrado y no lo es. Usar
-  500 o más (500×1000 es proporción de teléfono real).
-- **Sacar `body.noTouch` no vuelve táctil al navegador.** `IS_TOUCH` es una constante de JS y sigue
-  en falso, así que se dibujan los anillos de recarga del canvas (que en táctil están detrás de
-  `if (!IS_TOUCH)`) Y además aparecen los botones DOM: se ve una superposición que **en un teléfono
-  real no existe**. Me hizo perseguir un bug inexistente.
+- **Chrome headless has a minimum width of 500 px.** Asking for `--window-size=390,...` gives a 390 px
+  capture but the page reports `innerWidth = 500`: the layout is computed for 500 and the capture
+  shows 390, so everything appears shifted and cut off. It looks like a centring bug and it is not. Use
+  500 or more (500×1000 is a real phone's proportion).
+- **Removing `body.noTouch` does not make the browser touch.** `IS_TOUCH` is a JS constant and it stays
+  false, so the canvas's recharge hoops are drawn (which on touch are behind
+  `if (!IS_TOUCH)`) AND the DOM buttons appear as well: you see an overlap that **on a real
+  phone does not exist**. It had me chasing a bug that was not there.
 
-## MOVIMIENTO vs SELECCIÓN — el joystick se comía los taps
+## MOVEMENT vs SELECTION — the joystick was eating the taps
 
-`#jMove` es un div fijo de **52 % × 84 %** con `z-index: 3` sobre el canvas, y sólo se ocultaba con
-`body.inMenu`. Durante `rule`/`card`/`slot` seguía vivo: **tocar la carta de la izquierda creaba un
-joystick y la selección nunca llegaba al canvas.**
+`#jMove` is a fixed div of **52% × 84%** with `z-index: 3` over the canvas, and it was only hidden with
+`body.inMenu`. During `rule`/`card`/`slot` it stayed alive: **touching the left-hand card created a
+joystick and the selection never reached the canvas.**
 
-La solución NO es achicar el joystick (empeora el control, que es lo que se quería arreglar): es
-apagar las zonas táctiles cuando la pantalla es de SELECCIÓN (`body.picking`, sincronizada por
-`syncTouchUI()` una vez por frame y escrita **sólo cuando cambia**). Mientras elegís no hay nada
-que mover, así que el dedo sólo puede significar una cosa.
+The solution is NOT to shrink the joystick (it makes the control worse, which is what we wanted to fix): it is
+switching off the touch zones when the screen is a SELECTION one (`body.picking`, synchronised by
+`syncTouchUI()` once per frame and written **only when it changes**). While you are choosing there is nothing
+to move, so the finger can only mean one thing.
 
-Detalle que hay que acordarse: si la zona se oculta con el dedo apoyado, el navegador **no manda
-`pointerup`** y la palanca queda pegada. Por eso `moveStick.soltar()`.
+A detail to remember: if the zone is hidden with the finger down, the browser **does not send
+`pointerup`** and the stick gets stuck. That is why `moveStick.soltar()` exists.
 
-El escenario `touchsel` lo prueba con `document.elementFromPoint` sobre el centro de cada elemento
-seleccionable. **Tiene que sacar `body.noTouch` primero**: en headless `IS_TOUCH` es falso, las
-zonas están ocultas de todos modos, y el test pasaría trivialmente sin probar nada.
+The `touchsel` scenario tests it with `document.elementFromPoint` over the centre of each selectable
+element. **It has to remove `body.noTouch` first**: in headless `IS_TOUCH` is false, the
+zones are hidden anyway, and the test would pass trivially without testing anything.
 
-## La palanca manda VELOCIDAD, no aceleración
+## The stick commands VELOCITY, not acceleration
 
 ```js
 const ax = (inP.mx / mag) * accel;   // ax * mag = mx * accel
-P.vx += ax * mag * dt;               // y el tope es maxS SIEMPRE
+P.vx += ax * mag * dt;               // and the cap is maxS ALWAYS
 ```
 
-Escalaba la ACELERACIÓN: con el stick al 30 % igual terminabas a velocidad máxima, sólo que
-tardando más. En un analógico eso es **no tener control fino**. Ahora `mag` es la fracción de
-velocidad y la velocidad se acerca al objetivo con `CFG.player.respHl`.
+It scaled the ACCELERATION: with the stick at 30% you still ended up at maximum speed, it just
+took longer. On an analogue stick that is **having no fine control**. Now `mag` is the fraction of
+velocity and the velocity approaches the target with `CFG.player.respHl`.
 
-Dos cosas de una: el 30 % es el 30 %, y arrancar, frenar y doblar cuestan lo mismo (antes invertir
-el sentido eran 0,88 u/s frenados a 4,6 u/s² = **0,34 s arrastrándose en la dirección equivocada**,
-que era exactamente la sensación que Franco describió como "se arrastra").
+Two things at once: 30% is 30%, and starting, stopping and turning all cost the same (before, reversing
+direction was 0.88 u/s braked at 4.6 u/s² = **0.34 s dragging in the wrong direction**,
+which was exactly the sensation Franco described as "it drags").
 
-Medido por el escenario `feel`:
+Measured by the `feel` scenario:
 
-| | antes | después |
+| | before | after |
 |---|---|---|
-| arranque al 90 % | 0,172 s | **0,117 s** |
-| frenado al 10 % | 0,282 s | **0,133 s** |
-| inversión al 80 % | 0,344 s | **0,150 s** |
-| palanca al 50 % | 100 % de velocidad | **50 %** |
+| getting to 90% | 0.172 s | **0.117 s** |
+| braking to 10% | 0.282 s | **0.133 s** |
+| reversing at 80% | 0.344 s | **0.150 s** |
+| stick at 50% | 100% of the speed | **50%** |
 
-Queda física: es un acercamiento exponencial, no un teletransporte de velocidad. Lo que se fue es
-la inercia residual, no el peso.
+It is still physics: it is an exponential approach, not a teleport of velocity. What has gone is
+the residual inertia, not the weight.
 
-## Cómo se edita este archivo de 5500 líneas
+## How this 5500-line file is edited
 
-**`LoopWeb/index.html` es la fuente de verdad y lo único que hay en el repo**, igual que el resto
-de los ports: un archivo autocontenido, sin paso de build. Pero editar a mano un HTML de ~5500
-líneas es insostenible, así que durante las sesiones largas se parte en trece archivos
-(`p01_head.html`, `p02_core.js`, … `p13_tail.html`) en un directorio temporal, se parchea ahí y se
-reensambla con un `cat` en ese orden.
+**`LoopWeb/index.html` is the source of truth and the only thing in the repo**, like the rest
+of the ports: a self-contained file, with no build step. But editing an HTML of ~5500
+lines by hand is unsustainable, so during long sessions it is split into thirteen files
+(`p01_head.html`, `p02_core.js`, … `p13_tail.html`) in a temporary directory, patched there and
+reassembled with a `cat` in that order.
 
-**Esos `parts/` NO están versionados y no sobreviven a la sesión.** Cuando esta guía los menciona,
-habla de esa copia de trabajo, no de algo que vayas a encontrar en el repo. Para retomar: volvé a
-partir `index.html` por los comentarios de sección, o editá el monolito directo.
+**Those `parts/` are NOT versioned and do not survive the session.** When this guide mentions them,
+it is talking about that working copy, not about something you will find in the repo. To pick it up again:
+split `index.html` by the section comments again, or edit the monolith directly.
 
-Dos cosas que ese flujo enseñó y conviene repetir:
+Two things that flow taught which are worth repeating:
 
-- **Los parches se aplican con un helper que afirma que el ancla existe Y es única** (`sub()` en
-  Python), nunca con un reemplazo a ciegas. Un ancla ambigua que pisa la ocurrencia equivocada es
-  el error más caro de todos porque no falla: compila y hace otra cosa.
-- **Antes de aplicar, correr el parche contra una COPIA de las partes.** Así se cazó que
-  `wantPointer(false)` colgado de la cadena de `else if` se tragaba las pantallas de muerte y
-  victoria — el juego nunca llegó a tener ese bug.
+- **Patches are applied with a helper that asserts the anchor exists AND is unique** (`sub()` in
+  Python), never with a blind replacement. An ambiguous anchor that hits the wrong occurrence is
+  the most expensive error of all because it does not fail: it compiles and does something else.
+- **Before applying, run the patch against a COPY of the parts.** That is how it was caught that
+  `wantPointer(false)` hanging off the `else if` chain swallowed the death and victory
+  screens — the game never got to have that bug.
 
-## De dónde salió cada cosa
+## Where each thing came from
 
-| Origen | Qué aportó | Dónde vive |
+| Source | What it contributed | Where it lives |
 |---|---|---|
-| Pong · Balls · MiniBalls | El hilo **desvía** orbes; solver de impulso elástico | `threadDeflect`, `resolveOrbPair` |
-| Tron · Snake | El rastro como **objeto persistente** con presupuesto de largo | `thread[]`, `pushThreadPoint` |
-| Newton's Cradle | La carga **se contagia** en cadenas de orbes; péndulos con Verlet | `resolveOrbPair`, `updatePendulums` |
-| Ajedrez | Enemigos que se mueven por reglas de pieza, con carril telegrafiado | `ETYPES`, `pickLane` |
-| Ta-Te-Ti | Sectores 3×3 que se reclaman encerrándolos; tres en línea = frenesí | `claimSectorsIn`, `checkTateti` |
-| Póker | Las 5 cartas equipadas se evalúan como una mano | `evalHand`, `recomputeStats` |
-| Buscaminas | Minas ocultas; el hilo **revela** las celdas y sus números | `seedMines`, `revealCell` |
-| Simón Dice | Secuencia de sectores que se "toca" **recorriéndolos** | `updateSimon` |
-| Pac-Man | Fantasma con objetivo tipo Pinky; frenesí comestible | `updateGhost`, `startFrenzy` |
-| Tank Wars | Tanque con obuses **devolvibles** con el hilo; escudo con espera | `updateTank`, `updateShells` |
-| Crazy Tanks | `createJoystick` hand-rolled; reglas como objeto de multiplicadores | `createJoystick`, `RULE` |
-| Fuegos Artificiales | Muertes que estallan; la regla PIROTECNIA | `killEnemy`, `updateFlares` |
-| Reloj | **La aguja ES el temporizador de oleada** y una paleta física | `updateClock` |
-| DonkeyKong | Draft de modificadores; seeds derivadas; combos con ventana; **BARRILES** | `openRuleDraft`, `mulberry32`, `updateBarrels` |
-| StickFight | Estructura del archivo, audio con `voice()`, shell del Arcade | todo el esqueleto |
+| Pong · Balls · MiniBalls | The thread **deflects** orbs; an elastic impulse solver | `threadDeflect`, `resolveOrbPair` |
+| Tron · Snake | The trace as a **persistent object** with a length budget | `thread[]`, `pushThreadPoint` |
+| Newton's Cradle | The charge **is contagious** along chains of orbs; pendulums with Verlet | `resolveOrbPair`, `updatePendulums` |
+| Chess | Enemies that move by piece rules, with a telegraphed lane | `ETYPES`, `pickLane` |
+| Noughts and Crosses | 3×3 sectors claimed by enclosing them; three in a row = a frenzy | `claimSectorsIn`, `checkTateti` |
+| Poker | The 5 equipped cards are evaluated as a hand | `evalHand`, `recomputeStats` |
+| Minesweeper | Hidden mines; the thread **reveals** the cells and their numbers | `seedMines`, `revealCell` |
+| Simon Says | A sequence of sectors "played" by **walking through them** | `updateSimon` |
+| Pac-Man | A ghost with a Pinky-style target; an edible frenzy | `updateGhost`, `startFrenzy` |
+| Tank Wars | A tank with shells **returnable** with the thread; a shield with a wait | `updateTank`, `updateShells` |
+| Crazy Tanks | A hand-rolled `createJoystick`; rules as an object of multipliers | `createJoystick`, `RULE` |
+| Fireworks | Deaths that burst; the FIREWORKS rule | `killEnemy`, `updateFlares` |
+| Clock | **The hand IS the wave timer** and a physical paddle | `updateClock` |
+| DonkeyKong | A draft of modifiers; derived seeds; combos with a window; **BARRELS** | `openRuleDraft`, `mulberry32`, `updateBarrels` |
+| StickFight | The file's structure, audio with `voice()`, the Arcade's shell | the whole skeleton |
 
-## Qué del repo entró de verdad, y qué quedó afuera
+## What from the repo really came in, and what was left out
 
-La tabla de arriba dice de dónde salió cada cosa, pero varias entradas están **de nombre más que
-de sustancia**. Esto es el mapa honesto, para no volver a creer que algo está cubierto:
+The table above says where each thing came from, but several entries are there **in name more than
+in substance**. This is the honest map, so as not to believe again that something is covered:
 
-| Origen | Estado real |
+| Source | Real state |
 |---|---|
-| **Ahorcado** | **Afuera del todo.** THE GALLOWS fue un intento y se eliminó (ver su sección). El pool quedó sin nada de Hangman. |
-| **Snake** | Aportó la FORMA del rastro, no su REGLA. En Snake cruzarte **te mata** y comer **te agranda**; acá cruzarte es la RECOMPENSA y el largo es un presupuesto que se compra con cartas. Las dos ideas que definen a Snake están invertidas o ausentes. |
-| **Tron** | Medio adentro. LIGHT CYCLES dio el lado enemigo (una moto cuya estela quema), pero **tu propio hilo no es una pared**: roza por 3.5 con enfriamiento, no mata. En Tron el punto es que TU línea es letal. |
-| **Fireworks** | Sólo estallido al morir y la regla PIROTECNIA. El ciclo que lo define — lanzar, arco, reventar en patrón — no está. |
-| **Ajedrez** | La coronación sí; la decisión de tablero no. Las piezas son amenazas telegrafiadas, no un rival moviendo. |
-| **DonkeyKong** | Era sólo estructura hasta que entró BARRILES (2026-09-18). |
-| **StickFight** | Esqueleto del archivo, `voice()`, shell del Arcade. **Cero mecánica.** |
+| **Hangman** | **Out altogether.** THE GALLOWS was an attempt and it was removed (see its section). The pool was left with nothing from Hangman. |
+| **Snake** | It contributed the SHAPE of the trace, not its RULE. In Snake crossing yourself **kills you** and eating **makes you bigger**; here crossing yourself is the REWARD and the length is a budget bought with cards. The two ideas that define Snake are inverted or absent. |
+| **Tron** | Half in. LIGHT CYCLES gave the enemy side (a bike whose trail burns), but **your own thread is not a wall**: it grazes for 3.5 with a cooldown, it does not kill. In Tron the point is that YOUR line is lethal. |
+| **Fireworks** | Only the burst on dying and the FIREWORKS rule. The cycle that defines it — launch, arc, burst in a pattern — is not there. |
+| **Chess** | The promotion yes; the board decision no. The pieces are telegraphed threats, not an opponent making moves. |
+| **DonkeyKong** | It was only structure until BARRELS came in (2026-09-18). |
+| **StickFight** | The file's skeleton, `voice()`, the Arcade's shell. **Zero mechanics.** |
 
-### Tres mecánicas cableadas que NADIE puede obtener
+### Three wired-up mechanics that NOBODY can obtain
 
-`P.thorns` (devolver daño al recibirlo), `P.loopHeal` (curarte al cerrar un bucle) y `P.lifesteal`
-existen, se resetean en `recomputeStats` y **se chequean en el juego** — pero ninguna carta ni
-regla las sube nunca de 0. Son código que corre para algo que no puede pasar.
+`P.thorns` (returning damage when you take it), `P.loopHeal` (healing when you close a loop) and `P.lifesteal`
+exist, are reset in `recomputeStats` and **are checked in the game** — but no card and no
+rule ever raises them above 0. They are code that runs for something that cannot happen.
 
-No es urgente arreglarlo, pero conviene saberlo por dos motivos: son ranuras listas si hace falta
-tapar alguna de las ausencias de arriba, y son exactamente el tipo de cosa que un lector futuro
-va a suponer que funciona. (Misma familia que el `thread[j].w || 1` que hacía del pincel código
-muerto, o que `chargeCd` faltando en el espejo.)
+It is not urgent to fix, but it is worth knowing for two reasons: they are slots ready if one of the
+absences above needs covering, and they are exactly the kind of thing a future reader
+will assume works. (The same family as the `thread[j].w || 1` that made the brush dead
+code, or as `chargeCd` missing in the mirror.)
 
-## Arquitectura (lo no-obvio)
+## Architecture (the non-obvious parts)
 
-- **Espacio mundo, no píxeles.** La arena es un círculo de **radio 1** centrado en (0,0);
-  la pantalla se deriva al dibujar con `sx()/sy()/sr()`. A diferencia de `sper/xper` del
-  resto del repo, **un resize no toca un solo número de la simulación** — que es lo que
-  permite guardar ~200 puntos de hilo sin reescalarlos nunca.
-- **El hilo es una SOGA simulada, no una pintura** (`layThread` + `simThread`, 2026-09-14).
-  Franco: *"mejoraría MUCHÍSIMO con un movimiento mejor del hilo"*. Cadena Verlet con
-  **fricción por edad** (`CFG.rope`): un punto fresco desliza y hace látigo detrás de la
-  canica; uno viejo se clava. El último elemento del array es siempre la **cabeza, clavada a
-  la canica**; los puntos se siembran a **paso fijo** entre el último apoyado y la cabeza (antes
-  un tirón los dejaba 10× más separados). Presupuesto de largo = puntos × paso.
-- **Cada punto tiene un ANCLA (`ax, ay`) = dónde fue apoyado, y vuelve ahí al asentarse.**
-  Sin ancla la soga acorta las curvas por adentro y la cabeza **nunca vuelve a cruzarla: cero
-  bucles** (medido con el bot). Con ancla hace látigo ~0.5 s y después se asienta EXACTO sobre el
-  camino real, así la geometría del bucle es la misma que antes (área máx del bot idéntica).
-  Ojo: **se siembra desde el ancla del último apoyado, no desde su posición actual**, o las
-  anclas trazarían el atajo en vez del camino.
-- **Los golpes patean la soga de verdad** (`kickThread`): desplazan los puntos del segmento y
-  Verlet lo convierte en velocidad; la onda viaja sola y el ancla la devuelve. Reemplaza al
-  viejo "ripple" senoidal sintético. `hitT` quedó sólo para el brillo.
-- **Cierre de bucle** = intersección del tramo recorrido este frame contra el hilo viejo
-  (`findSelfCross` → `segSegT`), salteando el tramo más nuevo. Sin ese salteo, girar fuerte
-  cierra "bucles" de dos píxeles. **El salteo se mide en DISTANCIA (`CFG.thread.skipDist`),
-  no en cantidad de puntos**: durante un tirón los puntos quedan 10× más separados, y contarlos
-  dejaba ciega justo la línea recta que el tirón acaba de dibujar — que es con la que querés cerrar.
-- **La regla de balance central**: `tight = sqrt(0.17 / area)` ⇒ **bucle chico = daño,
-  bucle grande = puntos**. Sin eso el juego sería "barré la cancha con un círculo enorme"
-  y no habría skill. Si tocás esto, tocás el juego entero.
-- **Colisión orbe↔hilo BARRIDA** (`threadDeflect`): se testea el tramo recorrido contra el
-  segmento, no la posición puntual. A 2 u/s un orbe avanza 4 radios en un frame lento.
-- **Dos familias de enemigo y nada más**: deslizantes (`fam:'s'`, esperan → telegrafían un
-  carril → embisten) y libres (`fam:'f'`, tanque y fantasma). El jefe es `fam:'b'`.
-  Agregar un enemigo = una fila en `ETYPES`.
-- **Armadura del jefe**: `hurtEnemy(..., src)` divide el daño por 3 salvo `src === 'loop'`.
-  El clímax obliga a usar el verbo central del juego.
-- **UNA regla por vez, no apiladas** (`hourRule`). Antes se acumulaban toda la run y para la
-  hora 7 tenías péndulos + minas + espejo + resonancia + pirotecnia a la vez. Franco lo dijo
-  textual: *"en cierto punto no entiendo nada"*. El reparto que quedó es la regla de oro del
-  juego: **cartas = tu build (se acumulan) · reglas = el clima (cambia)**.
-  `nextHour()` limpia péndulos/minas/secuencia y corre sólo el `onStart` de la regla vigente.
-- **RACHA DE CORAJE** (`braveMul`): el precio de sacar el apilado fue perder el efecto
-  compuesto, y sin él convenía jugar siempre a lo seguro (el bot prudente llegaba a la hora 11
-  y el arriesgado moría en la 3). La racha devuelve la recompensa compuesta **sin** devolver el
-  caos: cada hora seguida con regla picante sube un multiplicador permanente, y CALMA lo corta.
-  El caos es por hora (legible), la recompensa se compone (motivante), y se lee en un número.
-- **Roster por hora** (`pickRoster`): no salen todos los tipos desbloqueados a la vez, sino
-  1–3 sorteados que son los únicos de esa hora. Con seis comportamientos distintos en pantalla
-  no se lee nada. El peón siempre entra, como relleno.
-- **El aviso de inicio de hora** (`drawIntro`) dice regla + descripción. Es la pantalla que
-  enseña; si la sacás, vuelve la sensación de no entender qué pasa.
-- **`RULE` es un objeto de multiplicadores recomputado desde cero** (`applyRules`), nunca
-  estado mutable acumulado.
-- **`recomputeStats()` se recalcula íntegro** desde `hand[]`: agregar o cambiar una carta no
-  puede duplicar un efecto. Preserva la vida **absoluta** y acredita todo aumento del máximo.
-- **Dificultad = vida y cadencia, con tope en el daño** (`scaleHp/scaleCd/scaleDmg`).
-  Lección de TankWARS: escalar el daño sin tope hace que a la hora 10 te maten de un toque.
-- **El perfil del TIRÓN** (`lungeVel`) es el twin-smoothstep de SnakeWeb: área exacta 0.5
-  por fase ⇒ el avance neto es analítico, y la embestida nunca cambia de signo ⇒ sin recoil.
-  Devuelve **velocidad**: se suma en la integración, nunca `vx +=` (acumularía y sale volando).
-- **Subpasos acotados** en el loop (máx 3): estabilizan las cadenas de rebote orbe-orbe.
-  Ojo: cualquier lógica con umbral de distancia por frame tiene que medir contra el **último
-  punto guardado**, no contra la posición del subpaso anterior.
+- **World space, not pixels.** The arena is a circle of **radius 1** centred on (0,0);
+  the screen is derived when drawing with `sx()/sy()/sr()`. Unlike the rest of the repo's
+  `sper/xper`, **a resize does not touch a single number of the simulation** — which is what
+  allows ~200 thread points to be stored without ever rescaling them.
+- **The thread is a simulated ROPE, not a painting** (`layThread` + `simThread`, 2026-09-14).
+  Franco: *"it would improve ENORMOUSLY with better thread movement"*. A Verlet chain with
+  **friction by age** (`CFG.rope`): a fresh point slides and whips behind the
+  marble; an old one pins. The array's last element is always the **head, pinned to
+  the marble**; the points are seeded at a **fixed step** between the last one laid down and the head (before,
+  a lunge left them 10× further apart). The length budget = points × step.
+- **Each point has an ANCHOR (`ax, ay`) = where it was laid down, and it returns there as it settles.**
+  Without the anchor the rope shortens the curves from the inside and the head **never crosses it again: zero
+  loops** (measured with the bot). With the anchor it whips for ~0.5 s and then settles EXACTLY on the
+  real path, so the loop's geometry is the same as before (the bot's max area identical).
+  Careful: **it is seeded from the last laid-down point's anchor, not from its current position**, or the
+  anchors would trace the short cut instead of the path.
+- **The hits really do kick the rope** (`kickThread`): they displace the segment's points and
+  Verlet turns it into velocity; the wave travels by itself and the anchor brings it back. It replaces the
+  old synthetic sinusoidal "ripple". `hitT` was left only for the glow.
+- **A loop closure** = the intersection of the stretch covered this frame against the old thread
+  (`findSelfCross` → `segSegT`), skipping the newest stretch. Without that skip, turning hard
+  closes "loops" two pixels across. **The skip is measured in DISTANCE (`CFG.thread.skipDist`),
+  not in number of points**: during a lunge the points end up 10× further apart, and counting them
+  left blind precisely the straight line the lunge has just drawn — which is the one you want to close with.
+- **The central balance rule**: `tight = sqrt(0.17 / area)` ⇒ **a small loop = damage,
+  a big loop = points**. Without that the game would be "sweep the pitch with an enormous circle"
+  and there would be no skill. If you touch this, you touch the whole game.
+- **SWEPT orb↔thread collision** (`threadDeflect`): the stretch covered is tested against the
+  segment, not the point position. At 2 u/s an orb advances 4 radii in a slow frame.
+- **Two enemy families and nothing else**: sliders (`fam:'s'`, they wait → telegraph a
+  lane → charge) and free ones (`fam:'f'`, the tank and the ghost). The boss is `fam:'b'`.
+  Adding an enemy = one row in `ETYPES`.
+- **The boss's armour**: `hurtEnemy(..., src)` divides the damage by 3 except for `src === 'loop'`.
+  The climax forces you to use the game's central verb.
+- **ONE rule at a time, not stacked** (`hourRule`). Before they accumulated for the whole run and by
+  hour 7 you had pendulums + mines + mirror + resonance + fireworks at once. Franco said it
+  verbatim: *"at a certain point I don't understand anything"*. The division that resulted is the game's
+  golden rule: **cards = your build (they accumulate) · rules = the weather (it changes)**.
+  `nextHour()` clears pendulums/mines/the sequence and runs only the current rule's `onStart`.
+- **COURAGE STREAK** (`braveMul`): the price of taking away the stacking was losing the compound
+  effect, and without it it was better to always play safe (the cautious bot reached hour 11
+  and the daring one died in hour 3). The streak gives back the compound reward **without** giving back the
+  chaos: each consecutive hour with a spicy rule raises a permanent multiplier, and CALM breaks it.
+  The chaos is per hour (legible), the reward compounds (motivating), and it reads in one number.
+- **A roster per hour** (`pickRoster`): not all the unlocked types come out at once, but
+  1–3 rolled ones that are the only ones for that hour. With six different behaviours on screen
+  nothing reads. The pawn always comes in, as filler.
+- **The start-of-hour notice** (`drawIntro`) says the rule + a description. It is the screen that
+  teaches; if you take it away, the sense of not understanding what is happening comes back.
+- **`RULE` is an object of multipliers recomputed from scratch** (`applyRules`), never
+accumulated mutable state.
+- **`recomputeStats()` is recomputed in full** from `hand[]`: adding or changing a card cannot
+  duplicate an effect. It preserves the **absolute** health and credits every increase of the maximum.
+- **Difficulty = health and rate of fire, with a cap on damage** (`scaleHp/scaleCd/scaleDmg`).
+  The TankWARS lesson: scaling damage without a cap means that by hour 10 you are killed in one touch.
+- **The LUNGE's profile** (`lungeVel`) is SnakeWeb's twin-smoothstep: an exact area of 0.5
+  per phase ⇒ the net advance is analytic, and the charge never changes sign ⇒ no recoil.
+  It returns **velocity**: it is added in the integration, never `vx +=` (it would accumulate and fly off).
+- **Bounded substeps** in the loop (max 3): they stabilise the orb-orb bounce chains.
+  Careful: any logic with a per-frame distance threshold has to measure against the **last
+  stored point**, not against the previous substep's position.
 
-## Lo que salió del playtest largo (2026-09-14)
+## What came out of the long playtest (2026-09-14)
 
-Franco jugó y disparó una tanda de cambios que redefinieron varias cosas. Las decisiones y
-**el porqué**, que es lo que no hay que volver a romper:
+Franco played and fired off a batch of changes that redefined several things. The decisions and
+**the why**, which is what must not be broken again:
 
-- **Una decisión por hora, ALTERNANDO** (`endHour`): horas impares cambia la REGLA (y dura
-  dos horas), pares llega una CARTA. Antes venían las dos pantallas juntas *y* la mano se
-  llenaba tan rápido que te pasabas la run descartando. Con 11 transiciones salen 6 reglas y
-  5 cartas: **la mano se completa justo al final y no descartás nunca**.
-- **Ocho mejoras, dos por palo** (antes dieciséis). Varias eran tan específicas que no daban
-  ganas de elegirlas. Con ocho **repetís seguido**, y como los duplicados apilan su efecto,
-  sacar dos iguales es a la vez un PAR y el doble del efecto: recién ahí el póker pasa.
-- **Nombres reales del póker** (PAIR / TWO PAIR / THREE OF A KIND / STRAIGHT / FLUSH / FULL
+- **One decision per hour, ALTERNATING** (`endHour`): odd hours change the RULE (and it lasts
+  two hours), even ones bring a CARD. Before, both screens came together *and* the hand
+  filled up so fast that you spent the run discarding. With 11 transitions that gives 6 rules and
+  5 cards: **the hand is completed right at the end and you never discard**.
+- **Eight upgrades, two per suit** (previously sixteen). Several were so specific that they were
+  no fun to choose. With eight you **repeat often**, and since duplicates stack their effect,
+  drawing two the same is at once a PAIR and double the effect: only then does the poker happen.
+- **Real poker names** (PAIR / TWO PAIR / THREE OF A KIND / STRAIGHT / FLUSH / FULL
   HOUSE / FOUR OF A KIND / STRAIGHT FLUSH).
-- **El inventario se ve al elegir**: la mano con los huecos libres, siempre, en el draft.
-- **Reclamar sector = rodear el ROMBO** del centro (`claimSectorsIn` + `drawSectorTargets`).
-  Antes se muestreaba 5×5 la cobertura contra un umbral: invisible, y se sentía arbitrario
-  ("parece inconsistente"). Ahora hay un blanco dibujado y la regla se ve. El rombo late en
-  dorado si cerrarlo completa una línea (`wouldCompleteLine`).
-- **FRENESÍ rehecho**: ya no huyen. Imán suave hacia la canica (`CFG.frenzy.pull`, a propósito
-  MÁS LENTO que el andar de una pieza: las escora, no las mueve), sos **invulnerable**, las
-  piezas dejan de amenazar, y al terminar sale una **onda de choque gratis** (`frenzyBurst`).
-  La versión anterior convertía el premio en una persecución.
-- **Los rombos abren en una VENTANA, no siempre** (`game.sectorsOpen`, abre en la 1ª campanada
-  de cada hora). Estando siempre, el ta-te-ti se encadenaba sin descanso. Y el **frenesí sale
-  una vez por hora** (`run.frenzyHour`).
-- **El 3x3 paga TODAS sus líneas** (`linesDone` + `newLines` + `checkLines`): el tablero no se
-  limpia al cerrar una terna, así que ir sumando sectores va cerrando combinaciones nuevas —
-  un reclamo bien puesto cierra dos juntas, y con los 9 salen las 8. Recién se resetea cuando
-  están los nueve.
-- **El hilo ONDULA** (`CFG.rope.waveAmp/waveK/waveSpd`): la onda desplaza el **ancla**, no el
-  dibujo, así que pasa por el mismo resorte amortiguado y se mezcla con los golpes y el látigo.
-  Tiene media cero alrededor del camino grabado ⇒ **la geometría del bucle no cambia**. Sin
-  esto el tramo asentado quedaba absolutamente muerto y el hilo se leía como una línea dibujada.
-- **RESONANCE no castiga pisar otros sectores.** En una grilla 3×3, para ir de un sector al
-  siguiente casi siempre cruzás uno intermedio: con la regla de "sector equivocado = reinicio"
-  la secuencia se caía apenas te movías. La única presión es el reloj. **No la re-agregues.**
-- **RESONANCE es un Simón de verdad**: cuatro colores por sector (`SECT_CI`/`SIMON_COL`), una
-  nota por color, el resto de la esfera **apagada**, puntos de progreso y aviso de error. Antes
-  no se entendía si habías acertado.
-- **La cabeza del hilo DIRIGE** (`CFG.thread.headPts` / `headAim`): cerca de la punta la salida
-  se mezcla hacia donde te estás moviendo — es un raquetazo, no un rebote. Lejos, física pura.
-  La punta se dibuja con halo propio: si no se ve, no sabés con qué parte estás pegando.
-- **Las piezas NO se barren al cerrar la hora.** Verlas evaporarse al elegir una carta rompía
-  la continuidad. El premio por aguantar es la cuerda (14% de vida) y el bonus.
-- **El cartel de hora es una placa compacta** arriba, con cinta del color de la regla. No dice
-  qué enemigos vienen (Franco lo pidió: prefiere descubrirlo).
-- **`addScore` no hace nada en `over`/`win`.** El fondo sigue vivo, pero ver el número moverse
-  solo después de morir arruinaba la lectura del resultado.
-- **Fuera** la regla ESTELAS (rastros de enemigos) y la palabra tipo Ahorcado: la primera no le
-  pareció buena mecánica, la segunda no tenía ninguna.
-- **DAÑO y PUNTOS son dos lenguajes distintos** (`drawFloaters`): el daño es un número pelado
-  con una chispa de cuatro puntas al lado (vive en el mundo); los puntos van siempre con "+"
-  dentro de una chapa oscura con borde (se lee como UI). Antes eran el mismo número con otro
-  color y se confundían constantemente.
-- **Tipografía Outfit** (Google Fonts). La anterior era la system-ui, que en Windows cae en
-  Segoe UI y se lee cuadrada y genérica — sobre todo en los números del score.
-- **Modos con nombre y explicación**: FREE RUN / DAILY RUN como tarjetas con subtítulo. "LIBRE"
-  y "DIARIO" sueltos no decían nada.
+- **The inventory is visible while choosing**: the hand with its free slots, always, in the draft.
+- **Claiming a sector = going round the DIAMOND** at its centre (`claimSectorsIn` + `drawSectorTargets`).
+  Before, the coverage was sampled 5×5 against a threshold: invisible, and it felt arbitrary
+  ("it seems inconsistent"). Now there is a drawn target and the rule is visible. The diamond pulses in
+  gold if closing it completes a line (`wouldCompleteLine`).
+- **FRENZY remade**: they no longer flee. A gentle magnet towards the marble (`CFG.frenzy.pull`, deliberately
+  SLOWER than a piece's walk: it heels them, it does not move them), you are **invulnerable**, the
+  pieces stop threatening, and when it ends a **free shockwave** comes out (`frenzyBurst`).
+  The previous version turned the prize into a chase.
+- **The diamonds open in a WINDOW, not always** (`game.sectorsOpen`, it opens on each hour's 1st
+  chime). Being there always, the noughts and crosses chained without a break. And the **frenzy comes
+  once per hour** (`run.frenzyHour`).
+- **The 3x3 pays ALL its lines** (`linesDone` + `newLines` + `checkLines`): the board is not
+  cleared on closing a triple, so adding sectors keeps closing new combinations —
+  a well-placed claim closes two together, and with all 9 the 8 come out. It is only reset when
+  all nine are taken.
+- **The thread UNDULATES** (`CFG.rope.waveAmp/waveK/waveSpd`): the wave displaces the **anchor**, not the
+  drawing, so it goes through the same damped spring and mixes with the hits and the whip.
+  It has zero mean around the recorded path ⇒ **the loop's geometry does not change**. Without
+  this the settled stretch was absolutely dead and the thread read as a drawn line.
+- **RESONANCE does not punish stepping on other sectors.** On a 3×3 grid, to get from one sector to the
+  next you almost always cross an intermediate one: with the "wrong sector = reset" rule
+  the sequence fell over the moment you moved. The only pressure is the clock. **Do not re-add it.**
+- **RESONANCE is a real Simon**: four colours per sector (`SECT_CI`/`SIMON_COL`), one
+  note per colour, the rest of the face **dark**, progress dots and an error warning. Before
+  you could not tell whether you had got it right.
+- **The thread's head AIMS** (`CFG.thread.headPts` / `headAim`): near the tip the exit
+  blends towards where you are moving — it is a racket shot, not a bounce. Far away, pure physics.
+  The tip is drawn with a halo of its own: if you cannot see it, you do not know which part you are hitting with.
+- **The pieces are NOT swept away at the close of the hour.** Seeing them evaporate on choosing a card broke
+  the continuity. The prize for lasting is the rope (14% of health) and the bonus.
+- **The hour card is a compact plate** at the top, with a ribbon in the rule's colour. It does not say
+  which enemies are coming (Franco asked for that: he prefers to find out).
+- **`addScore` does nothing in `over`/`win`.** The background stays alive, but seeing the number move
+  by itself after dying ruined the reading of the result.
+- **Out** went the TRAILS rule (enemy traces) and the Hangman-style word: the first did not
+  seem a good mechanic to him, the second had none at all.
+- **DAMAGE and POINTS are two different languages** (`drawFloaters`): the damage is a bare number
+  with a four-pointed spark beside it (it lives in the world); the points always go with a "+"
+  inside a dark plate with a border (it reads as UI). Before they were the same number in a different
+  colour and they were constantly confused.
+- **Outfit typography** (Google Fonts). The previous one was the system-ui, which on Windows falls back to
+  Segoe UI and reads square and generic — above all in the score's numbers.
+- **Modes with a name and an explanation**: FREE RUN / DAILY RUN as cards with a subtitle. A bare "FREE"
+  and "DAILY" said nothing.
 
-## Segundo playtest (2026-09-15) — bugs de fondo y afinado
+## Second playtest (2026-09-15) — background bugs and tuning
 
-- **EXPLOSIÓN DE DAMAS (el bug más grave que tuvo el juego).** Las damas invocaban peones y
-  los peones que llegaban al centro coronaban en damas: reacción en cadena exponencial. Peor,
-  `enemyCap()` sólo lo miraba el spawner del reloj, así que coronaciones e invocaciones
-  entraban por la puerta de atrás sin tope. Tres candados, **no los saques**:
-  `HARD_CAP` aplicado **dentro de `spawnEnemy`** (cubre toda fuente), `MAX_QUEENS = 2`, y la
-  dama ya **no** invoca peones. Verificado: 10 horas con el jugador quieto → se estaciona en
-  11 enemigos y 2 damas. Antes reventaba.
-- **La CELDA es cuadrada; lo RECTANGULAR es sólo dónde va el rombo.** (Corregido más tarde el
-  mismo día: primero se acható la celda entera y eso cambió el "#" del reloj, que no era lo
-  buscado.) La celda es el tercio de siempre (`SECT_Q`, `sectRect`, `sectorAt`) — es lo que
-  dibuja el reloj, lo que se pinta entero y lo que define en qué sector estás. El BLANCO va en
-  una grilla achatada (`SECT_DX/SECT_DY`): en el centro geométrico de una celda de esquina el
-  rombo caía a radio 0.94, sobre el borde, y **el tablero no se podía completar nunca**.
-- **Ciclo del tablero** (versión final): la ventana abre pasada `CFG.clock.sectorsAt` de la
-  hora (33%), **una sola vez por hora** (`game.sectorsShown`), y cobrar una línea **limpia el
-  tablero entero** y cierra la ventana — los sectores se descargan en el frenesí. Los sectores
-  sin cobrar sí persisten entre horas. Las ternas cobradas viven en `linesDone`, que
-  `resetSectors()` limpia junto con el tablero.
-- **Los rombos se dibujan DESPUÉS de la aguja**: el del centro quedaba tapado justo cuando la
-  aguja pasaba por ahí, que es casi siempre.
-- **Cerrar acepta el ROCE** (`CFG.thread.closeTol` ≈ radio de la canica). Medido: la ondulación
-  costaba un cierre de cada tres exigiendo la intersección exacta de la línea de centro. El
-  modelo mental pasa a ser "TOCÁ tu hilo y cierra". (La pista visual `nearClose` que se había
-  pensado NO existe en el código: se perdió en un parche fallido y nunca se rehizo.)
-- **El hilo se dibuja como CINTA RELLENA, no como línea con grosor.** Con strokes por tramos
-  siempre quedaba el escalón entre capas; un polígono relleno tiene silueta continua. El color
-  va en rodajas opacas que COMPARTEN sus vértices de borde, así no hay costura. El ancho de cada
-  punto es el que tenía la mano al apoyarlo (`thread[i].w`, ver la auditoría más abajo).
-- **Fuga de orbes: el hilo TAMBIÉN se mueve.** El test barrido del orbe no alcanza — cuando la
-  soga barre por encima de un orbe casi quieto no hay intersección contra la posición actual
-  del segmento. Se testea también contra la posición ANTERIOR (`p.px/p.py`) y los cruces en
-  diagonal. Y `deflCd` (ventana CIEGA) volvió a ser corto: a 0.15 s eran 0.26 unidades de vuelo
-  sin colisión. El "no estar siempre prendido" se resuelve aparte con `o.chargeCd`.
-- **Los orbes dejaron de decidir la oleada**: hacían 26 + velocidad y conservaban el 60% de la
-  carga, así que un orbe barría grupos enteros y la población siguiente era una lotería. Ahora
-  17 + velocidad y conservan 28%. El daño del BUCLE subió para compensar: decide tu habilidad.
-- **RESONANCE no castiga pisar otros sectores** (ver abajo).
+- **QUEEN EXPLOSION (the worst bug the game has had).** The queens summoned pawns and
+  the pawns that reached the centre promoted into queens: an exponential chain reaction. Worse,
+  `enemyCap()` was only looked at by the clock's spawner, so promotions and summons
+  came in through the back door with no cap. Three locks, **do not take them out**:
+  `HARD_CAP` applied **inside `spawnEnemy`** (it covers every source), `MAX_QUEENS = 2`, and the
+  queen **no longer** summons pawns. Verified: 10 hours with the player standing still → it settles at
+  11 enemies and 2 queens. Before, it burst.
+- **The CELL is square; what is RECTANGULAR is only where the diamond goes.** (Corrected later the
+  same day: first the whole cell was squashed and that changed the clock's "#", which was not what was
+  wanted.) The cell is the usual third (`SECT_Q`, `sectRect`, `sectorAt`) — it is what
+  the clock draws, what is painted whole and what defines which sector you are in. The TARGET goes on
+  a squashed grid (`SECT_DX/SECT_DY`): at the geometric centre of a corner cell the
+  diamond landed at radius 0.94, on the edge, and **the board could never be completed**.
+- **The board's cycle** (final version): the window opens past `CFG.clock.sectorsAt` of the
+  hour (33%), **once only per hour** (`game.sectorsShown`), and collecting a line **clears the
+  whole board** and closes the window — the sectors discharge into the frenzy. Uncollected
+  sectors do persist between hours. The collected triples live in `linesDone`, which
+  `resetSectors()` clears along with the board.
+- **The diamonds are drawn AFTER the hand**: the centre one was covered precisely when the
+  hand passed through there, which is almost always.
+- **Closing accepts a GRAZE** (`CFG.thread.closeTol` ≈ the marble's radius). Measured: the undulation
+  cost one closure in three by demanding the exact intersection of the centre line. The
+  mental model becomes "TOUCH your thread and it closes". (The `nearClose` visual hint that had been
+  planned does NOT exist in the code: it was lost in a failed patch and never redone.)
+- **The thread is drawn as a FILLED RIBBON, not as a line with thickness.** With per-segment strokes
+  there was always a step between layers; a filled polygon has a continuous silhouette. The colour
+  goes in opaque slices that SHARE their edge vertices, so there is no seam. Each point's width
+  is the one the hand had when laying it down (`thread[i].w`, see the audit further down).
+- **Orb leak: the thread ALSO moves.** The orb's swept test is not enough — when the
+  rope sweeps over an almost-still orb there is no intersection against the segment's current
+  position. It is also tested against the PREVIOUS position (`p.px/p.py`) and the diagonal
+  crossings. And `deflCd` (the BLIND window) went back to being short: at 0.15 s it was 0.26 units of flight
+  with no collision. "Not being lit all the time" is solved separately with `o.chargeCd`.
+- **The orbs stopped deciding the wave**: they did 26 + speed and kept 60% of the
+  charge, so one orb swept whole groups and the next population was a lottery. Now it is
+  17 + speed and they keep 28%. The LOOP's damage went up to compensate: your skill decides.
+- **RESONANCE does not punish stepping on other sectors** (see below).
 
-## Auditoría de QA (2026-09-15) — bugs que el playtest no encontraba
+## QA audit (2026-09-15) — bugs the playtest was not finding
 
-Todo esto estaba vivo y ninguno tiraba un error. **No los re-introduzcas.**
+All of this was live and none of it threw an error. **Do not re-introduce them.**
 
-- **La racha de coraje nunca se cortaba.** `chooseRule` comparaba `r.id === 'calma'`, pero el id
-  quedó en `'calm'` cuando se tradujo la UI. Tomar CALM subía la racha igual que una regla
-  picante — y el propio cartel del draft promete lo contrario, porque ahí sí compara bien.
-  Moraleja: **un id de datos que se usa en dos archivos es una dependencia silenciosa**; si
-  renombrás uno, buscá el string en TODO el repo.
-- **La ventana de rombos se reabría al frame siguiente de cobrar.** `checkLines` hace
-  `game.sectorsOpen = false`, pero `updateClock` la reabre en cuanto ve `u >= sectorsAt`, cosa
-  que sigue siendo cierta el resto de la hora. El cierre duraba UN frame. Ahora hay
-  `game.sectorsShown`: la ventana se abre **una sola vez por hora**.
-- **Morir en el mismo frame en que termina la hora te robaba la pantalla de derrota.**
-  `stepSim` llamaba `updateClock` ANTES de mirar el estado; con dt grande hay hasta 3 subpasos,
-  y si morías en el primero, el segundo cruzaba la hora y `endHour()` abría el draft ENCIMA de
-  la derrota: partida zombi con el jugador muerto. Medido 60/60 casos antes, 0/60 después.
-  Hacen falta **los dos** chequeos de estado (antes y después de `updateClock`).
-- **La pantalla de derrota seguía jugando sola.** En `over`/`win` el loop llama a `updateOrbs`
-  para que el fondo respire, pero eso desviaba contra el hilo (`run.deflects++`) y los orbes
-  cargados mataban piezas (`run.kills++`, combo, drops). El resumen final mostraba números
-  subiendo. Ahora `updateOrbs` mira `game.state === 'play'` antes de tocar nada que sea estado
-  de partida; los orbes siguen rebotando contra las paredes y entre sí.
-- **El pincel del hilo no existía.** `drawThread` lee `thread[j].w` con un fallback defensivo
-  `|| 1`… y `newPt` nunca escribía `w`. El fallback corría SIEMPRE: ancho constante y
-  `CFG.thread.speedW` sin efecto. **Cuidado con los `|| valor` defensivos: tapan justamente el
-  bug que tendrían que delatar.**
-- **La fuente del canvas no era la que se carga.** El `<link>` trae Outfit y el CSS la aplica al
-  body, pero TODO el texto del juego se dibuja en canvas con la constante `FONT`, que seguía en
-  Segoe UI. Ahora coinciden, y se re-hornea el plato con `document.fonts.ready` (si no, los
-  numerales quedan con la fuente de sistema para siempre).
-- **El espejo nunca cargaba los orbes.** `mirrorDeflect` arma un orbe fantasma y se olvidaba de
-  `chargeCd`; adentro, `if (o.chargeCd <= 0)` con `undefined` da **false**, así que el reflejo
-  desviaba pero no encendía nada. `undefined` en una comparación numérica no explota: miente.
-- **`spawnOrb` simulaba un orbe dos veces.** `updateOrbs` recorre al revés; cuando una pieza
-  muere adentro de ese bucle suelta un orbe, y con la mesa llena `spawnOrb` hacía `splice` de un
-  neutro. Sacar un elemento por debajo del índice actual corre el array. Ahora **reemplaza en el
-  lugar**.
-- **El modo DIARIO no era reproducible**, por dos causas independientes:
-  1. la ondulación de la soga usaba `perfT` (reloj de pared desde que cargó la página), así que
-     la fase dependía de CUÁNDO empezaste. Ahora usa `ropeT`, que acumula dt de simulación y lo
-     reinicia `startRun`;
-  2. el polvo de ambiente llamaba a `rnd()` (el rng **sembrado**) desde un temporizador que no
-     se reiniciaba entre partidas ⇒ el stream entero se corría. La decoración ahora usa
-     `Math.random`. **Regla: lo decorativo nunca toca la semilla.**
-  Verificado: 4000 frames bit a bit idénticos, con cambios de hora, drafts, coronaciones y
-  muerte incluidos, comparando sumas de verificación de todo el estado.
-- **`hitstop` sobrevivía de una partida a la otra** y el primer frame de la nueva quedaba sin
-  simular. `startRun` limpia `hitstop`, `trauma`, `flashA` y `zoomPunch`.
-- **El frenesí quedaba colgado** al salir al menú o al ganar: `updateFrenzy` sólo corre en
-  `play`, así que nunca terminaba y el ×1.5 de `hurtEnemy` quedaba activo. Lo limpian `endRun` y
+- **The courage streak was never broken.** `chooseRule` compared `r.id === 'calma'`, but the id
+  had become `'calm'` when the UI was translated. Taking CALM raised the streak just like a spicy
+  rule — and the draft's own card promises the opposite, because there it does compare correctly.
+  The moral: **a data id used in two files is a silent dependency**; if
+  you rename one, search for the string across the WHOLE repo.
+- **The diamond window reopened the frame after collecting.** `checkLines` does
+  `game.sectorsOpen = false`, but `updateClock` reopens it as soon as it sees `u >= sectorsAt`, which
+  remains true for the rest of the hour. The closure lasted ONE frame. Now there is
+  `game.sectorsShown`: the window opens **once only per hour**.
+- **Dying in the same frame the hour ends robbed you of the defeat screen.**
+  `stepSim` called `updateClock` BEFORE looking at the state; with a big dt there are up to 3 substeps,
+  and if you died in the first, the second crossed the hour and `endHour()` opened the draft ON TOP OF
+  the defeat: a zombie game with the player dead. Measured 60/60 cases before, 0/60 after.
+  **Both** state checks are needed (before and after `updateClock`).
+- **The defeat screen carried on playing by itself.** In `over`/`win` the loop calls `updateOrbs`
+  so the background breathes, but that deflected against the thread (`run.deflects++`) and the charged
+  orbs killed pieces (`run.kills++`, the combo, drops). The final summary showed numbers
+  going up. Now `updateOrbs` checks `game.state === 'play'` before touching anything that is game
+  state; the orbs keep bouncing off the walls and off each other.
+- **The thread's brush did not exist.** `drawThread` reads `thread[j].w` with a defensive fallback
+  `|| 1`… and `newPt` never wrote `w`. The fallback ran ALWAYS: a constant width and
+  `CFG.thread.speedW` with no effect. **Careful with defensive `|| value`s: they cover up precisely the
+  bug they should be exposing.**
+- **The canvas's font was not the one being loaded.** The `<link>` brings Outfit and the CSS applies it to the
+  body, but ALL the game's text is drawn on canvas with the `FONT` constant, which was still
+  Segoe UI. Now they match, and the face is re-baked with `document.fonts.ready` (otherwise the
+  numerals stay in the system font forever).
+- **The mirror never charged the orbs.** `mirrorDeflect` builds a ghost orb and forgot
+  `chargeCd`; inside, `if (o.chargeCd <= 0)` with `undefined` gives **false**, so the reflection
+  deflected but lit nothing. `undefined` in a numeric comparison does not blow up: it lies.
+- **`spawnOrb` simulated one orb twice.** `updateOrbs` walks backwards; when a piece
+  dies inside that loop it releases an orb, and with the table full `spawnOrb` did a `splice` of a
+  neutral one. Removing an element below the current index shifts the array. Now it **replaces in
+place**.
+- **DAILY mode was not reproducible**, for two independent reasons:
+  1. the rope's undulation used `perfT` (wall time since the page loaded), so
+     the phase depended on WHEN you started. Now it uses `ropeT`, which accumulates simulation dt and
+`startRun` resets it;
+  2. the ambient dust called `rnd()` (the **seeded** rng) from a timer that was not
+     reset between games ⇒ the whole stream shifted. The decoration now uses
+     `Math.random`. **The rule: decoration never touches the seed.**
+  Verified: 4000 frames bit for bit identical, with hour changes, drafts, promotions and
+  death included, comparing checksums of the whole state.
+- **`hitstop` survived from one game to the next** and the new one's first frame was left
+  unsimulated. `startRun` clears `hitstop`, `trauma`, `flashA` and `zoomPunch`.
+- **The frenzy was left hanging** on leaving for the menu or on winning: `updateFrenzy` only runs in
+  `play`, so it never ended and `hurtEnemy`'s ×1.5 stayed active. `endRun` clears it and
   `backToMenu`.
-- **La quema de sector no se reiniciaba al salir**: `e.sectT` sólo subía, así que una pieza que
-  pisaba medio segundo y volvía después ardía al instante. Es un contador de PERMANENCIA.
-- **Con el jugador QUIETO la cola del hilo se iba de la arena.** Parado, el hilo se queda en 2
-  puntos y `simThread` salía temprano (`if (n < 3) return`), así que ni el ancla ni el recorte
-  contra el plato corrían — pero `kickThread` sí seguía empujando la cola en cada rebote. Medido
-  en la prueba AFK: radio 1.14 a la hora 2, 1.60 a la hora 3, **2.86 a la hora 4** (la arena
-  tiene radio 1), con el hilo dibujado como una recta enorme saliendo de la esfera. **Una salida
-  temprana por "caso trivial" es sospechosa si algo de afuera puede seguir escribiendo ese
-  estado.** Ahora el caso `n < 3` aplica ancla y recorte igual.
-- **El buscaminas era ilegible**: la casilla destapada se pintaba a alpha 0.05 (invisible) y los
-  números quedaban DEBAJO de los carriles de telegrafía y de la aguja. Franco, textual: "¿qué
-  marca ese número?". Ahora el dibujo va en dos pasadas — `drawMineCells()` con el fondo y
-  `drawMineMarks()` **arriba de todo lo vivo**, porque es información, no decorado.
+- **The sector burn was not reset on leaving**: `e.sectT` only went up, so a piece that
+  stepped on it for half a second and came back later burned instantly. It is a PERSISTENCE counter.
+- **With the player STANDING STILL the thread's tail left the arena.** Standing still, the thread stays at 2
+  points and `simThread` left early (`if (n < 3) return`), so neither the anchor nor the clip
+  against the face ran — but `kickThread` did keep pushing the tail on every bounce. Measured
+  in the AFK test: radius 1.14 at hour 2, 1.60 at hour 3, **2.86 at hour 4** (the arena
+  has radius 1), with the thread drawn as an enormous straight line leaving the face. **An early
+  exit for a "trivial case" is suspicious if something outside can keep writing that
+  state.** Now the `n < 3` case applies the anchor and the clipping just the same.
+- **The minesweeper was illegible**: the uncovered square was painted at alpha 0.05 (invisible) and the
+  numbers ended up UNDER the telegraph lanes and the hand. Franco, verbatim: "what does that
+  number mark?". Now the drawing goes in two passes — `drawMineCells()` with the background and
+  `drawMineMarks()` **on top of everything alive**, because it is information, not decoration.
 
-## Sistema visual (art direction, 2026-09-16)
+## Visual system (art direction, 2026-09-16)
 
-Mesa de casino: fieltro oscuro, metal dorado, naipes de hueso. Antes cada pantalla elegía sus
-colores y tamaños a ojo y por eso parecían de juegos distintos. Ahora hay **tokens** en
-`p03_engine` y todo se escribe contra ellos:
+A casino table: dark felt, golden metal, bone playing cards. Before, each screen chose its
+colours and sizes by eye and that is why they looked like different games. Now there are **tokens** in
+`p03_engine` and everything is written against them:
 
-- **`C`** — paleta. Cinco familias, **una función cada una**: superficies (`void/felt/surf/
-  surfHi/line/lineHi`), tinta (`ink/inkDim/inkFaint`), **oro** = valor (puntaje, premios, el
-  reloj), **hielo** = vos (canica, hilo, herramientas), **carmesí** = lo que te lastima,
-  **violeta** = reglas y resonancia. Si un color hace dos cosas, deja de significar algo.
-- **`TS`** — escala tipográfica en fracciones de `min(W,H)`: `display/title/sub/body/cap`.
-  No inventar tamaños sueltos.
-- **`panel(x,y,w,h,r,accent,glow)`** — el ÚNICO lugar donde se decide cómo se ve una placa:
-  gradiente vertical, borde de acento, filo de luz arriba. Lo usan draft, menú, cartel de hora,
-  botones y el panel del stack.
-- **`txtO()`** — texto contorneado, para lo que vuela sobre la arena. El `txtG` de sombra
-  desplazada se lee como un texto pegado encima; el contorno centra la silueta.
-- Las mismas variables existen en CSS (`:root`) para que la cáscara DOM no sea otro juego.
+- **`C`** — the palette. Five families, **one function each**: surfaces (`void/felt/surf/
+  surfHi/line/lineHi`), ink (`ink/inkDim/inkFaint`), **gold** = value (the score, the prizes, the
+  clock), **ice** = you (the marble, the thread, your tools), **crimson** = what hurts you,
+  **violet** = rules and resonance. If a colour does two things, it stops meaning anything.
+- **`TS`** — the typographic scale in fractions of `min(W,H)`: `display/title/sub/body/cap`.
+  Do not invent loose sizes.
+- **`panel(x,y,w,h,r,accent,glow)`** — the ONLY place where how a plate looks is decided:
+  a vertical gradient, an accent border, an edge of light on top. The draft, the menu, the hour card,
+  the buttons and the stack panel all use it.
+- **`txtO()`** — outlined text, for whatever flies over the arena. The offset-shadow `txtG`
+  reads as text stuck on top; the outline centres the silhouette.
+- The same variables exist in CSS (`:root`) so the DOM shell is not a different game.
 
-**Regla de rendimiento que manda sobre todo: "que parezca caro de producir, pero que sea barato
-de renderizar".** Sin `shadowBlur`, sin `filter`, sin partículas nuevas. La profundidad se arma
-con gradientes verticales, un filo claro arriba y una base oscura — tres fills y dos líneas.
+**The performance rule that governs everything: "make it look expensive to produce, but cheap
+to render".** No `shadowBlur`, no `filter`, no new particles. Depth is built
+with vertical gradients, a light edge on top and a dark base — three fills and two lines.
 
-### Los números de daño dicen QUIÉN, y el tamaño dice CUÁNTO
+### The damage numbers say WHO, and the size says HOW MUCH
 
-Eran tres naranjas casi idénticos (`#ff6b81 / #ff9f43 / #ffd23f`) separados por un `kind` que
-el jugador no podía deducir, con tamaño fijo. Ahora:
+They were three almost identical oranges (`#ff6b81 / #ff9f43 / #ffd23f`) separated by a `kind` the
+player could not deduce, at a fixed size. Now:
 
-- lo que **hacés vos** → hueso, y vira a **oro** cuanto más fuerte pega;
-- lo que **te hacen** → carmesí, más pesado (`kind: 3`, nuevo);
-- lo que te **cura** → verde;
-- el **tamaño** sale de `dmgRef()` = lo que pega un bucle ceñido a esa altura de la partida, así
-  que un 40 impresiona en la hora 1 y es rutina en la 11 — como se siente jugando;
-- sólo los golpes grandes se ganan un destello, y usa el sprite cacheado de `bloomPx`. Si
-  brillara todo, no brillaría nada.
+- what **you do** → bone, shifting to **gold** the harder it hits;
+- what **is done to you** → crimson, heavier (`kind: 3`, new);
+- what **heals** you → green;
+- the **size** comes from `dmgRef()` = what a tight loop does at that point in the game, so
+  a 40 is impressive in hour 1 and routine in hour 11 — as it feels while playing;
+- only the big hits earn a flash, and it uses `bloomPx`'s cached sprite. If
+  everything shone, nothing would shine.
 
-El puntaje es una **ficha** (chapa con filo dorado), no un globo: es otro lenguaje, no otro color.
+The score is a **chip** (a plate with a golden edge), not a balloon: it is another language, not another colour.
 
-### Decisiones de performance de esta pasada
+### This pass's performance decisions
 
-- **La tira de la mano se HORNEA** (`bakeHandStrip`). Es lo único del rediseño que costaba EN
-  JUEGO: corre en cada frame del HUD y cada naipe pedía dos `createLinearGradient` — 10 por
-  frame para dibujar algo que sólo cambia cuando agarrás una carta. Ahora es **un `drawImage`**,
-  invalidado por `handKey()` (contenido + jugada + tamaño) y por el resize. Mismo patrón que
+- **The hand's strip is BAKED** (`bakeHandStrip`). It is the only part of the redesign that cost anything IN
+  GAME: it runs on every HUD frame and each card asked for two `createLinearGradient`s — 10 per
+  frame to draw something that only changes when you take a card. Now it is **one `drawImage`**,
+  invalidated by `handKey()` (content + hand + size) and by the resize. The same pattern as
   `bakeDial`.
-- **El contador de FPS ya no corre siempre.** Tenía un `requestAnimationFrame` propio vivo desde
-  que cargaba la página, se mirara o no el panel de info. Ahora arranca al abrirlo y se corta al
-  cerrarlo (`startFps`/`stopFps`).
-- **Las animaciones de entrada terminan.** Draft de reglas y de cartas entran escalonadas en
-  0.24–0.26 s; pasado ese tiempo el factor vale 1 y no se recalcula nada. La única animación
-  permanente es un `Math.sin` por naipe en el draft (flotación de reposo), y sólo mientras el
-  draft está abierto.
-- **La sombra de los naipes son dos rects desplazados**, no `shadowBlur` — que es de lo más caro
-  que hay en canvas mobile.
+- **The FPS counter no longer runs all the time.** It had a `requestAnimationFrame` of its own alive from
+  the moment the page loaded, whether or not the info panel was being looked at. Now it starts when it is opened and stops when
+closing it (`startFps`/`stopFps`).
+- **The entry animations end.** The rules and cards drafts come in staggered over
+  0.24–0.26 s; past that time the factor is worth 1 and nothing is recomputed. The only permanent
+  animation is one `Math.sin` per card in the draft (the resting float), and only while the
+  draft is open.
+- **The cards' shadow is two offset rects**, not `shadowBlur` — which is about the most expensive thing
+  there is on mobile canvas.
 
-### La arena (2026-09-16, segunda pasada) — donde de verdad se nota
+### The arena (2026-09-16, second pass) — where it really shows
 
-La primera pasada tocó cartas, paneles, números y pantallas: **todo lo que se mira por segundos**.
-El plato, las piezas, las orbes y la aguja — lo que se mira TODO el rato — quedaron como estaban,
-y el resultado fue "no sentí mucha diferencia". Lección que vale para cualquier rediseño acá: **el
-pase de arte se juzga por lo que ocupa la pantalla durante el juego, no por las pantallas de menú.**
+The first pass touched cards, panels, numbers and screens: **everything you look at for seconds**.
+The face, the pieces, the orbs and the hand — what you look at ALL the time — were left as they were,
+and the result was "I didn't feel much difference". A lesson that holds for any redesign here: **an
+art pass is judged by what fills the screen during play, not by the menu screens.**
 
-**Una sola luz clave.** `LIGHT` (`p03_engine`) es la dirección de la luz en coordenadas de
-PANTALLA, arriba a la izquierda. Todo lo que tiene volumen la respeta: canica, piezas, orbes,
-aguja, torreta del tanque. Antes cada cosa elegía la suya (o ninguna) y el conjunto parecía un
-collage de stickers. **Si un objeto se dibuja ROTADO, hay que contrarrotar la luz** (moto, aguja,
-torreta): si no, el brillo gira con el objeto y se lee como algo que se ilumina solo.
+**One single key light.** `LIGHT` (`p03_engine`) is the light's direction in SCREEN
+coordinates, top left. Everything with volume respects it: the marble, the pieces, the orbs, the
+hand, the tank's turret. Before, each thing chose its own (or none) and the whole looked like a
+collage of stickers. **If an object is drawn ROTATED, the light has to be counter-rotated** (the bike, the hand,
+the turret): otherwise the shine turns with the object and reads as something that lights itself.
 
-Dos helpers, y no hay un tercer lugar donde se decida esto:
+Two helpers, and there is no third place where this is decided:
 
-- **`groundShadow(x,y,r,a)`** — dos elipses apiladas, sin gradiente (a 24 piezas en pantalla, un
-  `createRadialGradient` por pieza por frame es gasto real y se ve igual). Es el detalle más barato
-  del pase y el que más cambia: **sin sombra las piezas flotan; con sombra están apoyadas.**
-- **`bevelShape(pathFn, w, liteA, darkA, lx, ly)`** — filo claro arriba / oscuro abajo DENTRO de
-  la silueta. El truco es recortar contra la forma y volver a trazarla corrida: lo que sobresale
-  se recorta, así que del trazo queda sólo la mitad interior, que es exactamente un borde de luz.
-  Da volumen sin un gradiente por objeto y sin una sola sombra de canvas. `pathFn` se llama tres
-  veces, así que tiene que poder reconstruir el camino.
+- **`groundShadow(x,y,r,a)`** — two stacked ellipses, no gradient (with 24 pieces on screen, one
+  `createRadialGradient` per piece per frame is a real cost and it looks the same). It is the pass's cheapest
+  detail and the one that changes the most: **without a shadow the pieces float; with a shadow they are resting.**
+- **`bevelShape(pathFn, w, liteA, darkA, lx, ly)`** — a light edge on top / a dark one underneath INSIDE
+  the silhouette. The trick is to clip against the shape and stroke it again offset: what sticks out
+  is clipped, so only the inner half of the stroke is left, which is exactly an edge of light.
+  It gives volume without a gradient per object and without a single canvas shadow. `pathFn` is called three
+  times, so it has to be able to rebuild the path.
 
-**El plato es un objeto, no un círculo.** `bakeDial` se hornea una vez por resize, así que **ahí
-adentro el detalle es gratis y conviene gastarlo todo**: bisel de latón con gradiente cónico (el
-doble reflejo es lo que lo hace leer como metal), anillo de capítulo, sombra interior del bisel
-cayendo sobre el fieltro — ese gradiente solo es el golpe de profundidad de la pasada entera — y
-grano de tela por mosaico. Las grillas van **grabadas**: línea oscura + línea clara corrida hacia
-la luz. Una línea sola se lee dibujada; dos se leen talladas.
+**The face is an object, not a circle.** `bakeDial` is baked once per resize, so **in
+there the detail is free and it is worth spending it all**: a brass bevel with a conic gradient (the
+double reflection is what makes it read as metal), a chapter ring, the bevel's inner shadow
+falling over the felt — that gradient alone is the whole pass's stroke of depth — and
+a cloth grain by tile. The grids go **engraved**: a dark line + a light line offset towards
+the light. A single line reads as drawn; two read as carved.
 
-Tres cosas que costaron una iteración cada una y conviene no repetir:
+Three things that cost one iteration each and are worth not repeating:
 
-- **El bisel arrancó demasiado claro y ancho** y se comió la escena — parecía un aro de oro
-  gigante. Un bisel ENMARCA; si brilla, dejó de ser marco.
-- **Los numerales compartían radio con sus propias marcas de hora** y quedaban atravesados. El
-  anillo necesita DOS bandas: marcas afuera, números adentro.
-- **La caída interior tan marcada achicaba el área jugable.** La profundidad se sugiere, no
-  recorta el tablero.
+- **The bevel started too light and too wide** and ate the scene — it looked like a giant
+  gold hoop. A bevel FRAMES; if it shines, it has stopped being a frame.
+- **The numerals shared a radius with their own hour marks** and ended up crossed. The
+  ring needs TWO bands: marks outside, numbers inside.
+- **Such a marked inner drop shrank the playable area.** Depth is suggested, it does not
+  trim the board.
 
-**Cachear un `CanvasPattern` es un bug esperando.** Un pattern nace atado al contexto que lo creó,
-y cada resize hornea el plato en un canvas nuevo. Se cachea el **mosaico** y se llama
-`createPattern` por horneado.
+**Caching a `CanvasPattern` is a bug waiting to happen.** A pattern is born tied to the context that created it,
+and each resize bakes the face into a new canvas. The **tile** is cached and
+`createPattern` is called per bake.
 
-### Estados (hover) y la trampa de layout
+### States (hover) and the layout trap
 
-El hover se calcula con la posición del puntero, y la forma obvia de conseguirla
-(`getBoundingClientRect` en cada `pointermove`) es **exactamente** lo que el brief pedía evitar:
-una lectura que fuerza recálculo de layout, disparada decenas de veces por segundo. El rect se
-cachea en `resize()` (`cvLeft/cvTop`) y el handler sólo resta dos números. `hovering(r)` da falso
-siempre en táctil. El cursor se escribe **sólo cuando cambia** (`wantPointer`), mismo patrón que
-ya usaba el joystick: escribir `style.cursor` cada frame es una escritura al CSSOM por frame para
-dejarlo igual.
+The hover is computed with the pointer's position, and the obvious way to get it
+(`getBoundingClientRect` on every `pointermove`) is **exactly** what the brief asked to avoid:
+a read that forces a layout recalculation, fired dozens of times a second. The rect is
+cached in `resize()` (`cvLeft/cvTop`) and the handler only subtracts two numbers. `hovering(r)` is always
+false on touch. The cursor is written **only when it changes** (`wantPointer`), the same pattern
+the joystick already used: writing `style.cursor` every frame is one CSSOM write per frame for
+leaving it the same.
 
-**`wantPointer(false)` NO puede colgarse de la cadena de `else if` del render.** Como
-`typeof wantPointer === 'function'` siempre da verdadero, se tragaba las ramas de `'over'` y
-`'win'` y las pantallas de muerte y victoria dejaban de dibujarse. Lo cazó el dry-run del parche
-sobre una copia de `parts/`, no el juego.
+**`wantPointer(false)` can NOT hang off the render's `else if` chain.** Since
+`typeof wantPointer === 'function'` is always true, it swallowed the `'over'` and
+`'win'` branches and the death and victory screens stopped being drawn. The patch's dry-run
+over a copy of `parts/` caught it, not the game.
 
-## EL RELOJERO necesita un COMPÁS, no más números
+## THE CLOCKMAKER needed a BAR, not more numbers
 
-Las cuatro quejas del playtest — "acercarse es solo posible si tenés escudo", "todo el rato es
-igual", "hay tantos enemigos que no entiendo lo que pasa", "re difícil hacerle daño" — eran **la
-misma falla**: la pelea no tenía ciclo. Los brazos giraban sin parar, el núcleo lastimaba siempre,
-el ataque salía a cara o cruz cada 3 s, y la armadura (`src !== 'loop'` → 30 %) dejaba una sola
-forma de hacer daño: justo la que exige meterse donde te pegan. **Sin un momento en que la
-respuesta sea "AHORA", lo único que queda es entrar, comer el golpe y salir a esperar el escudo.**
+The playtest's four complaints — "getting close is only possible if you have a shield", "it's the same
+the whole time", "there are so many enemies I don't understand what's happening", "it's really hard to damage it" — were **the
+same failure**: the fight had no cycle. The arms turned non-stop, the core always hurt,
+the attack came out on a coin flip every 3 s, and the armour (`src !== 'loop'` → 30%) left a single
+way to do damage: precisely the one that demands getting in where you get hit. **Without a moment when the
+answer is "NOW", all that is left is to go in, eat the hit and come out to wait for the shield.**
 
-Tres tiempos, en `CFG.boss`:
+Three beats, in `CFG.boss`:
 
-| estado | qué pasa |
+| state | what happens |
 |---|---|
-| `idle` | los brazos giran, el núcleo lastima; dura menos en cada fase |
-| `wind` (1 s) | los brazos aceleran y un aro rojo se cierra hacia adentro — telegrafía |
-| `open` (2.6 s) | los brazos **se frenan y se recogen**, el núcleo se abre en hielo, **no lastima al contacto** y **recibe ×3** |
+| `idle` | the arms turn, the core hurts; it lasts less in each phase |
+| `wind` (1 s) | the arms speed up and a red hoop closes inwards — a telegraph |
+| `open` (2.6 s) | the arms **stop and draw in**, the core opens in ice, **it does not hurt on contact** and **takes ×3** |
 
-Medido: 14 transiciones en 30 s, núcleo abierto el 40 % del tiempo, ×3.00 confirmado, y 40 frames
-parado encima del núcleo abierto = 0 de daño.
+Measured: 14 transitions in 30 s, the core open 40% of the time, ×3.00 confirmed, and 40 frames
+standing on top of the open core = 0 damage.
 
-Dos principios que valen para cualquier jefe que se agregue acá:
+Two principles that hold for any boss added here:
 
-- **La señal es la ausencia de movimiento.** Los brazos frenándose dicen "ahora" mejor que
-  cualquier cartel, y no hay que enseñarla.
-- **Los ataques ALTERNAN, no se sortean.** Un patrón se aprende; una moneda, no. `rng() < 0.5`
-  entre dos ataques no genera variedad: genera ruido.
+- **The signal is the absence of movement.** The arms stopping say "now" better than
+  any card, and it does not have to be taught.
+- **The attacks ALTERNATE, they are not rolled.** A pattern can be learnt; a coin cannot. `rng() < 0.5`
+  between two attacks does not generate variety: it generates noise.
 
-La armadura pasó a `CFG.boss.armor = 0.55`. El bucle sigue siendo el rey — no la paga — pero al
-30 % todo lo demás eran cosquillas y la pelea era un peaje de vida. Y las invocaciones ahora se
-topean contra las piezas **que ya hay vivas** (`CFG.boss.maxAdds`): el jefe llamaba 2-5 cada 3 s
-ENCIMA del spawner normal de la hora, y por eso no se entendía nada.
+The armour became `CFG.boss.armor = 0.55`. The loop is still king — it does not pay it — but at
+30% everything else was a tickle and the fight was a health toll. And the summons are now
+capped against the pieces **that are already alive** (`CFG.boss.maxAdds`): the boss called 2-5 every 3 s
+ON TOP of the hour's normal spawner, and that is why nothing could be understood.
 
-## La aguja ya no batea las orbes
+## The hand no longer bats the orbs
 
-Era una paleta giratoria que las reflejaba y les pasaba su energía angular. En el papel sonaba
-bien; en la práctica es una fuerza que cruza el plato entero cada hora, sin telegrafía, mandando
-pelotas para cualquier lado justo cuando estás resolviendo otra cosa. El reloj ya manda con las
-reglas y con las campanadas. Los brazos del jefe, que son agujas, tampoco.
+It was a spinning paddle that reflected them and passed them its angular energy. On paper it sounded
+good; in practice it is a force that crosses the whole face every hour, with no telegraph, sending
+balls anywhere just as you are solving something else. The clock already governs through the
+rules and the chimes. The boss's arms, which are hands, do not either.
 
-**Trampa al sacarlo**: `ex`/`ey` (el coseno y el seno de `clock.ang`) estaban declarados DENTRO de
-ese bloque, y los sigue necesitando el spawn de piezas — las piezas nacen en la punta de la aguja.
-Borrar el bloque entero dejó `ex is not defined` en once escenarios. Lo cazó la regresión, no yo.
+**A trap when taking it out**: `ex`/`ey` (the cosine and sine of `clock.ang`) were declared INSIDE
+that block, and the piece spawning still needs them — the pieces are born at the hand's tip.
+Deleting the whole block left `ex is not defined` in eleven scenarios. The regression caught it, not me.
 
-### Un test verde que no probaba nada (dos veces seguidas)
+### A green test that proved nothing (twice in a row)
 
-Verificar "la orbe no se mueve" dio **dos falsos positivos** antes de servir:
+Verifying "the orb does not move" gave **two false positives** before it was any use:
 
-1. el **imán del jugador** también tira de la orbe;
-2. `spawnOrb` **randomiza radio y masa**, así que dos corridas comparaban orbes distintas — y 30
-   frames de simulación además consumen RNG y spawnean piezas que la chocan.
+1. the **player's magnet** pulls on the orb too;
+2. `spawnOrb` **randomises radius and mass**, so two runs compared different orbs — and 30
+   frames of simulation also consume RNG and spawn pieces that collide with it.
 
-Lo que sirvió fue llamar `updateClock(dt)` **sola**, con la orbe quieta encima de la aguja, y
-exigir velocidad **cero exacto**. Regla: cuando midas que algo dejó de pasar, aislá la función que
-tocaste en vez de correr el juego entero y mirar el resultado.
+What worked was calling `updateClock(dt)` **on its own**, with the orb still on top of the hand, and
+demanding **exactly zero** velocity. The rule: when you measure that something stopped happening, isolate the function you
+touched instead of running the whole game and looking at the result.
 
-## Playtest 2026-09-16 (tarde)
+## Playtest 2026-09-16 (afternoon)
 
-### La racha se mide contra un umbral ABSOLUTO, no contra las otras dos opciones
+### The streak is measured against an ABSOLUTE threshold, not against the other two options
 
-El corte era relativo: la opción de multiplicador más bajo de la terna mandaba la racha a cero.
-Con {RESONANCE x1.45, HORDE x1.50, THE GALLOWS x1.75} eso castigaba elegir RESONANCE — que tiene
-riesgo real — sólo porque las otras dos eran peores. Franco, textual: *"no quiero que me castigue
-los puntos por elegir el simon dice"*. Ahora hay `SAFE_RISK = 0.20` y `breaksStreak(r)`: una regla
-con riesgo real **nunca** corta la racha, aunque sea la más floja de las tres. El color de la placa
-sale del riesgo propio de la regla, no de su puesto en la terna.
+The break was relative: the trio's lowest-multiplier option sent the streak to zero.
+With {RESONANCE x1.45, HORDE x1.50, THE GALLOWS x1.75} that punished choosing RESONANCE — which has
+real risk — only because the other two were worse. Franco, verbatim: *"I don't want it to punish
+my points for choosing the simon says"*. Now there is `SAFE_RISK = 0.20` and `breaksStreak(r)`: a rule
+with real risk **never** breaks the streak, even if it is the mildest of the three. The plate's colour
+comes from the rule's own risk, not from its place in the trio.
 
-La lección general: **un castigo relativo castiga por el contexto, no por la decisión.** El jugador
-elige una regla concreta y espera que el precio dependa de esa regla — no de qué le tocó al lado.
+The general lesson: **a relative punishment punishes for the context, not for the decision.** The player
+chooses a concrete rule and expects the price to depend on that rule — not on what happened to be next to it.
 
-### THE GALLOWS: fuera
+### THE GALLOWS: out
 
-No gustó ni el minijuego ni cómo se veía, y no comunicaba qué pasaba al completarse (cobraba 34%
-de vida máxima y volvía a cero — que haya habido que preguntarlo ya es el veredicto). Se sacó
-entero: regla, objeto, contador, alivio, update, dibujo, CFG y los chequeos de QA. **Apagar una
-regla dejándole el código es deuda**: la próxima pasada de auditoría la vuelve a encontrar.
+Neither the mini-game nor how it looked went down well, and it did not communicate what happened on completion (it collected 34%
+of maximum health and went back to zero — that it had to be asked is the verdict in itself). It was taken out
+entirely: the rule, the object, the counter, the relief, the update, the drawing, the CFG and the QA checks. **Switching off a
+rule and leaving its code behind is debt**: the next audit pass finds it again.
 
-### Lo "cortado" no era la animación, era la rasterización
+### What was "choppy" was not the animation, it was the rasterisation
 
-La flotación de los naipes recorría 4 px en 2 s: ~0.06 px por frame. El cuerpo del naipe se movía
-suave, pero **el texto se rasteriza a píxel entero**, así que se quedaba clavado quince frames y
-saltaba uno de golpe. Suavizar la curva no lo habría arreglado nunca. Lo que lo arregla es más
-recorrido y, sobre todo, una **inclinación mínima** (±0.6°): con el canvas rotado el rasterizador
-ya no puede alinear el texto a la grilla y el movimiento se vuelve continuo.
+The cards' float covered 4 px in 2 s: ~0.06 px per frame. The card's body moved
+smoothly, but **the text is rasterised to a whole pixel**, so it stayed pinned for fifteen frames and
+jumped one all at once. Smoothing the curve would never have fixed it. What does fix it is more
+travel and, above all, a **minimal tilt** (±0.6°): with the canvas rotated the rasteriser
+can no longer align the text to the grid and the movement becomes continuous.
 
-Regla para la próxima: **si algo se mueve menos de ~0.3 px por frame y lleva texto, se va a ver a
-los saltos por más suave que sea la curva.** O se mueve de verdad, o no se mueve.
+A rule for next time: **if something moves less than ~0.3 px per frame and carries text, it is going to look
+jumpy however smooth the curve is.** Either it moves properly, or it does not move.
 
-### Buscaminas: la paleta clásica, y por qué ahora sí
+### Minesweeper: the classic palette, and why it works now
 
-Los números usaban una rampa fría **a propósito**, porque cuando usaban la del daño un "3" de celda
-y un "34" de golpe se leían igual. El clásico mete rojo en el 3, o sea que vuelve a ese territorio.
-Se puede porque las dos familias ya se distinguen por algo que **no es el color**: el número de
-celda está quieto, anclado en el centro de una casilla encendida y con contorno oscuro (`txtO`); el
-de daño flota, sube, se desvanece y nunca lleva contorno. Con eso resuelto, la paleta del Buscaminas
-es conocimiento que el jugador ya trae puesto. El 7 y el 8 originales (negro y gris) suben a hueso
-y gris claro: sobre fieltro oscuro no existirían.
+The numbers used a cold ramp **on purpose**, because when they used the damage one a cell "3"
+and a hit "34" read the same. The classic puts red in the 3, that is, it goes back into that territory.
+It can be done because the two families are already told apart by something that **is not the colour**: the cell
+number is still, anchored at the centre of a lit square and with a dark outline (`txtO`); the
+damage one floats, rises, fades and never carries an outline. With that settled, the Minesweeper palette
+is knowledge the player already brings with them. The original 7 and 8 (black and grey) go up to bone
+and light grey: over dark felt they would not exist.
 
-La casilla destapada se dibuja **hundida** (filo claro del lado de la luz, oscuro del contrario), y
-la mina es una esfera metálica con la luz clave de todo lo demás, con el rojo reservado para el aro
-que late — un solo elemento rojo dice "peligro" mejor que un cuerpo rojo con aros rojos.
+The uncovered square is drawn **sunken** (a light edge on the light's side, a dark one on the opposite), and
+the mine is a metallic sphere with the same key light as everything else, with the red reserved for the hoop
+that pulses — one single red element says "danger" better than a red body with red hoops.
 
-### Riders: el rumbo objetivo y el rumbo real
+### Riders: the target heading and the real heading
 
-`e.dir` es el rumbo OBJETIVO (siempre en ángulo recto) y `e.ang` el REAL, que lo alcanza girando a
-`CFG.cycle.turnRate`. Antes eran lo mismo y la moto cambiaba de dirección entre dos frames: se leía
-como un teletransporte de rumbo. Separarlos hace que curve como el fantasma sin perder el circuito —
-los tramos rectos siguen rectos y los giros siguen siendo de 90°, sólo que con radio.
+`e.dir` is the TARGET heading (always at a right angle) and `e.ang` the REAL one, which reaches it by turning at
+`CFG.cycle.turnRate`. Before they were the same thing and the bike changed direction between two frames: it read
+as a teleport of heading. Separating them makes it curve like the ghost without losing the circuit —
+the straight stretches are still straight and the turns are still 90°, only with a radius.
 
-Con el giro suave **ya no alcanza con "dobla al llegar a 0.88"**: mientras gira sigue avanzando, así
-que hace falta un tope duro contra el aro (0.93) que además le fuerce el rumbo hacia adentro.
+With the smooth turn **"turn on reaching 0.88" is no longer enough**: while it turns it keeps advancing, so
+a hard cap against the hoop (0.93) is needed which also forces its heading inwards.
 
-`life` x `spd` es el LARGO de la estela en unidades del plato (que mide 2 de punta a punta). Estaba
-en 4.0 x 0.80 = 3.2 unidades: más de una vuelta entera, el plato tapado de naranja. Ahora 1.5 x 0.60
-= 0.9 — una pared que se esquiva, no un laberinto.
+`life` x `spd` is the LENGTH of the trail in units of the face (which measures 2 from end to end). It was
+at 4.0 x 0.80 = 3.2 units: more than a whole lap, the face covered in orange. Now 1.5 x 0.60
+= 0.9 — a wall you dodge, not a maze.
 
-## Una regla que termina no puede dejar restos
+## A rule that ends cannot leave leftovers
 
-`nextHour` dice explícitamente que limpia el mundo (péndulos, minas, secuencia) — pero **las orbes
-estaban afuera de esa lista**. `orbCap()` depende de `RULE.orbRate`, así que una hora de "más
-pelotas" llenaba hasta 14 y la hora siguiente se las quedaba TODAS: el tope baja, pero `spawnOrb`
-sólo REEMPLAZA cuando está lleno, nunca recorta. Un efecto temporal quedaba permanente por el
-resto de la partida. Ahora `nextHour` poda al tope, sacando primero las neutras (misma política
-que ya usaba `spawnOrb`).
+`nextHour` says explicitly that it clears the world (pendulums, mines, the sequence) — but **the orbs
+were outside that list**. `orbCap()` depends on `RULE.orbRate`, so an hour of "more
+balls" filled up to 14 and the next hour kept them ALL: the cap drops, but `spawnOrb`
+only REPLACES when it is full, it never trims. A temporary effect stayed permanent for the
+rest of the game. Now `nextHour` prunes to the cap, taking out the neutral ones first (the same policy
+`spawnOrb` already used).
 
-Lo encontró `frenzy50` con un `ORB-CAP` **intermitente** — dependía de qué regla saliera sorteada.
-Un fallo que aparece una de cada varias corridas no es ruido: es un fallo con una precondición que
-todavía no identificaste. El mensaje del chequeo no alcanzaba para diagnosticarlo, y agregarle el
-contexto (hora, `orbRate`, regla, estado) fue lo que lo volvió legible.
+`frenzy50` found it with an **intermittent** `ORB-CAP` — it depended on which rule was rolled.
+A failure that appears one run in several is not noise: it is a failure with a precondition you have
+not identified yet. The check's message was not enough to diagnose it, and adding the
+context (the hour, `orbRate`, the rule, the state) is what made it legible.
 
-## El bucle no puede devaluarse con la hora
+## The loop cannot devalue itself with the hour
 
-La vida enemiga escala (`scaleHp()`: ×2.6 en la hora 11) y el daño del bucle era **constante**.
-Medido: un bucle ceñido valía **0.94 torres en la hora 1 y 0.36 en la hora 11** — el verbo
-central del juego se apagaba solo, y Franco lo sintió como "ya no parecía hacer daño". Ahora
-`closeLoop` multiplica por `scaleHp()`, así que el poder RELATIVO es constante (1.13 torres en
-las dos horas, verificado). **Cualquier cosa que sea la herramienta principal del jugador tiene
-que escalar con lo que escala en su contra**; si no, el juego se vuelve imposible solo.
+Enemy health scales (`scaleHp()`: ×2.6 at hour 11) and the loop's damage was **constant**.
+Measured: a tight loop was worth **0.94 rooks at hour 1 and 0.36 at hour 11** — the game's
+central verb switched itself off, and Franco felt it as "it didn't seem to do damage any more". Now
+`closeLoop` multiplies by `scaleHp()`, so the RELATIVE power is constant (1.13 rooks in
+both hours, verified). **Anything that is the player's main tool has
+to scale with what scales against them**; otherwise the game becomes impossible by itself.
 
-## RESONANCE deja una marca, no puntos invisibles
+## RESONANCE leaves a mark, not invisible points
 
-Pagaba 1600 puntos fijos. Con marcadores de seis o siete cifras eso no se ve: resolvías la
-secuencia y no pasaba nada legible. Ahora cada secuencia resuelta suma `run.resonance`, que da
-**hilo +8% y bucle +15% permanentes** (se aplican en `recomputeStats`, nunca acumulando sobre el
-valor anterior — sigue siendo idempotente) más puntaje que escala con la hora. Una sola cosa que
-se apila, no un menú de bonus aleatorios: hacer un segundo sistema de cartas habría competido
-con el que ya existe.
+It paid a fixed 1600 points. With six- or seven-figure scoreboards that is not visible: you solved the
+sequence and nothing legible happened. Now each solved sequence adds to `run.resonance`, which gives
+**+8% thread and +15% loop, permanently** (applied in `recomputeStats`, never accumulating over the
+previous value — it is still idempotent) plus a score that scales with the hour. One single thing
+that stacks, not a menu of random bonuses: making a second card system would have competed
+with the one that already exists.
 
-## La racha mide RIESGO, no cantidad de reglas
+## The streak measures RISK, not a number of rules
 
-`run.brave++` daba lo mismo GRAVEDAD (x1.40) que DOBLE O NADA (x2.00), y HORA MUERTA (x0.55,
-donde no spawnea nadie) construía racha igual que una regla peligrosa. Ahora `ruleRisk(r)`:
-rojas (mult >= 1.6) suman 2, picantes normales 1, las que no son riesgo (mult <= 1) suman 0, y
-CALMA sigue cortando a cero. El cartel del draft muestra el salto real.
+`run.brave++` gave the same for GRAVITY (x1.40) as for DOUBLE OR NOTHING (x2.00), and DEAD HOUR (x0.55,
+where nobody spawns) built streak just like a dangerous rule. Now there is `ruleRisk(r)`:
+red ones (mult >= 1.6) add 2, normal spicy ones 1, those that are not risk (mult <= 1) add 0, and
+CALM still cuts it to zero. The draft's card shows the real jump.
 
-## Las manos de póker tienen que decir QUÉ dan
+## The poker hands have to say WHAT they give
 
-`HAND_BONUS[i].desc` existía en la tabla desde siempre y **no se dibujaba en ningún lado**:
-tenías una pierna de ases y no había forma de saber para qué servía. Ahora el efecto va bajo la
-tira del HUD, y tocar la tira (o `H`) abre el **panel del stack**, que congela la simulación y
-muestra las cinco cartas grandes con su efecto concreto más la mano y su bonus. El COLOR es el
-único cuyo efecto depende del palo, así que tiene su propia tabla (`FLUSH_DESC`) — el texto
-viejo decía "The whole suit overflows", que no informa nada.
+`HAND_BONUS[i].desc` had always existed in the table and **was drawn nowhere**:
+you had a pair of aces and there was no way of knowing what it was for. Now the effect goes under the
+HUD's strip, and touching the strip (or `H`) opens the **stack panel**, which freezes the simulation and
+shows the five cards large with their concrete effect plus the hand and its bonus. The FLUSH is the
+only one whose effect depends on the suit, so it has its own table (`FLUSH_DESC`) — the old
+text said "The whole suit overflows", which informs you of nothing.
 
-**Ojo con el orden de render:** el panel es un modal y va ÚLTIMO, después de `drawToasts()`.
-Puesto junto a `drawHUD()` quedaba debajo del cartel de inicio de hora, que le tapaba las cartas.
+**Careful with the render order:** the panel is a modal and goes LAST, after `drawToasts()`.
+Put next to `drawHUD()` it ended up beneath the start-of-hour card, which covered its cards.
 
-## La economía: REGLA por calendario, CARTA por puntaje
+## The economy: a RULE by the calendar, a CARD by score
 
-Hasta el 2026-09-15 se alternaba — horas impares regla, pares carta — y la regla duraba dos
-horas. Franco lo cambió: **la regla cambia todas las horas** (dos horas seguidas de lo mismo se
-volvía rutina) y **la carta se gana con PUNTOS** (`CARD_SCORE = [4000, 12000, 26000, 46000,
-75000]`). El objetivo declarado: *"incentivar que el jugador explote la puntuación"* — el score
-dejó de ser un marcador y pasó a ser la moneda con la que se compra el build.
+Until 2026-09-15 it alternated — odd hours a rule, even ones a card — and the rule lasted two
+hours. Franco changed it: **the rule changes every hour** (two hours in a row of the same thing
+became routine) and **the card is earned with POINTS** (`CARD_SCORE = [4000, 12000, 26000, 46000,
+75000]`). The stated objective: *"to encourage the player to exploit the score"* — the score
+stopped being a scoreboard and became the currency the build is bought with.
 
-Detalles que importan:
+Details that matter:
 
-- **Ganar una carta NO interrumpe.** `addScore` sólo incrementa `run.cardsWon` y avisa; la carta
-  se cobra al cerrar la hora, después de la regla. Abrir un draft en pleno combate sería peor
-  que el premio. Lo inmediato es el aviso, no la pantalla.
-- **Se encadenan.** Si un solo golpe cruza dos umbrales (o venías con una guardada), salen dos
-  pantallas de carta seguidas. El flujo pasa por `afterDraft()`, que es el único lugar que
-  decide "¿otra carta o la hora siguiente?" — **no llames `nextHour()` directo desde un draft**.
-- **El HUD muestra el progreso** pegado al score (barra fina + cuánto falta, o `CARD READY`).
-  Sin eso, "hacer puntos" no se siente conectado con nada; esa barra ES el incentivo.
-- Consecuencia para el QA: **cerrar una hora puede encadenar 2+ pantallas**, así que todo helper
-  de test que avance drafts tiene que vaciar la cola en un bucle, no avanzar una sola vez.
+- **Winning a card does NOT interrupt.** `addScore` only increments `run.cardsWon` and gives notice; the card
+  is collected at the close of the hour, after the rule. Opening a draft in the middle of combat would be worse
+  than the prize. What is immediate is the notice, not the screen.
+- **They chain.** If a single hit crosses two thresholds (or you had one saved), two
+  card screens come out in a row. The flow goes through `afterDraft()`, which is the only place that
+  decides "another card or the next hour?" — **do not call `nextHour()` directly from a draft**.
+- **The HUD shows the progress** flush with the score (a fine bar + how much is left, or `CARD READY`).
+  Without that, "making points" does not feel connected to anything; that bar IS the incentive.
+- A consequence for QA: **closing an hour can chain 2+ screens**, so every test helper
+  that advances drafts has to empty the queue in a loop, not advance just once.
 
-## MINEFIELD: el hilo es un SONAR, no un marcador
+## MINEFIELD: the thread is a SONAR, not a marker
 
-Primera versión: `revealed` era un `Uint8Array` de flags y la celda quedaba destapada **para
-siempre**. A la hora de juego el plato entero estaba pintado (Franco: *"no quiero que queden
-todas las celdas marcadas"*), y peor: con todo destapado los números te decían dónde estaban las
-minas **sin haberte acercado nunca**, que era la otra queja. Las dos salen de la misma causa.
+The first version: `revealed` was a `Uint8Array` of flags and the cell stayed uncovered **forever**.
+After an hour of play the whole face was painted (Franco: *"I don't want all the cells to be left
+marked"*), and worse: with everything uncovered the numbers told you where the mines were
+**without you ever having gone near**, which was the other complaint. Both come from the same cause.
 
-Ahora `revealed` es un `Float32Array` de **segundos restantes** (`CFG.mines.scanT`, con
-`CFG.mines.fade` de desvanecido). El hilo refresca las celdas por las que pasa y el resto se
-apaga: la información es fresca o no es. Medido: de 50+ celdas acumuladas a **11 encendidas a la
-vez**. Las celdas LIMPIAS (0 minas al lado) se pintan mucho más tenues que las que tienen número
-— eran la mayoría y las que hacían la mancha.
+Now `revealed` is a `Float32Array` of **seconds remaining** (`CFG.mines.scanT`, with
+`CFG.mines.fade` of fading). The thread refreshes the cells it passes through and the rest
+goes out: the information is fresh or it is nothing. Measured: from 50+ accumulated cells to **11 lit at a
+time**. The CLEAN cells (0 mines next to them) are painted much fainter than those with a number
+— they were the majority and the ones making the smear.
 
-La excepción deliberada: **una mina sobre la que pasaste queda fichada para siempre** (`m.seen`).
-Encontrarla es el premio de haber ido hasta ahí; lo que se apaga es el barrido, no el hallazgo.
+The deliberate exception: **a mine you passed over stays registered forever** (`m.seen`).
+Finding it is the prize for having gone there; what fades is the sweep, not the find.
 
-### El bug que hacía que los números fueran ruido
+### The bug that made the numbers noise
 
-La mina se creaba con `mines.push({ c, r, ..., r: CELL * 0.34, ... })` — **dos claves `r`**: la
-fila y el radio. En un literal de JS **gana la última**, así que `m.r` valía 0.0755 y la FILA se
-perdía en silencio. De ahí:
+The mine was created with `mines.push({ c, r, ..., r: CELL * 0.34, ... })` — **two `r` keys**: the
+row and the radius. In a JS literal **the last one wins**, so `m.r` was 0.0755 and the ROW
+was lost silently. Hence:
 
-- `mineCountAt` comparaba `|0.0755 − fila| <= 1`, verdadero sólo para las filas 0 y 1 ⇒ los
-  números que veías no eran la cuenta de minas vecinas, eran ruido;
-- `revealCell` fichaba con `m.r === r`, y 0.0755 nunca es una fila entera ⇒ **pisar la celda de
-  una mina no la revelaba nunca**; las únicas que aparecían eran las que ya habían explotado.
+- `mineCountAt` compared `|0.0755 − row| <= 1`, true only for rows 0 and 1 ⇒ the
+  numbers you saw were not the count of neighbouring mines, they were noise;
+- `revealCell` registered with `m.r === r`, and 0.0755 is never a whole row ⇒ **stepping on a mine's
+  cell never revealed it**; the only ones that appeared were the ones that had already exploded.
 
-El radio ahora se llama `rad`. **Lección doble:** una clave repetida en un literal no avisa —
-ni error, ni warning, ni nada; y el campo pisado era justo el que tenía el nombre más corto y
-más fácil de repetir. Si un objeto mezcla coordenadas de grilla con medidas físicas, que los
-nombres no puedan chocar.
+The radius is now called `rad`. **A double lesson:** a repeated key in a literal gives no warning —
+no error, no warning, nothing; and the field that was overwritten was precisely the one with the shortest
+and most easily repeated name. If an object mixes grid coordinates with physical measurements, make sure the
+names cannot collide.
 
-**Y la lección de QA, que es peor:** el escenario `minefield` verificaba `mineCountAt` contra un
-cálculo manual… que leía el mismo `m.r` roto. El oráculo tenía el mismo bug que el código, así
-que coincidían y daba verde. **Un oráculo que comparte la fuente de datos con lo que testea no
-prueba nada.** El que sí lo agarró fue mirar los valores crudos (`minas en (c,r)` mostró
-`8,0.0755` catorce veces).
+**And the QA lesson, which is worse:** the `minefield` scenario verified `mineCountAt` against a manual
+calculation… which read the same broken `m.r`. The oracle had the same bug as the code, so
+they matched and it came out green. **An oracle that shares the data source with what it tests proves
+nothing.** What did catch it was looking at the raw values (`mines at (c,r)` showed
+`8,0.0755` fourteen times).
 
-### Números de tablero vs números de feedback
+### Board numbers vs feedback numbers
 
-Los números del buscaminas usaban **exactamente la misma paleta que los de daño**
-(`#ffd23f / #ff9f43 / #ff6b81`), el mismo peso 900 y el mismo halo: un "3" de celda y un "34" de
-golpe se leían igual. Ahora van en una rampa FRÍA (`MINE_NUM`) que el daño no usa nunca, y más
-chicos. Regla general para este juego: **lo que es información del tablero no puede compartir
-lenguaje visual con lo que es feedback de un golpe.**
+The minesweeper's numbers used **exactly the same palette as the damage ones**
+(`#ffd23f / #ff9f43 / #ff6b81`), the same weight 900 and the same halo: a cell "3" and a hit "34"
+read the same. Now they go in a COLD ramp (`MINE_NUM`) that the damage never uses, and
+smaller. A general rule for this game: **what is board information cannot share a
+visual language with what is a hit's feedback.**
 
-## RESONANCE: por qué el castigo mide QUEDARSE y no tiempo
+## RESONANCE: why the punishment measures STANDING STILL and not time
 
-La primera versión ("sector equivocado = reinicio inmediato") estaba rota: en una grilla 3×3, ir
-de un sector al siguiente casi siempre cruza uno intermedio. La segunda ("no castigar nada")
-sacaba todo el riesgo. La tercera —la que está— distingue **transitar** de **plantarse**:
+The first version ("a wrong sector = an immediate reset") was broken: on a 3×3 grid, going
+from one sector to the next almost always crosses an intermediate one. The second ("punish nothing")
+took away all the risk. The third —the one that is there— tells **passing through** from **standing still**:
 
     const spf = clamp(hyp(P.vx, P.vy) / (CFG.player.maxSpd * P.spdMul), 0, 1);
     simon.wrongT += dt * (1 - 0.85 * spf);
 
-Un umbral de tiempo pelado NO alcanza, y está medido: cruzar la celda del centro **en diagonal**
-son 0.94 u ≈ 1.07 s a máxima velocidad (más el arranque), así que cualquier valor que castigara
-plantarse castigaba también el viaje normal. Pesando por velocidad, a fondo casi no acumula y
-quieto acumula entero. El umbral vive en `CFG.simon.wrongT` (panel `T`) y el sector equivocado se
-tiñe de rojo mientras corre: el aviso se ve, no hay que explicarlo.
+A bare time threshold is NOT enough, and it is measured: crossing the centre cell **diagonally**
+is 0.94 u ≈ 1.07 s at maximum speed (plus the start-up), so any value that punished
+standing still also punished the normal journey. Weighting by speed, at full tilt it hardly accumulates and
+standing still it accumulates in full. The threshold lives in `CFG.simon.wrongT` (the `T` panel) and the wrong sector is
+tinted red while it runs: the warning is visible, it does not have to be explained.
 
-## El cartel de hora NO es un estado
+## The hour card is NOT a state
 
-Era `game.state = 'intro'` y congelaba la simulación 2.1 s después de cada draft. Franco:
-"no lo hagas pausar despues de elegir lo que sea". Ahora es `game.banner`, un contador que sólo
-dibuja un overlay; se juega desde el primer frame de la hora. Si volvés a necesitar una pantalla
-que congele, **no la metas como estado de `game.state`**: el estado decide si corre la
-simulación, y mezclar "qué se dibuja" con "qué se simula" es lo que trajo este problema.
+It was `game.state = 'intro'` and it froze the simulation for 2.1 s after each draft. Franco:
+"don't make it pause after choosing whatever it is". Now it is `game.banner`, a counter that only
+draws an overlay; you play from the hour's first frame. If you need a screen that freezes
+again, **do not put it in as a `game.state` state**: the state decides whether the
+simulation runs, and mixing "what is drawn" with "what is simulated" is what brought this problem.
 
-## QA: qa.py (humo) y qa2.py (invariantes)
+## QA: qa.py (smoke) and qa2.py (invariants)
 
-- `qa.py` es el de siempre: corre escenarios, saca capturas y caza errores de JS.
-- `qa2.py` es el **auditor**: además de correr, inspecciona el estado interno con `chk()` — NaN,
-  Infinity, HP negativo, posiciones fuera del plato, caps violados, arrays que crecen,
-  contadores que retroceden. `chkEvery = 1` lo corre en cada frame.
-- Truco para leer estado: las `const` de nivel superior NO quedan en `window`, pero
-  `window.eval(expr)` es eval **indirecto** ⇒ corre en el scope global y sí ve el entorno léxico.
-  `G('sparks.length')` llega a cualquier cosa sin tocar el juego.
-- **Para comparar dos corridas hay que igualar TRES cosas**: la semilla (`mode='daily'`), el
-  `lastT` del juego (bombear unos frames antes de `startRun`) y el **valor absoluto** del reloj
-  del driver (`t = 100000` en las dos). Restar dos floats grandes y cercanos no da exactamente
-  `STEP`: con `t ≈ 1e5` ms el error es ~1e-11 s, y el sistema lo amplifica en ~500 frames.
-- **El detector de fugas POR FRAME sobre-reporta y no hay que creerle.** El escenario `leak`
-  (qa.py) y `tunnel` (qa2.py) muestrean una vez por frame el tramo del orbe contra la posición
-  **final** del hilo — pero el hilo se movió durante los 3 subpasos, así que un barrido legítimo
-  cuenta como "cruce". A 50 ms llega a decir 100% de fugas. Los que valen son `tunnel2` (hilo
-  asentado, un disparo por vez, 5 velocidades × 2 dt) y `tunnel3` (hilo EN MOVIMIENTO, cuenta por
-  posición final del orbe): **0 de 50 y 0 de 56**. Si vas a medir colisiones, medí por
-  consecuencia (¿rebotó? ¿dónde terminó?), no por muestreo geométrico.
-- **Un bot que se queda quieto se muere**, y una vez muerto `stepSim` sale al toque: todo lo que
-  midas después es basura. Si el escenario necesita quietud, hacelo inmortal
-  (`B.P.hp = B.P.hpMax; B.P.ifr = 9`) y, si hace falta, congelá la hora (`CFG.clock.hourT = 1e6`).
-- **Lo mismo con los drafts**: si la hora termina, la simulación se congela hasta que elijas.
-  Todo escenario largo necesita su `advance()`.
+- `qa.py` is the usual one: it runs scenarios, takes captures and catches JS errors.
+- `qa2.py` is the **auditor**: besides running, it inspects the internal state with `chk()` — NaN,
+  Infinity, negative HP, positions outside the face, violated caps, arrays that grow,
+  counters that go backwards. `chkEvery = 1` runs it on every frame.
+- A trick for reading state: top-level `const`s do NOT end up on `window`, but
+  `window.eval(expr)` is **indirect** eval ⇒ it runs in the global scope and does see the lexical environment.
+  `G('sparks.length')` reaches anything without touching the game.
+- **To compare two runs THREE things have to be equalised**: the seed (`mode='daily'`), the
+  game's `lastT` (pump a few frames before `startRun`) and the **absolute value** of the driver's
+  clock (`t = 100000` in both). Subtracting two large, close floats does not give exactly
+  `STEP`: with `t ≈ 1e5` ms the error is ~1e-11 s, and the system amplifies it over ~500 frames.
+- **The PER-FRAME leak detector over-reports and is not to be believed.** The `leak` scenario
+  (qa.py) and `tunnel` (qa2.py) sample the orb's stretch once per frame against the thread's
+  **final** position — but the thread moved during the 3 substeps, so a legitimate sweep
+  counts as a "crossing". At 50 ms it gets as far as saying 100% leaks. The ones that count are `tunnel2` (a settled
+  thread, one shot at a time, 5 speeds × 2 dt) and `tunnel3` (a MOVING thread, counting by
+  the orb's final position): **0 of 50 and 0 of 56**. If you are going to measure collisions, measure by
+  consequence (did it bounce? where did it end up?), not by geometric sampling.
+- **A bot that stands still dies**, and once dead `stepSim` leaves straight away: everything you
+  measure afterwards is rubbish. If the scenario needs stillness, make it immortal
+  (`B.P.hp = B.P.hpMax; B.P.ifr = 9`) and, if necessary, freeze the hour (`CFG.clock.hourT = 1e6`).
+- **The same with the drafts**: if the hour ends, the simulation freezes until you choose.
+  Every long scenario needs its `advance()`.
 
-## Los carteles de draft (lección de legibilidad)
+## The draft cards (a legibility lesson)
 
-Los dos drafts se ven **distintos a propósito**, porque son cosas distintas:
+The two drafts look **different on purpose**, because they are different things:
 
-- **Cartas** = naipes de verdad. Cara de papel crema sobre la arena oscura, rango en las dos
-  esquinas, palo de marca de agua, y una **cinta con el nombre de la familia en PALABRAS**
-  (HILO / VIDA / CODICIA / ORBES). El color del palo solo no alcanzaba para entender qué hacía.
-- **Reglas** = placas de pizarra grabadas con un sello de lacre con el multiplicador.
+- **Cards** = real playing cards. A cream paper face over the dark arena, the rank in both
+  corners, a watermark suit, and a **ribbon with the family's name in WORDS**
+  (THREAD / HEALTH / GREED / ORBS). The suit's colour alone was not enough to understand what it did.
+- **Rules** = engraved slate plates with a wax seal carrying the multiplier.
 
-La tabla `EFF` (en `p09`/sección de cartas) devuelve el **efecto concreto en números** de cada
-carta según el rango que sacó ("Hilo +42% más largo"). Antes había una barra de fuerza abstracta
-y la primera reacción de Franco fue *"no entiendo si es por nivel o qué"*. La regla que quedó:
-**una carta tiene que decir lo que hace, no insinuarlo**. Si agregás un upgrade, agregá su
-entrada en `EFF` o la carta queda muda.
+The `EFF` table (in `p09`/the cards section) returns each card's **concrete effect in numbers**
+according to the rank it drew ("Thread +42% longer"). Before there was an abstract strength bar
+and Franco's first reaction was *"I don't understand whether it's by level or what"*. The rule that stuck:
+**a card has to say what it does, not hint at it**. If you add an upgrade, add its
+entry in `EFF` or the card is left mute.
 
-Las alturas de las esquinas del naipe están **calculadas, no al ojo**: con `textBaseline
-'middle'` un glifo ocupa ~±0.37·F, y por eso el rango va a 0.07 y el palo a 0.175 del alto.
-La cinta de familia va por encima de la esquina invertida, que antes se la comía.
+The heights of the card's corners are **calculated, not by eye**: with `textBaseline
+'middle'` a glyph takes up ~±0.37·F, and that is why the rank goes at 0.07 and the suit at 0.175 of the height.
+The family ribbon goes above the inverted corner, which used to eat it.
 
 ## Render
 
-- La esfera se **hornea una vez por resize** a `dialCv` (60 marcas + 81 celdas + numerales +
-  el "#" del ta-te-ti): un `drawImage` por frame en vez de ~300 llamadas de path.
-- **Nada de `shadowBlur` en entidades**: el glow es `bloomPx()`, un sprite de gradiente
-  radial cacheado por color cuantizado (`_glowCache`) dibujado con composite `lighter`.
-  Es la lección de TankWARS/DonkeyKong y lo que mantiene los FPS en mobile.
-- El hilo se dibuja en **7 tramos** con color interpolado cola→cabeza más **una sola**
-  pasada de halo. Un gradiente de canvas no puede seguir un path y 200 strokes serían carísimos.
-- Las piezas son **vectoriales** (`piecePath`), no glifos Unicode de ajedrez: en varios
-  Android faltan y se ven como cuadraditos.
-- **Radio de dibujo 1.14× el de colisión** (patrón `drawRadius` de TankWARS): se leen mejor
-  sin tocar el balance.
-- El trío de **context-loss** es obligatorio (iframes del Arcade sobre el mismo renderer):
-  si agregás un bake nuevo, invalidalo en el handler de `contextrestored`.
+- The face is **baked once per resize** into `dialCv` (60 marks + 81 cells + numerals +
+  the noughts-and-crosses "#"): one `drawImage` per frame instead of ~300 path calls.
+- **No `shadowBlur` on entities**: the glow is `bloomPx()`, a radial-gradient sprite
+  cached by quantised colour (`_glowCache`) drawn with composite `lighter`.
+  It is the TankWARS/DonkeyKong lesson and what keeps the FPS up on mobile.
+- The thread is drawn in **7 stretches** with the colour interpolated tail→head plus **one single**
+  halo pass. A canvas gradient cannot follow a path and 200 strokes would be very expensive.
+- The pieces are **vector** (`piecePath`), not Unicode chess glyphs: on several
+  Androids they are missing and show up as little squares.
+- **A drawing radius 1.14× the collision one** (TankWARS's `drawRadius` pattern): they read better
+  without touching the balance.
+- The **context-loss** trio is mandatory (Arcade iframes over the same renderer):
+  if you add a new bake, invalidate it in the `contextrestored` handler.
 
-## Controles
+## Controls
 
-- **Táctil**: palanca dinámica en la mitad izquierda (nace donde apoyás el dedo),
-  **TIRÓN** y **PULSO** abajo a la derecha. `#aimSafe` es el colchón muerto entre zona y
-  botones (sandwich de z-index 3 < 4 < 5, gotcha heredado de StickFight).
-- **Teclado**: WASD/flechas · `ESPACIO`/`SHIFT` tirón · `E` pulso · `P` pausa ·
-  `ENTER` confirmar · `1`/`2`/`3` elegir en los drafts · `T` panel de tuning.
+- **Touch**: a dynamic stick in the left half (it is born where you put your finger),
+  **LUNGE** and **PULSE** bottom right. `#aimSafe` is the dead cushion between the zone and the
+  buttons (a z-index sandwich of 3 < 4 < 5, a gotcha inherited from StickFight).
+- **Keyboard**: WASD/the arrows · `SPACE`/`SHIFT` lunge · `E` pulse · `P` pause ·
+  `ENTER` confirm · `1`/`2`/`3` choose in the drafts · `T` the tuning panel.
 
-## QA headless (sin node)
+## Headless QA (without node)
 
-Chrome headless con `--virtual-time-budget` **no dispara rAF de forma sostenida**: la sim
-queda congelada aunque los timers corran. El loop está preparado para bombearse a mano:
+Chrome headless with `--virtual-time-budget` **does not fire rAF in a sustained way**: the sim
+is left frozen even though the timers run. The loop is prepared to be pumped by hand:
 
-- `window.LOOP.loop(t)` es llamable directo y `scheduleRaf()` tiene dedupe.
-- Handle de debug: `window.LOOP = { CFG, P, game, run, RULE, hand, enemies, orbs, thread,
+- `window.LOOP.loop(t)` is directly callable and `scheduleRaf()` has dedupe.
+- A debug handle: `window.LOOP = { CFG, P, game, run, RULE, hand, enemies, orbs, thread,
   inP, moveStick, keys, simon, frenzy, hourRule, resetThread, ... , freeze, slow }`.
-- **El driver tiene que escribir `moveStick`, no `inP`**: `pollInputs()` reescribe `inP`
-  desde la palanca y el teclado en cada frame.
-- **El reloj del driver se llama `t`.** Un escenario que declare `var t` lo pisa: el bombeo se
-  rompe y el bucle del test sale tras una iteración con un contador absurdo. Ya pasó.
-- **Las corridas libres NO son deterministas.** Para comparar dos configuraciones hay que
-  forzar `B.game.mode = 'daily'` (rng sembrado); si no, la diferencia que ves es ruido.
-- `LOOP.freeze = true` congela la sim y sigue dibujando → screenshot del instante exacto.
-- Harness con cazador de errores: `qa.py` de las sesiones 2026-09-12/14
+- **The driver has to write `moveStick`, not `inP`**: `pollInputs()` rewrites `inP`
+  from the stick and the keyboard on every frame.
+- **The driver's clock is called `t`.** A scenario that declares `var t` overwrites it: the pumping
+  breaks and the test's loop leaves after one iteration with an absurd counter. It has happened.
+- **Free runs are NOT deterministic.** To compare two configurations you have to
+  force `B.game.mode = 'daily'` (a seeded rng); otherwise the difference you see is noise.
+- `LOOP.freeze = true` freezes the sim and keeps drawing → a screenshot of the exact instant.
+- A harness with an error catcher: `qa.py` from the 2026-09-12/14 sessions
   (menu · play · wave6 · intro · rule · card · slot · simon · frenzy · reglas · boss · over ·
-  win · poker · tateti · dash · rope · leak · closes · afk). `reglas` recorre TODAS las reglas
-  de a una; `afk` prueba el jugador quieto durante horas (la explosión de damas); `leak` cuenta
-  orbes que atraviesan el hilo sin rebotar; `closes` mide cierres variando las perillas.
+  win · poker · tateti · dash · rope · leak · closes · afk). `reglas` walks ALL the rules
+  one at a time; `afk` tests the player standing still for hours (the queen explosion); `leak` counts
+  orbs that go through the thread without bouncing; `closes` measures closures varying the knobs.
 
-**Agujero encontrado el 2026-09-18: `ALL` no era la lista de escenarios, era una lista a mano.**
-`SCENARIOS` tenia 47 definidos y `ALL` nombraba 35. Los DOCE que faltaban eran justo los mas
+**A hole found on 2026-09-18: `ALL` was not the list of scenarios, it was a hand-written list.**
+`SCENARIOS` had 47 defined and `ALL` named 35. The TWELVE that were missing were precisely the most
 nuevos - `boss`, `barriles`, `hudfijo`, `fkill`, `feedback`, `dprbase`, `heal`, `handtouch`,
-`touchsel`, `feel`, y los dos de hoy - o sea que `python qa2.py` a secas jamas los corria y solo
-se ejecutaban nombrandolos a mano el dia que se escribieron. Ya estan todos en `ALL`. **Cuando se
-agrega un escenario hay que agregarlo a `ALL` en el mismo movimiento**, o nace muerto: pasa una
-vez y despues no vuelve a correr nunca.
-
-Agregados el 2026-09-18: **`peon`** (el peon come en diagonal y avanza derecho; elige celdas A MANO
-y no al azar, porque lo que se prueba es una regla determinista - con posiciones sorteadas pasaria
-por casualidad la mitad de las veces) y **`obus`** (24 obuses cruzando un hilo de 112 puntos desde
-todos los angulos: ninguno puede cambiar de bando, y uno tiene que llegar igual al jugador con el
-hilo en el medio).
-
-## Playtest 2026-09-18 - el peon decide, y el hilo deja de ser un paraguas
-
-### El hilo ya no para los obuses
-
-`updateShells` reflejaba el obus que cruzara el hilo y le cambiaba de bando: en el papel era la
-fusion Pong + Tank Wars, y era la idea que mas me gustaba de todo el modulo. En la mano no
-funcionaba, y la razon es puramente geometrica: el hilo mide casi un plato de largo y va
-ARRASTRANDO detras tuyo, asi que tapa un arco enorme en todo momento. El obus rebotaba SIEMPRE.
-Franco lo dijo en una linea: "imposible que te hagan algo asi". Un tanque que no puede pegarte no
-es un enemigo - es un dispensador de proyectiles propios.
-
-Ahora el obus ATRAVIESA el hilo y lo unico que se hace con el es esquivarlo. El ORBE sigue
-rebotando, y esa asimetria es la regla, no una inconsistencia: **el orbe es de la mesa y lo podes
-hacer tuyo; el obus es de quien lo disparo.**
-
-Se fueron con el rebote: `run.reflects`, el logro `devolver` ('10 shells returned'), el campo
-`deflCd` del obus y el `px/py` que solo usaba el barrido. Los logros son solo toasts (no hay
-pantalla que los liste), asi que sacar una clave de `ACH` no rompe nada.
-
-### El peon: avanza derecho, come en diagonal
-
-Era la unica pieza del tablero sin decision - apuntaba al centro y caminaba. Y es justo la pieza
-de ajedrez con la regla mas particular de todas, y la mas facil de leer desde afuera.
-
-`pawnLane(e, c, r, pc, pr)` (en `p08_enemies.js`, arriba de `pickLane`) decide UNA vez, al elegir
-carril, antes de telegrafiar:
-
-- `adelante` = hacia el centro del plato, reducido al eje dominante. Ahi es donde el peon corona.
-- Las dos diagonales de captura salen de `adelante` mismo: la perpendicular de un eje es su par
-  invertido (`p = [f[1], f[0]]`), asi que con `f=(1,0)` dan `(1,1)` y `(1,-1)`.
-- Si el jugador esta PARADO en una de esas dos casillas, va por ahi. Captura de ajedrez: una
-  casilla, en diagonal, y solo si hay algo que comer. Si no, avanza.
-
-Se evalua una sola vez a proposito. Entre la decision y el golpe hay medio segundo de telegrafia
-(`aim: 0.50`), y ese medio segundo es la salida del jugador. Un peon que recalculara te
-PERSEGUIRIA, y perseguir no es lo que hace un peon: un peon te castiga por haberte quedado parado
-en el lugar equivocado. Y es determinista, no sorteado - si sorteara, la regla dejaria de ser una
-regla y el jugador no podria hacer nada con ella salvo tener suerte.
-
-`e.pawnBite` marca la captura y `drawTelegraphs` pinta ese carril en CARMESI en vez del blanco
-hueso del peon. Sin eso la regla existiria solo en el codigo: el jugador veria un peon moverse
-raro y no sabria que fue por donde estaba parado.
-
-### El naipe estaba corrido, y el motivo era la rotacion
-
-La cinta del palo se le montaba al palo de la esquina de abajo. Mirando los numeros sueltos no
-cerraba: la cinta iba de `bh*0.700` a `0.792` y el RANGO de esa esquina esta en `0.875`. Lo que
-faltaba ver es que esa esquina se dibuja con `rotate(PI)`, asi que su palo, que en coordenadas
-locales va `+0.097` POR DEBAJO del rango, en pantalla cae `0.097` POR ENCIMA: `bh*0.778`, justo
-adentro de la cinta.
-
-**Leccion general: en un bloque rotado 180 grados, todo desplazamiento local invierte su signo en
-pantalla.** Cualquier calculo de colision de layout tiene que hacerse en coordenadas de pantalla,
-no en las del bloque.
-
-La franja util del naipe va de `0.257` (pie de la esquina de arriba) a `0.743` (techo de la de
-abajo, que es su PALO y no su rango). El bloque de contenido estaba centrado en `0.585`. Subio
-`0.085` ENTERO, sin tocar los espacios internos - lo que estaba bien adentro sigue igual - y la
-cinta ademas se angosto de `0.66` a `0.58` de ancho, porque sus tapas redondas llegaban a
-`0.83*bw` y el palo de la esquina vive en `0.820`. Que dos cosas no se toquen por tres pixeles no
-es que no se toquen.
-
-### El Relojero, con mas vida
-
-De 2600 a 4400. La pelea estaba ARREGLADA (la ventana del nucleo abierto, la armadura de 0.30 a
-0.55, el tope de invocaciones) y con eso se paso de largo: de peaje imposible a tramite. Lo que
-sobraba era DURACION, no dificultad - el compas leer/esquivar/castigar esta donde tiene que estar,
-solo que se acababa antes de que llegaras a jugarlo dos veces. Por eso se movio la vida y NADA
-MAS: tocar `armor` o `openDmg` volveria a mover el sentimiento de la pelea.
-
-### Nada de tipografia decorativa en texto que se dibuja
-
-Paso dos veces seguidas. Primero el punto del medio (`·`): "eliminalos de todo el juego, no los
-quiero ver". Se reemplazo por comas y por RAYA LARGA donde encabezaba... y a la vuelta siguiente
-Franco pidio sacar tambien la raya larga: "no quiero que diga 'Promoted - Queen', ese caracter no
-lo uses en nada".
-
-**La leccion no es cambiar 129 caracteres, es la regla:** un separador que no es ni una palabra ni
-un signo comun obliga al lector a interpretarlo, y a este tamano sobre fieltro oscuro se lee como
-un guion roto. Cambiar un signo raro por otro signo raro no arregla nada — por eso fallo la
-primera vez.
-
-Los textos que se DIBUJAN se reescriben como FRASES, no se les cambia el separador:
-`'PROMOTED TO QUEEN'` no necesita ninguno, y en el panel de info cada raya paso a ser un punto y
-una oracion nueva. Donde de verdad hacia falta separar dos cosas va coma o dos puntos. El nombre
-de "sin jugada" en `HAND_BONUS[0]` era `—` y ahora es `'NONE'`: una palabra dice lo mismo y
-ademas se lee.
-
-En los COMENTARIOS, guion simple. Ojo con uno: `0.74·r` era una MULTIPLICACION, no un separador, y
-un reemplazo a ciegas lo habria convertido en `0.74-r`. Va asterisco.
-
-**Chequeo, no memoria:** despues de tocar esto hay que contar los caracteres en el `index.html`
-construido (`—`, `–`, `·`, el escape `—` y `&mdash;`). Todos en cero.
-
-### El boton de INFO se escribe contra el CODIGO, no contra la memoria
-
-Seguia diciendo que las cartas llegan alternando con las reglas. Eso dejo de ser cierto hace
-rato: **la REGLA es por calendario (todas las horas) y la CARTA es por PUNTAJE** (`CARD_SCORE`,
-`nextCardAt`, `cardsDue`), y el draft se abre en el momento en que cruzas el umbral, en plena
-hora. Tambien decia que al jefe "solo los bucles le hacen dano completo", cuando hoy la armadura
-es 0.55 y la ventana del nucleo abierto multiplica por 3.
-
-**Regla de la casa: el panel de info es documentacion de usuario y envejece igual que cualquier
-otra. Cada vez que cambie una mecanica hay que abrirlo.** Lo que dice hoy, verificado contra el
-codigo: rueda de reglas por hora, cartas por puntaje con reemplazo cuando la mano esta llena,
-frenesi una vez por hora que cura un tercio de la barra, y que el hilo NO para los obuses.
-
-## El barril tiene que ser un BARRIL, no una esfera con rayitas
-
-Franco: "no se distinguen bien por su tamano y parecen otro tipo de orbe mas que un barril". El
-problema no era el tamano. Estaba dibujado como una ESFERA que rotaba sobre si misma, y una esfera
-con dos rayitas es una orbe con dos rayitas.
-
-Un barril que rueda por el piso, **visto desde arriba**, es otra cosa:
-
-- Su **eje es perpendicular al viaje**. Rueda hacia adelante, asi que el cilindro esta acostado
-  cruzado: la silueta es mas larga a lo ancho que a lo largo del movimiento, y esa proporcion sola
-  ya dice hacia donde va. No hace falta ninguna flecha.
-- Es **mas gordo en el medio de su largo**. Esa panza es lo que separa un barril de una lata.
-- **NO GIRA EN EL PLANO DE LA PANTALLA.** Esto era el error de fondo. El eje de rotacion de un
-  barril que rueda hacia vos es horizontal, o sea perpendicular a la camara: en pantalla la
-  silueta no se mueve nada. Rotar el sprite en el plano es una moneda bailando, no un barril.
-- Entonces se ve que rueda por las **duelas**: las tablas corren a lo largo del eje y giran con la
-  superficie, asi que en pantalla barren de un borde al otro. Los **aros** de metal estan en
-  planos perpendiculares al eje y se quedan quietos. **Duelas que barren + aros quietos = rueda.**
-  Es el truco de la rueda de carreta en animacion vieja.
-
-`spin` (un angulo de pantalla) paso a ser `roll` (la fase de la SUPERFICIE). Y **se fue el
-horneado**: existia porque el sprite rotaba, pero ahora la silueta es fija y lo que cambia son las
-duelas, asi que un bake se regeneraria entero en cada frame — seria mas caro, no mas barato. Son
-tres barriles como mucho y solo con la regla puesta. La luz SI se contra-rota (como la moto, la
-aguja y la torreta): el barril no gira en el plano, entonces su brillo se queda donde esta la luz
-de la escena.
-
-`CFG.barrel.r` (0.048 -> 0.058) es el radio de COLISION y queda a proposito entre los dos semiejes
-del dibujo (0.075 a lo ancho, 0.048 en el sentido del viaje). Con una silueta alargada un circulo
-es siempre un compromiso; que caiga del lado generoso para el jugador es la decision.
-
-## EL LUCHADOR (StickFight) — el primer enemigo que se acerca y se compromete
-
-StickFight no habia aportado **ni una** mecanica. Lo que tenia para dar es lo que faltaba: en la
-arena habia cuatro maneras de que algo te amenazara — carril telegrafiado (piezas), persecucion
-(fantasma), proyectil (tanque, barriles) y estela (moto) — y **ninguna entra a distancia de un
-brazo y se queda ahi**.
-
-Camina hasta vos, planta los pies y tira una tanda de tres: jab, jab, envion. **Mientras pega no
-se mueve**, y esa es toda la contrajugada. El envion llega casi al doble que un jab (0.200 contra
-0.115), asi que retroceder un poquito no alcanza: o salis de verdad, o comes el ultimo.
-
-Tres cosas que encontro la QA y que valen mas que el enemigo:
-
-1. **Se plantaba aunque estuviera de espaldas.** Durante la preparacion gira LENTO a proposito
-   (para que se lo pueda juquear por un costado), asi que no alcanzaba a corregir medio giro y
-   tiraba la tanda al aire. Pasa de verdad en partida: un bucle o un pulso lo empujan. El arreglo
-   no es un caso especial sino una condicion — si no esta encarado sigue CAMINANDO, que es el
-   estado donde gira rapido, y se acomoda solo.
-2. **El puno flotante hacia que abrazarlo fuera la defensa perfecta.** Como disco en la punta del
-   brazo, el envion golpeaba un ANILLO (entre 0.140 y 0.260) y no tocaba nada adentro de 0.140.
-   Cuanto mas cerca, menos te pegaba el golpe mas grande — exactamente al reves. **El arreglo no
-   es mover numeros: es que la prueba de impacto describa lo que se ve.** Un brazo que se estira
-   barre desde el cuerpo hasta la punta, asi que el impacto va contra el SEGMENTO cuerpo->puno.
-   El escenario paso de 2 golpes de 3 a pegado, a 3 de 3, sin tocar un solo alcance.
-3. **Una figura de palo pone mucha menos tinta que una silueta llena del mismo radio**, asi que al
-   mismo `r` que una pieza se lee bastante mas chica. Se dibuja a 1.3 veces el radio de colision
-   (el radio de colision NO se toca: lo que hay que corregir es cuanto OCUPA en pantalla). Y las
-   proporciones importan mas que el tamano: con la cabeza compitiendo con el tronco, todo el medio
-   queda hecho un nudo y solo se entiende la pose que estira el brazo.
-
-La marcha es procedural, no una tabla de cuadros: el pie describe una elipse — avanza levantado,
-vuelve apoyado — y la rodilla sale de doblar hacia adelante segun cuanto se acorto la pierna. El
-ciclo avanza con lo que AVANZA el muneco, no con el reloj: si lo frenan, cojea mas lento en vez de
-patinar. **Un ciclo de marcha se lee por la SEPARACION de los pies, no por el balanceo del
-cuerpo.** Tinta clara sobre el fieltro, que es el look de StickFight dado vuelta (alla era tinta
-sobre papel).
-
-El telegrafo no es un carril sino un ARCO de alcance que se llena mientras el brazo se recoge, y
-desaparece cuando el puno sale: para cuando se ve el puno ya no hay nada que decidir. Mismo idioma
-que el carril de una pieza — la forma dice donde, el llenado dice cuando.
-
-## La vida del jefe se MIDE, no se estima
-
-Dos intentos a ojo fallaron seguidos: 2600 y 4400, los dos "muy facil". A la tercera se hizo el
-escenario `bossdps`, que barre orbitas alrededor del jefe y mide cuanto dano por segundo se le
-puede meter de verdad. Resultado a la hora 12:
-
-    mejor orbita (radio 0.20, apenas por afuera del jefe)     74 /s
-    lo mismo con mano de dano (x1.7)                         163 /s
-    + acertando la ventana del nucleo abierto (techo)        273 /s
-
-Con 4400 eso es una pelea de **dieciseis segundos**. No es que el jefe fuera facil: es que no
-llegaba a pasar. Se paso a **12000** — 44s al techo, ~60s a un jugador bueno pero no perfecto.
-
-**Por que la intuicion se queda tan corta acá:** el nucleo abierto multiplica por 3 y esta abierto
-el 40% del compas, y encima a la hora 12 el jugador llega con mano armada. Dos multiplicadores
-encimados sobre una base que ya escala con la hora. Cualquier numero elegido a ojo va a errar por
-un factor, no por un margen.
-
-**La primera version de `bossdps` media mal, y el error es la pelea entera.** Modelaba al jugador
-experto como el que gira PEGADO al jefe y rapido: dio 4/s con 38 bucles cerrados, contra 64/s con
-solo 15 bucles del que gira lejos y lento. El que cerraba MAS bucles hacia MENOS dano. La razon es
-geometrica: **un bucle lastima lo que queda ADENTRO**, y girar pegado cierra bucles chiquitos al
-lado tuyo que no contienen al jefe. El jefe mide 0.15 de radio; la tecnica es girar por afuera de
-eso. La version corregida barre radios en vez de adivinar cual es el optimo — cuando no sabes cual
-es la tecnica buena, no la supongas, barrela.
-
-**Lo que NO se toco, a pedido de Franco:** la ventana del nucleo abierto y que las agujas no
-bateen las orbes. Son lo que hizo que la pelea se sintiera una pelea. Un jefe que se defiende
-menos tiene que aguantar mas; eso no es un parche, es la consecuencia.
-
-## qa2.py: el archivo temporal lleva el PID
-
-`QA_HTML` era un nombre fijo (`_qa2.html`). Dos corridas de QA a la vez se pisan: una escribe su
-escenario, la otra lo sobreescribe, y el Chrome de la primera termina corriendo el escenario de la
-segunda. **Paso de verdad** — en un informe aparecio `### ruleclean` con las notas de `bossdps`.
-
-Lo grave no es la colision sino que es INVISIBLE: no falla, MIENTE. Un escenario reporta BAD(0)
-sobre codigo que nunca ejecuto. Ahora `QA_HTML` incluye `os.getpid()`.
-
-## Dos bugs de playtest, y los dos tests que casi mienten
-
-### El fantasma orbitaba en vez de pegar
-
-Franco: "los fantasmas se quedan dando vueltas alrededor mio en vez de ir a pegarme". Medido ANTES
-de tocar nada, y la forma del resultado es el diagnostico entero:
-
-    jugador QUIETO              distancia minima 0.000   8 toques    ok
-    gira a 0.30 (mas LENTO)     distancia minima 0.120   0 toques    <-- el bug
-    gira a 0.44 (a la par)      distancia minima 0.009   4 toques    ok
-    huye a 0.86 (mas rapido)    distancia minima 0.139   0 toques    correcto
-
-**Fallaba solo contra un jugador mas lento que el.** Eso descarta la velocidad - le sobra - y
-senala la punteria. Eran dos cosas multiplicandose:
-
-1. **El adelanto era una DISTANCIA FIJA (0.34), no un tiempo.** Apuntaba siempre a 0.34 por
-   delante del jugador, incluso teniendolo a 0.05. A esa distancia un punto 0.34 adelante queda
-   casi PERPENDICULAR a su avance: pasaba de largo, volvia, pasaba de largo otra vez. **La orbita
-   no era un error de calculo: era la solucion correcta al problema equivocado.** Ahora el
-   adelanto es `t = distancia / velocidad propia` — "donde vas a estar cuando yo llegue" — y de
-   cerca tiende a cero, o sea que termina apuntando AL jugador, que es lo unico que cierra una
-   persecucion.
-   Y explica por que el caso facil de probar a mano andaba: el error angular depende de cuanto
-   avanza el jugador en el tiempo de vuelo, y contra uno que va a la par del fantasma el 0.34 fijo
-   resultaba ser casi el valor correcto de casualidad.
-2. **El radio de giro era mas grande que el contacto.** A 0.44 u/s con 2.6 rad/s el radio minimo
-   es 0.169 y el contacto ocurre a 0.069: **mas del doble**. Aun apuntando bien, cualquier error
-   cerca se volvia una orbita estable sin salida geometrica. Ahora gira mas rapido cuanto mas
-   cerca esta, que ademas es lo que se espera de un fantasma: flota, no tiene inercia.
-
-Se conserva que un jugador a fondo pueda escaparse, y el escenario lo vigila.
-
-### La pieza telegrafiada volvia de un salto a su posicion vieja
-
-`pickLane` guarda `sxp/syp` (el origen de la embestida) cuando la pieza DECIDE, o sea antes del
-medio segundo de telegrafia. Si durante ese rato la empujas - un bucle, el pulso, una embestida,
-un barril - la pieza se mueve, pero al arrancar el embate el carril interpola desde `sxp/syp` y la
-TELETRANSPORTA de vuelta.
-
-Se re-ancla el origen al arrancar: sale de donde realmente esta. **El destino no se toca, y es a
-proposito:** `drawTelegraphs` dibuja el carril desde la posicion ACTUAL hasta el destino fijo, asi
-que lo que el jugador vio prometido fue "voy a terminar ahi". Mover el destino romperia esa
-promesa; mover el origen la cumple. `dur` se recalcula despues de re-anclar, o una pieza empujada
-hacia su destino llegaria antes y se quedaria esperando.
-
-### Los dos tests casi mienten, por motivos distintos
-
-**El de la pieza dio verde contra el codigo con el bug puesto.** Media "el primer frame con
-`st === 'move'`", pero el cambio de estado y el primer paso del carril NO pasan en la misma
-llamada: son ramas de un `else if`, asi que el frame en que `st` pasa a `'move'` es justo el que
-todavia no movio nada. Se mide el MAXIMO salto de un frame durante toda la embestida.
-
-**Y despues dio un falso positivo con el caballo.** La cota salia de `T.spd`, pero el caballo
-salta con duracion FIJA (0.34s) sin importar cuan largo sea el salto, asi que se mueve mas rapido
-que su velocidad nominal y no es una teletransportacion. La cota se saca ahora del CARRIL REAL
-(`largo / dur`), con 3.4 de margen porque las curvas de suavizado tienen pendiente maxima 3.
-
-**El del fantasma medía la huida girando en circulo**, y girando el jugador VUELVE a cruzarse con
-el fantasma: eso no prueba que se pueda escapar, prueba que se puede chocar. Ahora huye en linea
-recta y se verifica que la distancia CREZCA.
-
-**Metodo que hay que repetir:** cuando un test nuevo da verde, correrlo contra una copia del
-codigo con el bug puesto a mano. Si no falla ahi, no prueba nada. Se hizo asi con `empuje` y por
-eso se encontro que la primera version no servia.
-
-## DIRECCION ARTISTICA (2026-09-18)
-
-> **LOOP deberia sentirse como un reloj de bolsillo abierto que alguien uso como mesa de juego
-> durante cien anos.**
-
-Esa frase resuelve sola casi todas las preguntas de diseno visual: explica por que hay naipes y
-piezas de ajedrez sobre la misma superficie (alguien jugo ahi), por que el laton tiene patina (es
-viejo), por que hay UNA sola luz (hay una lampara sobre la mesa) y por que el tiempo importa (el
-objeto es un reloj). **Cada cosa nueva se evalua preguntando si pertenece a eso.**
-
-**Materiales - cinco, y cada cosa pertenece a uno solo.** Fieltro (la arena) - Laton (bisel, aguja,
-marcos, el casquillo de la canica) - Hueso/marfil (naipes) - Cristal y luz (orbes, escudo, frenesi)
-- **Joya (la canica, y SOLO la canica)**. Si algo nuevo no cae en uno de los cinco, no pertenece.
-
-**Iluminacion:** una lampara, arriba a la izquierda, fija (`LIGHT`, no se toca). Emiten luz solo
-tres cosas: la canica, el hilo y lo cargado. Todo lo demas la refleja.
-
-**Color:** el sistema semantico manda sobre la decoracion. Oro = valor. Hielo = vos. Carmesi = te
-lastima. Violeta = reglas. Verde = te cura. **Cualquier elemento que use uno de esos cinco esta
-haciendo esa afirmacion, le guste o no.** Dos colisiones encontradas, una corregida: la cola del
-hilo usaba el violeta de las REGLAS (corregido en el Grupo 2); los enemigos usan oro para la dama,
-violeta para el alfil, carmesi para la torre y celeste para el caballo (**sin corregir**: pasarlos
-a hueso es la propuesta N2 y necesita decision, porque arriesga la legibilidad por color a
-distancia, que es una decision documentada).
-
-**Movimiento:** pesado, inercia corta, nada aparece de golpe. Lo unico que se mueve linealmente es
-la aguja, porque es un mecanismo.
-
-**Sonido:** Do mayor pentatonica (`PENTA` siempre lo fue) con el silencio como instrumento.
-
-**Jerarquia de feedback - cuatro niveles y el presupuesto se respeta.** Rutinario: sonido y chispa.
-Bueno: + anillo. Excelente: + hitstop y sacudon. Excepcional: + cambio de iluminacion de toda la
-arena. **Cerrar un bucle cenido con tres piezas adentro deberia ser el unico evento habitual que
-llegue al nivel cuatro.**
-
-**UI:** informacion convertida en objeto, o nada. La hora vive en el anillo de capitulo.
-
-**No es:** neon, sci-fi, arcade generico, Las Vegas, glow excesivo. **Es:** viejo, fino, tactil,
-mecanico, misterioso, premium, ligeramente gastado, contenido.
-
-## GRUPO 1 - el reloj suena, barre y cuenta
-
-### El tictac no es un metronomo: es la aguja cruzando las marcas
-
-El plato tiene 60 marcas horneadas y la hora dura 38 s, asi que el tictac sale cada 0.63 s **solo**.
-No hay tempo que elegir: **el tempo ya estaba dibujado en el plato**. Esa es la diferencia entre
-poner musica encima del juego y hacer sonar el objeto.
-
-Dos tonos alternados como un escape real (La2 y Mi3, tonica y quinta) mas un chasquido de ruido muy
-corto, que es lo que de verdad se oye de un escape; el tono solo lo ubica en la tonalidad.
-
-**En el ultimo quinto se SUBDIVIDE a 120**, o sea la misma aguja marcando medias marcas. Un reloj
-que cambia de velocidad deja de ser un reloj; uno que marca mas fino sigue siendolo, y avisa que se
-acaba la hora sin un solo elemento de UI.
-
-El colchon (`droneSet`) es La1 fijo con su quinta y **no cambia de altura nunca** - cambiar de
-altura seria cambiar de tonalidad, y ahi ya es musica. Lo que cambia es cuanto se oye: aparece en la
-hora 4 y sube hasta la 12. Las tres primeras horas el juego suena como siempre.
-
-`audioHush(dur, piso)` agacha TODO. Se usa dos veces por partida: 0.75 s antes de que despierte el
-Relojero (su rugido esta REPROGRAMADO para entrar cuando el volumen vuelve - un golpe grande
-necesita vacio delante o no se oye grande) y un chupon de 0.2 s al entrar en frenesi.
-
-**Bug que esto destapo:** `audioHush` programa rampas sobre `masterGain`, que es el mismo nodo del
-boton de mute. **Poner `.value` mientras hay rampas programadas no hace nada.** Sin cancelar las
-rampas primero, el mute habria dejado de funcionar despues del primer silencio - o sea, despues de
-pelear con el jefe por primera vez. Intermitente y dificilisimo de atar a su causa.
-
-### La aguja hace las transiciones, y NO es un estado
-
-Lo nuevo ya esta dibujado abajo; encima queda una cuna oscura cubriendo el angulo que la aguja no
-barrio todavia, con una linea de laton en el filo. Seis transiciones, entre 0.26 s y 0.52 s.
-
-**`sweep` es un contador de render, no un `game.state`.** Esta documentado por que (el cartel de
-hora fue un estado, congelo la simulacion y hubo que sacarlo): no bloquea input ni frena la
-simulacion. Medido: el jugador se movio 0.244 unidades DURANTE la transicion, y `startRun` la
-dispara con el juego ya en `play`. Por eso volver a jugar puede sentirse inmediato.
-
-Avanza con el dt REAL, no con `simDt`: durante un draft la simulacion esta congelada y un barrido
-atado a `simDt` se quedaria trabado a la mitad para siempre.
-
-### El anillo de capitulo es la aguja de HORA
-
-Doce numerales, doce horas. La varilla que ya existe da una vuelta por hora (es el minutero) y las
-horas vividas se **encienden** en el anillo. No es un indicador nuevo: es la aguja que faltaba.
-
-**Se tiraron dos versiones antes de esta, y el motivo vale mas que el resultado.** La primera era
-una banda fina de laton entre las marcas y el bisel: en escritorio apenas se adivinaba y en telefono
-apaisado **no existia**. El problema no era el color ni el alfa: a 335 px de alto el radio del plato
-son ~150 px, asi que una banda de 0.014 del radio mide **DOS PIXELES**. Ninguna cantidad de brillo
-arregla dos pixeles.
-
-**LO QUE SOBREVIVE AL TAMANO ES LA SILUETA Y LO QUE YA ESTA DIMENSIONADO PARA LEERSE.** Los
-numerales ya lo estaban. Se hornea un SEGUNDO lienzo (`dialLitCv`) con los mismos numerales en laton
-vivo y se pega recortado contra una cuna: un clip y un drawImage.
-
-La segunda version tenia numerales Y banda, y la banda sobraba por dos razones: era un segundo aro
-de laton adentro del bisel, y sobre todo **era redundante con la aguja**, que ya marca el avance
-dentro de la hora. Quedaron dos indicadores sin superposicion: los numerales cuentan (discreto), la
-aguja marca la posicion (continuo).
-
-El contraste se arregla **bajando el apagado, no subiendo el encendido**: las horas que todavia no
-viviste estan dormidas, y la esfera se llena de luz durante la run.
-
-## GRUPO 2 - el hilo es un cordon, la canica es la joya
-
-### El hilo
-
-- **La cola usaba el violeta de las REGLAS.** Ahora va de acero frio a hielo. Un color del sistema
-  semantico es una afirmacion.
-- **No se apoyaba en nada.** Una sola pasada oscura corrida en el eje de la luz da la sombra Y el
-  borde de contacto: dos cosas con un stroke.
-- **El ultimo tercio lleva un NUCLEO caliente**, asi el cordon se lee redondo donde lo estas usando
-  y plano donde quedo apoyado.
-- **Tension:** `thread[i].w` guarda la velocidad de la mano al APOYAR cada punto (el pasado). La
-  tension es el presente y sale gratis de la velocidad del jugador.
-- **Anticipacion de cierre, gratis.** `findSelfCross` YA calculaba la distancia de la cabeza a cada
-  segmento viejo para decidir el roce. Se le pide de arrastre el minimo y su indice: cero
-  iteraciones nuevas, cero cambios de decision. Con eso, el tramo que vas a encerrar se enciende.
-
-**La cabeza se estaba yendo a BLANCO** y hubo que templarla: el nucleo aditivo se sumaba sobre un
-cuerpo que ya estaba en (196,247,255). Dos brillos sumados dan blanco, y **blanco es el material que
-convierte un cordon en un laser**. Brillante no es blanco.
+`touchsel`, `feel`, and today's two - that is, a bare `python qa2.py` never ran them and they were only
+executed by naming them by hand on the day they were written. They are all in `ALL` now. **When a
+scenario is added it has to be added to `ALL` in the same movement**, or it is born dead: it passes once
+and after that it never runs again.
+
+Added on 2026-09-18: **`peon`** (the pawn captures diagonally and advances straight; it picks cells BY HAND
+and not at random, because what is being tested is a deterministic rule - with rolled positions it would pass
+by chance half the time) and **`obus`** (24 shells crossing a 112-point thread from
+every angle: none may change side, and one has to reach the player anyway with the
+thread in the middle).
+
+## Playtest 2026-09-18 - the pawn decides, and the thread stops being an umbrella
+
+### The thread no longer stops the shells
+
+`updateShells` reflected any shell that crossed the thread and changed its side: on paper it was the
+Pong + Tank Wars fusion, and it was the idea I liked most in the whole module. In the hand it did not
+work, and the reason is purely geometric: the thread is almost a face long and it TRAILS
+behind you, so it covers an enormous arc at all times. The shell bounced ALWAYS.
+Franco said it in one line: "there's no way they can do anything to you like that". A tank that cannot hit you is
+not an enemy - it is a dispenser of projectiles of your own.
+
+Now the shell GOES THROUGH the thread and the only thing you do with it is dodge it. The ORB still
+bounces, and that asymmetry is the rule, not an inconsistency: **the orb belongs to the table and you can
+make it yours; the shell belongs to whoever fired it.**
+
+Gone with the bounce: `run.reflects`, the `devolver` achievement ('10 shells returned'), the shell's
+`deflCd` field and the `px/py` that only the sweep used. The achievements are only toasts (there is no
+screen that lists them), so removing a key from `ACH` breaks nothing.
+
+### The pawn: it advances straight, it captures diagonally
+
+It was the only piece on the board with no decision - it aimed at the centre and walked. And it is precisely the
+chess piece with the most distinctive rule of all, and the easiest to read from outside.
+
+`pawnLane(e, c, r, pc, pr)` (in `p08_enemies.js`, above `pickLane`) decides ONCE, when choosing a
+lane, before telegraphing:
+
+- `adelante` = towards the face's centre, reduced to the dominant axis. That is where the pawn promotes.
+- The two capture diagonals come out of `adelante` itself: an axis's perpendicular is its pair
+  inverted (`p = [f[1], f[0]]`), so with `f=(1,0)` they give `(1,1)` and `(1,-1)`.
+- If the player is STANDING on one of those two squares, it goes that way. A chess capture: one
+  square, diagonally, and only if there is something to capture. Otherwise, it advances.
+
+It is evaluated once only on purpose. Between the decision and the strike there is half a second of telegraph
+(`aim: 0.50`), and that half second is the player's way out. A pawn that recalculated would
+CHASE you, and chasing is not what a pawn does: a pawn punishes you for having stood still
+in the wrong place. And it is deterministic, not rolled - if it rolled, the rule would stop being a
+rule and the player could do nothing with it but get lucky.
+
+`e.pawnBite` marks the capture and `drawTelegraphs` paints that lane in CRIMSON instead of the pawn's
+bone white. Without that the rule would exist only in the code: the player would see a pawn move
+oddly and would not know it was because of where they were standing.
+
+### The card was shifted, and the reason was the rotation
+
+The suit's ribbon rode over the bottom corner's suit. Looking at the loose numbers it did not
+add up: the ribbon ran from `bh*0.700` to `0.792` and that corner's RANK is at `0.875`. What
+was missing was seeing that that corner is drawn with `rotate(PI)`, so its suit, which in local
+coordinates goes `+0.097` BELOW the rank, on screen lands `0.097` ABOVE it: `bh*0.778`, right
+inside the ribbon.
+
+**The general lesson: in a block rotated 180 degrees, every local displacement inverts its sign on
+screen.** Any layout collision calculation has to be done in screen coordinates,
+not in the block's.
+
+The card's usable strip runs from `0.257` (the foot of the top corner) to `0.743` (the ceiling of the bottom
+one, which is its SUIT and not its rank). The content block was centred at `0.585`. It went up
+`0.085` WHOLE, without touching the internal spacings - what was fine inside is still the same - and the
+ribbon also narrowed from `0.66` to `0.58` of the width, because its round caps reached
+`0.83*bw` and the corner's suit lives at `0.820`. Two things not touching by three pixels is
+not them not touching.
+
+### The Clockmaker, with more health
+
+From 2600 to 4400. The fight was FIXED (the open-core window, the armour from 0.30 to
+0.55, the summoning cap) and with that it overshot: from an impossible toll to a formality. What
+was lacking was DURATION, not difficulty - the read/dodge/punish bar is where it should be,
+it just ran out before you got to play it twice. That is why the health was moved and NOTHING
+ELSE: touching `armor` or `openDmg` would move the feel of the fight again.
+
+### No decorative typography in text that gets drawn
+
+It happened twice in a row. First the middle dot (`·`): "get rid of them across the whole game, I don't
+want to see them". It was replaced by commas and by an EM DASH where it led... and on the next round
+Franco asked to take the em dash out too: "I don't want it to say 'Promoted - Queen', don't use that character
+for anything".
+
+**The lesson is not changing 129 characters, it is the rule:** a separator that is neither a word nor
+a common punctuation mark forces the reader to interpret it, and at this size over dark felt it reads as
+a broken dash. Changing one odd sign for another odd sign fixes nothing — that is why the
+first time.
+
+The texts that are DRAWN are rewritten as SENTENCES, their separator is not swapped:
+`'PROMOTED TO QUEEN'` needs none, and in the info panel each dash became a full stop and
+a new sentence. Where two things genuinely had to be separated a comma or a colon goes. The name
+for "no hand" in `HAND_BONUS[0]` was `—` and is now `'NONE'`: a word says the same thing and
+can also be read.
+
+In the COMMENTS, a simple hyphen. Careful with one: `0.74·r` was a MULTIPLICATION, not a separator, and
+a blind replacement would have turned it into `0.74-r`. An asterisk goes there.
+
+**Check, not memory:** after touching this you have to count the characters in the built
+`index.html` (`—`, `–`, `·`, the `—` escape and `&mdash;`). All at zero.
+
+### The INFO button is written against the CODE, not against memory
+
+It still said that the cards arrive alternating with the rules. That stopped being true a while
+back: **the RULE is by the calendar (every hour) and the CARD is by SCORE** (`CARD_SCORE`,
+`nextCardAt`, `cardsDue`), and the draft opens at the moment you cross the threshold, mid-hour.
+It also said that on the boss "only loops do full damage", when today the armour
+is 0.55 and the open-core window multiplies by 3.
+
+**House rule: the info panel is user documentation and it ages like any
+other. Every time a mechanic changes you have to open it.** What it says today, verified against the
+code: a wheel of rules per hour, cards by score with a replacement when the hand is full,
+a frenzy once an hour that heals a third of the bar, and that the thread does NOT stop the shells.
+
+## A barrel has to be a BARREL, not a sphere with little lines
+
+Franco: "they aren't easy to tell apart by their size and they look like another kind of orb more than a barrel". The
+problem was not the size. It was drawn as a SPHERE that rotated on itself, and a sphere
+with two little lines is an orb with two little lines.
+
+A barrel rolling along the floor, **seen from above**, is something else:
+
+- Its **axis is perpendicular to the travel**. It rolls forwards, so the cylinder is lying
+  across: the silhouette is longer across than along the movement, and that proportion alone
+  already says where it is going. No arrow is needed.
+- It is **fatter in the middle of its length**. That belly is what separates a barrel from a tin.
+- **IT DOES NOT TURN IN THE SCREEN PLANE.** This was the underlying mistake. The rotation axis of a
+  barrel rolling towards you is horizontal, that is, perpendicular to the camera: on screen the
+  silhouette does not move at all. Rotating the sprite in the plane is a coin spinning, not a barrel.
+- So you see it rolling through the **staves**: the boards run along the axis and turn with the
+  surface, so on screen they sweep from one edge to the other. The metal **hoops** sit in
+  planes perpendicular to the axis and stay still. **Sweeping staves + still hoops = rolling.**
+  It is the cartwheel trick from old animation.
+
+`spin` (a screen angle) became `roll` (the SURFACE's phase). And **the baking went**: it existed
+because the sprite rotated, but now the silhouette is fixed and what changes are the
+staves, so a bake would be regenerated entirely on every frame — it would be more expensive, not cheaper. There are
+three barrels at most and only with the rule in force. The light IS counter-rotated (like the bike, the
+hand and the turret): the barrel does not turn in the plane, so its shine stays where the scene's
+light is.
+
+`CFG.barrel.r` (0.048 -> 0.058) is the COLLISION radius and it sits on purpose between the drawing's two
+semi-axes (0.075 across, 0.048 in the direction of travel). With an elongated silhouette a circle
+is always a compromise; that it falls on the side generous to the player is the decision.
+
+## THE FIGHTER (StickFight) — the first enemy that comes close and commits
+
+StickFight had not contributed **a single** mechanic. What it had to give is what was missing: in the
+arena there were four ways for something to threaten you — a telegraphed lane (the pieces), a chase
+(the ghost), a projectile (the tank, the barrels) and a trail (the bike) — and **none comes within arm's
+reach and stays there**.
+
+It walks up to you, plants its feet and throws a flurry of three: jab, jab, lunge. **While it strikes it does
+not move**, and that is the whole counterplay. The lunge reaches almost twice as far as a jab (0.200 against
+0.115), so backing off a little is not enough: either you get out properly, or you eat the last one.
+
+Three things the QA found that are worth more than the enemy:
+
+1. **It planted itself even with its back turned.** During the wind-up it turns SLOWLY on purpose
+   (so it can be juked round the side), so it could not correct half a turn and
+   threw the flurry at thin air. It really happens in a game: a loop or a pulse pushes it. The fix
+   is not a special case but a condition — if it is not facing you it carries on WALKING, which is the
+   state where it turns fast, and it sorts itself out.
+2. **The floating fist made hugging it the perfect defence.** As a disc at the arm's tip,
+   the lunge hit a RING (between 0.140 and 0.260) and touched nothing inside 0.140.
+   The closer you were, the less the biggest strike hit you — exactly the wrong way round. **The fix is
+   not moving numbers: it is making the impact test describe what you see.** An arm that stretches out
+   sweeps from the body to the tip, so the impact goes against the body->fist SEGMENT.
+   The scenario went from 2 hits out of 3 up close to 3 out of 3, without touching a single reach.
+3. **A stick figure puts down much less ink than a filled silhouette of the same radius**, so at the
+   same `r` as a piece it reads considerably smaller. It is drawn at 1.3 times the collision radius
+   (the collision radius is NOT touched: what has to be corrected is how much it TAKES UP on screen). And the
+   proportions matter more than the size: with the head competing with the trunk, the whole middle
+   becomes a knot and the only pose you can make out is the one stretching the arm.
+
+The walk is procedural, not a table of frames: the foot describes an ellipse — forward lifted,
+back planted — and the knee comes from bending forwards according to how much the leg shortened. The
+cycle advances with what the figure ADVANCES, not with the clock: if it is slowed, it limps more slowly instead of
+skating. **A walk cycle reads by the SEPARATION of the feet, not by the swing of the
+body.** Light ink on the felt, which is StickFight's look turned around (there it was ink
+on paper).
+
+The telegraph is not a lane but a REACH ARC that fills while the arm draws back, and it
+disappears when the fist comes out: by the time you see the fist there is nothing left to decide. The same language
+as a piece's lane — the shape says where, the fill says when.
+
+## The boss's health is MEASURED, not estimated
+
+Two attempts by eye failed in a row: 2600 and 4400, both "much too easy". On the third the
+`bossdps` scenario was made, which sweeps orbits around the boss and measures how much damage per second can
+really be put into it. The result at hour 12:
+
+    the best orbit (radius 0.20, just outside the boss)      74 /s
+    the same with a damage hand (x1.7)                      163 /s
+    + hitting the open-core window (the ceiling)            273 /s
+
+At 4400 that is a **sixteen-second** fight. It is not that the boss was easy: it is that it did not
+get a chance to happen. It went to **12000** — 44s at the ceiling, ~60s for a good but not perfect player.
+
+**Why intuition falls so short here:** the open core multiplies by 3 and is open
+40% of the bar, and on top of that at hour 12 the player arrives with a built hand. Two multipliers
+stacked on a base that already scales with the hour. Any number chosen by eye is going to be out by
+a factor, not by a margin.
+
+**The first version of `bossdps` measured badly, and the error is the whole fight.** It modelled the expert
+player as one who circles HUGGING the boss and fast: it gave 4/s with 38 loops closed, against 64/s with
+only 15 loops for one circling far away and slowly. The one that closed MORE loops did LESS damage. The reason is
+geometric: **a loop hurts what is left INSIDE**, and circling up close closes tiny loops
+beside you that do not contain the boss. The boss is 0.15 in radius; the technique is to circle outside
+that. The corrected version sweeps radii instead of guessing which is the optimum — when you do not know which
+the good technique is, do not assume it, sweep for it.
+
+**What was NOT touched, at Franco's request:** the open-core window and the hands not
+batting the orbs. They are what made the fight feel like a fight. A boss that defends itself
+less has to last longer; that is not a patch, it is the consequence.
+
+## qa2.py: the temporary file carries the PID
+
+`QA_HTML` was a fixed name (`_qa2.html`). Two QA runs at once overwrite each other: one writes its
+scenario, the other overwrites it, and the first one's Chrome ends up running the second's
+scenario. **It really happened** — in one report `### ruleclean` appeared with `bossdps`'s notes.
+
+What is serious is not the collision but that it is INVISIBLE: it does not fail, it LIES. A scenario reports BAD(0)
+on code it never executed. Now `QA_HTML` includes `os.getpid()`.
+
+## Two playtest bugs, and the two tests that nearly lied
+
+### The ghost orbited instead of hitting
+
+Franco: "the ghosts keep circling around me instead of coming to hit me". Measured BEFORE
+touching anything, and the shape of the result is the whole diagnosis:
+
+    a STILL player               minimum distance 0.000   8 touches   ok
+    circling at 0.30 (SLOWER)      minimum distance 0.120   0 touches   <-- the bug
+    circling at 0.44 (level)       minimum distance 0.009   4 touches   ok
+    fleeing at 0.86 (faster)       minimum distance 0.139   0 touches   correct
+
+**It only failed against a player slower than it.** That rules out speed - it has plenty - and
+points at the aiming. It was two things multiplying:
+
+1. **The lead was a FIXED DISTANCE (0.34), not a time.** It always aimed 0.34 ahead
+   of the player, even with them at 0.05. At that distance a point 0.34 ahead ends up
+   almost PERPENDICULAR to their advance: it went past, came back, went past again. **The orbit
+   was not a calculation error: it was the right solution to the wrong problem.** Now the
+   lead is `t = distance / its own speed` — "where you are going to be when I arrive" — and up
+   close it tends to zero, that is, it ends up aiming AT the player, which is the only thing that closes a
+   chase.
+   And it explains why the case that was easy to test by hand worked: the angular error depends on how much
+   the player advances in the flight time, and against one going level with the ghost the fixed 0.34
+   turned out to be almost the right value by coincidence.
+2. **The turning radius was bigger than the contact.** At 0.44 u/s with 2.6 rad/s the minimum radius
+   is 0.169 and contact happens at 0.069: **more than double**. Even aiming well, any error
+   up close became a stable orbit with no geometric way out. Now it turns faster the closer
+   it is, which is also what you expect from a ghost: it floats, it has no inertia.
+
+A player at full tilt being able to get away is preserved, and the scenario watches it.
+
+### The telegraphed piece jumped back to its old position
+
+`pickLane` stores `sxp/syp` (the charge's origin) when the piece DECIDES, that is, before the
+half second of telegraph. If during that time you push it - a loop, the pulse, a charge,
+a barrel - the piece moves, but on starting the charge the lane interpolates from `sxp/syp` and
+TELEPORTS it back.
+
+The origin is re-anchored on starting: it leaves from where it really is. **The destination is not touched, and that is
+on purpose:** `drawTelegraphs` draws the lane from the CURRENT position to the fixed destination, so
+what the player saw promised was "I am going to end up there". Moving the destination would break that
+promise; moving the origin keeps it. `dur` is recomputed after re-anchoring, or a piece pushed
+towards its destination would arrive sooner and be left waiting.
+
+### The two tests nearly lied, for different reasons
+
+**The piece one came out green against the code with the bug in place.** It measured "the first frame with
+`st === 'move'`", but the state change and the lane's first step do NOT happen in the same
+call: they are branches of an `else if`, so the frame in which `st` becomes `'move'` is precisely the one
+that has not moved anything yet. The MAXIMUM jump of a frame during the whole charge is now measured.
+
+**And then it gave a false positive with the knight.** The bound came from `T.spd`, but the knight
+jumps with a FIXED duration (0.34s) however long the jump is, so it moves faster
+than its nominal speed and it is not a teleport. The bound now comes from the REAL LANE
+(`length / dur`), with 3.4 of margin because the smoothing curves have a maximum slope of 3.
+
+**The ghost one measured the escape while circling**, and circling the player CROSSES the ghost's path
+again: that does not prove you can escape, it proves you can collide. Now it flees in a straight
+line and it is verified that the distance GROWS.
+
+**A method to repeat:** when a new test comes out green, run it against a copy of the
+code with the bug put back by hand. If it does not fail there, it proves nothing. It was done that way with `empuje` and that
+is how it was found that the first version was no use.
+
+## ART DIRECTION (2026-09-18)
+
+> **LOOP should feel like an open pocket watch that someone used as a gaming table
+> for a hundred years.**
+
+That sentence resolves almost every visual design question on its own: it explains why there are playing cards and
+chess pieces on the same surface (someone played there), why the brass has patina (it is
+old), why there is ONE single light (there is a lamp over the table) and why time matters (the
+object is a clock). **Every new thing is evaluated by asking whether it belongs to that.**
+
+**Materials - five, and each thing belongs to one only.** Felt (the arena) - Brass (the bevel, the hand,
+the frames, the marble's setting) - Bone/ivory (the cards) - Crystal and light (the orbs, the shield, the frenzy)
+- **Jewel (the marble, and ONLY the marble)**. If something new does not fall into one of the five, it does not belong.
+
+**Lighting:** one lamp, top left, fixed (`LIGHT`, not to be touched). Only three things emit
+light: the marble, the thread and whatever is charged. Everything else reflects it.
+
+**Colour:** the semantic system governs the decoration. Gold = value. Ice = you. Crimson = it
+hurts you. Violet = rules. Green = it heals you. **Any element that uses one of those five is
+making that statement, whether it likes it or not.** Two collisions found, one corrected: the thread's
+tail used the RULES' violet (corrected in Group 2); the enemies use gold for the queen,
+violet for the bishop, crimson for the rook and light blue for the knight (**not corrected**: moving them
+to bone is proposal N2 and needs a decision, because it risks legibility by colour at a
+distance, which is a documented decision).
+
+**Movement:** heavy, short inertia, nothing appears abruptly. The only thing that moves linearly is
+the hand, because it is a mechanism.
+
+**Sound:** C major pentatonic (`PENTA` always was) with silence as an instrument.
+
+**Feedback hierarchy - four levels and the budget is respected.** Routine: a sound and a spark.
+Good: + a ring. Excellent: + hitstop and a shake. Exceptional: + a lighting change across the whole
+arena. **Closing a tight loop with three pieces inside should be the only habitual event that
+reaches level four.**
+
+**UI:** information turned into an object, or nothing. The hour lives in the chapter ring.
+
+**It is not:** neon, sci-fi, generic arcade, Las Vegas, excessive glow. **It is:** old, fine, tactile,
+mechanical, mysterious, premium, slightly worn, restrained.
+
+## GROUP 1 - the clock sounds, sweeps and counts
+
+### The ticking is not a metronome: it is the hand crossing the marks
+
+The face has 60 baked marks and the hour lasts 38 s, so the ticking comes out every 0.63 s **by itself**.
+There is no tempo to choose: **the tempo was already drawn on the face**. That is the difference between
+putting music over the game and making the object sound.
+
+Two alternating tones like a real escapement (A2 and E3, the tonic and the fifth) plus a very short
+noise click, which is what you really hear of an escapement; the tone only places it in the key.
+
+**In the last fifth it SUBDIVIDES to 120**, that is, the same hand marking half-marks. A clock
+that changes speed stops being a clock; one that marks finer still is one, and it warns that
+the hour is running out without a single UI element.
+
+The bed (`droneSet`) is a fixed A1 with its fifth and it **never changes pitch** - changing
+pitch would mean changing key, and at that point it is music. What changes is how much of it you hear: it appears in
+hour 4 and rises to hour 12. For the first three hours the game sounds as it always did.
+
+`audioHush(dur, piso)` ducks EVERYTHING. It is used twice per game: 0.75 s before the
+Clockmaker wakes (its roar is RESCHEDULED to come in when the volume returns - a big hit
+needs emptiness in front of it or it does not sound big) and a 0.2 s suck on entering a frenzy.
+
+**A bug this uncovered:** `audioHush` schedules ramps on `masterGain`, which is the same node as the
+mute button's. **Setting `.value` while there are ramps scheduled does nothing.** Without cancelling the
+ramps first, the mute would have stopped working after the first silence - that is, after
+fighting the boss for the first time. Intermittent and extremely hard to tie to its cause.
+
+### The hand makes the transitions, and it is NOT a state
+
+The new thing is already drawn underneath; on top there is a dark wedge covering the angle the hand has not
+swept yet, with a line of brass on its edge. Six transitions, between 0.26 s and 0.52 s.
+
+**`sweep` is a render counter, not a `game.state`.** Why is documented (the hour
+card was a state, it froze the simulation and had to be taken out): it does not block input or hold up the
+simulation. Measured: the player moved 0.244 units DURING the transition, and `startRun`
+fires it with the game already in `play`. That is why going back to playing can feel immediate.
+
+It advances with the REAL dt, not with `simDt`: during a draft the simulation is frozen and a sweep
+tied to `simDt` would be left stuck halfway forever.
+
+### The chapter ring is the HOUR hand
+
+Twelve numerals, twelve hours. The rod that already exists goes round once an hour (it is the minute hand) and the
+hours lived **light up** on the ring. It is not a new indicator: it is the hand that was missing.
+
+**Two versions were thrown away before this one, and the reason is worth more than the result.** The first was
+a fine band of brass between the marks and the bevel: on desktop it could barely be made out and on a phone in
+landscape it **did not exist**. The problem was not the colour or the alpha: at 335 px of height the face's radius
+is ~150 px, so a band of 0.014 of the radius measures **TWO PIXELS**. No amount of brightness
+fixes two pixels.
+
+**WHAT SURVIVES THE SIZE IS THE SILHOUETTE AND WHATEVER IS ALREADY DIMENSIONED TO BE READ.** The
+numerals already were. A SECOND canvas (`dialLitCv`) is baked with the same numerals in live brass
+and is pasted clipped against a wedge: one clip and one drawImage.
+
+The second version had numerals AND a band, and the band was superfluous for two reasons: it was a second brass
+hoop inside the bevel, and above all **it was redundant with the hand**, which already marks the advance
+within the hour. Two indicators with no overlap were left: the numerals count (discrete), the
+hand marks the position (continuous).
+
+The contrast is fixed by **lowering the off state, not raising the on state**: the hours you have not
+lived yet are asleep, and the face fills with light during the run.
+
+## GROUP 2 - the thread is a cord, the marble is the jewel
+
+### The thread
+
+- **The tail used the RULES' violet.** Now it goes from cold steel to ice. A colour from the semantic
+  system is a statement.
+- **It did not rest on anything.** A single dark pass offset along the light's axis gives the shadow AND the
+  contact edge: two things with one stroke.
+- **The last third carries a hot CORE**, so the cord reads round where you are using it
+  and flat where it was laid down.
+- **Tension:** `thread[i].w` stores the hand's speed when LAYING each point down (the past). The
+  tension is the present and it comes free from the player's velocity.
+- **Closure anticipation, free.** `findSelfCross` ALREADY computed the distance from the head to each
+  old segment to decide the graze. It is asked for the minimum and its index as a by-product: zero
+  new iterations, zero changes of decision. With that, the stretch you are about to enclose lights up.
+
+**The head was going to WHITE** and it had to be tempered: the additive core was adding on top of a
+body that was already at (196,247,255). Two brightnesses added give white, and **white is the material that
+turns a cord into a laser**. Bright is not white.
 
-### La canica es la joya del mecanismo
+### The marble is the mechanism's jewel
 
-El codigo decia con todas las letras "mismo material, misma luz" que las orbes. La intencion era
-coherencia; la consecuencia era que el protagonista fuera una orbe un poco mas grande - en la
-captura de juego habia que BUSCARLO.
+The code said in so many words "the same material, the same light" as the orbs. The intention was
+coherence; the consequence was that the protagonist was a slightly bigger orb - in a
+game capture you had to LOOK FOR IT.
 
-Ahora es un **zafiro octogonal montado en un casquillo de laton**: el unico objeto movil del plato
-que lleva el material del reloj, lo que dice solo que el jugador es parte de la maquina. Y resuelve
-el anclaje del hilo, porque de un casquillo sale algo.
+Now it is an **octagonal sapphire mounted in a brass setting**: the only moving object on the face
+that carries the clock's material, which says by itself that the player is part of the machine. And it solves
+the thread's anchoring, because something comes out of a setting.
 
-**Es un OCTAGONO y no un circulo con facetas pintadas**, por la misma razon que la banda de
-progreso: en apaisado mide ~4.5 px de radio y a ese tamano las facetas no existen. Contra orbes que
-son circulos, un octagono se lee aunque mida cinco pixeles.
+**It is an OCTAGON and not a circle with painted facets**, for the same reason as the progress
+band: in landscape it measures ~4.5 px of radius and at that size the facets do not exist. Against orbs that
+are circles, an octagon reads even at five pixels.
 
-El halo bajo de 3.4 radios al 55% a 2.15 al 30%: **una joya no irradia**, un zafiro real es oscuro y
-lo que tiene son destellos duros.
+The halo went from 3.4 radii at 55% to 2.15 at 30%: **a jewel does not radiate**, a real sapphire is dark and
+what it has is hard glints.
 
-### El coste: pagar la materia con resolucion que no se usaba
+### The cost: paying for the material with resolution that was not being used
 
-`drawThread` salto de 214 a **308** comandos de path (+44%) contra un techo autoimpuesto de 15%. Dos
-correcciones:
+`drawThread` jumped from 214 to **308** path commands (+44%) against a self-imposed ceiling of 15%. Two
+corrections:
 
-1. Las pasadas nuevas van DECIMADAS (sombra en paso 3, nucleo en paso 2). **Una sombra no necesita
-   la resolucion del objeto que la proyecta.** 308 -> 255.
-2. Seguia afuera, asi que se pago con algo que sobraba: **el resplandor son cuatro trazos anchos
-   aditivos al 2-9% de alfa y se estaba trazando vertice por vertice.** Un halo difuso a esa
-   opacidad no puede mostrar facetado. Paso 2. 255 -> **224, +4.7%**.
+1. The new passes go DECIMATED (the shadow at step 3, the core at step 2). **A shadow does not need
+   the resolution of the object casting it.** 308 -> 255.
+2. It was still over, so it was paid for with something that was spare: **the glow is four wide additive
+   strokes at 2-9% alpha and it was being traced vertex by vertex.** A diffuse halo at that
+   opacity cannot show faceting. Step 2. 255 -> **224, +4.7%**.
 
-**La resolucion se gasta en la SILUETA, que es lo unico donde se nota.**
+**The resolution is spent on the SILHOUETTE, which is the only place where it shows.**
 
-OJO al medir: el peso total del escenario de `s_prof.py` varia entre 271 y 344 segun cuantas piezas
-salgan sorteadas. El numero comparable es `drawThread` con largo de hilo fijo, no el total.
+CAREFUL when measuring: the total weight of `s_prof.py`'s scenario varies between 271 and 344 depending on how many pieces
+get rolled. The comparable number is `drawThread` with a fixed thread length, not the total.
 
-### Dos bugs del grupo
+### Two bugs from the group
 
-- **`gw` ya existia en `bakeDial`.** Colision de nombre con el gradiente de desgaste: `SyntaxError`
-  y pantalla negra. Lo cazo la QA en el primer intento.
-- **El resaltado de cierre quedaba pegado.** `findSelfCross` solo corre si el jugador se movio; con
-  el jugador perfectamente quieto, `nearIdx` conservaba el valor del ultimo frame en que si se movio
-  y el tramo dorado quedaba encendido para siempre. **Tercera vez que aparece la misma familia en
-  este proyecto** (el `hitstop` que sobrevivia entre partidas, el frenesi colgado al salir al menu):
-  un valor de arrastre que solo se ESCRIBE cuando pasa algo y nunca se BORRA cuando deja de pasar.
+- **`gw` already existed in `bakeDial`.** A name collision with the wear gradient: a `SyntaxError`
+  and a black screen. The QA caught it on the first attempt.
+- **The closure highlight got stuck.** `findSelfCross` only runs if the player moved; with
+  the player perfectly still, `nearIdx` kept the value from the last frame in which they did move
+  and the golden stretch was left lit forever. **The third time the same family has turned up in
+  this project** (the `hitstop` that survived between games, the frenzy left hanging on leaving for the menu):
+  a carried-over value that is only WRITTEN when something happens and never CLEARED when it stops happening.
 
-### Patina, contenida
+### Patina, restrained
 
-Todo dentro de `bakeDial`, coste cero por frame: bandas angulares irregulares sobre el bisel (un aro
-de metal viejo tiene el brillo manchado), cuatro rayas finas de contacto, y **el fieltro gastado por
-donde barre la aguja** - lo unico que pasa siempre por el mismo lugar, hora tras hora. Semilla FIJA
-propia, nunca `rnd`: lo decorativo no toca la semilla del juego (ya rompio el modo diario una vez).
+All inside `bakeDial`, zero cost per frame: irregular angular bands over the bevel (an old metal
+hoop has its shine stained), four fine contact scratches, and **the felt worn where
+the hand sweeps** - the only thing that always passes through the same place, hour after hour. A FIXED seed
+of its own, never `rnd`: decoration does not touch the game's seed (it already broke daily mode once).
 
-## PANTALLA NEGRA (2026-09-19) - dos causas mias, una confirmada y una descartada
+## BLACK SCREEN (2026-09-19) - two causes of mine, one confirmed and one ruled out
 
-Franco: "se me trabo jugando en un momento, quedo la pantalla negra".
+Franco: "it got stuck on me while playing, the screen went black".
 
-**Congelado Y negro tiene DOS firmas posibles en este juego y conviene distinguirlas:**
+**Frozen AND black has TWO possible signatures in this game and it is worth telling them apart:**
 
-1. `ctxLost`. El bucle hace `if (ctxLost) { lastT = now; return; }` y deja de dibujar. Si el
-   navegador tira el contexto por memoria y no lo restaura, queda negro para siempre.
-2. **Una excepcion ANTES del render.** `loop()` llama a `scheduleRaf()` en su PRIMERA linea, asi
-   que el proximo frame ya esta pedido cuando algo tira. El juego sigue "vivo" tirando la misma
-   excepcion en cada frame, y el lienzo se queda congelado en lo ultimo que alcanzo a dibujar.
-   **Esta es la mas enganosa**, porque el juego no esta muerto: esta corriendo y fallando.
+1. `ctxLost`. The loop does `if (ctxLost) { lastT = now; return; }` and stops drawing. If the
+   browser throws away the context over memory and does not restore it, it stays black forever.
+2. **An exception BEFORE the render.** `loop()` calls `scheduleRaf()` on its FIRST line, so
+   the next frame has already been requested when something throws. The game carries on "alive" throwing the same
+   exception on every frame, and the canvas stays frozen on the last thing it managed to draw.
+   **This is the more deceptive one**, because the game is not dead: it is running and failing.
 
-### Causa descartada: el bake del tamano equivocado
+### The cause ruled out: the bake of the wrong size
 
-`dialLitCv` (los numerales encendidos del Grupo 1) era **un lienzo del tamano completo del plato**,
-igual que `dialCv`, para dibujar DOCE NUMEROS. En escritorio ~1600x1600x4 = 10 MB: se duplico la
-asignacion mas grande del juego para usar el 1% de sus pixeles.
+`dialLitCv` (Group 1's lit numerals) was **a canvas the full size of the face**,
+just like `dialCv`, to draw TWELVE NUMBERS. On desktop ~1600x1600x4 = 10 MB: the game's biggest
+allocation was doubled to use 1% of its pixels.
 
-**La leccion vale aunque no fuera la causa: un bake tiene que ser del tamano de lo que DIBUJA, no
-del sistema de coordenadas en el que vive.** Copiar la geometria del bake de al lado es lo comodo
-(misma escala, mismas coordenadas, se pega con los mismos numeros) y por eso cuesta verlo.
+**The lesson holds even though it was not the cause: a bake has to be the size of what it DRAWS, not
+of the coordinate system it lives in.** Copying the geometry from the bake next door is the comfortable thing
+(the same scale, the same coordinates, it pastes with the same numbers) and that is why it takes so long to see.
 
-Ahora son doce sprites chicos via `bakeSprite`: ~130 KB contra 10 MB, viven en `_bakes` (asi que
-`clearBakes()` los invalida solo, un bake menos que acordarse de poner en el handler de
-context-restored), se dibujan SOLO los encendidos, y se fue el `clip`.
+Now they are twelve small sprites through `bakeSprite`: ~130 KB against 10 MB, they live in `_bakes` (so
+`clearBakes()` invalidates them by itself, one bake fewer to remember to put in the
+context-restored handler), only the lit ones are drawn, and the `clip` has gone.
 
-**Se descarto como causa del reporte** porque en el telefono de Franco ese lienzo mide menos de
-1 MB: duplicarlo no alcanza para tirar un contexto.
+**It was ruled out as the cause of the report** because on Franco's phone that canvas measures less than
+1 MB: doubling it is not enough to throw away a context.
 
-### Causa probable: guardas de estado del audio que faltaban
+### The probable cause: missing audio state guards
 
-`droneSet` chequea `AC.state !== 'running'` antes de tocar el grafo. **Sus dos hermanos no.**
-Escribir cualquier parametro de un nodo de un AudioContext CERRADO tira `InvalidStateError`, y en
-movil el contexto se suspende o se interrumpe **solo**: una llamada, cambiar de app, la pagina al
-fondo. No es un estado hipotetico.
+`droneSet` checks `AC.state !== 'running'` before touching the graph. **Its two siblings do not.**
+Writing any parameter of a node of a CLOSED AudioContext throws `InvalidStateError`, and on
+mobile the context suspends or interrupts itself **by itself**: a call, switching app, the page in the
+background. It is not a hypothetical state.
 
-Y encaja con el sintoma exacto: `updateAmbience` llama a `droneOff()` **cada medio segundo**
-mientras no estas jugando, y corre en `loop()` ANTES del render. Firma numero 2 de arriba.
+And it fits the exact symptom: `updateAmbience` calls `droneOff()` **every half second**
+while you are not playing, and it runs in `loop()` BEFORE the render. Signature number 2 above.
 
-`acOk()` es ahora el UNICO lugar donde se decide si se puede tocar el grafo de audio.
+`acOk()` is now the ONLY place where it is decided whether the audio graph can be touched.
 
-**Regla general que sale de esto: si una funcion toca el grafo de audio, la pregunta no es "hay
-contexto" sino "el contexto esta CORRIENDO".** Y todo lo que corra antes del render puede llevarse
-puesto el frame entero.
+**The general rule that comes out of this: if a function touches the audio graph, the question is not "is there
+a context" but "is the context RUNNING".** And anything that runs before the render can take
+the whole frame with it.
 
-### El invariante que faltaba: `memoria`
+### The invariant that was missing: `memoria`
 
-La suite tenia 53 escenarios y **ninguno podia cazar esto**, porque todos miden COMPORTAMIENTO y
-el problema era de RECURSOS: nada se rompia, se acababa la memoria de lienzos.
+The suite had 53 scenarios and **none could catch this**, because they all measure BEHAVIOUR and
+the problem was one of RESOURCES: nothing broke, the canvas memory ran out.
 
-`SCENARIOS['memoria']` envuelve `document.createElement`, cuenta cada lienzo que el juego crea y
-suma su area despues de forzar un rehorneado y jugar un rato. Falla si el total pasa de 64 MB o si
-aparecen mas de dos lienzos de mas de 1 megapixel (**uno grande es el plato y esta bien; dos
-significa que alguien volvio a copiar su geometria para dibujar cuatro cosas**).
+`SCENARIOS['memoria']` wraps `document.createElement`, counts every canvas the game creates and
+adds up its area after forcing a re-bake and playing for a while. It fails if the total goes over 64 MB or if
+more than two canvases of over 1 megapixel appear (**one big one is the face and that is fine; two
+means someone has copied its geometry again to draw four things**).
 
-Medido hoy: **47 lienzos, 3.5 MB en total, el mas grande 1.5 MB, cero de mas de 1 MP.**
+Measured today: **47 canvases, 3.5 MB in total, the biggest 1.5 MB, zero over 1 MP.**
 
-Importa especialmente porque todos los juegos del Arcade viven en iframes del mismo renderer y
-comparten el techo de lienzos - ya paso una vez y esta en la memoria del proyecto.
+It matters especially because all the Arcade's games live in iframes of the same renderer and
+share the canvas ceiling - it has already happened once and it is in the project's memory.
 
-## GRUPO 3 - dos gramaticas para el cierre, dos materiales para las grillas
+## GROUP 3 - two grammars for the closure, two materials for the grids
 
-### El bucle chico y el grande eran la misma animacion pintada de otro color
+### The small loop and the big one were the same animation painted a different colour
 
-(Correccion de una nota del Grupo 2: el fantasma de los bucles no cenidos NO usaba el violeta de
-las reglas, usaba (125,249,255), que es el hielo. El color ya estaba bien.)
+(A correction to a Group 2 note: the ghost of the non-tight loops did NOT use the rules'
+violet, it used (125,249,255), which is the ice. The colour was already right.)
 
-**CENIDO = COMPRESION.** El poligono se CONTRAE hacia su centro en 0.22 s con filo duro. El
-anillo tambien se contrae (a `addRing` se le pasan los radios al reves). Las chispas nacen EN EL
-PERIMETRO y van HACIA ADENTRO: **el sentido de las particulas es la mitad de la lectura** - es lo
-que convierte "exploto algo" en "algo se cerro sobre algo". No deja marca: un golpe no deja
-huella.
+**TIGHT = COMPRESSION.** The polygon CONTRACTS towards its centre in 0.22 s with a hard edge. The
+ring contracts too (`addRing` is passed the radii the other way round). The sparks are born AT THE
+PERIMETER and go INWARDS: **the particles' direction is half the read** - it is what
+turns "I blew something up" into "something closed over something". It leaves no mark: a hit does not leave
+a trace.
 
-**GRANDE = EXPANSION.** El poligono no se mueve: se enciende ENTERO de una y se apaga en
-desvanecido, con el anillo expandiendose, y deja una **huella sobre el fieltro** que se va en
-2.6 s. Dura 0.55 s.
+**BIG = EXPANSION.** The polygon does not move: it lights up WHOLE at once and fades out,
+with the ring expanding, and it leaves a **trace on the felt** that goes in
+2.6 s. It lasts 0.55 s.
 
-(Hubo una version en que el contorno se trazaba punto por punto, en el mismo orden en que lo
-dibujo el jugador. La idea era linda - la mesa re-trazando el recorrido - pero Franco pidio
-cambiarla y tenia razon en algo de fondo: **el trazado progresivo pone el acento en el PROCESO, y
-lo que el jugador acaba de hacer ya termino.** Encender todo de golpe pone el acento en el
-RESULTADO, que es lo que corresponde a un premio. Ademas salio mas barato: reusa el mismo path del
-relleno en vez de construir un segundo recorrido.)
+(There was a version in which the outline was traced point by point, in the same order the player
+drew it. The idea was lovely - the table retracing the route - but Franco asked to
+change it and he was right about something fundamental: **progressive tracing puts the accent on the PROCESS, and
+what the player has just done is already over.** Lighting it all at once puts the accent on the
+RESULT, which is what belongs to a prize. It also came out cheaper: it reuses the fill's same path
+instead of building a second route.)
 
-Las marcas van DECIMADAS (`markPts`, con `ceil` y no `floor` - con floor el tope no se respeta) y
-con tope de 2: sin eso, cada marca es un poligono de cientos de puntos pagandose en cada frame y
-el plato se llena de graffiti.
+The marks go DECIMATED (`markPts`, with `ceil` and not `floor` - with floor the cap is not respected) and
+with a cap of 2: without that, each mark is a polygon of hundreds of points being paid for on every frame and
+the face fills with graffiti.
 
-### Hitstop: la jerarquia estaba al reves
+### Hitstop: the hierarchy was the wrong way round
 
-Cerrar un bucle - el verbo central del juego - no tenia ninguno, mientras que recibir un golpe,
-embestir y el envion del luchador si. Ahora: bucle vacio = nada; con algo adentro = un toque;
-cenido = claro; cenido con dos o mas muertes = el techo (medido: 0.069 s, exactamente
-`CFG.juice.hitstop * 1.25`). **Un bucle vacio no congela nada: si todo congela, nada pesa.**
+Closing a loop - the game's central verb - had none, while taking a hit,
+charging and the fighter's lunge did. Now: an empty loop = nothing; with something inside = a touch;
+tight = clear; tight with two or more deaths = the ceiling (measured: 0.069 s, exactly
+`CFG.juice.hitstop * 1.25`). **An empty loop freezes nothing: if everything freezes, nothing has weight.**
 
-### Dos grillas, dos materiales
+### Two grids, two materials
 
-La 9x9 tenia la linea clara AZULADA, lo que la emparentaba con el hielo - el color del jugador - y
-la hacia competir. Gris neutro y mas tenue: es estructura de fondo, no informacion.
+The 9x9 had its light line BLUISH, which made it a relative of the ice - the player's colour - and
+made it compete. Neutral grey and fainter: it is background structure, not information.
 
-El "#" del ta-te-ti estaba en cian, o sea en la familia de la LUZ. **El "#" no es luz: es una
-pieza del mecanismo.** Pasa a laton, se hornea DORMIDO, y lo enciende una capa que solo se dibuja
-mientras `game.sectorsOpen` - cero coste el resto de la hora, y comparte el clip de `drawSectors`
-para no agregar un segundo recorte contra el mismo circulo.
+The noughts-and-crosses "#" was in cyan, that is, in the LIGHT's family. **The "#" is not light: it is a
+part of the mechanism.** It becomes brass, it is baked ASLEEP, and it is lit by a layer only drawn
+while `game.sectorsOpen` - zero cost for the rest of the hour, and it shares `drawSectors`'s clip
+so as not to add a second clip against the same circle.
 
-El relleno de un sector RECLAMADO se queda en hielo a proposito: **el laton es la estructura del
-mecanismo, el hielo sos vos.** Las lineas son de la maquina; las marcas que dejas encima son
-tuyas.
+The fill of a CLAIMED sector stays in ice on purpose: **the brass is the mechanism's structure,
+the ice is you.** The lines belong to the machine; the marks you leave on top are
+yours.
 
-### El bug: el temporizador estaba en el lugar equivocado
+### The bug: the timer was in the wrong place
 
-Al morir, el fantasma y las marcas se CONGELABAN en pantalla, porque sus temporizadores vivian
-adentro de `updatePlayer`, que arranca con `if (!P.alive) return;`.
+On dying, the ghost and the marks FROZE on screen, because their timers lived
+inside `updatePlayer`, which starts with `if (!P.alive) return;`.
 
-Quinta aparicion de la familia "estado que se queda pegado" en este proyecto, pero el diagnostico
-es distinto de las otras cuatro: **el bug no fue olvidarse de limpiar, fue poner el temporizador
-en el lugar equivocado.** Un fantasma de bucle y una marca son EFECTOS: viven y mueren como las
-chispas y los anillos, y tienen que avanzar donde avanzan ellos. Se mudaron a `updateEffects`.
+The fifth appearance of the "state that gets stuck" family in this project, but the diagnosis
+is different from the other four: **the bug was not forgetting to clear, it was putting the timer
+in the wrong place.** A loop ghost and a mark are EFFECTS: they live and die like the
+sparks and the rings, and they have to advance where those advance. They moved to `updateEffects`.
 
-### Coste: el mismo error que ya se habia corregido una vez
+### Cost: the same mistake that had already been corrected once
 
-`drawChapterRing` habia quedado en **21.6 de peso, el SEGUNDO dibujo mas caro del juego**, para un
-contador de horas: nueve strokes (marcas de hora encendidas) mas nueve blits (numerales)... en el
-mismo angulo, diciendo lo mismo. Es identico al error que se corrigio en el Grupo 1 al sacar la
-banda de progreso. Se fueron las marcas: **21.6 -> 4.5**, y el anillo se lee igual.
+`drawChapterRing` had ended up at **21.6 of weight, the SECOND most expensive drawing in the game**, for an
+hour counter: nine strokes (lit hour marks) plus nine blits (numerals)... at the
+same angle, saying the same thing. It is identical to the mistake corrected in Group 1 when the
+progress band was taken out. The marks went: **21.6 -> 4.5**, and the ring reads just the same.
 
-## `bossdps` era un instrumento RUIDOSO presentado como preciso
+## `bossdps` was a NOISY instrument presented as a precise one
 
-**Correccion importante sobre lo que se reporto el 2026-09-18.** Cuando se eligio la vida del jefe
-(12000), este escenario midio 163/s con mano armada y de ahi salio el "44 s al techo". Medido
-despues, sobre builds distintos y sobre el mismo: 130, 163, 200, 200, 226, 229. **El instrumento
-oscila casi al doble.**
+**An important correction to what was reported on 2026-09-18.** When the boss's health was chosen
+(12000), this scenario measured 163/s with a built hand and that is where the "44 s at the ceiling" came from. Measured
+afterwards, over different builds and over the same one: 130, 163, 200, 200, 226, 229. **The instrument
+swings by almost double.**
 
-La causa es estructural: la medicion cuenta el dano hecho en una ventana de 9 segundos en la que
-se cierran CUATRO O CINCO bucles. Un bucle mas o menos mueve el resultado un 20-25%. **Medir algo
-que ocurre cinco veces adentro de la ventana de medicion no puede dar un numero estable.**
+The cause is structural: the measurement counts the damage done in a 9-second window in which
+FOUR OR FIVE loops are closed. One loop more or less moves the result by 20-25%. **Measuring something
+that happens five times inside the measurement window cannot give a stable number.**
 
-Y el error de metodo es peor que el numero: se saco una conclusion de UNA sola corrida, que es
-exactamente lo que el escenario decia estar corrigiendo cuando reemplazo "elegir la vida a ojo"
-por "medirla". Medir mal con confianza es peor que estimar sabiendo que se estima.
+And the error of method is worse than the number: a conclusion was drawn from ONE single run, which is
+exactly what the scenario claimed to be correcting when it replaced "choosing the health by eye"
+with "measuring it". Measuring badly with confidence is worse than estimating knowing you are estimating.
 
-Lo que el escenario **si** mide bien, porque fue consistente en todas las corridas (74, 79, 82,
+What the scenario **does** measure well, because it was consistent across every run (74, 79, 82,
 84, 92 /s):
-  - que la mejor orbita es la de radio ~0.20, apenas por afuera del jefe;
-  - que girar PEGADO cierra bucles que no lo contienen (el hallazgo geometrico original);
-  - y sirve como ALARMA: si el jefe se cae en menos de 22 s, algo se rompio.
+  - that the best orbit is the one at radius ~0.20, just outside the boss;
+  - that circling HUGGING it closes loops that do not contain it (the original geometric finding);
+  - and it works as an ALARM: if the boss falls in less than 22 s, something has broken.
 
-Lo que **no** puede resolver es el numero absoluto de segundos de pelea. La vida del jefe quedo en
-12000 y la pelea dura, para un jugador fuerte, **entre ~30 y ~55 s segun la corrida**. Afinar eso
-mejor pide jugarlo, no medirlo con esta herramienta.
+What it can **not** resolve is the absolute number of seconds of fight. The boss's health stayed at
+12000 and the fight lasts, for a strong player, **between ~30 and ~55 s depending on the run**. Tuning that
+better asks for playing it, not measuring it with this tool.
 
-Ahora reporta la MEDIANA de tres muestras con su dispersion, y el umbral de la asercion paso de
-35 s a 22 s: dejo de pretender ser un termometro y es lo que puede ser, una alarma.
+It now reports the MEDIAN of three samples with its spread, and the assertion's threshold went from
+35 s to 22 s: it stopped pretending to be a thermometer and is what it can be, an alarm.
 
-## CORRECCIONES 2026-09-19 (lote aparte del Grupo 4)
+## CORRECTIONS 2026-09-19 (a batch separate from Group 4)
 
-### El carril viaja con la pieza
+### The lane travels with the piece
 
-Franco: "si una onda de choque desplaza una pieza y despues se ejecuta su movimiento previsto, la
-pieza termina recorriendo tambien la distancia adicional desde su nueva posicion hasta el destino
+Franco: "if a shockwave displaces a piece and then its planned move is executed, the
+piece ends up also covering the extra distance from its new position to the destination
 original".
 
-**El arreglo anterior era medio arreglo.** Se habia re-anclado el ORIGEN al arrancar la embestida
-(`sxp = e.x`) dejando el destino fijo, con el argumento de que el carril dibujado promete un
-destino. Eso quita la teletransportacion pero deja lo otro: el carril se ESTIRA y la pieza recorre
-de mas.
+**The previous fix was half a fix.** The ORIGIN had been re-anchored on starting the charge
+(`sxp = e.x`) leaving the destination fixed, with the argument that the drawn lane promises a
+destination. That removes the teleport but leaves the other thing: the lane STRETCHES and the piece covers
+too much ground.
 
-Lo correcto es que **el movimiento entero se traslade**: misma direccion, MISMA DISTANCIA, otro
-punto de partida. Un empujon te corre a vos y a tu intencion con vos.
+The right thing is for **the whole movement to be translated**: the same direction, the SAME DISTANCE, a different
+starting point. A push moves you and your intention with you.
 
-Y hay UN SOLO lugar donde hacerlo. Las seis fuentes de desplazamiento - pulso del jugador,
-campanada del reloj, rafaga del frenesi, embestida del dash, orbe cargada y barril - pasan todas
-por `e.knock()`, que acumula en `kx/ky`, y eso se convierte en posicion en un unico bloque de
-`updateEnemies`. Trasladando `sxp/syp/tx/ty` ahi quedan cubiertas todas, **incluidas las que se
-agreguen despues**. Se saco el re-anclaje: con el carril viajando seria un segundo mecanismo
-haciendo el mismo trabajo, que es como nacen los bugs que nadie entiende.
+And there is ONE SINGLE place to do it. The six sources of displacement - the player's pulse,
+the clock's chime, the frenzy's burst, the dash's charge, a charged orb and a barrel - all go
+through `e.knock()`, which accumulates in `kx/ky`, and that becomes position in a single block of
+`updateEnemies`. Translating `sxp/syp/tx/ty` there covers all of them, **including any
+added later**. The re-anchoring was taken out: with the lane travelling it would be a second mechanism
+doing the same job, which is how the bugs nobody understands are born.
 
-Efecto lateral que no se habia mirado: durante `move` el lerp del carril PISA la posicion en cada
-frame, asi que un empujon en plena embestida se tiraba a la basura y pegarle a algo que embiste no
-hacia nada. Medido: el destino se corre 0.217 en vez de 0.
+A side effect that had not been looked at: during `move` the lane's lerp OVERWRITES the position on every
+frame, so a push mid-charge was thrown away and hitting something mid-charge did
+nothing. Measured: the destination shifts by 0.217 instead of 0.
 
-El destino trasladado se acota a radio 0.93. Por eso las distancias medidas dan levemente NEGATIVAS
-(-0.016 a -0.044): una pieza empujada contra el borde no puede lanzar su embestida fuera de la
-arena. **La asercion del test es asimetrica a proposito**: recorrer de mas es el bug; recorrer de
-menos solo puede venir del recorte.
+The translated destination is bounded to radius 0.93. That is why the measured distances come out slightly NEGATIVE
+(-0.016 to -0.044): a piece pushed against the edge cannot launch its charge out of the
+arena. **The test's assertion is asymmetric on purpose**: covering too much ground is the bug; covering
+too little can only come from the clipping.
 
-### Un solo control de dash y pulso
+### A single dash and pulse control
 
-Habia dos implementaciones para lo mismo: anillo dibujado en canvas (escritorio) y boton DOM
-relleno (tactil), que ademas decian el enfriamiento de forma distinta - arco que se llena contra
-opacidad. **La unica forma de que no vuelvan a divergir es que haya una sola implementacion, no
-dos que se parezcan.** El anillo se dibuja siempre; el boton DOM queda como zona tactil
-invisible (`color: transparent`, no `visibility: hidden`, porque tiene que seguir recibiendo
-toques).
+There were two implementations for the same thing: a hoop drawn on canvas (desktop) and a filled DOM
+button (touch), which also said the cooldown differently - an arc that fills against
+an opacity. **The only way for them not to diverge again is for there to be one single implementation, not
+two that resemble each other.** The hoop is always drawn; the DOM button is left as an invisible
+touch zone (`color: transparent`, not `visibility: hidden`, because it has to keep receiving
+touches).
 
-`btnRects` se cachea en `resize()`: `getBoundingClientRect` fuerza recalculo de layout y pedirlo
-por frame es el error que este proyecto ya cometio con el hover (de ahi `cvLeft/cvTop`). Si no se
-pudo leer, el dibujo cae a las posiciones de escritorio - **el control tiene que verse SIEMPRE,
-aunque sea en el lugar equivocado.**
+`btnRects` is cached in `resize()`: `getBoundingClientRect` forces a layout recalculation and asking for it
+per frame is the mistake this project already made with the hover (hence `cvLeft/cvTop`). If it
+could not be read, the drawing falls back to the desktop positions - **the control has to be visible ALWAYS,
+even if it is in the wrong place.**
 
-Dos detalles que solo aparecieron mirando la captura al tamano real:
+Two details that only appeared on looking at the capture at real size:
 
-- `cacheBtnRects` preguntaba `IS_TOUCH`, y **la pregunta correcta es si los botones estan
-  MAQUETADOS**, no que dispositivo creemos que es. Ademas en headless `IS_TOUCH` es falso y no se
-  puede forzar: con la condicion vieja era imposible fotografiar lo que ve un telefono, y **un
-  cambio visual que no se puede mirar no se puede verificar**.
-- La etiqueta de DASH quedaba CORTADA en apaisado: caia a 332 px de un lienzo de 335. Regla que
-  no necesita saber la plataforma: si abajo no entra, va arriba.
+- `cacheBtnRects` asked `IS_TOUCH`, and **the right question is whether the buttons are
+  LAID OUT**, not which device we think it is. Besides, in headless `IS_TOUCH` is false and it cannot
+  be forced: with the old condition it was impossible to photograph what a phone sees, and **a
+  visual change you cannot look at cannot be verified**.
+- The DASH label was CUT OFF in landscape: it landed at 332 px of a 335 px canvas. A rule that
+  does not need to know the platform: if it does not fit underneath, it goes above.
 
-### El cache de los botones se armaba cuando los botones estaban OCULTOS
+### The buttons' cache was built when the buttons were HIDDEN
 
-Franco, probando el build subido: "estan uno al lado del otro. no estan apilados".
+Franco, testing the uploaded build: "they're next to each other. they aren't stacked".
 
-`cacheBtnRects()` se llamaba UNICAMENTE desde `resize()`, y `resize()` corre al cargar la
-pagina... **cuando el juego esta en el MENU**, donde `#actBtns` tiene `display: none`. El rect de
-un elemento oculto viene en ceros, la guarda de tamano cero deja `btnRects = null`, y el dibujo
-cae al plan B: las posiciones de escritorio, que son **lado a lado**. Y no se recalculaba nunca
-mas, porque `resize()` solo corre si cambia el tamano de la ventana.
+`cacheBtnRects()` was called ONLY from `resize()`, and `resize()` runs when the page
+loads... **when the game is in the MENU**, where `#actBtns` has `display: none`. The rect of
+a hidden element comes back as zeros, the zero-size guard leaves `btnRects = null`, and the drawing
+falls back to plan B: the desktop positions, which are **side by side**. And it was never recomputed
+again, because `resize()` only runs if the window's size changes.
 
-O sea que entrar a jugar desde el menu sin girar el telefono - lo que hace todo el mundo - era
-exactamente el unico camino que NO pasaba por el bueno.
+That is, going in to play from the menu without turning the phone - what everybody does - was
+exactly the one route that did NOT go through the good one.
 
-**Y la verificacion lo tapo.** La captura y el escenario sacaban `noTouch` y llamaban `resize()`
-a mano, o sea que median justo el caso que en el juego real no ocurre. **Un test que prepara el
-terreno para que el codigo funcione no prueba el codigo: prueba la preparacion.** Ahora el
-escenario entra desde el menu y no toca `resize()`, y verificado al reves: contra un build con el
-arreglo revertido, falla ("rects cacheados=NO").
+**And the verification covered it up.** The capture and the scenario removed `noTouch` and called `resize()`
+by hand, that is, they measured precisely the case that does not occur in the real game. **A test that prepares the
+ground for the code to work does not test the code: it tests the preparation.** Now the
+scenario comes in from the menu and does not touch `resize()`, and verified the other way round: against a build with the
+fix reverted, it fails ("cached rects=NO").
 
-El arreglo: `ensureBtnRects()` rearma el cache cuando cambia la VISIBILIDAD, leida de las clases
-del `body` - que es lo que el CSS usa para ocultarlos, o sea la fuente de verdad. Leer clases no
-fuerza layout; el `getBoundingClientRect` de adentro si, pero corre unas pocas veces por partida.
+The fix: `ensureBtnRects()` rebuilds the cache when the VISIBILITY changes, read from the `body`'s
+classes - which is what the CSS uses to hide them, that is, the source of truth. Reading classes does not
+force layout; the `getBoundingClientRect` inside does, but it runs a few times per game.
 
-Ademas, de la misma tanda: los anillos quedaron **chicos** porque se dibujaban al 84% del boton y
-**un contorno se lee mas chico que un relleno del mismo diametro**; el boton venia dimensionado de
-cuando era un circuito relleno con el texto adentro, y ahora el texto vive afuera. Dash 84 -> 100,
-pulso 60 -> 76, anillo a 0.46 del ancho.
-Y la regla "si la etiqueta no entra abajo, va arriba" estaba pensada para un boton solo: en una
-COLUMNA, arriba de un boton hay otro boton, y la de DASH caia sobre el anillo de PULSE. Se le hace
-lugar abajo (38 px) en vez de voltearla, y el margen es ahora una asercion del escenario.
+Also, from the same batch: the hoops ended up **small** because they were drawn at 84% of the button and
+**an outline reads smaller than a fill of the same diameter**; the button had been dimensioned from
+when it was a filled circuit with the text inside, and now the text lives outside. Dash 84 -> 100,
+pulse 60 -> 76, the hoop at 0.46 of the width.
+And the "if the label does not fit underneath, it goes above" rule had been thought out for a single button: in a
+COLUMN, above a button there is another button, and DASH's landed on the PULSE hoop. Room is made
+for it underneath (38 px) instead of flipping it, and the margin is now an assertion of the scenario.
 
-### El caballo, con silueta de caballo
+### The knight, with a knight's silhouette
 
-Era un poligono de ocho puntos rectos y se leia como una esquirla. Ahora es una cabeza de perfil
-mirando a la derecha con el lenguaje de las piezas de ajedrez web: hocico largo, dos orejas con su
-valle, nuca curva, quijada, base ancha. Manda la SILUETA porque a 20 px es lo unico que sobrevive
-- la misma leccion que la banda del anillo y la canica. Como la pieza **se hornea**, las curvas son
-gratis.
+It was an eight-point straight polygon and read as a splinter. Now it is a head in profile
+facing right in the language of web chess pieces: a long muzzle, two ears with their
+valley, a curved nape, a jaw, a wide base. The SILHOUETTE is in charge because at 20 px it is the only thing that survives
+- the same lesson as the ring's band and the marble. Since the piece **is baked**, the curves are
+free.
 
-### El aviso de cierre, revertido
+### The closure warning, reverted
 
-Se fueron el resaltado ambar, el registro de `nearD2`/`nearIdx` dentro de `findSelfCross` y las dos
-limpiezas que existian unicamente para el. `findSelfCross` volvio exactamente a lo que era: ni una
-asignacion de mas en un bucle que recorre cientos de segmentos por frame. **El resto del hilo del
-Grupo 2 se queda**: materialidad, sombra de apoyo, nucleo de la cabeza, tension, paleta.
+Gone are the amber highlight, the recording of `nearD2`/`nearIdx` inside `findSelfCross` and the two
+cleanups that existed solely for it. `findSelfCross` went back to exactly what it was: not one
+extra assignment in a loop that walks hundreds of segments per frame. **The rest of Group 2's
+thread stays**: the materiality, the contact shadow, the head's core, the tension, the palette.
 
-### El test midio mal TRES veces en este lote
+### The test measured badly THREE times in this batch
 
-Vale anotarlo junto porque las tres tienen la misma forma - **el instrumento mide una ruta que el
-juego ya no usa, o una magnitud que no es la que dice medir** - y las tres reportaron bugs del
-juego que no existian:
+It is worth noting them together because all three have the same shape - **the instrument measures a route the
+game no longer uses, or a magnitude that is not the one it claims to measure** - and all three reported
+game bugs that did not exist:
 
-1. Empujaba con `e.x += dx` a mano. Eso no es el camino real (el juego empuja via `e.knock`) y,
-   con el carril viajando, es justo lo UNICO que no lo mueve.
-2. Contaba **el empujon mismo** como si fuera un salto del carril. La cota legitima de un frame
-   es el paso del carril MAS el empujon vigente, no solo el primero.
-3. Usaba el largo de carril capturado al principio, pero en dos segundos una pieza rapida termina
-   su embestida y **elige un carril nuevo**: el valor quedaba obsoleto.
+1. It pushed with `e.x += dx` by hand. That is not the real route (the game pushes through `e.knock`) and,
+   with the lane travelling, it is precisely the ONE thing that does not move it.
+2. It counted **the push itself** as if it were a jump of the lane. A frame's legitimate bound
+   is the lane's step PLUS the push in force, not just the first one.
+3. It used the lane length captured at the start, but in two seconds a fast piece finishes
+   its charge and **chooses a new lane**: the value was stale.
 
-**Regla: cuando un test empieza a fallar despues de un arreglo, la primera pregunta es si el test
-sigue midiendo lo que el juego hace ahora.**
+**The rule: when a test starts failing after a fix, the first question is whether the test
+is still measuring what the game does now.**
 
-## Un silencio sin nada del otro lado es solo un bajon de volumen
+## A silence with nothing on the other side is only a drop in volume
 
-Franco, probando: "cuando activo el frenesi es como que baja el volumen un par de segundos".
+Franco, testing: "when I activate the frenzy it's like the volume drops for a couple of seconds".
 
-Era el `audioHush(0.20, 0.10)` de `startFrenzy`, y lo que oyo es exactamente lo que pasaba. **Pero
-el problema no era la duracion: era que del otro lado no habia nada.**
+It was `startFrenzy`'s `audioHush(0.20, 0.10)`, and what he heard is exactly what was happening. **But
+the problem was not the duration: it was that there was nothing on the other side.**
 
-Antes del jefe el silencio funciona porque despues entra el rugido - el vacio existe PARA que el
-golpe suene grande, y por eso la voz del jefe esta reprogramada para entrar cuando el volumen
-vuelve. En el frenesi el silencio no precedia a nada, asi que no se lee como "paso algo" sino como
-"bajo el volumen".
+Before the boss the silence works because the roar comes in afterwards - the emptiness exists SO THAT the
+hit sounds big, and that is why the boss's voice is rescheduled to come in when the volume
+returns. In the frenzy the silence preceded nothing, so it does not read as "something happened" but as
+"the volume dropped".
 
-**Regla: el silencio es un instrumento de CONTRASTE. Sin algo del otro lado no dice nada.**
+**The rule: silence is an instrument of CONTRAST. Without something on the other side it says nothing.**
 
-Se saco el del frenesi. Lo que se queda es que el tictac se corta durante todo el frenesi: eso no
-es un bajon de volumen, es que el reloj se fue de la habitacion, y dura los 6.5 s enteros en vez
-de un instante. Se vuelve a evaluar en el Grupo 4, cuando el frenesi tenga sonido propio.
+The frenzy's was taken out. What stays is that the ticking cuts out for the whole frenzy: that is not
+a drop in volume, it is the clock having left the room, and it lasts the whole 6.5 s instead
+of an instant. It will be reconsidered in Group 4, when the frenzy has a sound of its own.
 
-## GRUPO 4 - el frenesi deja de ser un buff y pasa a ser un EVENTO DE ARENA
+## GROUP 4 - the frenzy stops being a buff and becomes an ARENA EVENT
 
-El frenesi ya duraba 6.5 s, ya paraba a las piezas, ya te daba puntos - pero todo eso pasaba
-adentro de las reglas. La arena no se enteraba. Era un buff con temporizador, no un momento.
+The frenzy already lasted 6.5 s, already stopped the pieces, already gave you points - but all that happened
+inside the rules. The arena never found out. It was a buff with a timer, not a moment.
 
-### Lo que cambio de estado, y lo que NO
+### What changed state, and what did NOT
 
-Nada de lo que DECIDE algo se toco: ni la frecuencia, ni la duracion, ni el iman, ni el puntaje,
-ni el dano. Lo que cambio es que ahora **se nota desde afuera del personaje**:
+Nothing that DECIDES anything was touched: not the frequency, not the duration, not the magnet, not the score,
+not the damage. What changed is that now **it is noticeable from outside the character**:
 
-- **el pano se tine** y el bisel se enciende, o sea que el frenesi le pasa al RELOJ, no a vos;
-- **el bisel ES el temporizador**: la luz recorre el aro y cuando se termina, se termino. No hay
-  barra nueva - la barra es el objeto que ya estaba;
-- **el hilo se vuelve oro**, que es el color del valor, porque en frenesi cada bucle vale mas;
-- **el drone sube una octava** en vez de agacharse. Una octava es la MISMA nota: el sonido se
-  pone urgente sin que el juego cambie de tonalidad, que es lo que hubiera pasado con otra nota.
+- **the cloth is tinted** and the bevel lights up, that is, the frenzy happens to the CLOCK, not to you;
+- **the bevel IS the timer**: the light travels round the hoop and when it runs out, it is over. There is no
+  new bar - the bar is the object that was already there;
+- **the thread turns gold**, which is the colour of value, because in a frenzy each loop is worth more;
+- **the drone goes up an octave** instead of ducking. An octave is the SAME note: the sound
+  becomes urgent without the game changing key, which is what would have happened with another note.
 
-`frenzyT` entra en 0.22 s y sale en 0.55 s: entra de golpe porque es un susto, sale despacio
-porque es un bajon. Se limpia en `startRun` y en `backToMenu` - un estado visual que sobrevive a
-una partida es un bug esperando.
+`frenzyT` comes in over 0.22 s and leaves over 0.55 s: it comes in abruptly because it is a fright, it leaves slowly
+because it is a comedown. It is cleared in `startRun` and in `backToMenu` - a visual state that survives
+a game is a bug waiting to happen.
 
-### Los que no son piezas tambien viven en la arena
+### The ones that are not pieces live in the arena too
 
-Franco: "los tanques y las flechas tipo TRON no cambian de color como parte del Frenzy".
+Franco: "the tanks and the TRON-style arrows don't change colour as part of the Frenzy".
 
-`drawEnemy` **ya calculaba** el color asustado y se lo pasaba a las piezas horneadas, pero a
-`drawCycle` y `drawTank` los llamaba sin el, y cada uno leia `e.T.col` por su cuenta. Todo el
-plato se volvia azul menos esos dos. No hizo falta un color nuevo: hubo que **hacerles llegar el
-que el juego ya tenia**.
+`drawEnemy` **was already computing** the frightened colour and passing it to the baked pieces, but it called
+`drawCycle` and `drawTank` without it, and each one read `e.T.col` on its own. The whole
+face turned blue except those two. No new colour was needed: what had to be done was **to get them the
+one the game already had**.
 
-Y despues faltaba la mitad: `drawCycleTrails` tenia su propio `[255,150,60]` hardcodeado, asi que
-la moto se ponia azul y dejaba una estela naranja atras. **En TRON la estela ES el enemigo** - es
-mas superficie que el cuerpo. Un rastro caliente cruzando un plato que se enfrio se leia como que
-ese enemigo no se habia enterado del frenesi.
+And then half of it was still missing: `drawCycleTrails` had its own hardcoded `[255,150,60]`, so
+the bike turned blue and left an orange trail behind it. **In TRON the trail IS the enemy** - it is
+more surface than the body. A hot trace crossing a face that had cooled read as if
+that enemy had not found out about the frenzy.
 
-**Leccion: cuando un objeto se dibuja en mas de un lugar, tintarlo en uno solo lo deja partido a
-la mitad.** Buscar TODOS los sitios que eligen su color antes de dar el cambio por hecho.
+**The lesson: when an object is drawn in more than one place, tinting it in only one leaves it split in
+half.** Look for ALL the sites that choose its colour before considering the change done.
 
-### El fantasma y el luchador no iban mas rapido: iban DOS VECES
+### The ghost and the fighter were not going faster: they were going TWICE
 
-Franco: "se mueven directamente hacia el jugador y mueren al alcanzarlo, se siente demasiado
-brusco".
+Franco: "they move straight at the player and die on reaching them, it feels too
+abrupt".
 
-Esta escrito que en frenesi las piezas dejan de amenazar y lo unico que las mueve es el iman, que
-a proposito es mas lento que su andar - "no los mueve por su cuenta, los escora hacia vos". Pero
-el fantasma y el luchador **seguian persiguiendo por las suyas Y ademas recibian el iman**: dos
-fuerzas sumadas hacia el mismo punto. Por eso llegaban encima de golpe.
+It is written down that in a frenzy the pieces stop threatening and the only thing that moves them is the magnet, which
+is deliberately slower than their walk - "it does not move them by itself, it heels them towards you". But
+the ghost and the fighter **carried on chasing of their own accord AND also took the magnet**: two
+forces added towards the same point. That is why they arrived on top of you all at once.
 
-Se les bajo la persecucion propia de x0.8 a x0.22 dentro del frenesi. El iman pasa a mandar,
-igual que con las piezas: siguen acercandose, pero **escorados**, que es la palabra que el diseno
-del iman ya usaba. Fuera del frenesi no cambia nada.
+Their own chase was lowered from x0.8 to x0.22 inside a frenzy. The magnet takes charge,
+just as with the pieces: they still come closer, but **heeled**, which is the word the magnet's
+design already used. Outside a frenzy nothing changes.
 
-**Leccion: antes de bajarle la velocidad a algo que se siente brusco, fijarse cuantas cosas lo
-estan empujando.** El sintoma "va muy rapido" y el sintoma "recibe dos empujes" se sienten igual y
-se arreglan distinto.
+**The lesson: before lowering the speed of something that feels abrupt, look at how many things are
+pushing it.** The symptom "it goes too fast" and the symptom "it takes two pushes" feel the same and
+are fixed differently.
 
-### La jerarquia: matar un peon no puede verse como matar una dama
+### The hierarchy: killing a pawn cannot look like killing a queen
 
-Cualquier muerte disparaba 38 chispas, un anillo de cinco radios y sacudon de pantalla: el nivel
-"excelente" para el evento mas rutinario del juego. Y durante el frenesi, donde caen cinco o seis
-por segundo, la pantalla se volvia ilegible justo en el momento que deberia ser el mas claro.
+Any death fired 38 sparks, a ring of five radii and a screen shake: the
+"excellent" level for the game's most routine event. And during a frenzy, where five or six fall
+per second, the screen became illegible precisely at the moment it should be clearest.
 
-El escalon no se invento: **`e.T.score` ya codifica cuanto vale cada pieza.** Tres niveles, con el
-dato que el juego ya tenia:
+The step was not invented: **`e.T.score` already encodes how much each piece is worth.** Three levels, with the
+data the game already had:
 
 | | | |
 |---|---|---|
-| rutina (< 200) | peon | sonido + 9 chispas. Sin anillo, sin sacudon |
-| buena (< 800) | torre, alfil, caballo, fantasma, tanque, moto, luchador | + anillo chico + sacudon minimo |
-| grande (>= 800) | dama, jefe | + anillo grande + sacudon + punch |
+| routine (< 200) | a pawn | a sound + 9 sparks. No ring, no shake |
+| good (< 800) | a rook, a bishop, a knight, a ghost, a tank, a bike, a fighter | + a small ring + a minimal shake |
+| big (>= 800) | a queen, the boss | + a big ring + a shake + a punch |
 
-### Ganar no puede ser la pantalla de perder en verde
+### Winning cannot be the losing screen in green
 
-Es el climax de doce horas y un jefe de 12000 de vida, y era el mismo layout con otro titulo.
-Ahora la victoria **cuenta el puntaje hacia arriba** (el numero se gana, no se informa),
-**despliega la mano en naipes de verdad** (te ganaste ese build: se muestra, no se nombra en una
-fila de tabla) y **apaga menos la arena**, porque el plato quedo con las doce horas encendidas y
-eso es parte del premio. La derrota se queda sobria, que esta bien: no todo final merece la misma
-celebracion.
+It is the climax of twelve hours and a boss with 12000 health, and it was the same layout with a different title.
+Now the victory **counts the score upwards** (the number is earned, not reported),
+**lays out the hand in real playing cards** (you earned that build: it is shown, not named in a
+table row) and **dims the arena less**, because the face was left with the twelve hours lit and
+that is part of the prize. The defeat stays sober, which is right: not every ending deserves the same
+celebration.
 
-## El indicador de "preparate" del Simon tenia la FORMA equivocada (2026-09-19)
+## The Simon's "get ready" indicator had the wrong SHAPE (2026-09-19)
 
-Franco: *"el aro cuando se esta por arrancar la secuencia no se dibuja por encima completamente
-del sector, una parte esta debajo"*.
+Franco: *"the hoop when the sequence is about to start isn't drawn completely over the
+sector, part of it is underneath"*.
 
-Tenia razon y pasaba en las tres clases de celda:
+He was right and it happened with all three classes of cell:
 
-| celda | que se veia |
+| cell | what you saw |
 |---|---|
-| centro | el aro nacia con radio 0.35 contra un medio-lado de 0.333: se salia del cuadrado por los cuatro lados desde el primer frame |
-| borde | ademas se pasaba del plato y lo cortaba el recorte |
-| esquina | se centraba en el centro GEOMETRICO del cuadrado, que esta a 0.943 del eje - practicamente sobre el canto -, asi que casi todo el aro caia fuera y quedaba un pedazo de arco suelto |
+| the centre | the hoop was born with radius 0.35 against a half-side of 0.333: it ran out of the square on all four sides from the first frame |
+| an edge | it also went past the face and was cut off by the clip |
+| a corner | it was centred on the square's GEOMETRIC centre, which is 0.943 from the axis - practically on the rim -, so almost the whole hoop fell outside and a loose piece of arc was left |
 
-**Ese ultimo es un error que este proyecto ya habia cometido y corregido una vez**: los rombos de
-sector no van en el centro geometrico de la celda por exactamente esta razon, y para eso existen
-`SECT_DX`/`SECT_DY`. El aro del Simon nunca recibio ese arreglo. Cuando una constante de
-geometria se arregla en un lugar, hay que buscar quien mas la calcula por su cuenta.
+**That last one is a mistake this project had already made and corrected once**: the sector
+diamonds do not go at the cell's geometric centre for exactly this reason, and that is what
+`SECT_DX`/`SECT_DY` exist for. The Simon's hoop never got that fix. When a geometry
+constant is fixed in one place, you have to look for who else computes it on their own.
 
-Pero mover el centro no alcanzaba, porque el problema de fondo era otro: **un circulo no entra en
-un cuadrado que ademas esta mordido por un circulo mas grande.** Cualquier radio que se vea bien
-en el centro se sale en las esquinas, y cualquiera que entre en las esquinas es invisible en el
-centro. No habia numero que arreglara esto.
+But moving the centre was not enough, because the underlying problem was a different one: **a circle does not fit in
+a square that is also bitten into by a bigger circle.** Any radius that looks good
+at the centre runs out in the corners, and any that fits in the corners is invisible at the
+centre. There was no number that would fix this.
 
-Asi que el indicador dejo de ser un aro y paso a ser **un marco cuadrado que se cierra sobre la
-celda**: la misma silueta que la cosa que senala. Nace 1.42x y aterriza EXACTO sobre el
-rectangulo que `paint` ya dibuja, asi que el final del gesto es el indicador fundiendose con su
-blanco. Y como va bajo el mismo recorte del plato, en las celdas de borde queda cortado EN EL
-MISMO LUGAR que la celda: coinciden en vez de contradecirse.
+So the indicator stopped being a hoop and became **a square frame that closes over the
+cell**: the same silhouette as the thing it points at. It is born at 1.42x and lands EXACTLY on the
+rectangle `paint` already draws, so the end of the gesture is the indicator merging with its
+target. And since it goes under the same clip as the face, in the edge cells it ends up cut IN THE
+SAME PLACE as the cell: they coincide instead of contradicting each other.
 
-El arco que ademas barria el tiempo se fue: el encogimiento YA es la cuenta regresiva. Eran dos
-codificaciones de `u3` en el mismo objeto - la misma redundancia que ya se saco dos veces (la
-banda de progreso, el tick de hora encendido).
+The arc that also swept the time has gone: the shrinking IS the countdown. They were two
+encodings of `u3` in the same object - the same redundancy that has already been taken out twice (the
+progress band, the lit hour tick).
 
-**Regla: un indicador que senala una cosa deberia tener la forma de esa cosa.** Mientras el
-indicador y su blanco tengan geometrias distintas, cualquier recorte, cualquier borde y cualquier
-cambio de tamano los va a separar.
+**The rule: an indicator that points at a thing should have the shape of that thing.** As long as the
+indicator and its target have different geometries, any clip, any edge and any
+change of size will separate them.
 
-Escenario nuevo `aro`: envuelve `strokeRect` del prototipo del contexto y comprueba, en las nueve
-celdas, que el indicador sea concentrico con su celda al empezar y aterrice exacto al terminar.
-**Contra el codigo viejo falla 9 de 9** - no habia un solo rectangulo concentrico, porque dibujaba
-un `arc`.
+A new scenario, `aro`: it wraps `strokeRect` on the context's prototype and checks, across the nine
+cells, that the indicator is concentric with its cell at the start and lands exactly at the end.
+**Against the old code it fails 9 out of 9** - there was not a single concentric rectangle, because it drew
+an `arc`.
 
-## El luchador aprende una segunda tanda: PATADAS (2026-09-19)
+## The fighter learns a second flurry: KICKS (2026-09-19)
 
-Franco: *"esta bueno el stickman pero podria tener un combo mas, por ejemplo que haga con
-patadas"*.
+Franco: *"the stickman is good but it could have one more combo, for example doing something with
+kicks"*.
 
-Tiraba siempre lo mismo - jab, jab, envion - y una tanda sola te la aprendes en dos encuentros.
-Ahora hay dos y elige cual antes de plantarse:
+It always threw the same thing - jab, jab, lunge - and a single flurry you learn in two encounters.
+Now there are two and it chooses which before planting itself:
 
-| tanda | golpes | alcance | dano total | duracion |
+| flurry | strikes | reach | total damage | duration |
 |---|---|---|---|---|
-| PUNOS | jab, jab, envion | 0.115 / 0.115 / 0.200 | 2.30 | 1.26 s |
-| PATADAS | baja, giro | 0.165 / 0.235 | 2.30 | 1.24 s |
+| FISTS | jab, jab, lunge | 0.115 / 0.115 / 0.200 | 2.30 | 1.26 s |
+| KICKS | low, spinning | 0.165 / 0.235 | 2.30 | 1.24 s |
 
-**No es una tanda mas fuerte: es la MISMA amenaza repartida distinto.** Los totales son iguales a
-proposito. Lo que cambia es la forma: menos golpes, mas lentos, que llegan mucho mas lejos. Cada
-patada sola es mas facil de esquivar - tarda mas en salir y el arco de aviso nace mas grande -
-pero retroceder ya no alcanza, que era justo el hueco que dejaban los punos.
+**It is not a stronger flurry: it is the SAME threat distributed differently.** The totals are equal on
+purpose. What changes is the shape: fewer strikes, slower, reaching much further. Each
+kick on its own is easier to dodge - it takes longer to come out and the warning arc is born bigger -
+but backing off is no longer enough, which was exactly the gap the fists left.
 
-**Como elige, y por que se puede leer.** Decide al plantarse, mirando la distancia: fuera del
-alcance del jab patea, y encima patea igual una de cada tres. Alejarte no te saca del problema,
-te cambia el problema. Y se lee sin memorizar nada porque **el arco de aviso que ya existia se
-dibuja con el alcance del golpe que viene**: cuando va a patear, nace mas grande. La informacion
-ya estaba en pantalla; ahora dice dos cosas en vez de una. Por eso la tanda se elige al
-PLANTARSE y no al pegar: si se eligiera al pegar, el aviso estaria mintiendo durante toda la
-preparacion.
+**How it chooses, and why it can be read.** It decides on planting itself, looking at the distance: outside the
+jab's reach it kicks, and on top of that it kicks anyway one time in three. Moving away does not take you out of the problem,
+it changes the problem. And it reads without memorising anything because **the warning arc that already existed is
+drawn with the reach of the strike that is coming**: when it is going to kick, it is born bigger. The information
+was already on screen; now it says two things instead of one. That is why the flurry is chosen on
+PLANTING and not on striking: if it were chosen on striking, the warning would be lying throughout the
+wind-up.
 
-En el dibujo la patada sale de la PIERNA, con la misma cuenta con la que se dibujaba el puno
-(posicion de mundo, no del muneco, asi que lo que ves es lo que golpea), y la rodilla sale sola
-de la formula que ya estaba - con la pierna recogida dobla mucho, estirada queda recta. El torso
-se inclina hacia atras mientras la pierna sale: **ese contrapeso es lo que hace que una patada
-pese en vez de parecer una pierna que se estira.** La baja va al ras y la de giro va alta.
+In the drawing the kick comes out of the LEG, with the same calculation the fist was drawn with
+(a world position, not the figure's, so what you see is what hits), and the knee comes out by itself
+from the formula that was already there - with the leg drawn in it bends a lot, stretched out it stays straight. The torso
+leans back while the leg goes out: **that counterweight is what makes a kick
+weigh something instead of looking like a leg stretching.** The low one goes along the ground and the spinning one goes high.
 
-El escenario `luchador` paso de 5 puntos a 7. El nuevo punto 7 es **el invariante del diseno
-escrito como test**: si el dano total o la duracion de las dos tandas se separan mas de un 15%,
-o si la patada deja de llegar mas lejos que el puno, salta. El punto 3 (el del envion) ahora
-FUERZA la tanda de punos: desde que hay dos, dejarlo elegir haria que ese punto midiera a veces
-otra cosa sin avisar.
+The `luchador` scenario went from 5 points to 7. The new point 7 is **the design's invariant
+written as a test**: if the total damage or the duration of the two flurries separate by more than 15%,
+or if the kick stops reaching further than the fist, it trips. Point 3 (the lunge's) now
+FORCES the fists flurry: since there are two, letting it choose would make that point sometimes measure
+something else without warning.
 
-## "No se hereda" no quiere decir "no afecta" (2026-09-19)
+## "It is not inherited" does not mean "it does not affect it" (2026-09-19)
 
-Franco: *"la barra de informacion en el celu no se desplaza"*.
+Franco: *"the information bar doesn't scroll on the phone"*.
 
-El panel ya tenia `overflow-y: auto`, `touch-action: pan-y` y `overscroll-behavior: contain`, y
-al lado un comentario mio que decia: *"`html, body` llevan `touch-action: none`... la propiedad no
-se hereda, asi que esto ya deberia poder desplazarse"*.
+The panel already had `overflow-y: auto`, `touch-action: pan-y` and `overscroll-behavior: contain`, and
+beside it a comment of mine that said: *"`html, body` carry `touch-action: none`... the property is not
+inherited, so this should already be able to scroll"*.
 
-**La frase es cierta y la conclusion es falsa.** `touch-action` no se HEREDA, pero el navegador no
-la resuelve por herencia: cuando el dedo baja, calcula el gesto permitido como la INTERSECCION del
-`touch-action` del elemento tocado con el de TODOS sus ancestros. Con `none` en el `body`, la
-interseccion es vacia para cualquier descendiente, diga lo que diga.
+**The sentence is true and the conclusion is false.** `touch-action` is not INHERITED, but the browser does not
+resolve it by inheritance: when the finger goes down, it computes the allowed gesture as the INTERSECTION of the
+touched element's `touch-action` with that of ALL its ancestors. With `none` on the `body`, the
+intersection is empty for any descendant, whatever it says.
 
-Y era peor que un panel que no andaba: **el `none` del `body` era lo unico que protegia al
-lienzo.** Como `touch-action` no se hereda, el `<canvas>` nunca tuvo el suyo - estaba viviendo de
-la prohibicion global. Sacar el `none` del `body` a secas habria arreglado el panel y roto el
-juego: arrastrar el dedo sobre el plato habria empezado a mover la pagina. (El escenario nuevo lo
-muestra: contra el CSS viejo, el lienzo reporta `touch-action: auto`.)
+And it was worse than a panel that did not work: **the `body`'s `none` was the only thing protecting the
+canvas.** Since `touch-action` is not inherited, the `<canvas>` never had its own - it was living off
+the global ban. Simply removing the `body`'s `none` would have fixed the panel and broken the
+game: dragging your finger over the face would have started moving the page. (The new scenario
+shows it: against the old CSS, the canvas reports `touch-action: auto`.)
 
-El arreglo pone cada prohibicion donde corresponde: `html, body` pasan a `manipulation` (mata el
-zoom por doble toque, deja pasar el desplazamiento), el `<canvas>` recibe su propio `none`, y
-`overscroll-behavior: none` evita que llegar al final de algo arrastre la pagina de atras - que
-importa el doble aca, porque el juego vive en un iframe del Arcade.
+The fix puts each ban where it belongs: `html, body` become `manipulation` (it kills the
+double-tap zoom, lets scrolling through), the `<canvas>` gets its own `none`, and
+`overscroll-behavior: none` stops reaching the end of something dragging the page behind it - which
+matters twice as much here, because the game lives in an iframe of the Arcade.
 
-**Reglas:**
-1. `touch-action`, `pointer-events` y `overflow` los resuelve el navegador mirando la CADENA de
-   ancestros, no el elemento solo. "No se hereda" y "no afecta" son cosas distintas.
-2. **Un comentario que explica por que algo deberia andar, al lado de algo que no anda, es una
-   hipotesis escrita como si fuera un hecho.** Si hay que justificar que algo funciona, hay que
-   probarlo, no comentarlo.
+**The rules:**
+1. `touch-action`, `pointer-events` and `overflow` are resolved by the browser looking at the CHAIN of
+   ancestors, not at the element alone. "It is not inherited" and "it does not affect it" are different things.
+2. **A comment that explains why something should work, next to something that does not work, is a
+   hypothesis written as if it were a fact.** If you have to justify that something works, you have to
+   test it, not comment it.
 
-Escenario nuevo `scroll`, que corre en 800x380 - telefono acostado, que es como juega Franco -:
-comprueba que el panel DESBORDE (si no, no habria nada que probar), que ningun ancestro declare
-`touch-action: none`, que el lienzo SI lo declare, y que el panel sea un contenedor desplazable de
-verdad. Contra el CSS viejo falla los dos primeros. `qa2.py` gano un mapa `SIZES` para que un
-escenario pueda pedir su propia ventana.
+A new scenario, `scroll`, which runs at 800x380 - a phone held sideways, which is how Franco plays -:
+it checks that the panel OVERFLOWS (otherwise there would be nothing to test), that no ancestor declares
+`touch-action: none`, that the canvas DOES declare it, and that the panel is a genuinely scrollable
+container. Against the old CSS it fails the first two. `qa2.py` gained a `SIZES` map so a
+scenario can ask for a window of its own.
 
-## Ninguna pieza se mueve fuera de su regla, ni para salir de una esquina (2026-09-19)
+## No piece moves outside its rule, not even to get out of a corner (2026-09-19)
 
-Franco: *"vi a las torres moviendose en diagonal"*.
+Franco: *"I saw rooks moving diagonally"*.
 
-`pickLane` elegia entre las direcciones de la familia pero **no comprobaba que el primer paso
-cayera en el tablero** - eso lo hacia unicamente el caballo. Cuando ninguna direccion servia, mas
-abajo entraba un plan B:
+`pickLane` chose among the family's directions but **did not check that the first step
+landed on the board** - only the knight did that. When no direction worked, further
+down a plan B came in:
 
 ```js
-e.dx = -Math.sign(e.x) || 1; e.dy = -Math.sign(e.y) || 1;   // ambos a la vez = DIAGONAL
+e.dx = -Math.sign(e.x) || 1; e.dy = -Math.sign(e.y) || 1;   // both at once = a DIAGONAL
 ```
 
-Para cualquier pieza. Una torre acorralada contra el borde rebotaba en diagonal.
+For any piece. A rook cornered against the edge bounced diagonally.
 
-Ahora se filtran las direcciones por "el primer paso cae en el tablero", y el plan B elige, entre
-**las direcciones de la pieza**, la que mas apunta al centro; el paso se ACORTA hasta entrar en el
-plato en vez de recortar x e y por separado, porque recortar los ejes tuerce la direccion.
+Now the directions are filtered by "the first step lands on the board", and plan B chooses, among
+**the piece's directions**, the one that most points at the centre; the step is SHORTENED until it fits in the
+face instead of clipping x and y separately, because clipping the axes skews the direction.
 
-**Regla: un caso de escape no es permiso para romper la regla que define al objeto.** El plan B
-existia para sacar a una pieza de una esquina, y al hacerlo la convertia en otra pieza.
+**The rule: an escape case is not permission to break the rule that defines the object.** Plan B
+existed to get a piece out of a corner, and in doing so it turned it into a different piece.
 
-Escenario nuevo `legal`: 384 elecciones en los ocho bordes y esquinas, mas 96 con la pieza
-empujada FUERA de la grilla, comprobando contra el conjunto legal de cada familia. Contra el
-codigo viejo: **48/384 ilegales, con "torre en (-0.86,-0.86) eligio (1,1)"** - el bug de Franco,
-reproducido literalmente.
+A new scenario, `legal`: 384 choices at the eight edges and corners, plus 96 with the piece
+pushed OUTSIDE the grid, checking against each family's legal set. Against the
+old code: **48/384 illegal, with "a rook at (-0.86,-0.86) chose (1,1)"** - Franco's bug,
+reproduced literally.
 
-## La torre, con perfil de torre
+## The rook, with a rook's profile
 
-La silueta vieja era un cono invertido: 0.86 de ancho arriba y 0.60 abajo. Se afinaba hacia el
-piso, o sea que estaba parada en punta, que es lo contrario de lo que transmite una torre. Franco
-la pidio "mas derechita" y paso el dibujo de referencia.
+The old silhouette was an inverted cone: 0.86 wide at the top and 0.60 at the bottom. It tapered towards the
+floor, that is, it stood on a point, which is the opposite of what a rook conveys. Franco
+asked for it "straighter" and passed on the reference drawing.
 
-El perfil nuevo es el clasico: **almenas, cuello, fuste casi recto con una cintura apenas
-insinuada, y una base ancha que la planta.** Las cuatro almenas salen de una tabla `M` en vez de
-veinte `lineTo` a mano, asi que mover una no obliga a recalcular las otras. La pieza se hornea:
-las curvas no cuestan nada en tiempo de partida.
+The new profile is the classic one: **battlements, a neck, an almost straight shaft with a waist barely
+hinted at, and a wide base that plants it.** The four battlements come from an `M` table instead of
+twenty hand-written `lineTo`s, so moving one does not force the others to be recomputed. The piece is baked:
+the curves cost nothing at play time.
 
-## El peon corona por LLEGAR, no por terminar un movimiento
+## The pawn promotes by ARRIVING, not by finishing a move
 
-Franco: *"estoy viendo peones que son desplazados al centro y no promocionan; deberian hacerlo
-siempre que lleguen al centro sea cual fuere el motivo"*.
+Franco: *"I'm seeing pawns that get displaced to the centre and don't promote; they should do it
+whenever they reach the centre whatever the reason"*.
 
-La coronacion se miraba dentro del `if (u >= 1)` de la embestida, o sea **solo al terminar su
-propio movimiento**. Un peon empujado al centro por un pulso, una campanada o un barril se
-quedaba ahi sin coronar, y su siguiente movimiento lo sacaba.
+The promotion was checked inside the charge's `if (u >= 1)`, that is, **only on finishing its
+own move**. A pawn pushed to the centre by a pulse, a chime or a barrel
+stayed there without promoting, and its next move took it away.
 
-Ahora se mira todos los frames, en `updateEnemies`, **justo despues de que el empuje se volvio
-posicion** - para que el frame en que lo empujaron ya cuente.
+Now it is checked every frame, in `updateEnemies`, **right after the push has become
+position** - so the frame in which it was pushed already counts.
 
-**Regla: si una condicion es sobre UN LUGAR, se evalua por estar ahi, no por como se llego.**
-Atarla al final de un movimiento la convierte en "premio por moverse bien", que es otra cosa.
+**The rule: if a condition is about A PLACE, it is evaluated by being there, not by how you got there.**
+Tying it to the end of a move turns it into a "prize for moving well", which is something else.
 
-Lo que sigue sin coronar es un peon que ATRAVIESA el centro a toda velocidad en un solo frame
-(un empujon enorme lo mueve 0.6 por frame y la ventana mide 0.27). Eso es correcto: paso por
-arriba, no llego. Si alguna vez hace falta, el arreglo es un chequeo barrido contra el segmento
-del frame, no agrandar la ventana.
+What still does not promote is a pawn that GOES THROUGH the centre at full speed in a single frame
+(an enormous push moves it 0.6 per frame and the window measures 0.27). That is correct: it passed
+over, it did not arrive. If it is ever needed, the fix is a swept check against the frame's
+segment, not enlarging the window.
 
-Escenario nuevo `corona`, con tres puntos: empujado **por el pulso de verdad** (el camino que
-reporto Franco - el jugador afuera, la onda lo manda al centro), puesto en el centro a mano, y
-uno lejos que NO debe coronar. Contra el codigo viejo el peon termina en r=0.081 - o sea, en el
-centro - y no corona.
+A new scenario, `corona`, with three points: pushed **by the real pulse** (the route
+Franco reported - the player outside, the wave sends it to the centre), placed at the centre by hand, and
+one far away that must NOT promote. Against the old code the pawn ends up at r=0.081 - that is, at the
+centre - and does not promote.
 
-## Modo TEST
+## TEST mode
 
-Franco pidio "un modo test que tenga vida infinita". Es un MODO y no una dificultad: no cambia
-numeros, **saca la muerte**. Por eso vive en `MODES` y no en `DIFFS`, y por eso no guarda record -
-un record sin muerte no es un record.
+Franco asked for "a test mode with infinite health". It is a MODE and not a difficulty: it does not change
+numbers, **it takes away death**. That is why it lives in `MODES` and not in `DIFFS`, and that is why it does not save a record -
+a record without death is not a record.
 
-Lo importante es lo que NO hace: **no esconde los golpes.** El impacto se ve, se oye, te sacude,
-te empuja y se sigue contando en `run.damage`. Lo unico que no pasa es que baje la vida. Un modo
-de prueba que tapa los golpes no sirve para probar nada.
+What matters is what it does NOT do: **it does not hide the hits.** The impact is seen, heard, it shakes you,
+pushes you and is still counted in `run.damage`. The only thing that does not happen is the health dropping. A test
+mode that covers up the hits is no use for testing anything.
 
-Tres candados, porque hay tres caminos a la muerte: `hurtPlayer`, `hurtPlayerRaw` (el patibulo,
-que se saltea la invulnerabilidad) y `killPlayer` (por si aparece un cuarto).
+Three locks, because there are three routes to death: `hurtPlayer`, `hurtPlayerRaw` (the gallows,
+which skips the invulnerability) and `killPlayer` (in case a fourth appears).
 
-`menuRects` paso a centrar `MODES.length` tarjetas en vez de tener el `(i - 0.5)` de dos cableado:
-con la cuenta vieja, agregar un modo descentraba la fila entera.
+`menuRects` went over to centring `MODES.length` cards instead of having the `(i - 0.5)` for two hard-wired:
+with the old calculation, adding a mode threw the whole row off-centre.
 
-Escenario nuevo `modotest`: un golpe de 9999, un `hurtPlayerRaw(9999)`, 600 frames quieto en el
-medio de la arena a la hora 9 con ocho enemigos, y `saveBest`. Comprueba las dos mitades - que no
-muera Y que el golpe siga contandose y dejando chispas.
+A new scenario, `modotest`: a hit of 9999, a `hurtPlayerRaw(9999)`, 600 frames standing still in the
+middle of the arena at hour 9 with eight enemies, and `saveBest`. It checks both halves - that it does not
+die AND that the hit is still counted and still leaves sparks.
 
-## La lista de manos, pegada a las cartas
+## The list of hands, flush with the cards
 
-Franco: *"que esten un poco mas pegados a la primera carta de la izquierda, al menos unos 50px"*.
+Franco: *"have them a bit closer to the first card on the left, at least 50px or so"*.
 
-Las filas se dibujaban **alineadas a la izquierda** dentro de una columna de ancho fijo, asi que
-cada nombre terminaba donde se le daba la gana y **el hueco hasta la primera carta lo decidia el
-largo del texto**: "PAIR" quedaba a media pantalla de la mano y "STRAIGHT FLUSH" casi tocandola.
-No era un margen mal elegido - era que no habia margen, habia sobra de texto.
+The rows were drawn **left-aligned** inside a fixed-width column, so
+each name ended wherever it liked and **the gap up to the first card was decided by the
+text's length**: "PAIR" ended up half a screen from the hand and "STRAIGHT FLUSH" almost touching it.
+It was not a badly chosen margin - it was that there was no margin, there was leftover text.
 
-Alineadas a la DERECHA, todas terminan a la misma distancia de la carta. Y la separacion baja de
-`S*0.05` a `S*0.018`. En vertical la lista va debajo y centrada, asi que ahi sigue a la izquierda.
+RIGHT-aligned, they all end the same distance from the card. And the separation drops from
+`S*0.05` to `S*0.018`. In portrait the list goes underneath and centred, so there it stays on the left.
 
-La barra de resalte de la mano activa tuvo que aprender a medir: con las filas a la derecha seguia
-midiendo la columna entera y quedaba media barra vacia a la izquierda. Se agrego `medirFit`, que
-corre **el mismo bucle de achique** que `txtFit` y devuelve el ancho. Corre el mismo bucle a
-proposito: si el ancho se calculara aparte, los dos numeros se separarian en cuanto alguien tocara
-uno, y el resultado seria una caja que no calza con su texto y nadie sabria por que.
+The active hand's highlight bar had to learn to measure: with the rows on the right it was still
+measuring the whole column and half a bar was left empty on the left. `medirFit` was added, which
+runs **the same shrink loop** as `txtFit` and returns the width. It runs the same loop on
+purpose: if the width were computed separately, the two numbers would drift apart as soon as someone touched
+one, and the result would be a box that does not fit its text and nobody would know why.
 
-## El panel de info, segunda vuelta: se desplaza A MANO
+## The info panel, second round: it scrolls BY HAND
 
-El arreglo de CSS de la vuelta anterior era correcto y necesario - el `touch-action: none` del
-`body` vaciaba la interseccion para todo lo de adentro, y el lienzo estaba viviendo de esa
-prohibicion sin tener la suya -, pero Franco probo y **seguia sin desplazarse**.
+The previous round's CSS fix was correct and necessary - the `body`'s `touch-action: none`
+emptied the intersection for everything inside, and the canvas was living off that
+ban without having its own -, but Franco tested it and **it still did not scroll**.
 
-El sospechoso es donde vive el juego: el Arcade lo mete en un iframe y, en telefono vertical, lo
-**rota 90 grados por CSS** para que se juegue apaisado sin girar el aparato. El desplazamiento
-tactil dentro de un contenedor rotado depende de como cada navegador clasifica la direccion del
-gesto, y `pan-y` se refiere al eje LOCAL del elemento.
+The suspect is where the game lives: the Arcade puts it in an iframe and, on a portrait phone,
+**rotates it 90 degrees with CSS** so it is played in landscape without turning the device.
+Touch scrolling inside a rotated container depends on how each browser classifies the gesture's
+direction, and `pan-y` refers to the element's LOCAL axis.
 
-No valia la pena seguir adivinando cual capa se lo comia: **el desplazamiento se hace a mano**,
-con eventos de puntero - lo que ya usa todo el juego - y `clientY` del documento del iframe, que
-viene por la misma transformacion que todo lo demas. Con inercia, porque un panel de texto que
-frena en seco donde levantaste el dedo se siente roto en un telefono.
+It was not worth carrying on guessing which layer was eating it: **the scrolling is done by hand**,
+with pointer events - what the whole game already uses - and the iframe document's `clientY`, which
+comes through the same transformation as everything else. With inertia, because a text panel that
+stops dead where you lifted your finger feels broken on a phone.
 
-El CSS se queda: es correcto, arregla el lienzo desprotegido, y si el gesto nativo llega alguna
-vez los dos caminos hacen lo mismo.
+The CSS stays: it is correct, it fixes the unprotected canvas, and if the native gesture ever
+arrives the two routes do the same thing.
 
-**Regla: cuando un arreglo "correcto segun la especificacion" no arregla el sintoma en el aparato
-real, el siguiente paso no es una segunda teoria - es sacar la dependencia.**
+**The rule: when a "correct according to the spec" fix does not fix the symptom on the real
+device, the next step is not a second theory - it is removing the dependency.**
 
-El escenario `scroll` gano un punto que despacha eventos de puntero de verdad y comprueba que el
-panel se haya movido, en los dos sentidos. Los puntos de CSS se quedan: cubren la otra mitad.
+The `scroll` scenario gained a point that dispatches real pointer events and checks that the
+panel moved, in both directions. The CSS points stay: they cover the other half.
 
-## El luchador solo pateaba, y por que (2026-09-19)
+## The fighter only kicked, and why (2026-09-19)
 
-**Medido antes de tocar nada**, con 40 encuentros en condiciones de juego: **0 tandas de punos, 40
-de patadas.** El repertorio nunca se perdio - los tres punos seguian ahi con su alcance, su dano y
-su tiempo -, lo que fallaba era ELEGIR.
+**Measured before touching anything**, with 40 encounters under game conditions: **0 fist flurries, 40
+kick ones.** The repertoire was never lost - the three fists were still there with their reach, their damage and
+their timing -, what was failing was CHOOSING.
 
 ```js
 e.cmb = (d > PUNOS[0].reach || rnd(0, 1) < 0.32) ? 1 : 0;
 ```
 
-La distancia al plantarse, medida, va de **0.1293 a 0.1369**. El alcance del jab es 0.115. O sea
-que `d > 0.115` es siempre verdadero, el `||` corta antes de llegar al azar, y sale patada
-siempre.
+The distance on planting, measured, runs from **0.1293 to 0.1369**. The jab's reach is 0.115. That is,
+`d > 0.115` is always true, the `||` short-circuits before reaching the random, and a kick comes out
+every time.
 
-**La causa de fondo no es el umbral: es que `d` no puede informar nada en ese punto.** El luchador
-se planta JUSTO cuando entra en `CFG.fighter.enter`, asi que la distancia en ese instante siempre
-vale casi lo mismo - la ventana mide un paso de caminata, 0.008. Yo razone "si esta fuera del
-alcance del jab, patea", describiendo una situacion que la propia regla de plantarse vuelve
-imposible.
+**The underlying cause is not the threshold: it is that `d` cannot tell you anything at that point.** The fighter
+plants itself JUST as it comes within `CFG.fighter.enter`, so the distance at that instant is always
+worth almost the same - the window measures one walking step, 0.008. I reasoned "if it is outside the
+jab's reach, kick", describing a situation the planting rule itself makes
+impossible.
 
-**Regla: una variable que el propio codigo acaba de fijar no sirve para ramificar.** Antes de
-poner un umbral, preguntarse si el numero puede variar en ese punto.
+**The rule: a variable the code itself has just set is no use for branching.** Before
+setting a threshold, ask whether the number can vary at that point.
 
-Un matiz que aparecio en los tests y que vale registrar: en una pelea SOSTENIDA - el luchador ya
-pegado al jugador, sin volver a acercarse - `d` si podia bajar de 0.115 y entonces salian punos.
-O sea que no era "nunca punos" en abstracto: era **nunca punos en la aproximacion**, que es la
-inmensa mayoria de lo que se ve. Las dos mediciones son correctas y miden cosas distintas.
+A nuance that appeared in the tests and is worth recording: in a SUSTAINED fight - the fighter already
+up against the player, without coming close again - `d` could indeed drop below 0.115 and then fists came out.
+That is, it was not "never fists" in the abstract: it was **never fists on the approach**, which is the
+vast majority of what you see. Both measurements are correct and they measure different things.
 
-**Arreglo:** ALTERNA. Despues de una tanda hay 75% de que salga la otra. A la larga da 50/50, y
-ademas se LEE: "acaba de patear" pasa a ser informacion util. Y la tanda ARRANCA sorteada en vez
-de en 0 - con `cmb: 0` fijo la primera tanda de cada luchador salia 75% patadas (medido: 30 de
-40), y como la mayoria no vive para tirar muchas, el jugador seguia viendo una mezcla torcida.
+**The fix:** it ALTERNATES. After a flurry there is a 75% chance the other one comes out. In the long run it gives 50/50, and
+it also READS: "it has just kicked" becomes useful information. And the flurry STARTS rolled instead
+of at 0 - with a fixed `cmb: 0` each fighter's first flurry was 75% kicks (measured: 30 of
+40), and since most do not live to throw many, the player still saw a skewed mix.
 
-## Las animaciones del luchador
+## The fighter's animations
 
-Franco: *"se ven toscas y poco pulidas... golpes que parecen simples desplazamientos rigidos de
-las extremidades o poses que cambian bruscamente"*. Los saltos eran reales y eran seis.
+Franco: *"they look crude and unpolished... strikes that look like simple rigid displacements of
+the limbs or poses that change abruptly"*. The jumps were real and there were six.
 
-1. **La maquina de estados saltaba y el cuerpo tambien.** `cam` (cuanto separa los pies) pasaba
-   de 1 a 0.18 en UN frame al plantarse, y la carga del envion se apagaba de golpe al empezar a
-   pegar. Ahora hay dos valores suavizados en el enemigo - `e.guard` (0 caminando, 1 plantado) y
-   `e.crouch` - y todo lo que antes miraba `e.fs` para decidir una pose lee esos numeros. La
-   transicion dura ~0.11 s en vez de un frame.
-2. **El golpe era una recta.** `lerp(-0.42, 1, t)` con `t` lineal: velocidad constante, que es
-   exactamente "una extremidad que se desplaza". Ahora la anticipacion se recoge rapido y SE
-   QUEDA cargada -el rato quieto arriba es lo que hace legible el golpe-, la salida va con quinta
-   potencia (la mitad del recorrido en el primer 13% del tiempo) y la recuperacion vuelve mas
-   lento de lo que fue. Que la vuelta no sea simetrica con la ida es la mitad de por que un golpe
-   parece pesar.
-3. **El muneco se espejaba en un frame al darse vuelta.** `face` se recalculaba cada frame desde
-   `cos(ang)`. Primero le puse histeresis, y el test de continuidad demostro que no alcanzaba: el
-   volteo seguia siendo instantaneo, 6.4 px de salto en un muneco de 15.7. Ahora `face` es un
-   NUMERO CONTINUO: al girar pasa por cero en ~0.07 s, la figura se angosta y sale del otro lado,
-   que es como gira un recorte de papel.
-4. **No habia cuerpo detras del golpe.** Ahora el hombro entra con el puno y sale con la patada
-   (contrapeso), la cadera empuja hacia el golpe, y el pie de apoyo se desliza adelante en los
-   grandes: plantarse y EMPUJAR.
-5. **El codo no se estiraba nunca**: tenia un desvio fijo, asi que un puno a fondo seguia doblado.
-   Ahora usa la misma cuenta que la rodilla - cuanto mas corto quedo el miembro, mas dobla -, y el
-   brazo se endereza al llegar. Es lo que mata la sensacion de palito articulado.
-6. **No habia seguimiento.** Durante la salida se traza un rastro tenue de la extremidad unos
-   cuadros atras. Son dos lineas y es la diferencia entre un golpe y una pose: sin rastro, a 60
-   fps el puno simplemente APARECE afuera.
+1. **The state machine jumped and so did the body.** `cam` (how far the feet separate) went
+   from 1 to 0.18 in ONE frame on planting, and the lunge's load switched off abruptly on starting to
+   strike. Now there are two smoothed values on the enemy - `e.guard` (0 walking, 1 planted) and
+   `e.crouch` - and everything that used to look at `e.fs` to decide a pose reads those numbers. The
+   transition lasts ~0.11 s instead of one frame.
+2. **The strike was a straight line.** `lerp(-0.42, 1, t)` with a linear `t`: constant speed, which is
+   exactly "a limb being displaced". Now the anticipation draws back fast and STAYS
+   loaded -the moment held up there is what makes the strike legible-, the exit goes with a fifth
+   power (half the travel in the first 13% of the time) and the recovery comes back more
+   slowly than it went. That the return is not symmetric with the going is half of why a strike
+seems to weigh something.
+3. **The figure mirrored in one frame on turning round.** `face` was recomputed every frame from
+   `cos(ang)`. First I gave it hysteresis, and the continuity test showed that was not enough: the
+   flip was still instantaneous, a 6.4 px jump in a 15.7 px figure. Now `face` is a
+   CONTINUOUS NUMBER: turning, it passes through zero in ~0.07 s, the figure narrows and comes out the other side,
+   which is how a paper cut-out turns.
+4. **There was no body behind the strike.** Now the shoulder comes in with the fist and goes out with the kick
+   (the counterweight), the hip pushes towards the strike, and the supporting foot slides forward on the
+   big ones: planting and PUSHING.
+5. **The elbow never straightened**: it had a fixed offset, so a fist at full stretch was still bent.
+   Now it uses the same calculation as the knee - the shorter the limb ended up, the more it bends -, and the
+   arm straightens on arrival. It is what kills the articulated-stick sensation.
+6. **There was no follow-through.** During the exit a faint trace of the limb is drawn a few
+   frames behind. It is two lines and it is the difference between a strike and a pose: without a trace, at 60
+   fps the fist simply APPEARS outside.
 
-Y el nudo brillante de la punta entraba de golpe en `ext > 0.45`; ahora entra por alfa desde 0.15.
+And the bright knot at the tip came in abruptly at `ext > 0.45`; now it comes in by alpha from 0.15.
 
-**Nada de mecanica cambio**: ni dano, ni alcance, ni duracion, ni cadencia, ni cuando se planta,
-ni el descanso, ni el frenesi.
+**No mechanic changed**: not the damage, not the reach, not the duration, not the rate of fire, not when it plants itself,
+not the rest, not the frenzy.
 
-### El escenario `lucha2`, y como se mide una animacion
+### The `lucha2` scenario, and how an animation is measured
 
-Tres partes. Las dos primeras son directas: **que salgan las dos tandas** (con chequeo de que
-ALTERNE, porque las proporciones podrian dar bien con rachas largas) y **que los cinco golpes
-ejecuten** - tres punos y dos patadas, cada indice tiene que haber hecho dano al menos una vez.
+Three parts. The first two are straightforward: **that both flurries come out** (with a check that it
+ALTERNATES, because the proportions could come out right with long streaks) and **that the five strikes
+execute** - three fists and two kicks, each index has to have done damage at least once.
 
-La tercera es la interesante: se envuelve `drawFighter` y se capturan **los puntos que emite**,
-frame a frame. Es lo que llega al lienzo, no una formula copiada del juego.
+The third is the interesting one: `drawFighter` is wrapped and **the points it emits** are captured,
+frame by frame. It is what reaches the canvas, not a formula copied from the game.
 
-Tres cosas me obligaron a corregir el test antes de que midiera algo:
+Three things forced me to correct the test before it measured anything:
 
-- **El rastro corre los indices.** Se dibuja antes del esqueleto y solo durante la salida del
-  golpe, asi que los primeros puntos a veces son suyos. Denuncio un salto de 37 px en un muneco
-  de 15: no era el muneco, era el test comparando la punta del rastro contra una cadera. Se
-  cuenta desde el FINAL: el esqueleto emite 14 puntos fijos, o sea que los ultimos 28 numeros son
-  siempre la misma estructura.
-- **Caminar no es saltar.** El luchador andando mueve el torso ~3 px por frame. Se le DESCUENTA
-  LA TRASLACION y se mide la pose pura.
-- **El umbral hay que medirlo, no elegirlo.** El pico del build bueno es 2.6 px sobre 15.7 (0.166)
-  y ese pico es la entrada del cuerpo en el puno, o sea la animacion haciendo lo suyo. Se fijo en
-  0.22, con 33% de margen. **Contra el build anterior el mismo test da 11.44 px y falla**, que es
-  el espejado instantaneo.
+- **The trace shifts the indices.** It is drawn before the skeleton and only during the strike's
+  exit, so the first points are sometimes its. It reported a 37 px jump in a 15 px
+  figure: it was not the figure, it was the test comparing the trace's tip against a hip. It is
+  counted from the END: the skeleton emits 14 fixed points, that is, the last 28 numbers are
+  always the same structure.
+- **Walking is not jumping.** The fighter while walking moves its torso ~3 px per frame. THE
+  TRANSLATION IS DISCOUNTED and the pure pose is measured.
+- **The threshold has to be measured, not chosen.** The good build's peak is 2.6 px out of 15.7 (0.166)
+  and that peak is the body coming in on the punch, that is, the animation doing its job. It was set at
+  0.22, with 33% of margin. **Against the previous build the same test gives 11.44 px and fails**, which is
+  the instantaneous mirroring.
 
-**Regla que ya habia aparecido y ahora tiene tercera prueba: cuando un test cambia de color, la
-primera pregunta es si el test sigue midiendo lo que el juego hace ahora.**
+**A rule that had already turned up and now has a third proof: when a test changes colour, the
+first question is whether the test is still measuring what the game does now.**
 
-### Un NaN que me metio el propio parche
+### A NaN the patch itself put in
 
-El parche inserto `guard: 0, crouch: 0, face: 1,` con un comentario `//` al final de la linea...
-y el ancla caia en MEDIO de una linea del fuente, que seguia con `gait: 0, ang: 0, bob: ...`. El
-comentario se comio el resto: `ang` quedo sin definir y la posicion del luchador se volvio NaN en
-el primer frame.
+The patch inserted `guard: 0, crouch: 0, face: 1,` with a `//` comment at the end of the line...
+and the anchor landed in the MIDDLE of a line of the source, which carried on with `gait: 0, ang: 0, bob: ...`. The
+comment ate the rest: `ang` was left undefined and the fighter's position became NaN on
+the first frame.
 
-**Regla: si el ancla de un reemplazo cae en medio de una linea, el reemplazo no puede terminar en
-un comentario de linea.** Va arriba, en su propia linea.
+**The rule: if a replacement's anchor lands in the middle of a line, the replacement cannot end in
+a line comment.** It goes above, on a line of its own.
 
-## El colchon del frenesi sonaba a telefono vibrando
+## The frenzy's bed sounded like a phone vibrating
 
-Franco: *"el sonido en el frenzy que parece como una vibracion de un celular sacalo a la mierda"*.
+Franco: *"the sound in the frenzy that's like a phone vibrating, get rid of the bloody thing"*.
 
-Mio, de la tanda anterior. El colchon son dos senos - 55 y 82.41 Hz - y en el frenesi yo los subia
-una octava: **110 y 164.8 Hz**, a volumen forzado. Un parlante de telefono no reproduce esas notas,
-las convierte en golpeteo, y ademas dos senos graves tan juntos baten entre si y producen
-modulacion de amplitud. Golpeteo mas modulacion es, literalmente, la descripcion fisica de un
-telefono vibrando.
+Mine, from the previous batch. The bed is two sines - 55 and 82.41 Hz - and in the frenzy I raised them
+an octave: **110 and 164.8 Hz**, at a forced volume. A phone's speaker does not reproduce those notes,
+it turns them into knocking, and besides, two low sines that close beat against each other and produce
+amplitude modulation. Knocking plus modulation is, literally, the physical description of a
+phone vibrating.
 
-**Regla: en un parlante chico, una nota grave no se oye grave - se oye como un defecto.** Todo lo
-que este por debajo de ~200 Hz hay que darlo por perdido o por sucio.
+**The rule: on a small speaker, a low note is not heard as low - it is heard as a defect.** Everything
+below ~200 Hz has to be written off as lost or as dirty.
 
-Se saco entero, junto con el parametro `oct` de `droneSet` y `CFG.frenzy.drone`, que no usaba
-nadie mas. **Probe dos cosas con el colchon del frenesi y las dos estuvieron mal**: agacharlo (se
-oyo como un bajon de volumen) y subirlo (zumbido). Lo que marca el frenesi por audio es que el
-TICTAC SE CORTA los 6.5 s enteros - el reloj se fue de la habitacion -, y eso no es un cambio de
-volumen, es una ausencia.
+It was taken out entirely, along with `droneSet`'s `oct` parameter and `CFG.frenzy.drone`, which nobody
+else used. **I tried two things with the frenzy's bed and both were wrong**: ducking it (it was
+heard as a drop in volume) and raising it (a hum). What marks the frenzy through audio is that the
+TICKING CUTS OUT for the whole 6.5 s - the clock has left the room -, and that is not a change of
+volume, it is an absence.
 
-## Las puntas de las flechas
+## The arrowheads
 
-Franco: *"las puntas no terminan de verse prolijas... terminaciones toscas"*. La causa era de
-construccion, no de tamano. El carril era un cuadrilatero ahusado **con su propio contorno
-cerrado**, y la punta un TRIANGULO APARTE encima:
+Franco: *"the tips don't quite look tidy... crude terminations"*. The cause was one of
+construction, not of size. The lane was a tapering quadrilateral **with its own closed
+outline**, and the tip a SEPARATE TRIANGLE on top:
 
-- el carril terminaba en un corte recto contorneado - una tapa dura justo donde deberia haber una
-  punta;
-- el triangulo arrancaba en `L - 0.45·w1` con medio ancho `1.05·w1` contra un carril de ancho
-  `w1`: apenas mas ancho, asi que se leia como un bulto y no como una punta;
-- y al ser dos figuras con alfas distintas, la costura quedaba a la vista.
+- the lane ended in a stroked straight cut - a hard cap right where there should have been a
+  tip;
+- the triangle started at `L - 0.45·w1` with a half-width of `1.05·w1` against a lane of width
+  `w1`: barely wider, so it read as a lump and not as a tip;
+- and being two figures with different alphas, the seam was visible.
 
-Ahora la flecha es **UNA sola silueta cerrada** - cuerpo ahusado, hombros, vertice y vuelta -, el
-contorno la recorre entera y la cabeza mide casi el doble del ancho del cuerpo. Uniones
-redondeadas, que a este tamano se ve mas fino que un pico.
+Now the arrow is **ONE single closed silhouette** - a tapering body, shoulders, a vertex and back -, the
+outline walks the whole thing and the head measures almost twice the body's width. Rounded
+joins, which at this size look finer than a spike.
 
-Un intento intermedio que descarte: atar el encendido de la cabeza a que el relleno del cuerpo
-LLEGARA hasta ella. Sonaba mas fino y estaba mal: en un carril largo la cabeza mide un 8% del
-largo, asi que se quedaba apagada durante el 92% del aviso - justo cuando lo unico que importa es
-hacia donde. **La cabeza dice la DIRECCION: tiene que verse desde el primer frame.** Ahora se
-enciende con el progreso general.
+An intermediate attempt I discarded: tying the head's lighting to the body's fill
+REACHING it. It sounded finer and it was wrong: in a long lane the head measures 8% of the
+length, so it stayed unlit during 92% of the warning - precisely when the only thing that matters is
+where to. **The head says the DIRECTION: it has to be visible from the first frame.** Now it
+lights with the general progress.
 
-No cambia ni el ancho, ni el largo, ni el color, ni la alfa del cuerpo.
+Neither the width, nor the length, nor the colour, nor the body's alpha changes.
 
-## El dorado de los sectores: rompia la ley de color del juego
+## The sectors' gold: it broke the game's colour law
 
-Franco: *"las lineas que dividen los sectores se vuelven doradas y no entiendo que representa"*.
+Franco: *"the lines that divide the sectors turn golden and I don't understand what it represents"*.
 
-**Que lo causaba.** `drawSectorHash` dibuja el "#" del ta-te-ti encendido, y corre unicamente
-mientras `game.sectorsOpen` - la VENTANA DE RECLAMO, que se abre pasado un tercio de cada hora y
-se cierra al cobrar una linea o al terminar la hora. El resto del tiempo el "#" esta horneado en
-el plato, apagado. O sea que el dorado SI significaba algo: "se puede reclamar sectores ahora".
+**What caused it.** `drawSectorHash` draws the noughts-and-crosses "#" lit, and it runs only
+while `game.sectorsOpen` - the CLAIM WINDOW, which opens past a third of each hour and
+closes on collecting a line or at the end of the hour. The rest of the time the "#" is baked into
+the face, unlit. That is, the gold DID mean something: "sectors can be claimed now".
 
-**Por que igual no se entendia.** El juego tiene una ley de color propia - **oro = valor** - y
-esto la rompia: el "#" se ponia dorado siempre que la ventana estaba abierta, valiera algo o no,
-mientras que los rombos de la MISMA mecanica la respetan (hielo si son un blanco normal, oro si
-completan una linea). Dos objetos de la misma mecanica hablando idiomas distintos.
+**Why it still could not be understood.** The game has a colour law of its own - **gold = value** - and
+this broke it: the "#" turned gold whenever the window was open, whether it was worth anything or not,
+while the diamonds of the SAME mechanic respect it (ice if they are a normal target, gold if
+they complete a line). Two objects from the same mechanic speaking different languages.
 
-**El dorado no era ambiguo por ser tenue: era ambiguo por mentir.** Un color con significado
-asignado que se usa fuera de su significado envenena al resto - si el oro a veces no quiere decir
-valor, deja de querer decir valor nunca.
+**The gold was not ambiguous for being faint: it was ambiguous for lying.** A colour with an assigned
+meaning used outside its meaning poisons the rest - if gold sometimes does not mean
+value, it stops meaning value at all.
 
-**Arreglo:** el "#" habla el idioma de los rombos. HIELO mientras la ventana esta abierta, ORO
-solo cuando algun sector libre completaria una linea. La informacion no se pierde - la ventana se
-sigue anunciando, y encima con el color correcto -, y el dorado pasa a ser un aviso con contenido:
-hay una linea a un paso.
+**The fix:** the "#" speaks the diamonds' language. ICE while the window is open, GOLD
+only when some free sector would complete a line. The information is not lost - the window is
+still announced, and now with the right colour -, and the gold becomes a warning with content:
+there is a line one step away.
 
-## EL CRASH DE MOVIL: el juego dibujaba dentro de un sprite (2026-09-20)
+## THE MOBILE CRASH: the game was drawing inside a sprite (2026-09-20)
 
-Franco: la palanca andaba, el menu de arriba a la derecha respondia al toque pero no hacia nada,
-y el boton de info andaba y se podia desplazar.
+Franco: the stick worked, the top-right menu responded to touch but did nothing,
+and the info button worked and could be scrolled.
 
-**Los sintomas eran el diagnostico.** Todo lo que siguio funcionando es DOM puro: la palanca, el
-panel de info y su arrastre a mano. Todo lo que "respondia pero no hacia nada" es DOM que cambia
-ESTADO DEL JUEGO y necesita que alguien vuelva a dibujar: pausa cambia `game.paused` y no se ve,
-reset vuelve al menu y no se ve. O sea, el lienzo dejo de actualizarse y el resto siguio vivo.
-No era un problema de controles.
+**The symptoms were the diagnosis.** Everything that carried on working is pure DOM: the stick, the
+info panel and its hand-rolled drag. Everything that "responded but did nothing" is DOM that changes
+GAME STATE and needs someone to draw again: pause changes `game.paused` and it is not seen,
+reset goes back to the menu and it is not seen. That is, the canvas stopped updating and the rest stayed alive.
+It was not a controls problem.
 
-### La causa
+### The cause
 
-Dos lugares PISABAN la variable global `ctx` para dibujar en un lienzo auxiliar y la devolvian al
-final - `bakeSprite` y `bakeHandStrip`:
+Two places OVERWROTE the global variable `ctx` to draw on an auxiliary canvas and restored it at the
+end - `bakeSprite` and `bakeHandStrip`:
 
 ```js
 const prev = ctx;
-ctx = cv.getContext('2d');       // sin comprobar
+ctx = cv.getContext('2d');       // without checking
 ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-dibujar(S / 2, S / 2);           // si esto tira, no hay vuelta
-ctx = prev;                      // nunca se ejecuta
+dibujar(S / 2, S / 2);           // if this throws, there is no way back
+ctx = prev;                      // it never runs
 ```
 
-Si algo fallaba en el medio, **`ctx` se quedaba apuntando al lienzo auxiliar - o a `null` - para
-siempre**. A partir de ese frame el juego seguia corriendo, simulando y respondiendo, y dibujaba
-todo dentro de un sprite de 40 px que nadie mira.
+If something failed in the middle, **`ctx` was left pointing at the auxiliary canvas - or at `null` - for
+ever**. From that frame on the game carried on running, simulating and responding, and drew
+everything inside a 40 px sprite nobody looks at.
 
-Dos maneras concretas de fallar, las dos propias del telefono:
+Two concrete ways to fail, both of them the phone's own:
 
-1. **`getContext('2d')` devuelve `null`.** iOS tiene techo de memoria de lienzos POR PESTANA y en
-   el Arcade todos los juegos viven en iframes de la misma pestana - esto ya le paso a este repo
-   con Pong. Reproducido en el test: el build viejo tira
-   `Cannot read properties of null (reading 'setTransform')` en `bakeSprite`.
-2. **`dibujar()` tira.** Y como `_bakes.set(...)` pasa DESPUES, el sprite no se cachea: se
-   reintenta el frame siguiente, y el siguiente, para siempre.
+1. **`getContext('2d')` returns `null`.** iOS has a canvas memory ceiling PER TAB and in
+   the Arcade every game lives in an iframe of the same tab - this has already happened to this repo
+   with Pong. Reproduced in the test: the old build throws
+`Cannot read properties of null (reading 'setTransform')` in `bakeSprite`.
+2. **`dibujar()` throws.** And since `_bakes.set(...)` comes AFTERWARDS, the sprite is not cached: it is
+   retried the next frame, and the next, forever.
 
-Estos bakes no corren solo al cargar: `bakeSprite` corre cuando aparece un tamano o tipo de pieza
-nuevo y `bakeHandStrip` cada vez que cambia la mano. O sea, en mitad de una partida.
+These bakes do not only run on load: `bakeSprite` runs when a new piece size or type appears
+and `bakeHandStrip` every time the hand changes. That is, in the middle of a game.
 
-### El arreglo
+### The fix
 
-`try/finally` en los dos, mas comprobacion del contexto, mas `blit` tolerando un sprite nulo, mas
-las mismas guardas en los otros tres lugares que crean lienzos auxiliares (`bakeDial`, el sprite
-de resplandor, la textura de fieltro).
+`try/finally` in both, plus a context check, plus `blit` tolerating a null sprite, plus
+the same guards in the other three places that create auxiliary canvases (`bakeDial`, the glow
+sprite, the felt texture).
 
-**Regla: un intercambio de variable global sin camino de vuelta es una bomba, no importa que la
-tire.** Si una funcion pisa estado global para trabajar, la restitucion va en `finally`, siempre.
+**The rule: a global variable swap with no way back is a bomb, whatever sets it
+off.** If a function overwrites global state to work, the restoration goes in `finally`, always.
 
-### Y que la proxima deje rastro
+### And let the next one leave a trace
 
-Aparte de la causa hay un problema de DISENO que es el que convirtio un error en una partida
-muerta: **cualquier excepcion dentro de `loop()` congelaba el lienzo para siempre y en silencio.**
-`scheduleRaf()` es la primera linea de `loop`, asi que el frame siguiente ya esta pedido cuando la
-excepcion sale: el bucle seguia vivo tirando el mismo error eternamente.
+Besides the cause there is a DESIGN problem which is what turned an error into a dead
+game: **any exception inside `loop()` froze the canvas forever and in silence.**
+`scheduleRaf()` is `loop`'s first line, so the next frame has already been requested when the
+exception leaves: the loop stayed alive throwing the same error forever.
 
-Eso no es un sintoma: es la razon por la que Franco no pudo decirme que paso. Ahora un frame que
-tira cuesta un frame, y la primera vez aparece un cartel en el DOM - lo unico que sigue vivo
-cuando el lienzo muere - con el mensaje del error.
+That is not a symptom: it is the reason Franco could not tell me what happened. Now a frame that
+throws costs a frame, and the first time a card appears in the DOM - the only thing that stays alive
+when the canvas dies - with the error's message.
 
-Escenario nuevo `ctxswap`. Contra el build anterior da tres fallas, incluida
-**"el juego quedo dibujando fuera de la pantalla"**: el crash de Franco, reproducido sin telefono.
+A new scenario, `ctxswap`. Against the previous build it gives three failures, including
+**"the game was left drawing off screen"**: Franco's crash, reproduced without a phone.
 
-## Flush decia dos cosas distintas, y una era ilegible
+## Flush said two different things, and one of them was illegible
 
-El HUD llamaba a `handDesc()` -efecto concreto segun el palo- y el inventario leia
-`HAND_BONUS[i].desc` -texto generico-. **No discrepaban por un error de transcripcion: leian
-fuentes distintas**, y una de las dos no sabia que el color depende del palo. Se unifico en
-`bonusDesc(i)`, que llaman las dos.
+The HUD called `handDesc()` -the concrete effect according to the suit- and the inventory read
+`HAND_BONUS[i].desc` -a generic text-. **They did not disagree through a transcription error: they read
+different sources**, and one of the two did not know that the flush depends on the suit. It was unified in
+`bonusDesc(i)`, which both call.
 
-Y el tamano: **medido, el efecto se dibujaba a `cw * 0.25` con `cw = S * 0.037`, o sea
-`S * 0.00925`. En el telefono acostado de Franco son 3.3 pixeles.** El piso del sistema
-tipografico del propio juego es `TS.cap = S * 0.0125`. No era letra chica: estaba por debajo de lo
-que el diseno admite.
+And the size: **measured, the effect was drawn at `cw * 0.25` with `cw = S * 0.037`, that is,
+`S * 0.00925`. On Franco's phone held sideways that is 3.3 pixels.** The floor of the game's own
+typographic system is `TS.cap = S * 0.0125`. It was not small type: it was below what
+the design admits.
 
-El arreglo tuvo dos pasos y el primero fue insuficiente. Subir el tamano base no alcanzaba porque
-**el tope real era el ANCHO**: el texto iba centrado sobre una tira pegada al borde izquierdo, asi
-que solo podia crecer hasta chocar contra el canto de la pantalla. Alineandolo a la izquierda con
-la tira puede estirarse hacia la derecha, que es donde no hay nada, hasta el borde del plato. De
-3.3 px paso a ~9.
-**Cuando un texto no entra, preguntarse si el problema es el tamano o el lugar.**
+The fix took two steps and the first was insufficient. Raising the base size was not enough because
+**the real cap was the WIDTH**: the text went centred over a strip flush with the left edge, so
+it could only grow until it hit the screen's rim. Aligning it to the left with
+the strip it can stretch to the right, which is where there is nothing, as far as the face's edge. So
+3.3 px went to ~9.
+**When a text does not fit, ask whether the problem is the size or the place.**
 
-## Los peones no coronan en frenesi
+## Pawns do not promote in a frenzy
 
-Efecto colateral del arreglo de ayer, y tenia que aparecer: desde que la coronacion se mira todos
-los frames, el IMAN del frenesi -que arrastra las piezas hacia el jugador- empezo a meter peones
-en el centro y cada uno que pasaba coronaba. La regla de la casa ya estaba escrita: **en frenesi
-no pasa NADA amenazante**, y coronar es la amenaza que crece sola.
+A side effect of yesterday's fix, and it had to turn up: since promotion is checked every
+frame, the frenzy's MAGNET -which drags the pieces towards the player- started putting pawns
+in the centre and every one that passed through promoted. The house rule was already written: **in a frenzy
+NOTHING threatening happens**, and promoting is the threat that grows by itself.
 
-## Dos tests que no median lo que decian
+## Two tests that did not measure what they said
 
-Los dos aparecieron en la suite completa y **ninguno era una regresion del juego.**
+Both appeared in the full suite and **neither was a regression of the game.**
 
-### `rngdet` comparaba la corrida de CALENTAMIENTO contra una asentada
+### `rngdet` compared the WARM-UP run against a settled one
 
-Bisecado: pasa en los cuatro commits anteriores y falla en `be01d88`. Parecia una regresion
-clarisima. Se instrumento la divergencia frame a frame: las dos corridas se separan en el
-**frame 1**. La pregunta decisiva fue correr TRES veces:
+Bisected: it passes in the four previous commits and fails in `be01d88`. It looked like a very clear
+regression. The divergence was instrumented frame by frame: the two runs separate at
+**frame 1**. The decisive question was running THREE times:
 
-    1a vs 2a: primer frame distinto = 1
-    2a vs 3a: primer frame distinto = -1   (identicas en 700 frames)
+    1st vs 2nd: first differing frame = 1
+    2nd vs 3rd: first differing frame = -1   (identical over 700 frames)
 
-**La simulacion sembrada es determinista; lo raro es la PRIMERA corrida de la pagina** - arranca
-con el primer frame despues de cargar, con su dt y sus lienzos recien horneados. Y lo decisivo:
-esto pasa IGUAL en los builds de anteayer, incluidos los que el test daba por buenos. El test
-venia comparando calentamiento contra asentada y pasaba de casualidad; los cambios de ayer hicieron
-que el juego consumiera azar en un patron algo distinto por pieza y esa diferencia de un frame
-dejo de lavarse.
+**The seeded simulation is deterministic; what is odd is the page's FIRST run** - it starts
+with the first frame after loading, with its dt and its freshly baked canvases. And the decisive part:
+this happens THE SAME in the day-before-yesterday's builds, including the ones the test passed as good. The test
+had been comparing a warm-up against a settled run and passing by coincidence; yesterday's changes made
+the game consume randomness in a slightly different pattern per piece and that one-frame difference
+stopped washing out.
 
-Se arreglo el TEST: descarta la corrida de calentamiento. Y quedo escrito lo que el modo diario
-garantiza de verdad: **la misma arena, las mismas reglas y las mismas cartas** - todo lo que
-decide la semilla -, no el mismo resultado, que depende del jugador y del ritmo de frames.
+The TEST was fixed: it discards the warm-up run. And what daily mode really guarantees was written
+down: **the same arena, the same rules and the same cards** - everything the seed
+decides -, not the same result, which depends on the player and on the frame rate.
 
-### `barriles` dejaba orbes sueltos en la prueba del jefe
+### `barriles` left loose orbs in the boss test
 
-Fallo una vez en la suite y no se reprodujo en 19 corridas aisladas. El escenario corre en modo
-LIBRE y deja **siete orbes rebotando** mientras comprueba que el barril no le pegue al jefe, que
-esta clavado en el centro. Un orbe cargado le hace dano a cualquier pieza, y 4 de dano es
-exactamente lo que hace uno.
+It failed once in the suite and did not reproduce in 19 isolated runs. The scenario runs in FREE
+mode and leaves **seven orbs bouncing** while it checks that the barrel does not hit the boss, which
+is pinned at the centre. A charged orb does damage to any piece, and 4 damage is
+exactly what one does.
 
-El test decia "el barril no le pega al jefe" y medía "nada le pega al jefe". Se le sacan los
-orbes. **Un test que a veces falla por algo que no esta probando es peor que no tenerlo: ensena a
-ignorar el rojo.**
+The test said "the barrel does not hit the boss" and measured "nothing hits the boss". The orbs are
+taken out of it. **A test that sometimes fails over something it is not testing is worse than not having it: it teaches you to
+ignore red.**
 
-## Detalles de la misma tanda
+## Details from the same batch
 
-- **El numero de vida** pasa de `txtG` (sombra en diagonal) a `txtO` (contorno negro). Sobre una
-  barra que va de verde a amarillo a rojo, una sombra desplazada no separa el texto del fondo, lo
-  emborrona. `txtO` ya existia y esta documentado como "para lo que tiene que leerse encima de
-  cualquier cosa": no hubo que inventar nada.
-- **El barrido al morir** se saco. Queda solo en la VICTORIA, donde hace de telon antes de la
-  ceremonia de puntaje. Verificado: `sweep.dur` queda en 0 al morir y en 0.52 al ganar.
-- Se unificaron los dos bucles de achique de texto (`txtFit` y `medirFit`) en `fitPx`.
+- **The health number** goes from `txtG` (a diagonal shadow) to `txtO` (a black outline). Over a
+  bar that runs from green to yellow to red, an offset shadow does not separate the text from the background, it
+  smears it. `txtO` already existed and is documented as "for whatever has to read over
+  anything at all": nothing had to be invented.
+- **The sweep on dying** was taken out. It is left only on the VICTORY, where it acts as a curtain before the
+  scoring ceremony. Verified: `sweep.dur` is left at 0 on dying and at 0.52 on winning.
+- The two text shrink loops (`txtFit` and `medirFit`) were unified in `fitPx`.
 
-### Un error mio que casi entra
+### A mistake of mine that nearly got in
 
-Escribi `S * 0.02` dentro de `drawHandStrip`, donde **`S` no esta en alcance** - vive en
-`drawHUD`. Lo cazo la revision antes de construir. El margen se expresa ahora en unidades de la
-propia tira, que es lo unico que esa funcion conoce.
+I wrote `S * 0.02` inside `drawHandStrip`, where **`S` is not in scope** - it lives in
+`drawHUD`. The review caught it before building. The margin is now expressed in units of the
+strip itself, which is the only thing that function knows.
 
-## LAS MANOS DE POKER: una sola tabla, un color explicito y la escalera real (2026-09-20)
+## THE POKER HANDS: a single table, an explicit flush and the royal flush (2026-09-20)
 
-### El problema de fondo: el efecto y su texto eran dos cosas
+### The underlying problem: the effect and its text were two things
 
-Habia una cadena de `if` que aplicaba los premios y, aparte, una tabla de strings que los
-describia. Dos listas que tenian que decir lo mismo y **nada obligaba a que lo hicieran**. Ya
-habia cobrado dos victimas: el COLOR decia una cosa en el HUD y otra en el inventario (arreglado a
-mano el dia anterior, o sea parcheando el sintoma), y la ESCALERA DE COLOR decia *"Everything
-doubled"*, que no es lo que hace - suma cinco cosas fijas, no duplica nada.
+There was a chain of `if`s that applied the prizes and, separately, a table of strings that
+described them. Two lists that had to say the same thing and **nothing forced them to**. It had
+already claimed two victims: the FLUSH said one thing in the HUD and another in the inventory (fixed by
+hand the day before, that is, patching the symptom), and the STRAIGHT FLUSH said *"Everything
+doubled"*, which is not what it does - it adds five fixed things, it doubles nothing.
 
-Ahora cada mano es **una entrada con su efecto en datos**:
+Now each hand is **an entry with its effect in data**:
 
 ```js
 { name: 'FULL HOUSE', eff: { dmg: 0.35, greed: 0.35 } }
 ```
 
-`applyHandBonus` lo aplica y `bonusSegs` lo escribe. **El texto se genera del mismo objeto que
-produce el efecto, asi que no puede mentir.** Tocar un numero cambia sola la descripcion en el HUD
-y en el inventario a la vez.
+`applyHandBonus` applies it and `bonusSegs` writes it. **The text is generated from the same object that
+produces the effect, so it cannot lie.** Touching a number changes the description in the HUD
+and in the inventory at the same time, by itself.
 
-**Regla: cuando un texto describe un comportamiento, generarlo DEL comportamiento.** Mientras
-sean dos declaraciones separadas, la unica pregunta es cuando divergen, no si.
+**The rule: when a text describes a behaviour, generate it FROM the behaviour.** As long as
+they are two separate declarations, the only question is when they diverge, not whether.
 
-### El color deja de ser un misterio
+### The flush stops being a mystery
 
-El COLOR daba un efecto distinto segun el palo. Franco pregunto dos veces que hacia - la segunda
-ya con el texto arreglado -, o sea que **el problema no era la redaccion sino el diseno**: una
-mano cuyo premio hay que ir a buscar a otro lado no se puede evaluar mientras jugas.
+The FLUSH gave a different effect according to the suit. Franco asked twice what it did - the second time
+with the text already fixed -, that is, **the problem was not the wording but the design**: a
+hand whose prize you have to go and look up somewhere else cannot be evaluated while you play.
 
-Ahora: **Damage, Score y Thread +20%.** Tres numeros, una linea, sin ir a buscar nada.
+Now: **Damage, Score and Thread +20%.** Three numbers, one line, with nothing to go and look up.
 
-Y hay una razon para que sea ANCHO y no profundo: en este juego **el palo lo decide la carta, no
-el azar** (`su: up.su`, y hay dos mejoras por palo). Un color son cinco cartas de las mismas dos
-mejoras: un build angosto por construccion. Premiarlo con mas de lo mismo lo hacia mas angosto
-todavia; darle un poco de las tres monedas principales lo ABRE.
+And there is a reason for it to be WIDE and not deep: in this game **the suit is decided by the card, not
+by chance** (`su: up.su`, and there are two upgrades per suit). A flush is five cards of the same two
+upgrades: a narrow build by construction. Rewarding it with more of the same made it narrower
+still; giving it a little of the three main currencies OPENS it up.
 
-### La escalera real
+### The royal flush
 
-`evalHand` devolvia 8 para cualquier escalera de color. Ahora distingue el 10-J-Q-K-A del mismo
-palo y devuelve 9. Su premio es **exactamente el doble de la escalera de color** - una relacion
-que se entiende de una y no hay que memorizar.
+`evalHand` returned 8 for any straight flush. Now it tells 10-J-Q-K-A of the same
+suit apart and returns 9. Its prize is **exactly double the straight flush's** - a relationship
+that is understood at once and does not have to be memorised.
 
-Cuidado con la RUEDA: A-2-3-4-5 es escalera y puede ser color, pero **no** es real. Tiene el As,
-que es justo lo que haria pasar un chequeo perezoso del tipo "termina en As"; por eso se mira el
-arranque (`rs[0] === 10 && rs[4] === 14`) y hay un caso de test para eso.
+Careful with the WHEEL: A-2-3-4-5 is a straight and can be a flush, but it is **not** royal. It has the Ace,
+which is exactly what would pass a lazy check of the "ends in an Ace" kind; that is why the
+start is checked (`rs[0] === 10 && rs[4] === 14`) and there is a test case for it.
 
-**Probabilidad, dicha a Franco para que decida:** es practicamente inalcanzable. Los rangos salen
-de `rndi(2,14)` uniforme, asi que cinco rangos que formen 10-J-Q-K-A son 120 de 371293 (0.032%), y
-encima los cinco tienen que ser del mismo palo. Esta implementada y es correcta; hacerla visible
-exigiria tocar como se sortean los rangos, o sea balance.
+**The probability, told to Franco so he can decide:** it is practically unreachable. The ranks come
+from a uniform `rndi(2,14)`, so five ranks forming 10-J-Q-K-A are 120 out of 371293 (0.032%), and
+on top of that all five have to be of the same suit. It is implemented and it is correct; making it visible
+would demand touching how the ranks are rolled, that is, balance.
 
-### La jerarquia
+### The hierarchy
 
-Sumando los porcentajes como medida cruda de cuanto da cada mano:
+Adding up the percentages as a crude measure of how much each hand gives:
 
-    PAR 0.12 - DOBLE PAR 0.30 - TRIO 0.25 - ESCALERA 0.43 - COLOR 0.60
-    FULL 0.70 - POKER 0.70+60 vida - ESCALERA DE COLOR 2.85+80 - REAL 5.70+160
+    PAIR 0.12 - TWO PAIR 0.30 - TRIPS 0.25 - STRAIGHT 0.43 - FLUSH 0.60
+    FULL 0.70 - FOUR OF A KIND 0.70+60 health - STRAIGHT FLUSH 2.85+80 - ROYAL 5.70+160
 
-Monotona salvo el escalon trio/doble par, que ya estaba asi y no se toco: el doble par reparte
-entre dos monedas y el trio concentra en dano, que es lo que los distingue.
-**Solo cambiaron dos entradas de la tabla, y las dos porque Franco las pidio.**
+Monotonic except for the trips/two-pair step, which was already like that and was not touched: two pair splits
+between two currencies and trips concentrates on damage, which is what tells them apart.
+**Only two entries of the table changed, and both because Franco asked for them.**
 
-### La lista, alineada con las cartas
+### The list, aligned with the cards
 
-El paso de la lista se calculaba de la TIPOGRAFIA (`(fsN + fsD) * 1.30`) y la altura salia del
-paso: la lista medía lo que medía, y que coincidiera con las cartas era casualidad. No coincidia,
-asi que las dos columnas no compartian ningun borde y la vista no las asociaba.
+The list's step was computed from the TYPOGRAPHY (`(fsN + fsD) * 1.30`) and the height came from the
+step: the list measured what it measured, and its coinciding with the cards was a coincidence. It did not coincide,
+so the two columns shared no edge and the eye did not associate them.
 
-Ahora **la lista ocupa exactamente el alto de los naipes** y la tipografia sale de ahi.
+Now **the list takes up exactly the height of the cards** and the typography comes from that.
 
-Y una correccion sobre mi propia primera version: repartir el alto en **partes iguales** hacia que
-las dos jugadas largas -escalera de color y real, con cinco efectos cada una- mandaran sobre el
-tamano de letra de las nueve. Medido en 1080p: la lista caia de 20.5 px a 11.8, o sea que
-"alinearla" habia empeorado justo lo que habia que mejorar. Se reparte **a prorrata**: cada fila
-pesa lo que necesita (2.18 unidades con un renglon de efecto, 3.05 con dos) y las siete cortas
-devuelven el espacio que no usan.
+And a correction to my own first version: sharing out the height in **equal parts** made
+the two long hands -straight flush and royal, with five effects each- govern the
+type size of all nine. Measured at 1080p: the list dropped from 20.5 px to 11.8, that is,
+"aligning it" had made worse precisely what had to be improved. It is shared out **pro rata**: each row
+weighs what it needs (2.18 units with one line of effect, 3.05 with two) and the seven short ones
+give back the space they do not use.
 
-**Regla: alinear un bloque con otro no puede costar la legibilidad del bloque. Si la cuenta
-obliga a elegir, la cuenta esta mal planteada.**
+**The rule: aligning one block with another cannot cost the block's legibility. If the calculation
+forces a choice, the calculation is badly framed.**
 
-Ademas: el ancho de la columna bajo de `S*0.30` a `S*0.26` porque la columna y los naipes se
-disputan el ancho y **los naipes le devuelven ALTO a la lista** (su alto ES el de la lista).
-Medido en 1080p: con 0.30 el naipe queda en 200 px y la lista en 295 de alto; con 0.26, 216 y 317.
-El texto mas largo sigue entrando sin achicarse.
+Also: the column's width dropped from `S*0.30` to `S*0.26` because the column and the cards
+compete for the width and **the cards give HEIGHT back to the list** (its height IS the list's).
+Measured at 1080p: with 0.30 the card ends up at 200 px and the list at 295 tall; with 0.26, 216 and 317.
+The longest text still fits without shrinking.
 
-Y el realce de la fila activa abraza el BLOQUE entero: con dos renglones de efecto, una barra de
-una linea dejaba media fila afuera de su propio resalte.
+And the active row's highlight hugs the whole BLOCK: with two lines of effect, a one-line
+bar left half a row outside its own highlight.
 
-### Los tests
+### The tests
 
-- `manos` recorre las NUEVE jugadas con una mano real de cada una y mide el stat **con y sin** el
-  bono para comprobar que el efecto aplicado es exactamente el de la tabla. Ese punto es el que
-  garantiza que el texto no pueda mentir.
-- `manopanel2` mide la GEOMETRIA de lo que se dibuja - envuelve `drawCard` y `txtFit` durante el
-  panel - y exige que ningun naipe se salga y que la columna no pise el primer naipe. Corrido en
+- `manos` walks the NINE hands with a real hand of each and measures the stat **with and without** the
+  bonus to check that the applied effect is exactly the table's. That point is the one that
+  guarantees the text cannot lie.
+- `manopanel2` measures the GEOMETRY of what is drawn - it wraps `drawCard` and `txtFit` during the
+  panel - and demands that no card runs out and that the column does not overlap the first card. Run at
   1600x900, 900x420 y 520x900.
-- Los casos de `evalHand` se actualizaron: 10-J-Q-K-A del mismo palo ya no es 8 sino 9, y se
-  agrego la rueda de color (que tiene que seguir siendo 8).
+- `evalHand`'s cases were updated: 10-J-Q-K-A of the same suit is no longer 8 but 9, and the
+  flush wheel was added (which has to stay 8).
 
-**Gotcha del harness, para no volver a perder tiempo:** `--headless=new` fuerza un ancho minimo de
-ventana de 500 px. Pedir 420 da una captura de 420 px de ancho pero la pagina se dispone para 500,
-asi que la imagen parece recortada y no lo esta. Un telefono vertical de 390 no se puede
-reproducir con este harness; el reparto en vertical es proporcional al ancho (los naipes ocupan
-siempre el 86%), asi que lo que entra a 500 entra a 390.
+**A harness gotcha, so as not to lose time again:** `--headless=new` forces a minimum window
+width of 500 px. Asking for 420 gives a capture 420 px wide but the page lays out for 500,
+so the image looks cropped and it is not. A 390-wide portrait phone cannot be
+reproduced with this harness; the portrait layout is proportional to the width (the cards always take up
+86%), so what fits at 500 fits at 390.
 
-## Lo que sigue en hold (2026-09-18)
+## What is still on hold (2026-09-18)
 
-Franco descarto las propuestas para **CrazyTanks** (la aguja como rival en una carrera; los
-portales del borde) y **Hangman** (la cuenta regresiva dibujada e irreversible). Quedan sin
-representacion mecanica y **no hay que implementar nada para esos dos hasta que el lo pida**. El
-analisis de por que Hangman no encaja sigue valiendo: su mecanica ES un cuestionario, y un
-cuestionario en un juego de reflejos siempre se va a sentir como lo que se sintio.
+Franco ruled out the proposals for **CrazyTanks** (the hand as a rival in a race; the
+edge portals) and **Hangman** (the drawn, irreversible countdown). They are left without
+mechanical representation and **nothing is to be implemented for those two until he asks**. The
+analysis of why Hangman does not fit still holds: its mechanic IS a quiz, and a
+quiz in a reflex game is always going to feel like what it felt like.
 
-Ver [../CLAUDE.md](../CLAUDE.md) para las convenciones compartidas de los ports web.
+See [../CLAUDE.md](../CLAUDE.md) for the web ports' shared conventions.

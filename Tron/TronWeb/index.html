@@ -19,8 +19,8 @@
     user-select: none; -webkit-user-select: none;
     font-family: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
   }
-  /* El canvas ocupa sólo el área SOBRE la barra; ahí vive la pista (la grilla de colisiones se
-     dimensiona a este rect). Tamaños seteados explícito desde JS en cada resize. */
+  /* The canvas takes only the area ABOVE the bar; the track lives there (the collision grid is
+     sized to this rect). Sizes are set explicitly from JS on each resize. */
   #c {
     display: block; position: absolute;
     top: 0; left: 0;
@@ -37,7 +37,7 @@
     box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
-  /* Barra inferior: gira al jugador humano (◄ ►) y ▶ arranca / reinicia. Mismo shell que BallsWeb. */
+  /* Bottom bar: it turns the human player (◄ ►) and ▶ starts / restarts. Same shell as BallsWeb. */
   #bar {
     position: absolute; left: 0; right: 0; bottom: 0;
     height: calc(var(--bar-height) + env(safe-area-inset-bottom));
@@ -61,9 +61,9 @@
   #ui button:active { background: rgba(255,255,255,0.22); transform: scale(0.92); }
   #ui button svg { display: block; width: 24px; height: 24px; pointer-events: none; }
 
-  /* Reset (⟳): dentro de #ui, hereda el mismo estilo que las flechas. */
-  /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
-  /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
+  /* Reset (⟳): inside #ui, it inherits the same style as the arrows. */
+  /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css. */
+  /* FPS HUD — Pong format: a monospaced panel at the top left, no border-radius. */
   #fpsOverlay {
     position: absolute;
     left: calc(8px + env(safe-area-inset-left));
@@ -79,9 +79,9 @@
     z-index: 9;
   }
 
-  /* Mute (🔊/🔇): arcade-shell.css estila #btnInfo/#btnFs/#btnExit POR ID, así que un botón nuevo
-     nace SIN estilo y hay que clonarles la regla. Va fuera de #ui a propósito: ahí heredaría los
-     48 px de `#ui button` y rompería el ritmo de la barra. */
+  /* Mute (🔊/🔇): arcade-shell.css styles #btnInfo/#btnFs/#btnExit BY ID, so a new button is born
+     WITH NO style and their rule has to be cloned. It sits outside #ui on purpose: there it would
+     inherit `#ui button`'s 48 px and break the bar's rhythm. */
   #btnMute {
     width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto; align-self: flex-end; margin-bottom: 6px;
     border: 1px solid rgba(255,255,255,0.16);
@@ -213,7 +213,7 @@
   //
   //  Consecuencias concretas:
   //   · the 90° turn sounds like a filter snap whose DIRECTION tells you which way you turned;
-  //     (izquierda barre hacia abajo, derecha hacia arriba);
+  //     (left sweeps downwards, right upwards);
   //   · the engine gets higher and more open the less free space you have ahead;
   //   · white noise appears ONCE in the whole vocabulary — the derezz — because that is the
   //     only moment the game destroys something and the body breaks up into pixels;
@@ -620,7 +620,7 @@
 
   // ════════════════ PLAYER (a port of the Player class) ════════════════
   // directions[dir] = [vx, vy,  dx2,dy2,  scoutDx,scoutDy]
-  //   [0,1] = velocidad (px/s, ×deltaT)         [2,3] = look-ahead inmediato (2 px) → muerte / IA
+  // [0,1] = speed (px/s, ×deltaT)         [2,3] = the immediate look-ahead (2 px) → death / the AI
   //   [4,5] = the scout the AI randomises (5..50 px) every 2 s
   // NOTE: the original used an asymmetric look-ahead (right/down at 1 px, up/left at 2 px),
   // an adjustment to pygame's radius-1 circle. Here the trail is 3×3 (±1 px), so a look-ahead of
@@ -628,10 +628,10 @@
   // 2 px (> half the trail's width) so it never reads itself.
   function dirTemplate() {
     return {
-      0: [0,-150, 0,-2, 0,0],   // arriba
-      1: [150,0, 2,0, 0,0],     // derecha
-      2: [0,150, 0,2, 0,0],     // abajo
-      3: [-150,0, -2,0, 0,0],   // izquierda
+      0: [0,-150, 0,-2, 0,0],   // up
+      1: [150,0, 2,0, 0,0],     // right
+      2: [0,150, 0,2, 0,0],     // down
+      3: [-150,0, -2,0, 0,0],   // left
     };
   }
 
@@ -757,7 +757,7 @@
       for (let k = 1; k < this.head.length; k++) {
         const a = this.head[k - 1], b = this.head[k];
         if (Math.hypot(b.x - a.x, b.y - a.y) > far) continue;                     // do not cross a wrap
-        const t = 1 - b.age / HEAD_FADE;                                          // 1 = cabeza, 0 = cola (= color base)
+        const t = 1 - b.age / HEAD_FADE;                                          // 1 = head, 0 = tail (= the base colour)
         ctx.strokeStyle = rgb(hot(this.colorArr, t));
         ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke();
       }
@@ -800,7 +800,7 @@
     gh.roundScored = false;
     sfx.roundStart(n);                                                            // entry to the Grid: one engine per cycle, staggered
   }
-  function startGame() {                                                           // set nuevo (resetea marcador)
+  function startGame() {                                                           // a new set (it resets the scoreboard)
     const bo = BEST_OF[gh.bestOfIdx];
     gh.targetWins = Math.ceil(bo / 2);
     gh.youWins = 0; gh.cpuWins = 0;
@@ -1005,7 +1005,7 @@
     const youCol = PLAYER_COLORS[0], youW = gh.lastWinner === 'you';
     if (gh.targetWins > 1) drawScoreboard(0.28, 1.05);
     if (setOver()) {
-      createText(90, youW ? 'YOU WIN!' : 'CPU GANA', youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 22, 'rgba(0,0,0,0.55)');
+      createText(90, youW ? 'YOU WIN!' : 'CPU WINS', youW ? rgb(youCol) : rgb(CPU_COLOR), 0.5, 0.47, 22, 'rgba(0,0,0,0.55)');
       createText(36, 'tap or press Enter for a rematch', 'rgb(220,220,220)', 0.5, 0.6, 0, 'rgba(0,0,0,0.55)');
     } else {
       const msg = youW ? 'Round to you!' : ('Round to ' + (gh.lastWinnerName || 'CPU'));
@@ -1203,7 +1203,7 @@ one, and so do the trails. A round is a leg; the <b>set</b> is the real result.
 <h5>Mobile</h5>
 <ul>
   <li><b>Tap the left or right half of the screen</b> to turn that way.</li>
-  <li><b>Turn left</b> and <b>Turn right</b> in the bar do the same.</li>
+  <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></span> <b>Turn left</b> and <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></span> <b>Turn right</b> in the bar do the same.</li>
   <li>Tap a menu row to change its value, then <b>PLAY</b>.</li>
 </ul>
 </div>
@@ -1250,7 +1250,7 @@ one, and so do the trails. A round is a leg; the <b>set</b> is the real result.
         var izq = Math.max(m, Math.min(Math.round(rb.left), vw - ancho - m));
         panel.style.right = 'auto'; panel.style.left = izq + 'px';
       }
-      if ((rb.top + rb.height / 2) < vh / 2) {          // boton arriba -> panel colgando debajo
+      if ((rb.top + rb.height / 2) < vh / 2) {          // button at the top -> panel hanging below
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';

@@ -721,7 +721,7 @@ class Game(Sprite):
         gap = yper(0.018)
         return [
             ('pvp', pygame.Rect(int(cx - bw/2), int(by + 0*(bh+gap)), int(bw), int(bh)),
-             '2 Jugadores'),
+             '2 Players'),
             ('w', pygame.Rect(int(cx - bw/2), int(by + 1*(bh+gap)), int(bw), int(bh)),
              'Play as White  (vs AI)'),
             ('b', pygame.Rect(int(cx - bw/2), int(by + 2*(bh+gap)), int(bw), int(bh)),
@@ -1008,7 +1008,7 @@ class Game(Sprite):
             self.draw_play()
 
     def draw_menu(self):
-        createText(int(sper(0.06)), 'AJEDREZ', 'center',
+        createText(int(sper(0.06)), 'CHESS', 'center',
                    (240, 240, 240), screenX/2, yper(0.16))
         createText(int(sper(0.020)), 'Choose how to play', 'center',
                    (180, 180, 180), screenX/2, yper(0.26))
@@ -1029,7 +1029,7 @@ class Game(Sprite):
             engine_color = (200, 160, 100)
         createText(int(sper(0.014)), engine_line,
                    'center', engine_color, screenX/2, yper(0.90))
-        createText(int(sper(0.014)), 'ESC = salir',
+        createText(int(sper(0.014)), 'ESC = quit',
                    'center', (160, 160, 160), screenX/2, yper(0.94))
 
     def draw_captured(self, view_captured):
@@ -1270,7 +1270,7 @@ class Game(Sprite):
                        (200, 160, 100), xper(0.02), yper(0.02))
 
         createText(int(sper(0.013)),
-                   'Arrastrá o clic-clic  ·  ←→ historial  ·  HOME/END = inicio/final  ·  R = reiniciar  ·  N = menú  ·  ESC = salir',
+                   'Drag or click-click  ·  ←→ history  ·  HOME/END = start/end  ·  R = restart  ·  N = menu  ·  ESC = quit',
                    'center', (180, 180, 180), screenX/2, yper(0.985))
 
 
@@ -1327,7 +1327,7 @@ def addSprite(sprite):
 
 
 # ====================================================================
-# SOUND (sintetizado on init, sin assets)
+# SOUND (synthesised on init, no assets)
 # ====================================================================
 
 def _make_buffer(samples_mono, volume):

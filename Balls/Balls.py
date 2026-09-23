@@ -931,7 +931,7 @@ def buildWalls():
         segs = topbot
     elif WALL_MODE == 3:                                                            # sin techo/piso: laterales, wrap vertical
         segs = sides
-    # MODE 4: sin paredes, wrap en ambos ejes — segs queda vacío.
+    # MODE 4: no walls, wrap on both axes — segs stays empty.
     for (a, b) in segs:
         seg = pymunk.Segment(space.static_body, a, b, t)
         seg.elasticity = BALL_WALL_RESTITUTION                                     # fallback only — pre_solve callback overrides this on every contact

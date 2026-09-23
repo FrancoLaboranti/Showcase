@@ -34,7 +34,7 @@
     box-shadow: 0 6px 24px rgba(0,0,0,0.35);
   }
 
-  /* Cronómetro de la partida — arriba-izquierda, discreto. Arranca con la 1ª jugada, frena al terminar. */
+  /* Round stopwatch — top left, discreet. It starts on the 1st move and stops on finishing. */
   #timer {
     position: absolute;
     left: calc(12px + env(safe-area-inset-left)); top: calc(9px + env(safe-area-inset-top));
@@ -72,7 +72,7 @@
   #ui button svg { display: block; width: 22px; height: 22px; pointer-events: none; }
   #ui #btnDiff { position: relative; font-weight: 700; font-size: 13px; letter-spacing: -1px; overflow: visible; }
   #ui #btnDiff #diffKey { color: #ffd23f; }                                       /* estrellas doradas */
-  /* multiplicador: medallón dorado "estampado" sobresaliendo de la esquina sup-der */
+  /* multiplier: a golden medallion "stamped" over the top-right corner */
   #ui #btnDiff #diffMult {
     position: absolute; top: -5px; right: -5px;
     min-width: 19px; height: 19px; padding: 0 4px;
@@ -92,7 +92,7 @@
   #ui #btnSound.on { background: rgba(120,200,255,0.26); border-color: rgba(120,200,255,0.55); }
   #ui #btnMode.on  { background: rgba(255,200,50,0.28); border-color: rgba(255,200,50,0.6); color: #ffd23f; }
 
-  /* Mine counter — overlay anclado al marco del tablero (posición la fija placeHud() en JS). */
+  /* Mine counter — an overlay anchored to the board's frame (placeHud() sets the position in JS). */
   #status {
     position: absolute;
     display: flex; align-items: center; gap: 5px;
@@ -101,8 +101,8 @@
     pointer-events: none; z-index: 2;
   }
   #status svg { width: 14px; height: 14px; }
-  /* Botones ✕/⛶/ⓘ + overlay de salida vienen de arcade-shell.css. */
-  /* HUD de FPS — formato Pong: panel monoespaciado arriba a la izquierda, sin border-radius. */
+  /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css. */
+  /* FPS HUD — Pong format: a monospaced panel at the top left, no border-radius. */
   #fpsOverlay {
     position: absolute;
     left: calc(8px + env(safe-area-inset-left));
@@ -187,10 +187,10 @@
   // === DIFFICULTIES (fewer mines than the original .py's 40) ===
   const DIFFS = [
     { name: 'Easy',   key: 'F', cols: 9,  rows: 9,  mines: 10, secs: 40,  gold: 10, mult: 1 },  // secs = gold limit · gold = nuggets · mult = points per nugget
-    { name: 'Medio',   key: 'M', cols: 13, rows: 13, mines: 25, secs: 70,  gold: 20, mult: 2 },
+    { name: 'Medium', key: 'M', cols: 13, rows: 13, mines: 25, secs: 70,  gold: 20, mult: 2 },
     { name: 'Hard', key: 'D', cols: 16, rows: 16, mines: 50, secs: 110, gold: 30, mult: 3 },
   ];
-  let diffIndex = 1;                                                              // arranca en Medio
+  let diffIndex = 1;                                                              // starts on Medium
   let GRID_WIDTH = DIFFS[diffIndex].cols, GRID_HEIGHT = DIFFS[diffIndex].rows, MINES_COUNT = DIFFS[diffIndex].mines;
 
   // === PALETTE (a modern "minefield" look, contrast raised) ===
@@ -225,7 +225,7 @@
     const gap = 8;
     const th = timerEl.offsetHeight || 22;
     timerEl.style.right = 'auto'; statusEl.style.left = 'auto';
-    if (fT >= th + gap + 4) {                                                    // lugar arriba → esquinas superiores
+    if (fT >= th + gap + 4) {                                                    // room at the top → the top corners
       const top = fT - th - gap;
       timerEl.style.left = fL + 'px';            timerEl.style.top = top + 'px';
       statusEl.style.right = (W - fR) + 'px';    statusEl.style.top = top + 'px';
@@ -258,7 +258,7 @@
 
   // === ESTADO ===
   let grid = [];                 // grid[y][x]
-  let gridReady = false;         // minas colocadas (tras 1er click)
+  let gridReady = false;         // mines placed (after the 1st click)
   let gameOver = false;
   let victory = false;
   let revealedCount = 0;
@@ -266,7 +266,7 @@
   let endAt = 0;                 // timestamp of the end (to animate the banner)
   let timerStart = 0, timerRunning = false, timerEnd = 0;   // stopwatch: starts on the 1st move, stops on finishing
   let mode = 'classic';          // 'classic' | 'gold' (bonus mode: few mines + gold to collect)
-  let GOLD_COUNT = 0;            // pepitas a esparcir en modo oro
+  let GOLD_COUNT = 0;            // nuggets to scatter in gold mode
   let goldCollected = 0;         // gold collected in the current round
   let goldTimeMs = 0;            // time limit (countdown) of gold mode
   let goldMult = 1;             // points per nugget according to difficulty (×1/×2/×3)
@@ -311,7 +311,7 @@
   }
 
   function placeMines(firstTile) {
-    const safe = new Set(neighbors(firstTile));                                  // incluye firstTile (vecino propio)
+    const safe = new Set(neighbors(firstTile));                                  // it includes firstTile (its own neighbour)
     safe.add(firstTile);
     const candidates = [];
     for (const row of grid) for (const t of row) if (!safe.has(t)) candidates.push(t);
@@ -412,20 +412,20 @@
   function goldScore() { return endReason === 'win' ? (goldCollected * goldMult + bonusPts) : goldCollected; }
   function commitScore() {
     const score = goldScore();
-    const key = 'msw.gold.rec.' + DIFFS[diffIndex].key;
+    const key = 'msw.gold.rec.' + DIFFS[diffIndex].key;   // `key` is for STORAGE only: what is shown is `name`
     let prev = 0;
     try { prev = parseInt(localStorage.getItem(key) || '0', 10) || 0; } catch (_) {}
     if (score > prev) { isNewRecord = true; lastRecord = score; try { localStorage.setItem(key, String(score)); } catch (_) {} }
     else { isNewRecord = false; lastRecord = prev; }
   }
-  function recordLine() { return isNewRecord ? ('New record! ' + lastRecord) : ('Record ' + DIFFS[diffIndex].key + ': ' + lastRecord); }
+  function recordLine() { return isNewRecord ? ('New record! ' + lastRecord) : ('Record ' + DIFFS[diffIndex].name + ': ' + lastRecord); }
 
   function processClick(gx, gy, rightClick) {
     if (gameOver || victory) return;
     if (gx < 0 || gx >= GRID_WIDTH || gy < 0 || gy >= GRID_HEIGHT) return;
     const t = grid[gy][gx];
     const now = nowMs();
-    if (!gridReady) placeMines(t);                                              // 1er click (izq O der) coloca minas
+    if (!gridReady) placeMines(t);                                              // the 1st click (left OR right) places the mines
     if (rightClick) {
       if (!t.isRevealed) { t.isFlagged = !t.isFlagged; t.flagAt = now; t.isFlagged ? sndFlag() : sndUnflag(); }
     } else {
@@ -572,8 +572,8 @@
       ctx.fillStyle = parity ? DIRT_D : DIRT_L;
       ctx.fillRect(px, py, tile, tile);
       ctx.fillStyle = 'rgba(120,72,30,0.12)';
-      ctx.fillRect(px, py, tile, Math.max(1, tile * 0.08));                        // borde superior hundido
-      ctx.fillRect(px, py, Math.max(1, tile * 0.08), tile);                        // borde izquierdo hundido
+      ctx.fillRect(px, py, tile, Math.max(1, tile * 0.08));                        // a sunken top edge
+      ctx.fillRect(px, py, Math.max(1, tile * 0.08), tile);                        // a sunken left edge
       ctx.strokeStyle = 'rgba(90,55,20,0.12)'; ctx.lineWidth = 1;
       ctx.strokeRect(px + 0.5, py + 0.5, tile - 1, tile - 1);                      // separates the earth cells
 
@@ -650,7 +650,7 @@
     if (gameOver) {
       const goldTitle = endReason === 'time' ? 'Time!' : 'Boom!';
       drawBanner(mode === 'gold' ? goldTitle : 'You lost!', endReason === 'time' ? '#ffb300' : '#e8413a', now,
-                 mode === 'gold' ? ('Oro juntado: ' + goldCollected + '/' + GOLD_COUNT) : null,
+                 mode === 'gold' ? ('Gold collected: ' + goldCollected + '/' + GOLD_COUNT) : null,
                  mode === 'gold' ? recordLine() : null);
     } else if (victory) {
       drawBanner(mode === 'gold' ? 'Gold!' : 'You win!', mode === 'gold' ? '#ffcf33' : '#43a047', now,
@@ -683,7 +683,7 @@
       if (t < 0) continue;
       const p = Math.min(1, t / DUR), e = easeOut(p);
       const x = c.sx + (tx - c.sx) * e;
-      const y = c.sy + (ty - c.sy) * e - Math.sin(p * Math.PI) * tile * 0.7;      // arco hacia arriba
+      const y = c.sy + (ty - c.sy) * e - Math.sin(p * Math.PI) * tile * 0.7;      // an arc upwards
       drawGoldCoin(x, y, tile * 0.17, { goldAt: 0 }, now);
       if (p >= 1 && !c.landed) { c.landed = true; coinTick(); }
     }
@@ -745,7 +745,7 @@
     ctx.moveTo(cx - gap / 2 - lw, ly - lh * 0.18); ctx.lineTo(cx - r * 0.95, cy - r * 0.32);          // patilla izq
     ctx.moveTo(cx + gap / 2 + lw, ly - lh * 0.18); ctx.lineTo(cx + r * 0.95, cy - r * 0.32);          // patilla der
     ctx.stroke();
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';                                                          // brillito en AMBOS lentes
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';                                                          // a little shine on BOTH lenses
     ctx.beginPath(); ctx.arc(cx - gap / 2 - lw * 0.7, ly - lh * 0.12, r * 0.07, 0, TAU); ctx.fill();
     ctx.beginPath(); ctx.arc(cx + gap / 2 + lw * 0.3, ly - lh * 0.12, r * 0.07, 0, TAU); ctx.fill();
     ctx.strokeStyle = '#7a4e00'; ctx.lineWidth = Math.max(2, r * 0.1); ctx.lineCap = 'round';         // sonrisa
@@ -806,7 +806,7 @@
     let ms, s;
     if (mode === 'gold') {
       const elapsed = timerStart ? ((timerRunning ? nowMs() : timerEnd) - timerStart) : 0;
-      ms = Math.max(0, goldTimeMs - elapsed);                                     // tiempo restante
+      ms = Math.max(0, goldTimeMs - elapsed);                                     // the time remaining
       s = Math.ceil(ms / 1000);
       timerEl.style.color = (timerStart && timerRunning && ms <= 10000) ? '#ff5a5a' : TIMER_COLOR;  // the last 10 s in red
     } else {
@@ -880,7 +880,7 @@
   canvas.addEventListener('pointerdown', e => {
     audioOn();
     if (tapAt(e.clientX, e.clientY)) return;
-    if (e.button === 2) {                                                       // click derecho (desktop) → bandera
+    if (e.button === 2) {                                                       // a right click (desktop) → a flag
       e.preventDefault();
       const { gx, gy } = tileAt(e.clientX, e.clientY);
       processClick(gx, gy, true);
@@ -909,7 +909,7 @@
   canvas.addEventListener('pointercancel', e => { if (e.pointerId === pressId) { clearTimeout(pressTimer); pressId = null; } });
   canvas.addEventListener('contextmenu', e => e.preventDefault());
 
-  // === BOTONES ===
+  // === BUTTONS ===
   const btnDiff = document.getElementById('btnDiff');
   function applyDiff() {
     const d = DIFFS[diffIndex];
@@ -927,7 +927,7 @@
     }
     document.getElementById('diffKey').textContent = '★'.repeat(diffIndex + 1);   // difficulty as stars (1/2/3)
     document.getElementById('diffMult').textContent = mode === 'gold' ? ('×' + d.mult) : '';   // badge in the top-right corner (gold mode only)
-    btnDiff.title = 'Dificultad: ' + d.name + (mode === 'gold' ? ' · oro ×' + d.mult : '');
+    btnDiff.title = 'Difficulty: ' + d.name + (mode === 'gold' ? ' · gold ×' + d.mult : '');
     reset(); resize();
   }
   btnDiff.addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); diffIndex = (diffIndex + 1) % DIFFS.length; applyDiff(); });
@@ -942,7 +942,7 @@
     btnMode.innerHTML = MODE_ICON[mode];
     btnMode.classList.toggle('on', mode === 'gold');
     btnMode.title = mode === 'gold' ? 'Mode: Gold Rush' : 'Mode: Classic';
-    showHint(mode === 'gold' ? 'Fiebre del oro contrarreloj · cavá donde haya "!" · esquivá las minas'
+    showHint(mode === 'gold' ? 'Gold rush against the clock · dig where there is a "!" · dodge the mines'
                              : 'tap to dig · press and hold to plant a flag');
   }
   btnMode.addEventListener('pointerdown', e => { e.preventDefault(); audioOn(); mode = (mode === 'classic') ? 'gold' : 'classic'; refreshMode(); applyDiff(); });
@@ -1023,7 +1023,7 @@ around it</b>.
 <h5>Desktop</h5>
 <ul>
   <li><b>Left click</b> digs a cell. <b>Right click</b> plants or removes a <b>flag</b>.</li>
-  <li><b>R</b> restarts, same as <b>Restart (R)</b>.</li>
+  <li><b>R</b> restarts, same as <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span> <b>Restart (R)</b>.</li>
   <li><b>Mode: Classic / Gold Rush</b> and <b>Difficulty: Easy / Medium / Hard</b> in the bar.</li>
 </ul>
 <h5>Mobile</h5>
@@ -1077,7 +1077,7 @@ Difficulty changes the field size and how many mines it holds.
         var izq = Math.max(m, Math.min(Math.round(rb.left), vw - ancho - m));
         panel.style.right = 'auto'; panel.style.left = izq + 'px';
       }
-      if ((rb.top + rb.height / 2) < vh / 2) {          // boton arriba -> panel colgando debajo
+      if ((rb.top + rb.height / 2) < vh / 2) {          // button at the top -> panel hanging below
         panel.style.top = Math.round(ref.bottom + 8) + 'px';
         panel.style.bottom = 'auto';
         panel.style.maxHeight = Math.max(110, vh - ref.bottom - 8 - m) + 'px';

@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Full chess with menu (2 players / vs IA as White / vs IA as Black / **IA vs IA spectator**), drag-and-drop **and** click-click moves, **conditionally slide-animated** moves (click-click animates, drag-and-drop snaps; AI always animates — `MOVE_ANIM_DURATION = 0.18 s`), history scrubbing with ←/→/HOME/END, captured-pieces side panels with material-advantage indicator, draw detection (threefold repetition + insufficient material), synthesised piece-move sounds, and **Stockfish** as the primary AI engine (with the internal negamax kept as fallback). 1280×720 window. Spanish UI labels (`'JAQUE MATE'`, `'Pensando...'`, `'Turno: Blancas'`); engine + AI identifiers are English.
+Full chess with menu (2 players / vs IA as White / vs IA as Black / **IA vs IA spectator**), drag-and-drop **and** click-click moves, **conditionally slide-animated** moves (click-click animates, drag-and-drop snaps; AI always animates — `MOVE_ANIM_DURATION = 0.18 s`), history scrubbing with ←/→/HOME/END, captured-pieces side panels with material-advantage indicator, draw detection (threefold repetition + insufficient material), synthesised piece-move sounds, and **Stockfish** as the primary AI engine (with the internal negamax kept as fallback). 1280×720 window. English UI labels (`'CHECKMATE'`, `'Thinking...'`, `'Turn: White'`); engine + AI identifiers are English.
 
 Follows the repo skeleton loosely (`Sprite`, `xper/yper/sper`, `createText`) — `deltaT` is now used (for the move animation timer); everything else is event-driven.
 

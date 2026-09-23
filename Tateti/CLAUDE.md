@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Tic-tac-toe with a menu (2 players / vs CPU as X / vs CPU as O) and a persistent X/O/draw scoreboard. 1280×720 window. Mixed Spanish UI / English identifiers — comments and menu labels in Spanish (`'GANA LA CPU'`, `'EMPATE'`, `'ELEGÍ MODO'`), code is English.
+Tic-tac-toe with a menu (2 players / vs CPU as X / vs CPU as O) and a persistent X/O/draw scoreboard. 1280×720 window. English UI, English identifiers. The menu labels and end-of-round cards were Spanish until the language pass (`'CPU WINS'`, `'DRAW'`, `'choose a mode'`).
 
 Follows the shared repo skeleton (`Sprite`, `deltaT`, `xper/yper/sper`, `createText`, `manager[0]`/`board[0]` as single-element lists). Two sprites only: `Manager` (menu/HUD/input) and `Board` (cells + CPU move + drawing).
 
