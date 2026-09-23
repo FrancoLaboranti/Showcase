@@ -492,6 +492,7 @@
     ballTrail.length = 0;                              // no trail crossing the court on the serve
     rallyHits = 0; rallyFlash = 0;                     // the rally starts from zero on each serve (bestRally persists)
     prevBx = bx; prevBy = by; rbx = bx; rby = by;      // no interpolation streak after the reset
+    sfx.serve();                                       // the cue lands at the END of SERVE_DELAY, not now
   }
   function newMatch() {
     j1score = 0; j2score = 0; j1racha = 0; j2racha = 0;
@@ -504,22 +505,31 @@
     serve(Math.random() < 0.5 ? -1 : 1);
   }
   function updateFireStates() {
+    const eraR = right.onFire, eraL = left.onFire;                 // catching fire is a TRANSITION, not a state
     const fireOn = fireEnabled || (challenge && cmod.forceFire);   // a Challenge rung can force the fire
     right.onFire = fireOn && j1racha >= FIRE_STREAK;
     // the FIREPROOF opponent (Black) does not catch fire in 1P; in 2P the left is human and catches fire normally
     left.onFire  = fireOn && (twoPlayers || !A.FIREPROOF) && j2racha >= FIRE_STREAK;
+    if (right.onFire && !eraR) sfx.fireUp(true);
+    if (left.onFire  && !eraL) sfx.fireUp(false);
   }
 
   function scorePoint(scorer) {
+    // Read BEFORE the reset two lines below: the point sound collapses the ladder FROM the rung it
+    // reached, and `doused` is whether this point is what puts the burning court out.
+    const rally = rallyHits, doused = fireTop || fireBot || fireNet;
     if (scorer === 1) { j1score++; j1racha++; j2racha = 0; j1pulse = 1; }
     else              { j2score++; j2racha++; j1racha = 0; j2pulse = 1; }
     fireball = false; firetrail = false; fireTop = false; fireBot = false; fireNet = false;
+    sfx.point(scorer, rally, doused);
     updateFireStates();
     const cond = WIN_POINTS[ptsIdx];
     if (cond != null && (j1score >= cond || j2score >= cond)) {
       winner = scorer;
-      recordMatch(scorer);
+      recordMatch(scorer);                             // it sets `newRecordFlag`, which the phrase reads
       state = 'over';
+      // Offset so the ending does not land on top of the point that caused it.
+      sfx.over(scorer === 1, newRecordFlag, 0.45);
     } else {
       // serve towards whoever conceded the point (the player who missed)
       serve(scorer === 1 ? -1 : 1);
@@ -719,8 +729,12 @@
     // It touches no speed or clamp (it only reads an integer) → the rally's escalation stays intact.
     rallyHits++;
     if (rallyHits > bestRally) bestRally = rallyHits;
+    // The ladder is read from the rally: `step` is the rung, `spd` the fraction of the top speed.
+    // It goes AFTER the clamp so a capped ball does not sound faster than it travels.
+    sfx.hit(p, isRight, Math.abs(bvx) / vxMax(), rallyHits - 1);
     if (RALLY_TIERS.includes(rallyHits)) {
       rallyFlash = 0.5;   // only the frame/net glow; the card and its flash were removed
+      sfx.tier();         // it rides ON TOP of the hit, which is why the card could be removed
     }
   }
 
@@ -733,15 +747,17 @@
     if (ballTrail.length > TRAIL_LEN) ballTrail.shift();
 
     // ceiling / floor, if the ball is coming in lit, it sets that edge alight
-    if (by > H - r) { by = H - r; bvy = -Math.abs(bvy) * WALL_ACCEL; burst(bx, H, fireball ? [255, 170, 40] : NEON_P1, 7, Math.min(W, H) * 0.5, r * 0.4, 0.3); if (fireball) fireBot = true; }
-    if (by < r)     { by = r;     bvy =  Math.abs(bvy) * WALL_ACCEL; burst(bx, 0, fireball ? [255, 170, 40] : NEON_P1, 7, Math.min(W, H) * 0.5, r * 0.4, 0.3); if (fireball) fireTop = true; }
+    // `!fireBot` / `!fireTop` guard the IGNITION, which is a change of state in the world and sounds
+    // once. Setting an already-true flag was a no-op before and still is: no behaviour moves.
+    if (by > H - r) { by = H - r; bvy = -Math.abs(bvy) * WALL_ACCEL; burst(bx, H, fireball ? [255, 170, 40] : NEON_P1, 7, Math.min(W, H) * 0.5, r * 0.4, 0.3); sfx.wall(); if (fireball) { if (!fireBot) sfx.ignite('edge'); fireBot = true; } }
+    if (by < r)     { by = r;     bvy =  Math.abs(bvy) * WALL_ACCEL; burst(bx, 0, fireball ? [255, 170, 40] : NEON_P1, 7, Math.min(W, H) * 0.5, r * 0.4, 0.3); sfx.wall(); if (fireball) { if (!fireTop) sfx.ignite('top'); fireTop = true; } }
 
     paddleHit(right, true);
     paddleHit(left, false);
     bvy = clampN(bvy, -vyMax(), vyMax());
 
     // net on fire: the lit ball crosses the centre
-    if (fireball && Math.abs(bx - W / 2) < 0.02 * W) fireNet = true;
+    if (fireball && Math.abs(bx - W / 2) < 0.02 * W) { if (!fireNet) sfx.ignite('net'); fireNet = true; }
     if (!fireball) { fireTop = false; fireBot = false; fireNet = false; }
 
     // points: the ball goes out past an edge (no sparks: it is not a bounce, the ball is leaving)
@@ -881,13 +897,17 @@
   let brickAimErr = 0, brickChasing = false;   // the aiming bias of the approach in progress (brick mode)
   function stepBricks(dt) {
     if (brickAttack) {                                 // the clock: it ends the round (not the goals); the higher brick score wins
+      const tAntes = brickTimer;
       brickTimer -= dt;
-      if (brickTimer <= 0) { brickTimer = 0; winner = j1brick >= j2brick ? 1 : 2; state = 'over'; return; }
-      if (brickRegenCD > 0) { brickRegenCD -= dt; if (brickRegenCD <= 0 && !bricks.length) setupBricks(); }  // regen with a cooldown (anti-camping)
+      if (brickTimer <= 0) { brickTimer = 0; sfx.horn(); winner = j1brick >= j2brick ? 1 : 2; state = 'over'; return; }
+      // One tick per SECOND in the last ten, not one per frame: the clock is already red at the top of
+      // the screen and you are watching eight balls, so the cue has to be in the ear.
+      if (brickTimer <= 10 && Math.ceil(brickTimer) !== Math.ceil(tAntes)) sfx.tick(brickTimer <= 5);
+      if (brickRegenCD > 0) { brickRegenCD -= dt; if (brickRegenCD <= 0 && !bricks.length) { setupBricks(); sfx.regen(); } }  // regen with a cooldown (anti-camping)
     }
     for (const p of [right, left]) {
       if (p.boostT > 0) p.boostT -= dt;
-      if (p.powerFireT > 0) { p.powerFireT -= dt; p.onFire = p.powerFireT > 0; }
+      if (p.powerFireT > 0) { p.powerFireT -= dt; p.onFire = p.powerFireT > 0; if (!p.onFire) sfx.fireOut(); }   // a timer that dies with no warning on screen
     }
     bricksAI(dt);
     updatePaddle(right, dt, false, true);
@@ -907,8 +927,8 @@
     if (b.entry > 0) b.entry -= dt;
     b.x += b.vx * dt; b.y += b.vy * dt;
     b.trail.push({ x: b.x, y: b.y }); if (b.trail.length > 16) b.trail.shift();
-    if (b.y > H - r) { b.y = H - r; b.vy = -Math.abs(b.vy) * WALL_ACCEL; }
-    if (b.y < r)     { b.y = r;     b.vy =  Math.abs(b.vy) * WALL_ACCEL; }
+    if (b.y > H - r) { b.y = H - r; b.vy = -Math.abs(b.vy) * WALL_ACCEL; sfx.wall(); }
+    if (b.y < r)     { b.y = r;     b.vy =  Math.abs(b.vy) * WALL_ACCEL; sfx.wall(); }
     paddleHitBall(b, right, true);
     paddleHitBall(b, left, false);
     if (b.entry <= 0) b.vy = clampN(b.vy, -vyMax() * BRICK_SPEED, vyMax() * BRICK_SPEED);   // do not brake the dash
@@ -916,11 +936,11 @@
     // goal: if the ball goes out at one side, a point for the OPPONENT. It does NOT end the round (it only ends on reaching
     // the total). The BASE balls reappear; the EXTRA ones (from a power-up) disappear: they live one life only.
     if (b.x - r > W) {                                 // it got past the player (right) → a point for the CPU, unless the player has a shield
-      if (right.shield) { right.shield = false; burst(W, b.y, POWER_COLS.shield, 20, Math.min(W, H) * 0.7, r * 0.6, 0.5); }
+      if (right.shield) { right.shield = false; burst(W, b.y, POWER_COLS.shield, 20, Math.min(W, H) * 0.7, r * 0.6, 0.5); sfx.shield(); }
       else addBrickPoint(2);
       b.extra ? b.dead = true : respawnBall(b);
     } else if (b.x + r < 0) {                          // it got past the CPU (left) → a point for the player, unless the CPU has a shield
-      if (left.shield) { left.shield = false; burst(0, b.y, POWER_COLS.shield, 20, Math.min(W, H) * 0.7, r * 0.6, 0.5); }
+      if (left.shield) { left.shield = false; burst(0, b.y, POWER_COLS.shield, 20, Math.min(W, H) * 0.7, r * 0.6, 0.5); sfx.shield(); }
       else addBrickPoint(1);
       b.extra ? b.dead = true : respawnBall(b);
     }
@@ -941,6 +961,7 @@
     b.last = isRight ? 1 : 2;                            // who touched it last (for the point/power)
     const col = p.onFire ? [255, 170, 40] : (isRight ? NEON_P1 : leftGlow());
     burst(b.x, b.y, col, 8, Math.min(W, H) * 0.5, r * 0.5, 0.35);
+    sfx.hit(p, isRight, Math.abs(b.vx) / (vxMax() * BRICK_SPEED), 0);   // step 0: in bricks there is no rally to climb
   }
   function breakBrick(k, b) {
     // reflect the ball on the side of least penetration
@@ -954,9 +975,10 @@
     bricks.splice(bricks.indexOf(k), 1);
     // bricks do NOT score (that is only for goals). A coloured one DROPS a token (fire/ball)
     // that falls towards the side of whoever touched it: you have to catch it with the paddle.
+    sfx.brick(k.y, !!k.power);                           // the pitch comes from the ROW: a column plays a scale
     if ((b.last === 1 || b.last === 2) && k.power) spawnDrop(cx, cy, b.last, k.power);
     if (brickAttack && (b.last === 1 || b.last === 2)) { if (b.last === 1) j1brick++; else j2brick++; }  // time trial: breaking DOES add to your score
-    if (!bricks.length) { if (brickAttack) brickRegenCD = 1.2; else setupBricks(); }   // defence: regen on contact · time trial: with a cooldown
+    if (!bricks.length) { if (brickAttack) brickRegenCD = 1.2; else { setupBricks(); sfx.regen(); } }   // defence: regen on contact · time trial: with a cooldown
   }
   function addBrickPoint(scorer) {
     if (brickAttack) {                                  // time trial: a goal gives +3 bonus and does NOT end the round
@@ -972,6 +994,7 @@
   function spawnDrop(x, y, side, type) {                 // side = who broke it (1 right / 2 left); type from the brick
     const dir = side === 1 ? 1 : -1;                     // it falls towards the side of whoever broke it
     drops.push({ x, y, vx: dir * W * 0.16, vy: rnd(-1, 1) * H * 0.04, type, side, windup: 0.45, trail: [] });
+    sfx.dropSpawn();                                   // it announces the 0.45 s of windup the token sits still for
   }
   function updateDrops(dt) {
     const r = dropR();
@@ -997,6 +1020,7 @@
   }
   function applyDrop(side, type) {
     const self = side === 1 ? right : left;
+    sfx.drop(type);                                    // four timbres, one per power: the sound describes the effect
     if (type === 'fire')  { self.powerFireT = 10; return; }  // a paddle in flames for 10s
     if (type === 'speed') { self.boostT = 8; return; }       // a faster paddle for 8s (green)
     if (type === 'shield') { self.shield = true; return; }   // shield: it saves ONE goal against (it does not score)
@@ -1305,7 +1329,9 @@
     return 'Fire: ' + (fireEnabled ? 'On' : 'Off');
   }
   function setupCycle(key, dir) {
-    if (key === 'rival')       { oppIdx = (oppIdx + dir + OPPONENTS.length) % OPPONENTS.length; applyOpponent(); }
+    sfx.ui('cycle', dir);
+    // Changing the opponent ALSO plays its voice: you pick a rival and hear which one it is.
+    if (key === 'rival')       { oppIdx = (oppIdx + dir + OPPONENTS.length) % OPPONENTS.length; applyOpponent(); sfx.rivalTone(); }
     else if (key === 'puntos') { ptsIdx = (ptsIdx + dir + WIN_POINTS.length) % WIN_POINTS.length; }
     else if (key === 'modo')   { bricksModeIdx = (bricksModeIdx + dir + 2) % 2; }
     else                         fireEnabled = !fireEnabled;
@@ -1319,7 +1345,7 @@
     else if (k === 'enter' || k === ' ')      menuConfirm();
     else if (k === 'escape')                  onBack();
   }
-  function menuMove(d)   { const n = (menulevel === 0 ? menuLevel0() : menuSetupRows()).length; menuOption = (menuOption + d + n) % n; }
+  function menuMove(d)   { const n = (menulevel === 0 ? menuLevel0() : menuSetupRows()).length; menuOption = (menuOption + d + n) % n; sfx.ui('move'); }
   function menuAdjust(d) { if (menulevel !== 1) return; const r = menuSetupRows()[menuOption]; if (r) setupCycle(r.key, d); }
   function menuConfirm() {
     if (menulevel === 0) {
@@ -1330,7 +1356,7 @@
       else if (r.key === 'bricks')    { twoPlayers = false; pendingBricks = true; gotoSetup(); }
     } else startGame();
   }
-  function gotoSetup() { menulevel = 1; menuOption = 0; applyOpponent(); syncUI(); }
+  function gotoSetup() { menulevel = 1; menuOption = 0; applyOpponent(); syncUI(); sfx.ui('confirm'); }
 
   // a touch on the menu (canvas coords)
   function tapMenu(lx, ly) {
@@ -1351,6 +1377,7 @@
 
   // ── STATE TRANSITIONS ──
   function startGame()  {
+    sfx.ui('start');
     if (pendingBricks) { startBricks(); return; }      // the setup was configuring bricks
     challenge = false; bricksMode = false; applyOpponent(); newMatch(); confirmQuit = false; syncUI();   // newMatch pone state='play'
   }
@@ -1365,7 +1392,8 @@
   function overAdvance() {
     if (!challenge) { rematch(); return; }
     if (winner === 1) {                              // you won this game
-      if (challengeIdx >= CHALLENGE_ORDER.length - 1) { backToMenu(); return; }   // you beat them all
+      if (challengeIdx >= CHALLENGE_ORDER.length - 1) { sfx.advance(true); backToMenu(); return; }   // you beat them all
+      sfx.advance(false);
       challengeIdx++;
       oppIdx = CHALLENGE_ORDER[challengeIdx]; applyOpponent(); applyChallengeMod();
       newMatch(); confirmQuit = false; syncUI();
@@ -1374,6 +1402,7 @@
     }
   }
   function backToMenu() {
+    sfx.ui('back');
     state = 'menu'; menulevel = 0; menuOption = bricksMode ? 3 : twoPlayers ? 1 : 0;
     confirmQuit = false; challenge = false; bricksMode = false; pendingBricks = false;
     embers.length = 0; sparks.length = 0; ballTrail.length = 0; balls = []; bricks = []; drops = [];

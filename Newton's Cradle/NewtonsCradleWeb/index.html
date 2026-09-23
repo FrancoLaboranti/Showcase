@@ -1477,25 +1477,76 @@
   tappable(document.getElementById('btnReset'), reset);
 
   // ════════════════ SOUND (a metallic click synthesised in Web Audio) ════════════════
-  // There are no samples in this folder, so the "clack" is generated: a pair of inharmonic partials with
-  // a fast decay (the metallic chime) + a filtered noise transient (the attack). It is triggered
-  // at most once per frame, with a cooldown, scaling volume/pitch with the force of the collision.
+  // The clack is a RECORDING: six real wooden-ball impacts cut from `woodenballs.wav`, which was
+  // already in the folder. The synthesised version below is kept as a fallback and nothing more.
   let actx = null, lastClickT = 0, frameImpactV = 0;
+  let master = null, woodBufs = [], woodLoading = false;
   const SND_COOLDOWN = 32;     // minimum ms between clicks (it avoids a machine gun)
   const SND_VTHR     = 0.4;    // rad/s: below this it does not sound (numerical rubbing)
+
+  // ══════════════ MIX ══════════════
+  // ORDERED BY MEASURED BRIGHTNESS, not by file number. The spectral centroids are wood5 562 Hz,
+  // wood1 1044, wood6 1893, wood2 1955, wood3 2289 and wood4 2947, so the numbering says nothing
+  // about how they sound. A gentle touch takes the dullest impact, a hard one the brightest: that
+  // is what six clips were cut for.
+  const WOOD_FILES = ['wood5.mp3', 'wood1.mp3', 'wood6.mp3', 'wood2.mp3', 'wood3.mp3', 'wood4.mp3'];
+  // The clips are normalised (peak ~0.89), so they need a real reduction. Level lives here.
+  const MIX = { wood: 0.42, synth: 0.035, master: 0.9 };
+  // Several balls can land within the same cooldown window and stack. The limiter takes the sum.
+  const LIMITER = { threshold: -12, knee: 6, ratio: 10, attack: 0.003, release: 0.15 };
+
+  async function loadWood() {
+    if (woodLoading || !actx) return;
+    woodLoading = true;
+    for (let i = 0; i < WOOD_FILES.length; i++) {
+      try {
+        const r = await fetch('sounds/' + WOOD_FILES[i]);       // relative to the page: the folder's space and apostrophe are already resolved
+        if (!r.ok) continue;
+        woodBufs[i] = await actx.decodeAudioData(await r.arrayBuffer());
+      } catch (_) { /* one that does not load simply is not chosen */ }
+    }
+  }
   function audioResume() {
     try {
-      if (!actx) actx = new (window.AudioContext || window.webkitAudioContext)();
+      if (!actx) {
+        actx = new (window.AudioContext || window.webkitAudioContext)();
+        try {
+          master = actx.createGain(); master.gain.value = MIX.master;
+          const lim = actx.createDynamicsCompressor();
+          lim.threshold.value = LIMITER.threshold; lim.knee.value = LIMITER.knee;
+          lim.ratio.value = LIMITER.ratio; lim.attack.value = LIMITER.attack;
+          lim.release.value = LIMITER.release;
+          master.connect(lim); lim.connect(actx.destination);
+        } catch (e) { master = null; }
+      }
       if (actx.state === 'suspended') actx.resume();
+      loadWood();
     } catch (e) {}
   }
+  function out() { return master || actx.destination; }
   function playClick(intensity) {
     // It is not enough for the context to EXIST: a closed or interrupted one throws on touching the graph.
     if (!actx || actx.state !== 'running') return;
+    const k = Math.max(0, Math.min(1, intensity));
+    // THE RECORDING, when it is there. The `return` matters: without it the synth would play on
+    // top and the impact would be heard twice, once real and once fake.
+    const i = Math.round(k * (WOOD_FILES.length - 1));
+    const buf = woodBufs[i] || woodBufs.find(b => b);        // whatever loaded, if that one did not
+    if (buf) {
+      const t0 = actx.currentTime;
+      const g = actx.createGain();
+      g.gain.value = (0.35 + 0.65 * k) * MIX.wood;           // the force of the blow decides the level
+      const src = actx.createBufferSource(); src.buffer = buf;
+      src.playbackRate.value = 1 + (Math.random() * 2 - 1) * 0.04;   // ±4%: two identical blows in a row give it away
+      src.connect(g).connect(out());
+      src.start(t0);
+      return;
+    }
+    // ── FALLBACK ── while the six clips are still downloading, or if a fetch failed.
     const t = actx.currentTime;
     // a VERY soft tick: a low tonal blip, rounded off with a lowpass (no piercing treble and no attack
     // noise), at a very low volume. The audible minimum so the tick is always heard.
-    const vol = (0.3 + 0.7 * Math.max(0, Math.min(1, intensity))) * 0.035;
+    const vol = (0.3 + 0.7 * k) * MIX.synth;
     const pitch = 1 + (Math.random() * 2 - 1) * 0.06;
     const g = actx.createGain();
     g.gain.setValueAtTime(0, t);
@@ -1503,7 +1554,7 @@
     g.gain.exponentialRampToValueAtTime(0.0003, t + 0.06);                         // short decay
     const lp = actx.createBiquadFilter();                                          // rounds it off: it cuts what is piercing
     lp.type = 'lowpass'; lp.frequency.value = 2400; lp.Q.value = 0.6;
-    g.connect(lp).connect(actx.destination);
+    g.connect(lp).connect(out());
     const base = 1050 * pitch;
     for (const [m, gg] of [[1, 1], [2.0, 0.12]]) {                                 // fundamental + a hint of the octave
       const o = actx.createOscillator(); o.type = 'sine'; o.frequency.value = base * m;

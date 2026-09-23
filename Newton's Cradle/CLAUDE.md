@@ -19,11 +19,26 @@ writing any parameter, did not leave the cradle mute: it left it **STILL**, neve
 frame again. The call now sits in `try/catch` and `playClick` requires `actx.state === 'running'`, not
 merely that the context exists.
 
-**The orphan WAV.** `sounds/woodenballs.wav` is 19.6 MB that nothing loaded: 69 s of a real recording
-of wooden balls colliding, 24-bit stereo at 48 kHz, with **39 isolated impacts**. That is more than
-enough material for the one game in the repo whose sound IS two wooden spheres colliding. The six
-clean hits (silent lead-in, no clipping, whole tail) were extracted to `wood1..6.mp3`, **17.6 KB in
-total**:
+**Where the wood comes from.** The six clips were cut from `sounds/woodenballs.wav`: 69 s of a real
+recording of wooden balls colliding, 24-bit stereo at 48 kHz, with **39 isolated impacts**. That is
+more than enough material for the one game in the repo whose sound IS two wooden spheres colliding.
+The six clean hits (silent lead-in, no clipping, whole tail) became `wood1..6.mp3`, **17.6 KB in
+total**.
+
+**The master was REMOVED from the working tree** on 2026-09-23: 19.6 MB that nothing loaded, served
+by GitHub Pages and mirrored into Showcase, for a game whose whole sound weighs 18 KB. It is not
+lost, it lives in git history and comes back byte-for-byte with
+
+```powershell
+git show c07a976:"Newton's Cradle/NewtonsCradleWeb/sounds/woodenballs.wav" > woodenballs.wav
+# c07a976 es el ULTIMO commit que contiene el blob. No sirve cualquier commit que `git log
+# --follow` liste: --follow sigue renombres y devuelve commits donde el archivo NO esta.
+```
+
+which is the command to run before cutting more impacts. Deleting it does NOT shrink a clone: the
+blob stays in history. What it fixes is what is served and what is mirrored.
+
+The six, measured:
 
 | | attack centroid | tail to -40 dB |
 |---|---|---|

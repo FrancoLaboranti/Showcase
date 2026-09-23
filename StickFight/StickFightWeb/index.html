@@ -458,7 +458,7 @@ function note(f0, f1, t0, dur, type, vol) {
   const jit = 1 + rnd(-0.1, 0.1);            // ±10% of pitch so it does not sound like a machine
   o.type = type; o.frequency.setValueAtTime(Math.max(20, f0 * jit), a.currentTime + t0);
   if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * jit), a.currentTime + t0 + dur);
-  g.gain.setValueAtTime(vol, a.currentTime + t0);
+  g.gain.setValueAtTime(Math.max(0.00005, vol * spGain), a.currentTime + t0);
   g.gain.exponentialRampToValueAtTime(0.0001, a.currentTime + t0 + dur);
   o.connect(g); g.connect(masterGain);
   o.start(a.currentTime + t0); o.stop(a.currentTime + t0 + dur + 0.02);
@@ -469,20 +469,56 @@ function voice(name, cdMs, fn) {
   if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
   voiceLast[name] = now; fn();
 }
+
+// ══════════════ SPATIAL AUDIBILITY ══════════════
+// This camera is CENTRED and zooms (`cam.z`), so the visible rectangle is derived from the
+// half-width `W/(2*cam.z)` and changes size as the fight opens up. That is precisely why the
+// distance goes to the RECTANGLE and not to a radius around the centre: with a changing frame, a
+// fixed radius is right at one zoom level and wrong at every other.
+//
+// Outside, it falls across a HALO of half a screen instead of cutting at the edge, so a fighter
+// walking in is heard before he appears.
+const AUDIO_HALO = 0.5;      // the halo, as a fraction of the view's shortest side
+const AUDIO_FLOOR = 0.05;    // under this it is inaudible: better not to spend the voice
+function audible(x, y) {
+  // Sin posicion: GLOBAL. Sin esta guarda, un x/y ausente propaga NaN hasta `setValueAtTime`,
+  // que tira dentro del try/catch de `voice()` y borra el sonido sin aviso.
+  if (!isFinite(x) || !isFinite(y)) return 1;
+  if (!(W > 0 && H > 0 && cam && cam.z > 0)) return 1;      // before the first resize
+  const hw = W / (2 * cam.z), hh = H / (2 * cam.z);
+  const dx = Math.max(cam.x - hw - x, 0, x - (cam.x + hw));
+  const dy = Math.max(cam.y - hh - y, 0, y - (cam.y + hh));
+  if (dx === 0 && dy === 0) return 1;
+  const t = Math.hypot(dx, dy) / (AUDIO_HALO * Math.min(hw, hh) * 2);
+  if (t >= 1) return 0;
+  const g = (1 - t) * (1 - t);
+  return g < AUDIO_FLOOR ? 0 : g;
+}
+// `spGain` multiplies inside note() so the attenuation does not have to be threaded through every
+// note of every voice. It is set only for the duration of the call.
+let spGain = 1;
+function voiceAt(name, cdMs, x, y, fn) {
+  const g = audible(x, y);
+  if (g <= 0) return;                  // past the halo: it neither sounds nor costs a voice
+  spGain = g;
+  try { voice(name, cdMs, fn); } finally { spGain = 1; }
+}
 const sfx = {
-  whoosh()   { voice('whoosh', 60, () => note(500, 300, 0, 0.05, 'triangle', 0.04)); },
-  hit(d)     {                              // the damage scales the volume and the low end (heavier = fatter)
+  // Every voice below happens at a POINT of the arena and takes (x, y). The arena is 8000 px
+  // wide and holds five fighters, so without this a step on the far side sounded like one beside you.
+  whoosh(x, y)   { voiceAt('whoosh', 60, x, y, () => note(500, 300, 0, 0.05, 'triangle', 0.04)); },
+  hit(d, x, y)   {                          // the damage scales the volume and the low end (heavier = fatter)
     const k = clamp(d / 12, 0.3, 1);
-    voice('hit', 40, () => note(180 - 60 * k, 90 - 40 * k, 0, 0.06 + 0.06 * k, 'square', 0.05 + 0.05 * k));
+    voiceAt('hit', 40, x, y, () => note(180 - 60 * k, 90 - 40 * k, 0, 0.06 + 0.06 * k, 'square', 0.05 + 0.05 * k));
   },
-  heavy()    { voice('heavy', 80, () => { note(140, 50, 0, 0.12, 'sawtooth', 0.09); note(147, 52, 0, 0.12, 'sawtooth', 0.05); }); },
-  block()    { voice('block', 70, () => note(700, 500, 0, 0.04, 'triangle', 0.05)); },
-  launcher() { voice('launch', 120, () => note(300, 60, 0, 0.18, 'sawtooth', 0.09)); },
-  ko()       { voice('ko', 300, () => { note(420, 40, 0, 0.4, 'sawtooth', 0.1); note(210, 30, 0.05, 0.4, 'square', 0.06); }); },
-  jump()     { voice('jump', 90, () => note(330, 540, 0, 0.08, 'square', 0.035)); },
-  dash()     { voice('dash', 120, () => note(240, 480, 0, 0.09, 'triangle', 0.05)); },
-  grab()     { voice('grab', 120, () => note(523, 659, 0, 0.08, 'square', 0.04)); },
-  step()     { voice('step', 130, () => note(90, 70, 0, 0.03, 'triangle', 0.018)); },
+  heavy(x, y)    { voiceAt('heavy', 80, x, y, () => { note(140, 50, 0, 0.12, 'sawtooth', 0.09); note(147, 52, 0, 0.12, 'sawtooth', 0.05); }); },
+  block(x, y)    { voiceAt('block', 70, x, y, () => note(700, 500, 0, 0.04, 'triangle', 0.05)); },
+  launcher(x, y) { voiceAt('launch', 120, x, y, () => note(300, 60, 0, 0.18, 'sawtooth', 0.09)); },
+  ko(x, y)       { voiceAt('ko', 300, x, y, () => { note(420, 40, 0, 0.4, 'sawtooth', 0.1); note(210, 30, 0.05, 0.4, 'square', 0.06); }); },
+  jump(x, y)     { voiceAt('jump', 90, x, y, () => note(330, 540, 0, 0.08, 'square', 0.035)); },
+  dash(x, y)     { voiceAt('dash', 120, x, y, () => note(240, 480, 0, 0.09, 'triangle', 0.05)); },
+  grab(x, y)     { voiceAt('grab', 120, x, y, () => note(523, 659, 0, 0.08, 'square', 0.04)); },
+  step(x, y)     { voiceAt('step', 130, x, y, () => note(90, 70, 0, 0.03, 'triangle', 0.018)); },
   banner()   { voice('banner', 300, () => { note(392, 0, 0, 0.1, 'square', 0.05); note(523, 0, 0.11, 0.14, 'square', 0.06); }); },
   win()      { voice('win', 300, () => { note(523, 0, 0, 0.1, 'square', 0.05); note(659, 0, 0.11, 0.1, 'square', 0.05); note(784, 0, 0.22, 0.1, 'square', 0.05); note(1047, 0, 0.33, 0.25, 'square', 0.06); } ); },
 };
@@ -1261,7 +1297,7 @@ class Fighter {
         if (this.stateT >= CFG.fight.airTechT &&
             (this.consume('jump') || this.consume('punch') || this.consume('kick'))) {
           this.state = ST.FALL; this.stateT = 0; this.juggle = 0;
-          spawnDust(this.x, this.y + STAND * 0.45, 5); sfx.dash();
+          spawnDust(this.x, this.y + STAND * 0.45, 5); sfx.dash(this.x, this.y);
         }
         break;                               // otherwise it ends on touching the ground (onLand)
       }
@@ -1331,7 +1367,7 @@ class Fighter {
           this.vx = -this.wallSide * CFG.climb.wjVx * S;
           this.vy = -(CFG.climb.wjVy + bonus) * S;
           this.facing = -this.wallSide; this.state = ST.JUMP; this.grounded = false;
-          sfx.jump(); spawnDust(this.x + this.wallSide * 0.1 * CH, this.y, 5);
+          sfx.jump(this.x, this.y); spawnDust(this.x + this.wallSide * 0.1 * CH, this.y, 5);
         }
         break;
       }
@@ -1362,7 +1398,7 @@ class Fighter {
       this.state = ST.DASH; this.stateT = 0; this.lastDashDir = d.dir; this.facing = this.foe ? this.facing : d.dir;
       // The dash's total + cd → the time before you can dash again.
       this.dashCdT = CFG.dash.wind + CFG.dash.time + CFG.dash.cd;
-      sfx.dash(); this.recordGhosts = true;
+      sfx.dash(this.x, this.y); this.recordGhosts = true;
       return true;
     }
     // down+jump on a one-way platform = dropping through (BEFORE the jump is consumed as a jump)
@@ -1385,7 +1421,7 @@ class Fighter {
     this.vy = -Math.sqrt(2 * CFG.move.gUp * S * CFG.move.jumpApex * CH);
     this.grounded = false; this.state = ST.JUMP; this.stateT = 0; this.coyoteT = 9;
     this.popT = 0;                           // the POSE starts compressed and stretches out (see buildPose)
-    this.unplantFeet(); sfx.jump(); spawnDust(this.x, this.y + STAND, 4);
+    this.unplantFeet(); sfx.jump(this.x, this.y); spawnDust(this.x, this.y + STAND, 4);
   }
   startMove(name, chained) {
     const m = MOVES[name];
@@ -1395,7 +1431,7 @@ class Fighter {
     if (this.atkHitSet) this.atkHitSet.clear(); else this.atkHitSet = new Set();
     this.state = ST.ATTACK; this.stateT = 0;
     if (m.unplantR) { this.feet[1].planted = false; }
-    sfx.whoosh();
+    sfx.whoosh(this.x, this.y);
   }
   startDropkick() {
     this.vy = -0.45 * S; this.vx = clamp(this.vx * 1.12, -1.1 * S, 1.1 * S);
@@ -1435,7 +1471,7 @@ class Fighter {
       const revers = want !== 0 && Math.sign(want) !== Math.sign(this.vx) && Math.abs(this.vx) > mv.skidMin * mv.maxRun * S;
       if (revers && this.state !== ST.SKID) {                        // skid with an explicit state
         this.state = ST.SKID; this.stateT = 0; this.unplantFeet();
-        spawnDust(this.x - Math.sign(this.vx) * 0.1 * CH, this.y + STAND, 6); sfx.step();
+        spawnDust(this.x - Math.sign(this.vx) * 0.1 * CH, this.y + STAND, 6); sfx.step(this.x, this.y);
       }
       if (this.state === ST.SKID) {
         this.vx -= Math.sign(this.vx) * mv.skidDecel * S * dt;
@@ -1573,7 +1609,7 @@ class Fighter {
   onLand(vyImpact) {
     this.squashT = 0; this.squashAmt = clamp(vyImpact / (1.2 * S), 0, 1);
     this.replantFeet();
-    if (vyImpact > 0.3 * S) { spawnDust(this.x, this.y + STAND, 3 + Math.floor(this.squashAmt * 6)); sfx.step(); }
+    if (vyImpact > 0.3 * S) { spawnDust(this.x, this.y + STAND, 3 + Math.floor(this.squashAmt * 6)); sfx.step(this.x, this.y); }
     if (this.state === ST.LAUNCHED) {
       // UKEMI: if you are asking for something as you touch the ground, you land ROLLING instead of lying there.
       // It comes out cheaper than knockdown + getup (0.38 s against ~0.6 s) and it looks better too.
@@ -2156,7 +2192,7 @@ class Fighter {
         if (ph < duty) {                                              // stance: from the front (+half) towards the back (−half)
           const u = ph / duty;
           tx = hipX + dir * half * (1 - 2 * u); ty = gy;
-          if (!f.planted && spd > 0.25 * S) sfx.step();               // heel contact
+          if (!f.planted && spd > 0.25 * S) sfx.step(this.x, this.y);  // heel contact
           f.planted = true;
         } else {                                                      // swing: an arc from back to front
           const u = (ph - duty) / (1 - duty);
@@ -2417,7 +2453,7 @@ function resolveCombat(att, def) {
     def.pendKb = true; def.pendKbx = dir * CFG.fight.blockPush * S * 3; def.pendKby = 0;
     att.vx -= dir * CFG.fight.blockPush * S * 2;
     att.hitstopT = def.hitstopT = 0.04;
-    spawnSparks(cx2, cy2, 5, [90, 110, 140], dir); sfx.block();
+    spawnSparks(cx2, cy2, 5, [90, 110, 140], dir); sfx.block(cx2, cy2);
     addHitArc(cx2, cy2, dir, 0.2, [90, 110, 140]);
     addDmgNum(cx2, cy2 - 0.1 * CH, chip, false, true);
     return;
@@ -2440,8 +2476,8 @@ function resolveCombat(att, def) {
   spawnSparks(cx2, cy2, 6 + Math.min(8, Math.round(dmg * 0.8)), att.color, dir);
   addHitArc(cx2, cy2, dir, dmg / 14, att.color);
   addDmgNum(cx2, cy2 - 0.12 * CH, dmg, dmg >= 10, false);
-  if (m.sound === 'heavy') sfx.heavy(); else sfx.hit(dmg);
-  if (m.launcher) sfx.launcher();
+  if (m.sound === 'heavy') sfx.heavy(cx2, cy2); else sfx.hit(dmg, cx2, cy2);
+  if (m.launcher) sfx.launcher(cx2, cy2);
 
   // ── K.O. ──
   if (def.hp <= 0) {
@@ -2452,7 +2488,7 @@ function resolveCombat(att, def) {
     // visible flight that lands ~2-3 CH away.
     def.startRagdoll(dir * (m.kbx + 0.50) * S * 3.5, (m.kby - 0.55) * S * 2.5);
     def.grounded = false;
-    addTrauma(CFG.juice.trKO); sfx.ko();
+    addTrauma(CFG.juice.trKO); sfx.ko(def.x, def.y);
     onKO(att, def);
     return;
   }

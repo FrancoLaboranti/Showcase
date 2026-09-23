@@ -329,6 +329,33 @@
   // offset), so no tick is identical to the last and nothing is allocated per trigger: in sweep mode
   // that is 8 hits per second, i.e. 28,800 AudioBuffers an hour if one were generated each time.
   let noiseBuf = null;
+  // ── THE SWEEP IS A TEXTURE, NOT AN EVENT ──
+  // It used to be a scheduler firing one hit every 125 ms: 8 one-shots a second, 3 nodes each,
+  // 28,800 nodes an hour and up to 200 ms of hits already queued at any moment. That is an
+  // accumulation, and turning its volume down does not fix it, because what is wrong is how OFTEN
+  // it is triggered, not how loud each trigger is.
+  //
+  // It is now ONE looping node whose gain is switched, which is what the root CLAUDE.md says to do
+  // with anything continuous. Nothing can pile up, and the mechanical character is kept.
+  let whirSrc = null, whirGain = null, whirOn = -1;
+  const WHIR_GAIN = 0.0045;   // the ambience floor: present, never an event
+  function buildWhir() {
+    if (whirSrc || !AC || !noiseBuf) return;
+    try {
+      whirSrc = AC.createBufferSource(); whirSrc.buffer = noiseBuf; whirSrc.loop = true;
+      const bp = AC.createBiquadFilter(); bp.type = 'bandpass';
+      bp.frequency.value = 5000; bp.Q.value = 4;     // the same colour the hits had
+      whirGain = AC.createGain(); whirGain.gain.value = 0;
+      whirSrc.connect(bp); bp.connect(whirGain); whirGain.connect(masterGain);
+      whirSrc.start();
+    } catch (e) { whirSrc = null; whirGain = null; }
+  }
+  // Never stopped: a stopped BufferSource cannot be restarted, and cutting it dead clicks.
+  function whirSet(on) {
+    if (!whirGain || !AC || whirOn === on) return;
+    whirOn = on;
+    try { whirGain.gain.setTargetAtTime(on ? WHIR_GAIN : 0, AC.currentTime, 0.05); } catch (e) {}
+  }
 
   function audioResume() {
     if (!AC) {
@@ -344,6 +371,7 @@
       } catch (e) { return; }                 // with no audio the clock KEEPS running
     }
     if (AC.state === 'suspended') AC.resume().catch(() => {});
+    buildWhir();
   }
 
   // The one gate.
@@ -392,9 +420,9 @@
       hit(par ? 3400 : 2700, 2.5, par ? 0.008 : 0.009, 0.030, t0);
       note(tickPitch * (par ? 1 : 0.94), 0, t0, 0.030, 'sine', 0.012, 0);
     },
-    // Mechanical sweep: one hit every 125 ms, with no tonal ping and in the ambience range. It is not an
-    // event, it is a texture; if you hear it as an event, sweep mode stops being smooth.
-    whir(t0) { hit(5000, 4, 0.004, 0.008, t0); },
+    // The mechanical sweep is no longer a one-shot: see `buildWhir`/`whirSet`. It is a texture,
+    // and firing it eight times a second was the accumulation that saturated the mode.
+
     // The minute hand's jump: lower, longer and louder than the tick. It is what lets you
     // count minutes without looking at the screen. No tonal partial: the tonal is reserved for the hour.
     minuto() { hit(900, 1.6, 0.014, 0.040, 0); },
@@ -435,7 +463,6 @@
   // It is called once per frame from draw(), with the SAME four time fields that are about to be
   // drawn: that way the tick comes out in the same frame as the hand's jump (offset ≤ 16.7 ms).
   let lastSec = -1, lastMin = -1, lastHour = -1, lastFrameMs = 0;
-  let nextBeat = 0;                           // next sweep hit, in AC time
 
   function clockAudio(h, m, s, us) {
     const nowMs = performance.now();
@@ -444,22 +471,17 @@
     // Resync WITHOUT sounding. The first frame, and coming back to a tab that spent hours in the background,
     // see the whole hour jump at once: without this guard that fires a false chime plus a
     // minute click nobody saw.
-    if (gap > 1500) { lastSec = s; lastMin = m; lastHour = h; nextBeat = 0; return; }
+    if (gap > 1500) { lastSec = s; lastMin = m; lastHour = h; return; }
     // Still no user gesture (or the frame ceiling was reached): the time still has to be followed,
     // or unlocking the audio lets out the whole accumulated burst at once.
     if (!ac()) { lastSec = s; lastMin = m; lastHour = h; return; }
 
-    if (segundero === 0) {
-      if (s !== lastSec) sfx.tic(s % 2 === 0);
-    } else {
-      // A scheduler with a 200 ms lookahead over AC.currentTime, NOT one hit per frame: at 60 fps the
-      // ±16.7 ms jitter over a 125 ms period sounds like a limping hum. The ceiling of 4
-      // iterations keeps a long frame from queueing half a second of hits in one go.
-      const t = AC.currentTime;
-      if (nextBeat < t) nextBeat = t + 0.005;           // startup, or a resync after falling behind
-      let n = 0;
-      while (nextBeat < t + 0.2 && n < 4) { sfx.whir(nextBeat - t); nextBeat += 0.125; n++; }
-    }
+    // THE SECOND HAND SOUNDS IN BOTH MODES. It used to live inside the `segundero === 0` branch,
+    // so switching to sweep silenced the one cue that tells you a second has gone by: you could
+    // read microseconds on screen and the clock had stopped speaking.
+    if (s !== lastSec) sfx.tic(s % 2 === 0);
+    // The mechanical hum is a continuous node, on in sweep and off in tick. One gain, no queue.
+    whirSet(segundero === 1);
     // Minute and hour sound in BOTH modes: they are the structure of the clock, not of the second hand.
     if (m !== lastMin && lastMin >= 0) sfx.minuto();
     if (h !== lastHour && lastHour >= 0) sfx.hora();
@@ -642,12 +664,13 @@
   // ✕/⛶/ⓘ buttons count too. Measured and accepted consequence: the first tap does NOT sound, because
   // resume() is asynchronous and ac() still sees 'suspended'; the clock starts on the next tick.
   window.addEventListener('pointerdown', audioResume, true);
-  // There are no drones to switch off, but there are up to 200 ms of already-scheduled sweep hits and three
-  // counters to resync. lastFrameMs = 0 forces the next frame's silent resync branch;
-  // without it, coming back after an hour swallows a false chime.
+  // The hum IS a drone now, and there are three counters to resync. lastFrameMs = 0 forces the
+  // next frame's silent resync branch; without it, coming back after an hour swallows a false chime.
   document.addEventListener('visibilitychange', () => {
-    if (document.hidden) { if (AC) AC.suspend().catch(() => {}); }
-    else { audioResume(); lastFrameMs = 0; nextBeat = 0; }
+    // Now there IS a drone to switch off: `requestAnimationFrame` stops in a background tab and the
+    // audio graph does not, so the hum would keep going with nobody watching the clock.
+    if (document.hidden) { whirSet(false); if (AC) AC.suspend().catch(() => {}); }
+    else { audioResume(); lastFrameMs = 0; }
   });
 
   const btnMute = document.getElementById('btnMute');

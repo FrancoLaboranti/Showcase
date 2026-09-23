@@ -193,6 +193,20 @@
   // ── AUDIO (WebAudio, synthesised tones) ──
   let actx = null;
   let heldOsc = null, heldGain = null;
+  // ══════════════ MIX ══════════════
+  // Every level in the game lives here. Before this block there was NO master at all: each voice
+  // connected straight to `actx.destination`, so there was nowhere the game had a level, and the
+  // disc's tone sat at 0.32 while the rest of the repo works between 0.02 and 0.09.
+  //
+  // The relative balance is kept: the disc's tone is still the most present thing, because its
+  // PITCH is the game's mnemonic and it is what has to be memorised. What changes is the level.
+  const MIX = { pad: 0.15, held: 0.14, win: 0.095, fail: 0.085 };
+  const MASTER = 0.8;
+  // The defeat arpeggio is four notes every 0.13 s with 0.22-0.55 s tails: they OVERLAP. Levels
+  // alone do not handle an overlap, so the limiter goes on the SUM, as in Fireworks.
+  const LIMITER = { threshold: -12, knee: 6, ratio: 10, attack: 0.003, release: 0.16 };
+  let masterGain = null;
+
   function audioResume() {
     // `playTone()` is called from `update()`, which runs inside `loop()`, and the
     // `requestAnimationFrame` is at the end. If creating the context throws, Simon is not left
@@ -200,9 +214,19 @@
     if (!actx) {
       try { actx = new (window.AudioContext || window.webkitAudioContext)(); }
       catch (e) { actx = null; return; }
+      try {
+        masterGain = actx.createGain(); masterGain.gain.value = MASTER;
+        const lim = actx.createDynamicsCompressor();
+        lim.threshold.value = LIMITER.threshold; lim.knee.value = LIMITER.knee;
+        lim.ratio.value = LIMITER.ratio; lim.attack.value = LIMITER.attack;
+        lim.release.value = LIMITER.release;
+        masterGain.connect(lim); lim.connect(actx.destination);
+      } catch (e) { masterGain = null; }       // no master: `out()` falls back to the destination
     }
     if (actx.state === 'suspended') actx.resume().catch(() => {});
   }
+  // The single exit point. If the master could not be built, it behaves exactly as before.
+  function out() { return masterGain || actx.destination; }
   function playTone(freq, dur) {
     if (!soundOn) return;
     audioResume();
@@ -211,10 +235,10 @@
     const osc = actx.createOscillator(), g = actx.createGain();
     osc.type = 'sine'; osc.frequency.value = freq;
     g.gain.setValueAtTime(0, t);
-    g.gain.linearRampToValueAtTime(0.32, t + 0.012);
-    g.gain.setValueAtTime(0.32, t + Math.max(0.04, dur * 0.7));
+    g.gain.linearRampToValueAtTime(MIX.pad, t + 0.012);
+    g.gain.setValueAtTime(MIX.pad, t + Math.max(0.04, dur * 0.7));
     g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
-    osc.connect(g).connect(actx.destination);
+    osc.connect(g).connect(out());
     osc.start(t); osc.stop(t + dur + 0.03);
   }
   function startTone(freq) {            // tone held while the finger presses
@@ -226,8 +250,8 @@
     heldOsc = actx.createOscillator(); heldGain = actx.createGain();
     heldOsc.type = 'sine'; heldOsc.frequency.value = freq;
     heldGain.gain.setValueAtTime(0, t);
-    heldGain.gain.linearRampToValueAtTime(0.32, t + 0.012);
-    heldOsc.connect(heldGain).connect(actx.destination);
+    heldGain.gain.linearRampToValueAtTime(MIX.held, t + 0.012);
+    heldOsc.connect(heldGain).connect(out());
     heldOsc.start(t);
   }
   function stopTone() {
@@ -252,9 +276,9 @@
       const osc = actx.createOscillator(), g = actx.createGain();
       osc.type = 'sine'; osc.frequency.value = notes[i];
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.16, t + 0.015);
+      g.gain.linearRampToValueAtTime(MIX.win, t + 0.015);
       g.gain.exponentialRampToValueAtTime(0.0006, t + dur);
-      osc.connect(g).connect(actx.destination);
+      osc.connect(g).connect(out());
       osc.start(t); osc.stop(t + dur + 0.03);
     }
   }
@@ -272,9 +296,9 @@
       const d = last ? 0.55 : dur;
       if (last) osc.frequency.exponentialRampToValueAtTime(notes[i] * 0.6, t + d);  // droop "fail"
       g.gain.setValueAtTime(0, t);
-      g.gain.linearRampToValueAtTime(0.14, t + 0.02);
+      g.gain.linearRampToValueAtTime(MIX.fail, t + 0.02);
       g.gain.exponentialRampToValueAtTime(0.0006, t + d);
-      osc.connect(g).connect(actx.destination);
+      osc.connect(g).connect(out());
       osc.start(t); osc.stop(t + d + 0.03);
     }
   }

@@ -508,7 +508,7 @@
         for (let s = 2; s <= reach; s += 1) {
           if (occ(this.x + ux * s, this.y + uy * s)) {                            // the ONLY place where alive becomes false
             this.alive = false;
-            if (this.id === 0) sfx.derezYou(); else sfx.derezAI(this.id);
+            if (this.id === 0) sfx.derezYou(); else sfx.derezAI(this.id, this.x, this.y);
             return;
           }
         }
@@ -628,7 +628,7 @@
     o.type = type || 'square';
     o.frequency.setValueAtTime(Math.max(20, f0), t);
     if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
-    g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.setValueAtTime(Math.max(0.0001, vol * spGain), t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(masterGain);
     o.start(t); o.stop(t + dur + 0.02);
@@ -643,7 +643,7 @@
     const src = a.createBufferSource(); src.buffer = buf;
     const bp = a.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = q;
     const t = a.currentTime + t0;
-    const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol * spGain), t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(bp); bp.connect(g); g.connect(masterGain);
     src.start(t); src.stop(t + dur + 0.02);
@@ -654,6 +654,33 @@
     if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
     voiceLast[name] = now; sndThisFrame++;
     try { fn(); } catch (e) {}
+  }
+
+  // ══════════════ SPATIAL AUDIBILITY ══════════════
+  // Distance to the visible RECTANGLE, never to its centre: this world is wider than the viewport,
+  // and against a radius a cycle de-rezzing just off the side edge would be cut while one the same
+  // distance above stayed loud. Outside, it falls over a HALO of half a screen, so nothing snaps.
+  const AUDIO_HALO = 0.5;
+  const AUDIO_FLOOR = 0.05;
+  function audible(x, y) {
+    // Sin posicion: GLOBAL. Sin esta guarda, un x/y ausente propaga NaN hasta
+    // `setValueAtTime`, que tira dentro del try/catch de `voice()` y borra el sonido sin aviso.
+    if (!isFinite(x) || !isFinite(y)) return 1;
+    if (!(W > 0 && H > 0)) return 1;
+    const dx = Math.max(camX - x, 0, x - (camX + W));
+    const dy = Math.max(camY - y, 0, y - (camY + H));
+    if (dx === 0 && dy === 0) return 1;
+    const t = Math.hypot(dx, dy) / (AUDIO_HALO * Math.min(W, H));
+    if (t >= 1) return 0;
+    const g = (1 - t) * (1 - t);
+    return g < AUDIO_FLOOR ? 0 : g;
+  }
+  let spGain = 1;
+  function voiceAt(name, cdMs, x, y, fn) {
+    const g = audible(x, y);
+    if (g <= 0) return;
+    spGain = g;
+    try { voice(name, cdMs, fn); } finally { spGain = 1; }
   }
 
   // ── The engine (continuous) ──
@@ -718,9 +745,10 @@
     },
     // An AI's de-rez: the same family, compressed and SIGNED with that program's pitch, so you
     // know which one fell without looking at the minimap.
-    derezAI(id) {
+    // POSITIONAL: another cycle's de-rez, anywhere in a world bigger than the screen.
+    derezAI(id, x, y) {
       const f = NOTE_OF[id] || 220;
-      voice('derezAI', 90, () => {
+      voiceAt('derezAI', 90, x, y, () => {
         note(f, f * 0.5, 0, 0.10, 'square', 0.035);
         note(f * 0.5, f * 0.25, 0.09, 0.12, 'square', 0.028);
         noiseHit(0.02, 0.10, 0.022, 1400, 1.2);

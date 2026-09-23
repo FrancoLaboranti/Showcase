@@ -726,8 +726,26 @@
   const SND_MAX_PER_FRAME = 4;                                                     // cap on one-shots per frame (blowAll/salvos do not saturate)
   const PITCH_JITTER = 0.10;                                                       // ± pitch variation per trigger
   const VOICE_COOLDOWN = { launch: 70, sparks: 60, explosion: 55 };                // minimum ms between triggers of each voice
-  const VOICE_GAIN = { launch: 0.4, sparks: 0.35, explosion: 0.8 };                // base volume per voice
-  const BG_GAIN = 0.3;                                                             // volume of the looping ambience
+  // ══════════════ MIX ══════════════
+  // EVERYTHING to do with level lives in this block. When the sound files are replaced, these are
+  // the only numbers to touch.
+  //
+  // The previous values were explosion 0.8 / launch 0.4 / sparks 0.35 / background 0.3. The
+  // explosion is also multiplied by up to 1.3 by the burst's size inside `playVoice`, which put a
+  // single big burst at 1.04: over full scale on its own, before any other voice was added.
+  const MIX = {
+    launch:     0.16,
+    sparks:     0.14,
+    explosion:  0.30,     // still the loudest: the burst is the event, it just no longer clips
+    background: 0.12,
+  };
+  // The ceiling for ONE voice once its size multiplier has been applied. Without it the
+  // explosion's ×1.3 walks straight back over the level chosen just above.
+  const MIX_MAX = 0.42;
+  // Limiter: the threshold sits just under the peak of one burst, so a lone burst passes
+  // untouched and only a SALVO is caught. 12:1 is limiting, not compression; the fast attack
+  // catches the transient and the slow release keeps it from pumping between bursts.
+  const LIMITER = { threshold: -10, knee: 6, ratio: 12, attack: 0.003, release: 0.18 };
   const lastVoiceT = {};
 
   async function loadSamples() {
@@ -750,7 +768,17 @@
     if (!actx) {
       try {
         actx = new (window.AudioContext || window.webkitAudioContext)();
-        masterGain = actx.createGain(); masterGain.gain.value = muted ? 0 : 1; masterGain.connect(actx.destination);
+        masterGain = actx.createGain(); masterGain.gain.value = muted ? 0 : 1;
+        // Lowering the per-voice numbers fixes ONE burst. It does not fix four in the same frame,
+        // which still add up: that is what the limiter is for, and it is why it sits on the sum
+        // and not on each voice.
+        try {
+          const lim = actx.createDynamicsCompressor();
+          lim.threshold.value = LIMITER.threshold; lim.knee.value = LIMITER.knee;
+          lim.ratio.value = LIMITER.ratio; lim.attack.value = LIMITER.attack;
+          lim.release.value = LIMITER.release;
+          masterGain.connect(lim); lim.connect(actx.destination);
+        } catch (e) { masterGain.connect(actx.destination); }   // no compressor: straight out, as before
       } catch (e) { actx = null; return; }
     }
     if (actx.state === 'suspended') actx.resume().catch(() => {});
@@ -768,7 +796,7 @@
   function startBackground() {                                                     // looping ambience (idempotent: it does not start twice)
     if (!actx || bgNode || muted || !soundBuffers.background) return;
     bgNode = actx.createBufferSource(); bgNode.buffer = soundBuffers.background; bgNode.loop = true;
-    bgGain = actx.createGain(); bgGain.gain.value = BG_GAIN;
+    bgGain = actx.createGain(); bgGain.gain.value = MIX.background;
     bgNode.connect(bgGain); bgGain.connect(masterGain); bgNode.start();
   }
 
@@ -780,7 +808,7 @@
     if (now - (lastVoiceT[voice] || 0) < (VOICE_COOLDOWN[voice] || 0)) return;
     if (sndThisFrame >= SND_MAX_PER_FRAME) return;
     const g = actx.createGain();
-    g.gain.value = (VOICE_GAIN[voice] || 0.5) * (gainMul === undefined ? 1 : gainMul);
+    g.gain.value = Math.min(MIX_MAX, (MIX[voice] || 0.2) * (gainMul === undefined ? 1 : gainMul));
     g.connect(masterGain);
     const src = actx.createBufferSource(); src.buffer = buf;
     src.playbackRate.value = (pitch || 1) * (1 + (Math.random() * 2 - 1) * PITCH_JITTER);

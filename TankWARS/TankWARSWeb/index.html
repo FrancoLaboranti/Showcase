@@ -911,7 +911,7 @@
     o.type = type || 'sine';
     o.frequency.setValueAtTime(Math.max(20, f0 * j), t);
     if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * j), t + dur);
-    g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    g.gain.setValueAtTime(Math.max(0.0001, vol * spGain), t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(masterGain);
     o.start(t); o.stop(t + dur + 0.02);
@@ -926,7 +926,7 @@
     const bp = a.createBiquadFilter(); bp.type = type || 'bandpass';
     bp.frequency.value = freq; bp.Q.value = q || 1;
     const t = a.currentTime + (t0 || 0);
-    const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+    const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol * spGain), t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(bp); bp.connect(g); g.connect(masterGain);
     src.start(t); src.stop(t + dur + 0.02);
@@ -939,48 +939,83 @@
     try { fn(); } catch (e) {}
   }
 
+  // ══════════════ SPATIAL AUDIBILITY ══════════════
+  // The same rectangle the drawing already culls against (`inView`), used for the ear. The distance
+  // goes to the RECTANGLE and never to its centre: in a landscape view the centre is far more
+  // distant from the side edges than from the top ones, and a centre-based falloff would silence a
+  // tank just off the left while one the same distance above stayed at full volume.
+  //
+  // Outside, it falls across a HALO of half a screen rather than cutting at the edge, so a tank
+  // rolling in is heard before it appears. Quadratic, so there is no step.
+  const AUDIO_HALO = 0.5;      // the halo, as a fraction of the view's shortest side
+  const AUDIO_FLOOR = 0.05;    // under this it is inaudible: better not to spend the voice
+  function audible(x, y) {
+    // Sin posicion: GLOBAL. Sin esta guarda, un x/y ausente propaga NaN hasta
+    // `setValueAtTime`, que tira dentro del try/catch de `voice()` y borra el sonido sin aviso.
+    if (!isFinite(x) || !isFinite(y)) return 1;
+    if (!(W > 0 && H > 0)) return 1;
+    const dx = Math.max(camX - x, 0, x - (camX + W));
+    const dy = Math.max(camY - y, 0, y - (camY + H));
+    if (dx === 0 && dy === 0) return 1;
+    const t = Math.hypot(dx, dy) / (AUDIO_HALO * Math.min(W, H));
+    if (t >= 1) return 0;
+    const g = (1 - t) * (1 - t);
+    return g < AUDIO_FLOOR ? 0 : g;
+  }
+  // `spGain` multiplies inside note/noiseHit so the attenuation does not have to be threaded
+  // through every note of every voice. It is set only for the duration of the call.
+  let spGain = 1;
+  function voiceAt(name, cdMs, x, y, fn) {
+    const g = audible(x, y);
+    if (g <= 0) return;                  // past the halo: it neither sounds nor costs a voice
+    spGain = g;
+    try { voice(name, cdMs, fn); } finally { spGain = 1; }
+  }
+
   const sfx = {
     // CORDITE. Yours carries a sub; someone else's does not. The same event, a different distance.
-    fire(mio) {
-      voice(mio ? 'fire' : 'fireE', mio ? 50 : 35, () => {
+    fire(mio, x, y) {
+      voiceAt(mio ? 'fire' : 'fireE', mio ? 50 : 35, x, y, () => {
         if (mio) { noiseHit(0, 0.045, 0.075, 1100, 0.8, 'lowpass'); note(88, 62, 0, 0.09, 'sine', 0.045); }
         else     { noiseHit(0, 0.028, 0.028, 1800, 0.8, 'lowpass'); }
       });
     },
-    missile(mio) {
-      voice(mio ? 'msl' : 'mslE', 120, () => {
+    missile(mio, x, y) {
+      voiceAt(mio ? 'msl' : 'mslE', 120, x, y, () => {
         if (mio) { noiseHit(0, 0.22, 0.07, 700, 0.6, 'lowpass'); note(140, 90, 0, 0.22, 'sine', 0.04); }
         else     { noiseHit(0, 0.20, 0.045, 1100, 0.6, 'lowpass'); note(210, 140, 0, 0.18, 'sine', 0.025); }
       });
     },
     // SHEET METAL. The volume scales with the REAL damage, not the nominal one: a shot that did almost nothing
     // cannot sound like one that took off a quarter of your health.
-    hit(dmg, maxhp) {
+    hit(dmg, maxhp, x, y) {
       const k = Math.max(0.2, Math.min(1, dmg / (maxhp * 0.12)));
-      voice('hit', 28, () => noiseHit(0, 0.055, 0.03 + 0.05 * k, 240, 3.2));
+      voiceAt('hit', 28, x, y, () => noiseHit(0, 0.055, 0.03 + 0.05 * k, 240, 3.2));
     },
     // The crit is an ADDITIVE layer over the impact, not a replacement: first you hear that you hit
     // and then that you hit well.
-    crit() { voice('crit', 60, () => note(1750, 1750, 0, 0.035, 'sine', 0.035, 0)); },
+    crit(x, y) { voiceAt('crit', 60, x, y, () => note(1750, 1750, 0, 0.035, 'sine', 0.035, 0)); },
     // ELECTRICITY: the shot was eaten by the shield. There was no metal, so it does not sound like metal.
-    absorb() { voice('absorb', 45, () => { note(1250, 1250, 0, 0.04, 'sine', 0.05, 0); noiseHit(0, 0.02, 0.02, 2600, 6); }); },
+    absorb(x, y) { voiceAt('absorb', 45, x, y, () => { note(1250, 1250, 0, 0.04, 'sine', 0.05, 0); noiseHit(0, 0.02, 0.02, 2600, 6); }); },
     // Big CORDITE, scaled by the size of whatever died.
-    enemyDie(r) {
+    enemyDie(r, x, y) {
       const k = Math.max(0.3, Math.min(1, (r || 0.02) / 0.035));
-      voice('eDie', 70, () => { noiseHit(0, 0.16 + 0.22 * k, 0.05 + 0.05 * k, 520 - 220 * k, 0.7, 'lowpass');
-                                note(150 - 60 * k, 45, 0, 0.25 + 0.2 * k, 'sine', 0.05 + 0.05 * k); });
+      voiceAt('eDie', 70, x, y, () => { noiseHit(0, 0.16 + 0.22 * k, 0.05 + 0.05 * k, 520 - 220 * k, 0.7, 'lowpass');
+                                        note(150 - 60 * k, 45, 0, 0.25 + 0.2 * k, 'sine', 0.05 + 0.05 * k); });
     },
-    blast() { voice('blast', 90, () => { note(95, 38, 0, 0.42, 'sine', 0.10); noiseHit(0, 0.30, 0.07, 800, 0.5, 'lowpass');
-                                         noiseHit(0.02, 0.18, 0.04, 2200, 1.2); }); },
-    // The LOWEST in the game, so it is not confused with a missile.
-    mine() { voice('mine', 120, () => { note(70, 28, 0, 0.55, 'sine', 0.11); noiseHit(0, 0.40, 0.075, 500, 0.4, 'lowpass'); }); },
+    // The missile's burst. POSITIONAL: a missile can go off at the far side of the arena.
+    blast(x, y) { voiceAt('blast', 90, x, y, () => { note(95, 38, 0, 0.42, 'sine', 0.10); noiseHit(0, 0.30, 0.07, 800, 0.5, 'lowpass');
+                                                    noiseHit(0.02, 0.18, 0.04, 2200, 1.2); }); },
+    // The LOWEST in the game, so it is not confused with a missile. POSITIONAL: a mine goes off
+    // where it was laid, and the arena is full of them in the MINEFIELD biome.
+    mine(x, y) { voiceAt('mine', 120, x, y, () => { note(70, 28, 0, 0.55, 'sine', 0.11); noiseHit(0, 0.40, 0.075, 500, 0.4, 'lowpass'); }); },
     // WOOD: the only time this family turns up in the whole game.
-    crate(rota) { voice('crate', 50, () => rota ? (noiseHit(0, 0.14, 0.06, 520, 1.2), note(180, 110, 0, 0.14, 'triangle', 0.03))
+    crate(rota, x, y) { voiceAt('crate', 50, x, y, () => rota ? (noiseHit(0, 0.14, 0.06, 520, 1.2), note(180, 110, 0, 0.14, 'triangle', 0.03))
                                                 : noiseHit(0, 0.045, 0.035, 600, 1.5)); },
     // GOLD: the only bright, clean register. The ping RISES with how little the crate has left,
     // so you can hear that it is about to break without looking at the bar.
-    loot(salud) { voice('loot', 40, () => note(900 + (10 - Math.max(0, Math.min(10, salud))) * 85, 0, 0, 0.045, 'sine', 0.04, 0)); },
-    lootBreak() { voice('lootB', 250, () => [660, 880, 1100].forEach((f, i) => note(f, 0, i * 0.06, 0.2, 'triangle', 0.05, 0))); },
+    loot(salud, x, y) { voiceAt('loot', 40, x, y, () => note(900 + (10 - Math.max(0, Math.min(10, salud))) * 85, 0, 0, 0.045, 'sine', 0.04, 0)); },
+    lootBreak(x, y) { voiceAt('lootB', 250, x, y, () => [660, 880, 1100].forEach((f, i) => note(f, 0, i * 0.06, 0.2, 'triangle', 0.05, 0))); },
     coin() { voice('coin', 35, () => note(1560, 0, 0, 0.05, 'sine', 0.03, 0.04)); },
     // The shield is the ONLY continuous node: two sines a hertz apart beating slowly.
     // It is not a tone, it is a presence: you know you have it on without it covering anything.
@@ -1001,7 +1036,16 @@
     // broke and that it was yours.
     shieldBreak() { voice('shB', 300, () => { note(1400, 1400, 0, 0.35, 'sine', 0.05, 0); note(1483, 1483, 0, 0.35, 'sine', 0.05, 0);
                                               noiseHit(0.02, 0.12, 0.03, 3000, 5); }); },
-    ui() { voice('ui', 45, () => note(700, 700, 0, 0.035, 'square', 0.03, 0)); },
+    // `dir` is optional. Without it, the same flat blip the shop and the draft already used, so
+    // those three call sites do not change. With it the note MOVES: down to pause, up to resume.
+    // That two-direction toggle is the repo's convention (CrazyTanks and TronV2 both do it) and it
+    // earns its keep here, because pausing also hides the HUD: from a flat blip you cannot tell
+    // which way the switch went.
+    ui(dir) {
+      const f0 = dir ? (dir < 0 ? 760 : 540) : 700;
+      const f1 = dir ? (dir < 0 ? 520 : 780) : 700;
+      voice('ui', 45, () => note(f0, f1, 0, dir ? 0.055 : 0.035, 'square', 0.03, 0));
+    },
   };
 
   // The whole game lives inside an IIFE, so the headless audio harness cannot reach
@@ -1126,7 +1170,7 @@
               shot.isPlayerShot = true;            // it bounces back as a player shot
               shot.color = modifyColor(player.color, 150);
             } else {
-              sfx.absorb();                        // ELECTRICITY: there was no metal, it does not sound like metal
+              sfx.absorb(this.x, this.y);          // ELECTRICITY: there was no metal, it does not sound like metal
               toRemove.add(shot);                  // absorbed by the shield
             }
           }
@@ -1138,8 +1182,8 @@
           let dmg = MAXHP*0.05*atk*this.defense*pscale;   // damage in real HP (an even def → a base cannon of 25 against any enemy)
           const crit = isP && Math.random() < (player.critChance||0);   // CRITICAL HIT (the probability + the damage are bought in the shop), during RAGE too
           if (crit) dmg *= (player.critMult||2);
-          sfx.hit(dmg, MAXHP);
-          if (crit) sfx.crit();                              // an ADDITIVE layer: first you hit, then you hit WELL
+          sfx.hit(dmg, MAXHP, this.x, this.y);
+          if (crit) sfx.crit(this.x, this.y);                // an ADDITIVE layer: first you hit, then you hit WELL
           this.health = Math.max(this.health - dmg, 0);
           this.hitCD = 0.03;
           if (isP) dmgNum(this.x, this.y - this.radius, Math.max(1, Math.round(dmg)), crit);   // the damage number = real HP
@@ -1167,6 +1211,17 @@
           if ((this.scoreValue || 0) >= 1400) manager.bossKills++;  // elites/bosses → for the achievements
           if (this.scoreValue) popup(this.x, this.y - this.radius*2, '+' + gained + (m > 1 ? ' x' + m.toFixed(1) : ''), m > 1 ? [255,200,60] : [255,255,255]);
         }
+        // The size of whatever died decides the weight of the boom: a swarm pawn and an elite
+        // cannot sound the same. It goes here, in the branch that also does `toRemove`, so it is
+        // one sound per death and not one per frame while the corpse is still in the list.
+        //
+        // EXCEPT the Exploder, which is a bomb and not a tank: its death IS an area detonation, so
+        // it takes `blast` INSTEAD of `enemyDie` and never both. `enemyDie` scales by RADIUS, and
+        // the Exploder has one of the smallest bodies in the game while its blast does the most
+        // damage of anything an enemy can do to you, so through that voice it landed on the floor
+        // value and the worst moment of a wave sounded like a pawn going down.
+        if (this.blastOnDeath) sfx.blast(this.x, this.y);
+        else sfx.enemyDie(this.radius, this.x, this.y);
         const amount = this.dropCoins || 0;
         for (let i = 0; i < amount; i++) new Coin(this.x, this.y, ri(28,42) + (this.coinValue||0));
         toRemove.add(this);
@@ -1437,6 +1492,10 @@
         if (d < this.radius + coin.radius && !coin.accounted) {
           this.moneyToAdd += Math.round(coin.value * manager.coinMul * (this.coinGain||1)); this.coinGrabbedCD = 0.03;   // mutators + the Coin value upgrade
           burst(coin.x, coin.y, [255,255,80], 3, sper(0.12), 0.35, sper(0.0025));   // a flash on collecting it
+          // GLOBAL on purpose: the coin is cashed in ON the player, which is the centre of the
+          // camera, so there is nothing to attenuate. Its 35 ms cooldown is what keeps a burst
+          // crate from turning twenty coins into a machine gun.
+          sfx.coin();
           coin.accounted = true; toRemove.add(coin);
         }
       }
@@ -1468,6 +1527,10 @@
       if (this.shieldUpCD > 0) this.shieldAction();
     }
     onShieldBreak() {
+      // The only dissonance in the game, and it lives HERE and not in `shieldAction`: `onShieldBreak`
+      // exists only on the Player, and the voice was written to say "it was YOURS". An enemy
+      // Shielder overloading is not your problem and does not sound.
+      sfx.shieldBreak();
       // A BURST when the shield breaks: it turns the critical instant (an overload = 0 defence) into a DEFENSIVE moment.
       // It sweeps away the nearby enemy shots (you do not eat the volley that was coming) + gives a window of reduced damage so you can
       // reposition in time. A wave + a shake so it READS that your shield blew.
@@ -1933,6 +1996,7 @@
       this.radius=sper(0.0128); this.drawRadius=this.radius; this.color=[140,70,0];
       this.attack=1; this.defense=1; this.moveSpeed=1.05; this.primaryShotAS=0.6; this.maxHealth=this.health=815;   // a kamikaze: its danger is the blast (350 HP), not the cannon
       this.shieldAugment=-3; this.dropCoins=ri(12,17); this.coinValue=15; this.scoreValue=560; this.exploded=false;
+      this.blastOnDeath = true;   // AUDIO ONLY: it picks the death voice. It touches no damage, radius or physics.
     }
     process() {
       super.process();
@@ -2358,6 +2422,7 @@
     draftPanel.classList.add('show');
   }
   function pickDraft(id) {
+    sfx.ui();                             // choosing 1 of 3: the only confirmation the card gives
     if (player) grantPowerUp(player, id);
     manager.draftOpen = false;
     draftPanel.classList.remove('show');
@@ -2404,7 +2469,7 @@
       this.isPlayerShot = tank.isPlayer;
       this.attack = tank.attack;
       if (tank.isPlayer && tank.powerUps.pierce) { this.pierce = true; this.hit = new Set(); }   // the PIERCING upgrade: it goes through enemies
-      sfx.fire(this.isPlayerShot);
+      sfx.fire(this.isPlayerShot, this.x, this.y);
       shots.push(this);
     }
     process() {
@@ -2437,7 +2502,7 @@
       this.lifeSpan = ri(7,10); this.missile = true;
       this.isPlayerShot = tank.isPlayer; this.attack = tank.attack;
       this.areaMult = (tank.isPlayer && tank.powerUps && tank.powerUps.bigMissiles) ? 2 : 1;   // BIG MISSILES: ×2 the detonation radius (damage + explosion)
-      sfx.missile(this.isPlayerShot);
+      sfx.missile(this.isPlayerShot, this.x, this.y);
       shots.push(this);
     }
     process() {
@@ -2514,6 +2579,7 @@
     detonate() {
       if (this.detonated) return;
       this.detonated = true;
+      sfx.blast(this.x, this.y);          // AFTER the guard: several targets triggering the same burst give ONE boom
       const R = Math.max(this.radius * 9, sper(0.04)) * 1.6 * this.areaMult;     // the LETHAL radius = ~the visible flash (the drawn core inflates ~2.4× → without the 1.6 the damage came out small next to the drawing). ×areaMult with BIG MISSILES
       for (const t of tanks) {
         if (t.isPlayer === this.isPlayerShot) continue;    // the same side → no
@@ -2649,7 +2715,7 @@
         const e = shot.radius*0.75, sl = shot.x - e, st = shot.y - e, sz = shot.radius*1.5;
         if (sl+sz > wx && sl < wr && st+sz > wy && st < wb) {
           if (shot.isPlayerShot) {                          // only the player breaks it; for the enemy it just stops the shot
-            sfx.crate(shot.missile || this.health <= 1);     // WOOD: the only time this family turns up
+            sfx.crate(shot.missile || this.health <= 1, this.x, this.y);   // WOOD: the only time this family turns up
             this.health -= shot.missile ? this.health : 1;  // the missile blows it up in one touch
             this.hitCD = 0.06; if (player) player.score += 5;
           }
@@ -2722,6 +2788,7 @@
     }
     detonate() {
       // a BIG, showy burst (like the missile's): an orange boom ~ the size of the damage area + a fire core + a double spark shower + a strong shake
+      sfx.mine(this.x, this.y);           // the lowest voice in the game: a mine is not a missile
       const R = this.blast;
       new Explosion(this.x, this.y, R, [255,140,40]);                          // an orange-tinted boom, the size of the area
       new Explosion(this.x, this.y, R*0.55);                                   // a second white-orange fire core
@@ -2924,7 +2991,7 @@
       for (const shot of shots) {
         if (toRemove.has(shot)) continue;
         if (shot.isPlayerShot && getDistSq([shot.x,shot.y],[this.x,this.y]) < this.radius*this.radius) {
-          if (shot.missile || this.health <= 1) sfx.lootBreak(); else sfx.loot(this.health);
+          if (shot.missile || this.health <= 1) sfx.lootBreak(this.x, this.y); else sfx.loot(this.health, this.x, this.y);
           this.health -= shot.missile ? this.health : 1;   // the MISSILE blows it up in one touch; the cannon takes 1 off it
           this.hitCD = 0.05;
           if (player) player.score += 100;
@@ -3308,7 +3375,10 @@
   }
   holdBtn('btnMissile', 'missile');
   holdBtn('btnBoost', 'boost');
-  document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); showMenu(); });   // ↻ = go back to the menu
+  // The sound goes on the BUTTON and not inside `showMenu()`: that function is also what opens the
+  // game at startup and what the defeat screen calls, so from in there it would beep on launch and
+  // on dying.
+  document.getElementById('btnReset').addEventListener('pointerdown', e => { e.preventDefault(); sfx.ui(); showMenu(); });   // ↻ = go back to the menu
   document.getElementById('btnPause').addEventListener('pointerdown', e => { e.preventDefault(); togglePause(); });
   addEventListener('keydown', e => { if (e.key === 'p' || e.key === 'P') togglePause(); });   // P = pause (desktop)
 
@@ -3363,7 +3433,8 @@
     }
   }
   function buyUpgrade(u) {
-    if (!player || u.lvl > MAXLVL || player.money < u.cost) return;
+    if (!player || u.lvl > MAXLVL || player.money < u.cost) return;   // it cannot be afforded: no sound either
+    sfx.ui();
     player.money -= u.cost;
     applyUpgrade(u.key);
     u.cost += Math.floor(u.cost * 0.17);   // a steeper growth → there is never enough to max everything: you have to COMMIT to a build
@@ -3420,6 +3491,9 @@
     }
   }
   function toggleShop(open) {
+    // The funnel for BOTH routes in: the ⬆ button and the Tab key both end up here, so the sound
+    // goes once and does not need to be repeated at each input.
+    sfx.ui();
     manager.shopOpen = open;
     shopPanel.classList.toggle('show', open);
     btnShop.classList.toggle('on', open);
@@ -3543,8 +3617,12 @@
 
   // Pause: it freezes the update (the loop keeps drawing the still frame) and shows an overlay. During a game only.
   function togglePause(force) {
-    if (manager.menu || manager.gameover || manager.victory || manager.draftOpen) return;
+    if (manager.menu || manager.gameover || manager.victory || manager.draftOpen) return;   // it is not allowed: no sound either
     manager.paused = (force === undefined) ? !manager.paused : force;
+    // INSIDE the toggle and not on the button: the ⏸ button and the P key are the only two routes
+    // in, so one sound whichever was used. It reads the state ALREADY applied, so the direction
+    // cannot disagree with what actually happened.
+    sfx.ui(manager.paused ? -1 : 1);
     const b = document.getElementById('btnPause'); if (b) b.classList.toggle('on', manager.paused);
   }
 

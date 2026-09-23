@@ -491,7 +491,7 @@
     o.frequency.setValueAtTime(Math.max(20, f0), t);
     if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1), t + dur);
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(Math.max(0.0002, vol), t + A);
+    g.gain.linearRampToValueAtTime(Math.max(0.0002, vol * spGain), t + A);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.connect(g); g.connect(masterLP);
     o.start(t); o.stop(t + dur + 0.02);
@@ -510,7 +510,7 @@
     const t = a.currentTime + t0;
     const g = a.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.linearRampToValueAtTime(Math.max(0.0002, vol), t + 0.008);
+    g.gain.linearRampToValueAtTime(Math.max(0.0002, vol * spGain), t + 0.008);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(bp); bp.connect(g); g.connect(masterLP);
     src.start(t); src.stop(t + dur + 0.02);
@@ -521,6 +521,41 @@
     if (voiceLast[name] && now - voiceLast[name] < cdMs) return;
     voiceLast[name] = now; sndThisFrame++;
     try { fn(); } catch (e) {}
+  }
+
+  // ══════════════ SPATIAL AUDIBILITY ══════════════
+  // The distance is measured to the visible RECTANGLE, never to its centre. With a wide view the
+  // centre sits much further from the side edges than from the top ones, so a centre-based falloff
+  // silences a source just off the left while one the same distance above is still at full volume.
+  // Against the rectangle, "inside" is distance 0 and every edge behaves the same.
+  //
+  // Outside, it falls across a HALO of half a screen instead of cutting at the edge: a snake coming
+  // in is heard BEFORE it appears, which is what makes it read as a world rather than a switch. The
+  // curve is quadratic so the entry is soft and the tail dies without a step.
+  const AUDIO_HALO = 0.5;      // the halo, as a fraction of the view's shortest side
+  const AUDIO_FLOOR = 0.05;    // under this it is not audible: better not to spend the voice
+  function audible(x, y) {
+    // Sin posicion: GLOBAL. Sin esta guarda, un x/y ausente propaga NaN hasta
+    // `setValueAtTime`, que tira dentro del try/catch de `voice()` y borra el sonido sin aviso.
+    if (!isFinite(x) || !isFinite(y)) return 1;
+    const w = vR - vL, h = vB - vT;
+    if (!(w > 0 && h > 0)) return 1;              // frame 0: the bounds are not measured yet
+    const dx = Math.max(vL - x, 0, x - vR);
+    const dy = Math.max(vT - y, 0, y - vB);
+    if (dx === 0 && dy === 0) return 1;           // on screen
+    const t = Math.hypot(dx, dy) / (AUDIO_HALO * Math.min(w, h));
+    if (t >= 1) return 0;
+    const g = (1 - t) * (1 - t);
+    return g < AUDIO_FLOOR ? 0 : g;
+  }
+  // `spGain` multiplies inside wNote/wNoise so the attenuation does not have to be threaded
+  // through every note of every voice. It is set only for the duration of the call.
+  let spGain = 1;
+  function voiceAt(name, cdMs, x, y, fn) {
+    const g = audible(x, y);
+    if (g <= 0) return;                           // past the halo: it neither sounds nor costs a voice
+    spGain = g;
+    try { voice(name, cdMs, fn); } finally { spGain = 1; }
   }
 
 
@@ -576,13 +611,20 @@
     // ── HYDRAULICS ──
     // The charge in two beats, scheduled in one go: first the water gathering as it retracts
     // (LUNGE_WIND), then the whip. Without the first half the charge has no anticipation.
-    lunge() { voice('lunge', 200, () => { wNoise(0, LUNGE_WIND, 0.030, 900, 0.8);
+    // POSITIONAL: it is another snake's strike, somewhere in the lake. It was the one you could
+    // hear fighting off screen.
+    // `mio` is not a volume, it is a VOICE KEY: `voice()` groups the cooldown by name, so with a
+    // shared key an enemy striking within 200 ms swallowed the player's own dash. Yours gets its
+    // own pool and is always heard.
+    lunge(x, y, mio) { voiceAt(mio ? 'lungeYo' : 'lunge', 200, x, y, () => { wNoise(0, LUNGE_WIND, 0.030, 900, 0.8);
                                           wNoise(LUNGE_WIND, 0.22, 0.055, 500, 0.7);
                                           wNote(150, 70, LUNGE_WIND, 0.20, 'sine', 0.035, 0.008); }); },
     // A fleshy bite: the volume and the low end scale with the real damage.
     bite(dmg) { const k = Math.max(0.3, Math.min(1, dmg / 30));
                 voice('bite', 60, () => { wNote(160, 70, 0, 0.14, 'sine', 0.05 * k, 0.005); wNoise(0, 0.12, 0.035 * k, 400, 0.8); }); },
-    killEnemy() { voice('killE', 150, () => { wNote(220, 55, 0, 0.35, 'sine', 0.07, 0.006); wNote(330, 82, 0, 0.30, 'sine', 0.03, 0.006); wNoise(0, 0.30, 0.04, 350, 0.6); }); },
+    // POSITIONAL: a snake can die anywhere in the lake, including a fight between two enemies
+    // that you never see.
+    killEnemy(x, y) { voiceAt('killE', 150, x, y, () => { wNote(220, 55, 0, 0.35, 'sine', 0.07, 0.006); wNote(330, 82, 0, 0.30, 'sine', 0.03, 0.006); wNoise(0, 0.30, 0.04, 350, 0.6); }); },
     // Taking damage: lower and duller than biting. The one eating it is you.
     hurt(dmg) { const k = Math.max(0.35, Math.min(1, dmg / 30));
                 voice('hurt', 180, () => { wNote(130, 58, 0, 0.22, 'sine', 0.065 * k, 0.005); wNoise(0, 0.18, 0.045 * k, 260, 0.6); }); },
@@ -607,13 +649,14 @@
     },
     // Hitting a boss: TWO timbres. If the armour absorbed it, a dry, matte knock (it did not land);
     // if it landed, a bell. It is the only way to know whether the vulnerable window was open.
-    bossHit(entro) {
+    // POSITIONAL: the boss is a world entity and the fight can leave the frame.
+    bossHit(entro, x, y) {
       voice('bossHit', 70, () => {
         if (entro) { wNote(880, 0, 0, 0.35, 'sine', 0.06, 0.004); wNote(1320, 0, 0, 0.30, 'sine', 0.03, 0.004); }
         else       { wNoise(0, 0.09, 0.045, 700, 2.0); wNote(120, 90, 0, 0.10, 'sine', 0.03, 0.006); }
       });
     },
-    bossDie() { voice('bossDie', 1500, () => { wNote(200, 35, 0, 1.4, 'sine', 0.10, 0.03); wNoise(0, 0.8, 0.06, 300, 0.5);
+    bossDie(x, y) { voiceAt('bossDie', 1500, x, y, () => { wNote(200, 35, 0, 1.4, 'sine', 0.10, 0.03); wNoise(0, 0.8, 0.06, 300, 0.5);
                                                [523.25, 784, 1046.5, 1568].forEach((f, i) => wNote(f, 0, 0.5 + i * 0.09, 0.5, 'sine', 0.035, 0.005)); }); },
     // Sinking. The water closes to 300 Hz and does not open again until the reset.
     die() { voice('die', 2000, () => { wNote(300, 40, 0, 1.6, 'sine', 0.09, 0.02); wNoise(0, 1.2, 0.05, 400, 0.5); lpSet(300, 0.5); }); },
@@ -1534,7 +1577,7 @@
       enemies.push(this);
     }
     grow(n) { const last = this.pieces[this.pieces.length-1]; for (let i = 0; i < n && this.pieces.length < ENEMY_MAX_LEN; i++) this.pieces.push({ x: last.x, y: last.y, ang: last.ang, wt: 0 }); }
-    startLunge(tx, ty) { sfx.lunge(); const h = this.pieces[0], dx = tx-h.x, dy = ty-h.y, d = Math.hypot(dx, dy) || 1; this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; this.lungeDisp = 0; }
+    startLunge(tx, ty) { const h = this.pieces[0]; sfx.lunge(h.x, h.y); const dx = tx-h.x, dy = ty-h.y, d = Math.hypot(dx, dy) || 1; this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; this.lungeDisp = 0; }
     // ── EXTRA HEADS: a unified model (necks that bite by themselves). One parameter per head defines where it
     //    anchors to the body (baseIdx), its length (neckCount), its resting direction (restOff/side) and how much
     //    FREEDOM it has to aim (freedom). The 3 looks come out of that: 'cluster', 'hydra' and 'body'. ──
@@ -1655,6 +1698,10 @@
     die() {                                                                       // it dies with the SAME effect as the player (it breaks up into particles) + it drops food
       if (this.dead) return;
       this.dead = true;
+      // AFTER the guard and inside `die()`, which is the funnel: five different places call it
+      // (your bite, another enemy's, a mine, the venom, a boss). One sound per death, whatever
+      // killed it.
+      { const h = this.pieces[0]; if (h) sfx.killEnemy(h.x, h.y); }
       const n = this.pieces.length, r = curR*this.sizeMul;
       const step = Math.max(1, Math.ceil(n / 160));                              // particles that scatter slowly and fade, in its colour
       for (let i = 0; i < n; i += step) {
@@ -2065,7 +2112,7 @@
       // TWO timbres: if the armour absorbed more than half, a dry, matte knock; it did not land, the
       // vulnerable window was shut. If it landed, a bell. It is the only way to know whether the
       // moment was right without memorising each boss's phase.
-      sfx.bossHit(real >= dmg * 0.5);
+      sfx.bossHit(real >= dmg * 0.5, this.x, this.y);
       this.hp -= real; this.hurt = HAZARD_FLASH_TIME;
       manager.score += Math.round(real * HIT_SCORE);
       if (manager.lifesteal > 0) manager.healQueue += real * manager.lifesteal;
@@ -2077,7 +2124,7 @@
     die() {                                                                       // A NICE DEATH: a flash + a shockwave + an implosion→burst (a big cloud) + a shower of stars + a slow glow
       if (this.dead) return;
       this.dead = true;
-      sfx.bossDie();
+      sfx.bossDie(this.x, this.y);
       manager.score += BOSS_KILL_SCORE; manager.addXP(XP_KILL*4);
       const R = this.bodyR();
       manager.luFlash = 1; manager.flashGlow = `hsla(${this.hue},95%,62%,0.7)`;
@@ -2421,11 +2468,13 @@
         if (bestBoss) {
           const dx = bestBoss.x-h.x, dy = bestBoss.y-h.y, d = Math.hypot(dx, dy) || 1;
           this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; this.lungeDisp = 0; this.attackCD = ATTACK_CD;
+          sfx.lunge(h.x, h.y, true);                                             // your strike: `attackCD` above is what keeps it to one per dash
           this.atkTarget = null; this.atkHit = false; this.parryTarget = null;    // no enemy atkTarget → the charge's hit test tries the bosses (the bosses have their own counter)
           h.wave_time = h.wave_time_total;
         } else if (best) {
           const eh = best.pieces[0], dx = eh.x-h.x, dy = eh.y-h.y, d = Math.hypot(dx, dy) || 1;
           this.lungeX = dx/d; this.lungeY = dy/d; this.lungeT = LUNGE_WIND + LUNGE_TIME; this.lungeDisp = 0; this.attackCD = ATTACK_CD;
+          sfx.lunge(h.x, h.y, true);                                             // the other branch of the SAME `if/else`: only one of the two ever runs
           this.atkTarget = best; this.atkHit = false;                            // PARRY DISABLED (parryActive/parryTarget are never armed; only the warning ring in the draw is left)
           h.wave_time = h.wave_time_total;
         }

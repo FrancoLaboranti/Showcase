@@ -934,7 +934,7 @@ function note(f0, f1, t0, dur, type, vol, jitter) {
   o.type = type || 'square';
   o.frequency.setValueAtTime(Math.max(20, f0 * j), t);
   if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(20, f1 * j), t + dur);
-  g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+  g.gain.setValueAtTime(Math.max(0.0001, vol * spGain), t);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   o.connect(g); g.connect(masterGain);
   o.start(t); o.stop(t + dur + 0.02);
@@ -949,10 +949,44 @@ function noiseHit(dur, vol, freq, q, type, t0) {
   const bp = a.createBiquadFilter(); bp.type = type || 'bandpass';
   bp.frequency.value = freq; bp.Q.value = q || 1;
   const t = a.currentTime + (t0 || 0);
-  const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol), t);
+  const g = a.createGain(); g.gain.setValueAtTime(Math.max(0.0001, vol * spGain), t);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
   src.connect(bp); bp.connect(g); g.connect(masterGain);
   src.start(t); src.stop(t + dur + 0.02);
+}
+// ══════════════ SPATIAL AUDIBILITY ══════════════
+// The distance is measured to the visible RECTANGLE, never to its centre: the view is 1280x720, so
+// the centre is far more distant from the side edges than from the top ones and a centre-based
+// falloff would cut a tank just off the left while one the same distance above stayed loud.
+// Inside the rectangle the distance is 0 and the gain is 1.
+//
+// Outside, it falls across a HALO of half a screen instead of cutting at the edge: a tank coming
+// round the bend is heard BEFORE it appears. The curve is quadratic, so no step.
+//
+// On small tracks `camX`/`camY` stay at 0 and the whole world fits inside the rectangle, so
+// everything comes back as 1 without a special case.
+const AUDIO_HALO = 0.5;      // the halo, as a fraction of the view's shortest side
+const AUDIO_FLOOR = 0.05;    // under this it is inaudible: better not to spend the voice
+function audible(x, y) {
+  // Sin posicion: GLOBAL. Sin esta guarda, un x/y ausente propaga NaN hasta `setValueAtTime`,
+  // que tira dentro del try/catch de `voice()` y borra el sonido sin aviso.
+  if (!isFinite(x) || !isFinite(y)) return 1;
+  const dx = Math.max(camX - x, 0, x - (camX + SCREEN_X));
+  const dy = Math.max(camY - y, 0, y - (camY + SCREEN_Y));
+  if (dx === 0 && dy === 0) return 1;
+  const t = Math.hypot(dx, dy) / (AUDIO_HALO * Math.min(SCREEN_X, SCREEN_Y));
+  if (t >= 1) return 0;
+  const g = (1 - t) * (1 - t);
+  return g < AUDIO_FLOOR ? 0 : g;
+}
+// `spGain` multiplies inside note/noiseHit so the attenuation does not have to be threaded through
+// every note of every voice. It is set only for the duration of the call.
+let spGain = 1;
+function voiceAt(name, cdMs, x, y, fn) {
+  const g = audible(x, y);
+  if (g <= 0) return;                    // past the halo: it neither sounds nor costs a voice
+  spGain = g;
+  try { voice(name, cdMs, fn); } finally { spGain = 1; }
 }
 function voice(name, cdMs, fn) {
   if (!ac()) return;
@@ -1027,13 +1061,13 @@ function continuousUpdate(dt) {
 const sfx = {
   // A mortar's COUGH, not a laser: this throws bombs down a short barrel. The air first, the body
   // after. The AI's version is the same voice at 35%: it is far away and it is not yours.
-  fire(mio) { voice(mio ? 'fire' : 'fireAI', mio ? 90 : 60, () => {
+  fire(mio, x, y) { voiceAt(mio ? 'fire' : 'fireAI', mio ? 90 : 60, x, y, () => {
     const v = mio ? 1 : 0.35;
     noiseHit(0.07, 0.10 * v, 240, 0.9, 'lowpass');
     note(220, 95, 0, 0.14, 'square', 0.075 * v);
   }); },
   // The metal first (high and short), then the hull's hollow.
-  impact(mio) { voice('impact', 70, () => {
+  impact(mio, x, y) { voiceAt('impact', 70, x, y, () => {
     const v = mio ? 1 : 0.55;
     noiseHit(0.09, 0.09 * v, 520, 1.4);
     note(170, 62, 0, 0.26, 'square', 0.07 * v);
@@ -1153,7 +1187,7 @@ class Tank {
       const wantFire = keys[this.shoot] || (this.id === 0 && btnState.fire);
       if (wantFire && this.shoot_cooling === 0) {
         addSprite(new Bomb(this.color, this.radius, this.x, this.y, this.ang, this.vel));
-        sfx.fire(this.id === 0);
+        sfx.fire(this.id === 0, this.x, this.y);
         this.shoot_cooling = 2 * MUT.hotCd;
       }
     } else {
@@ -1236,7 +1270,7 @@ class Tank {
           else throttle = (Math.abs(diff) < Math.PI / 8 ? 1 : 0.55) * this.ai_acel * (this.finished ? 0.6 : 1);
           if (this.ai_shoot === 0 && this.shoot_cooling === 0 && !this.finished) {
             addSprite(new Bomb(this.color, this.radius, this.x, this.y, this.ang, this.vel));
-        sfx.fire(this.id === 0);
+            sfx.fire(this.id === 0, this.x, this.y);
             this.shoot_cooling = 2 * MUT.hotCd;
           }
         }
@@ -1468,7 +1502,7 @@ class Bomb {
         // const direct = closeness > GRAZE_CUT;
         // tank.spin_timer = SPIN_TIME * MUT.hotSpin * (direct ? 1 : 0.6 + 0.4 * closeness);
         // const cut = direct ? 0.15 : 0.35 - 0.20 * closeness;
-        sfx.impact(tank.id === 0);                                       // the one on the receiving end decides the volume: if it is you, full
+        sfx.impact(tank.id === 0, tank.x, tank.y);                       // the one on the receiving end decides the volume: if it is you, full
         tank.spin_timer = SPIN_TIME * MUT.hotSpin;                      // a FULL spin-out (the original behaviour; Hot Ammo stretches it ×1.5)
         tank.spin_dir = (ri(0,1) === 0 ? -1 : 1); tank.spin_saved = 0;
         tank.hitsTaken++; const _owner = tanks.find(t => t.color === this.color); if (_owner) _owner.hitsLanded++;   // #7 medal counters (the victim took one / the owner landed one)
