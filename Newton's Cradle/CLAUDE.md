@@ -38,18 +38,27 @@ git show c07a976:"Newton's Cradle/NewtonsCradleWeb/sounds/woodenballs.wav" > woo
 which is the command to run before cutting more impacts. Deleting it does NOT shrink a clone: the
 blob stays in history. What it fixes is what is served and what is mirrored.
 
-The six, measured:
+The six, measured **on the shipped mp3s** and in brightness order, which is the order
+`WOOD_FILES` uses. Measure the files, not the raw cuts: encoding rolls the top off and the two
+sets of numbers do not agree.
 
-| | attack centroid | tail to -40 dB |
-|---|---|---|
-| wood5 | 646 Hz (low, muted) | 59 ms |
-| wood1 | 1682 Hz | 72 ms |
-| wood2 | 1635 Hz | 177 ms |
-| wood6 | 2528 Hz | 55 ms |
-| wood3 | 3249 Hz | 61 ms |
-| wood4 | 3357 Hz (bright, dry) | 43 ms |
+| | centroid | tail to -40 dB | onsets |
+|---|---|---|---|
+| wood5 | 562 Hz (low, muted) | 59 ms | 1 |
+| wood2 | 1027 Hz | 97 ms | 1 |
+| wood1 | 1044 Hz | 72 ms | 1 |
+| wood6 | 1893 Hz | 55 ms | 1 |
+| wood3 | 2289 Hz | 61 ms | 1 |
+| wood4 | 2947 Hz (bright, dry) | 43 ms | 1 |
 
-They are not six copies of the same hit: the game can pick by collision speed. **They are not wired up
-yet**: the synthesised `playClick` is still what plays.
+They are not six copies of the same hit: the game picks by collision speed, and `playClick` maps
+the intensity onto that ladder.
+
+**wood2 was re-cut on 2026-09-23.** The first one had TWO hits, onsets at 5 ms and 134 ms, which
+Franco heard as a double knock. What let it through: the extractor rejected a second impact only if
+it went over 35 % of the first one's peak, and a wooden ball's return bounce lands just under that.
+The count that matters is ONSETS in the finished cut, not energy in a window, so the replacement was
+picked by counting them. The five that stayed sit at 41.24, 13.16, 15.86, 22.69 and 57.14 s of the
+master; the new wood2 comes from 24.84 s, far enough from all of them to be a different impact.
 
 The 19.6 MB WAV is still in the repo: it is source material and deleting it is Franco's call.

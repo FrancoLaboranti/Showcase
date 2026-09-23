@@ -12,7 +12,17 @@
     width: 100%; height: 100%;
     background: #06180b;
     overflow: hidden;
-    touch-action: none;
+    /* `manipulation`, NOT `none`. The browser resolves the allowed gesture as the INTERSECTION of
+       the touched element's `touch-action` with that of every one of its ancestors, so with `none`
+       here the info panel could declare `pan-y` all it liked and still not scroll: the
+       intersection came out empty. `manipulation` kills the double-tap zoom, which is the part
+       that actually got in the way, and lets scrolling through. Whatever must NOT be dragged says
+       so itself: the canvas below, the stick zones and the buttons. Loop worked this out first.
+       Measured: 21 of the 22 games had this and the info panel did not scroll in any of them. */
+    touch-action: manipulation;
+    /* Reaching the end of something does not drag what is behind it or fire "pull to refresh".
+       It matters twice over here, because every game lives in an iframe of the Arcade. */
+    overscroll-behavior: none;
     user-select: none; -webkit-user-select: none;
     font-family: 'Segoe UI', system-ui, sans-serif;
     color: #f0e8d0;
@@ -20,12 +30,21 @@
   #c {
     display: block; position: absolute;
     top: 0; left: 0;
+      /* It never had one of its own: it lived off the body's global ban. Now that the body
+       lets gestures through, the canvas is what does not. Dragging a finger over the game
+       moves the game, not the page. */
+    touch-action: none;
   }
+  /* ELEVEN buttons in ONE row. Measured at 380 px wide: the content spans 654 px and FIVE of them
+     end up off screen, btnExit at x = -77 and mute/fullscreen/info past the right edge. That is not
+     a cosmetic problem: with no exit and no ⓘ the game cannot be left or read. The bar wraps onto a
+     second row instead of overflowing, and the height goes to `min-height` so it can grow: resize()
+     already MEASURES barEl.offsetHeight, so the canvas gives way on its own. */
   #bar {
     position: absolute; left: 0; right: 0; bottom: 0;
-    height: calc(var(--bar-height) + env(safe-area-inset-bottom));
+    min-height: calc(var(--bar-height) + env(safe-area-inset-bottom));
     padding: 8px 10px env(safe-area-inset-bottom);
-    display: flex; align-items: center; justify-content: center; gap: 6px;
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px;
     background: rgba(0,0,0,0.85);
     border-top: 1px solid rgba(255,255,255,0.08);
     z-index: 3;
@@ -104,6 +123,23 @@
 <body>
   <canvas id="c"></canvas>
   <style>
+    /* The button HAD NO SIZE: it lives inside the `#bar` flex and with no width or height it
+       shrank to its contents. Measured: 4x19 px, impossible to hit with a thumb. It gets the same
+       body as the shell's ✕ / ⛶ / ⓘ, which are its neighbours in the bar. */
+    #btnMute {
+      width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
+      align-self: flex-end; margin-bottom: 6px;
+      border: 1px solid rgba(255,255,255,0.17); background: rgba(255,255,255,0.05);
+      color: rgba(255,255,255,0.48);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; touch-action: none; padding: 0; position: relative;
+      -webkit-tap-highlight-color: transparent;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.09);
+      transition: border-color 0.1s, color 0.1s, background 0.1s, transform 0.08s;
+    }
+    #btnMute svg { display: block; width: 15px; height: 15px; pointer-events: none; }
+    #btnMute::after { content: ''; position: absolute; inset: -7px -2px; border-radius: 50%; }
+    #btnMute:active { transform: scale(0.9); background: rgba(255,255,255,0.18); }
     /* Sound: waves when it plays, a cross when it is muted. */
     #btnMute .ic-off { display: none; }
     #btnMute.muted .ic-on  { display: none; }

@@ -540,3 +540,64 @@ death (`'YOU WENT DOWN…'`).
 `sfx.banner`, which is what a banner almost always means; death passes `sfx.ko`. Measured: the
 normal banner gives `square` 373 → 529 Hz (rising), the death one gives `sawtooth` 378 + `square`
 206 at gain 0.1 (falling).
+
+
+## GAMEPLAY: two flags that meant two different things (2026-09-23)
+
+Reported: "more fighters keep appearing than I have to defeat", "some of the fighters that appear
+stay static", and "I can wall jump indefinitely and keep climbing even when visually I already
+passed the wall". Three symptoms, two root causes, and neither of them was where the symptom was.
+
+### `dead` was doing two jobs, and only one of them was true
+
+`armarNivel` picked a roster with `plantelDeNivel()` and marked everyone left out as `e.dead = true`.
+But `dead` already meant "I knocked this one down", and every reader of the flag was written for
+that meaning:
+
+| reader | what it did with a benched fighter |
+| - | - |
+| `if (e.dead) drawFighter(e)` | drew it, and STANDING: `resetFighter` leaves `poseCur = POSES.idle` with `rag.on = false` |
+| `e.update(dt)` | ran it, so it stood there with full physics |
+| `separateBodies` | shoved the player, because `ST.IDLE` is in `SEP_STATES` |
+| `if (inPlay && !e.dead) aiThink(e, dt)` | skipped it, so it never reacted and could not be hit |
+| `for (const e of enemies) if (!e.dead) vivos++` | counted it as alive in the info panel |
+
+So the four that were not playing appeared as motionless human figures spread across the arena,
+next to a counter asking for five. Walking up and punching one did nothing. **Both reported
+gameplay symptoms were the same bug.**
+
+The fix is not a guard on each reader: **not being in the level now means not being in the array.**
+`PLANTEL` holds the nine that exist, `enemies` holds the ones fighting this level, and `armarNivel`
+rewrites it in place (never reassigns it: `window.SF` hands the array out by reference).
+`game.totalEnem = enemies.length`, so the number you see and the number you must beat are the same
+object, not two counts that can drift. `allFighters` became `let` and is rebuilt with the roster.
+
+Measured over 6 seeds, before and after: `existen == pide` in all of them, nobody starts the level
+downed or without an archetype, and with the player next to it every fighter engages and acts.
+
+### The arena's edge was a wall with no top
+
+The side walls are DRAWN from `ARENA.topY - 300` (`bakeTerrain`). The collision was two bare clamps
+on `x` inside `Fighter.update` with **no vertical bound at all**, so above the painted wall you
+still got a `wallSide`, chained wall jumps in empty sky and climbed forever. The blocks' loop does
+bound vertically (`pies <= b.y + 2 → continue`), which is why blocks never showed the problem.
+
+`ARENA.muroTopY` is now a field, used by BOTH the drawing and the collision, because the bug was
+exactly that the two disagreed. Above it the `x` is still clamped (nobody leaves the arena), what
+ends is the SURFACE.
+
+**The wall jump is not capped, counted or limited**: it stops where the wall stops. Measured at the
+left edge, holding into it and spamming jump for 20 s:
+
+| | wall jumps | highest point | wall sampled above the painted top |
+| - | - | - | - |
+| with the bug | 52 and still climbing when the probe stopped | y = -3442 | 30/30 |
+| fixed | 32 to 40 | ~205 px over `muroTopY`, one jump arc | 0/30 |
+
+### Two traps for whoever writes the next probe
+
+- `pollInputs()` rewrites `inP1` **every frame** from `keys`/`btnState`. Writing `inP1.mx` by hand
+  does nothing: it is gone before `readInput` reads it. Drive it with real `keydown`/`keyup` events.
+- `tryWallSlide()` is only called from `ST.JUMP`/`ST.FALL`, the x has to be `ARENA.pad` (not a
+  number picked by eye) and you have to arrive FALLING. Missing any of the three measures nothing
+  and looks like a pass.

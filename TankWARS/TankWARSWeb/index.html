@@ -15,7 +15,17 @@
     width: 100%; height: 100%;
     background: #000;
     overflow: hidden;
-    touch-action: none;
+    /* `manipulation`, NOT `none`. The browser resolves the allowed gesture as the INTERSECTION of
+       the touched element's `touch-action` with that of every one of its ancestors, so with `none`
+       here the info panel could declare `pan-y` all it liked and still not scroll: the
+       intersection came out empty. `manipulation` kills the double-tap zoom, which is the part
+       that actually got in the way, and lets scrolling through. Whatever must NOT be dragged says
+       so itself: the canvas below, the stick zones and the buttons. Loop worked this out first.
+       Measured: 21 of the 22 games had this and the info panel did not scroll in any of them. */
+    touch-action: manipulation;
+    /* Reaching the end of something does not drag what is behind it or fire "pull to refresh".
+       It matters twice over here, because every game lives in an iframe of the Arcade. */
+    overscroll-behavior: none;
     user-select: none; -webkit-user-select: none;
     font-family: 'Bahnschrift', 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif;
   }
@@ -25,7 +35,7 @@
      game is ALWAYS seen landscape, without using the orientation API (which showed a flash). resize() sets its
      width/height/transform. Having a transform, it is the containing block for its position:fixed children. */
   #stage { position: fixed; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 100vw; height: 100vh; overflow: hidden; }
-  #c { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+  #c { display: block; position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
 
   #hint { display: none; }   /* the start hint is hidden on purpose */
 
@@ -142,8 +152,6 @@
 
   /* The stats box (FPS + wave + an explicit sprite count): a top-left overlay toggled by the circle-i
      button (#btnInfo). It does NOT pause the game (Snake style). pointer-events:none → it does not block the game's touches. */
-  #fpsBox { position: fixed; left: calc(10px + env(safe-area-inset-left)); top: calc(8px + env(safe-area-inset-top)); z-index: 16; display: none; padding: 7px 11px; background: rgba(8,11,18,0.85); border: 1px solid rgba(120,200,255,0.3); border-radius: 8px; color: rgba(205,228,255,0.95); font: 600 13px ui-monospace, 'Consolas', Menlo, monospace; line-height: 1.5; letter-spacing: 0.03em; pointer-events: none; }
-  #fpsBox.show { display: block; }
 
   /* ── SHOP (upgrades). A full-screen overlay; it pauses the game. 8 items in a 2×4 grid. ── */
   #shopPanel { position: absolute; inset: 0; z-index: 16; display: none; align-items: center; justify-content: center; background: rgba(5,6,10,0.86); padding: 16px; }
@@ -301,7 +309,7 @@
 
 </style>
 </head>
-<body>
+<body class="inMenu">
   <!-- #stage wraps the WHOLE game so it can be rotated to landscape with CSS (see resize()). The hand-rolled
        sticks (base/nub) are appended to <body> (outside #stage) → they stay in screen coords. -->
   <div id="stage">
@@ -3502,8 +3510,6 @@
   btnShop.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); if (!manager.menu && !manager.draftOpen) toggleShop(!manager.shopOpen); });
   // Desktop: TAB opens/closes the shop (like the original).
   addEventListener('keydown', e => { if (e.key === 'Tab') { e.preventDefault(); if (!manager.menu && !manager.draftOpen) toggleShop(!manager.shopOpen); } });
-  // The circle-i button toggles the stats box (#fpsBox); it is wired in the <script> at the end, because that div is
-  // declared after this block and here document.getElementById('fpsBox') would give null.
 
   // ════════════════ MAIN MENU (a port of the Pygame's menu) ════════════════
   // An overlay with: choosing the tank's colour (8 colours), toggling the difficulty (Normal/Hardcore) and PLAY.
@@ -3804,28 +3810,10 @@
     roundRectPath(mmX, mmY, mmW, mmH, rad); ctx.strokeStyle = rgb(modifyColorPerc(manager.wallColor, 2.4)); ctx.lineWidth = 1.6; ctx.stroke();
   }
 
-  // The stats box (the DOM's #fpsBox) that the circle-i button toggles (no pause, Snake style). The loop refreshes its
-  // contents while it is visible: FPS + wave + an EXPLICIT count of each type of live sprite.
-  let _fpsBox = null;
-  function updateFpsBox() {
-    if (!_fpsBox) _fpsBox = document.getElementById('fpsBox');   // it retries until it finds it: the loop starts BEFORE #fpsBox (declared at the end of the HTML) exists
-    if (!_fpsBox || !_fpsBox.classList.contains('show')) return;
-    let crates = 0, solid = 0;
-    for (let i = 0; i < walls.length; i++) (walls[i].breakable ? crates++ : solid++);
-    _fpsBox.innerHTML =
-      'FPS ' + Math.round(1/Math.max(1e-3, dtSmoothed)) +
-      '<br>Wave ' + manager.waveCount +
-      '<br>Enemies ' + enemies.length +
-      '<br>Shots ' + shots.length +
-      '<br>Coins ' + coins.length +
-      '<br>Crates ' + crates +
-      '<br>Walls ' + solid +
-      '<br>Mines ' + mines.length +
-      '<br>Loot ' + lootBoxes.length +
-      '<br>Parts ' + parts.length;
-  }
+  // The floating #fpsBox is GONE: the ⓘ button opened it AND the info panel at the same time, so
+  // the same numbers showed up twice in two different places. Everything it said now lives in
+  // `updateStats()`, inside the panel, which is how the rest of the games are organised.
   function drawHUD() {
-    updateFpsBox();   // it refreshes the stats box (DOM) if it is open (tied to the info card)
     // the vignette (it darkens the edges, depth), below all the HUD
     ctx.fillStyle = vigDark; ctx.fillRect(0, 0, W, H);
     if (player) {
@@ -4090,6 +4078,8 @@
   }
   function updateStats() {
     if (!infoAbierto()) return;
+    let cajas = 0, solidas = 0;
+    for (let i = 0; i < walls.length; i++) (walls[i].breakable ? cajas++ : solidas++);
     statsEl().textContent = [
       'FPS: ' + Math.round(1/Math.max(1e-3, dtSmoothed)),
       'ms: ' + (dtSmoothed*1000).toFixed(1),   // frame time: shows small gains the rounded FPS hides
@@ -4097,6 +4087,13 @@
       'Enemies: ' + enemies.length,
       'Shots: ' + shots.length,
       'Parts: ' + parts.length,
+      // The five that used to live ONLY in the floating #fpsBox. That box is gone, so they come
+      // here: absorbing it must not cost information.
+      'Coins: ' + coins.length,
+      'Crates: ' + cajas,
+      'Walls: ' + solidas,
+      'Mines: ' + mines.length,
+      'Loot: ' + lootBoxes.length,
       'Cam: ' + Math.round(camX) + ',' + Math.round(camY),
       'Wave: ' + manager.waveNumber,
       'WaveT: ' + Math.round(manager.waveTime),
@@ -4303,7 +4300,6 @@
   setTimeout(() => hint.style.opacity = '0', 6000);
   canvas.addEventListener('pointerdown', () => hint.style.opacity = '0', { once: true });
   </script>
-  <div id="fpsBox"></div>
   <script>
     document.getElementById('btnExit').addEventListener('click', () => {
       // Embedded in the Arcade shell: postMessage to go back to the menu without reloading the iframe.
@@ -4316,15 +4312,9 @@
       location.href = '../../Arcade/';
     });
     // The circle-i button (top-right): it toggles the FPS/stats box (NO pause, it does NOT open a card), Snake style.
-    (function () {
-      const btnInfo = document.getElementById('btnInfo');
-      const fpsBox = document.getElementById('fpsBox');
-      if (!btnInfo || !fpsBox) return;
-      btnInfo.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation();
-        const show = !fpsBox.classList.contains('show');
-        fpsBox.classList.toggle('show', show); btnInfo.classList.toggle('on', show);
-      });
-    })();
+    // The ⓘ button used to have a SECOND handler here that opened the floating #fpsBox. With the
+    // shared tail script also toggling #infoPanel, one tap opened two things. The box is gone and
+    // so is this handler: the panel's own toggle is the only one left.
   </script>
   </div><!-- /#stage -->
 <div id="infoPanel"><h4>Tank WARS</h4>

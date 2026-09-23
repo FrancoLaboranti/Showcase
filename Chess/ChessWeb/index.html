@@ -11,7 +11,17 @@
   html, body {
     width: 100%; height: 100%;
     overflow: hidden;
-    touch-action: none;
+    /* `manipulation`, NOT `none`. The browser resolves the allowed gesture as the INTERSECTION of
+       the touched element's `touch-action` with that of every one of its ancestors, so with `none`
+       here the info panel could declare `pan-y` all it liked and still not scroll: the
+       intersection came out empty. `manipulation` kills the double-tap zoom, which is the part
+       that actually got in the way, and lets scrolling through. Whatever must NOT be dragged says
+       so itself: the canvas below, the stick zones and the buttons. Loop worked this out first.
+       Measured: 21 of the 22 games had this and the info panel did not scroll in any of them. */
+    touch-action: manipulation;
+    /* Reaching the end of something does not drag what is behind it or fire "pull to refresh".
+       It matters twice over here, because every game lives in an iframe of the Arcade. */
+    overscroll-behavior: none;
     user-select: none; -webkit-user-select: none;
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     color: #eee;
@@ -23,6 +33,10 @@
   #c {
     display: block; position: absolute;
     top: 0; left: 0;
+      /* It never had one of its own: it lived off the body's global ban. Now that the body
+       lets gestures through, the canvas is what does not. Dragging a finger over the game
+       moves the game, not the page. */
+    touch-action: none;
   }
 
   /* Start menu: an HTML overlay so it is easy to tap on mobile */
@@ -190,6 +204,12 @@
      (arcade-shell.css had ID-level rules of its own that overrode my .cbtn, giving the cluster
      two different palettes). */
   #btnExit, #btnInfo, #btnFs, #btnBack, #btnPause {
+    /* The POSITION goes here too, not only in `.cbtn`: `arcade-shell.css` declares
+       `#btnInfo, #btnFs, #btnExit { position: relative }`, and being an ID rule it beats the class.
+       With `relative` the offsets stop positioning and start SHIFTING from the flow position, so
+       `right: 8px` moved the button 8 px to the LEFT: measured at x = -8, -46, -84, all three off
+       screen. */
+    position: absolute; top: calc(8px + env(safe-area-inset-top));
     width: 30px; height: 30px; border-radius: 50%;
     border: 1px solid rgba(240,225,195,0.22);
     background: rgba(22,18,14,0.55);
@@ -299,7 +319,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
   </button>
   <button class="cbtn" id="btnBack" aria-label="back" title="Back to menu">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
   </button>
   <button class="cbtn" id="btnPause" aria-label="pause" title="Pause">
     <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg>

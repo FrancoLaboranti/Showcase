@@ -18,13 +18,23 @@
     width: 100%; height: 100%;
     background: #03040a;
     overflow: hidden;
-    touch-action: none;
+    /* `manipulation`, NOT `none`. The browser resolves the allowed gesture as the INTERSECTION of
+       the touched element's `touch-action` with that of every one of its ancestors, so with `none`
+       here the info panel could declare `pan-y` all it liked and still not scroll: the
+       intersection came out empty. `manipulation` kills the double-tap zoom, which is the part
+       that actually got in the way, and lets scrolling through. Whatever must NOT be dragged says
+       so itself: the canvas below, the stick zones and the buttons. Loop worked this out first.
+       Measured: 21 of the 22 games had this and the info panel did not scroll in any of them. */
+    touch-action: manipulation;
+    /* Reaching the end of something does not drag what is behind it or fire "pull to refresh".
+       It matters twice over here, because every game lives in an iframe of the Arcade. */
+    overscroll-behavior: none;
     user-select: none; -webkit-user-select: none;
     font-family: var(--font);
   }
   /* Full-screen canvas (no bottom bar), the UI is corner buttons + a canvas menu,
      CrazyTanks style. */
-  #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+  #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
 
   #hint { display: none; }   /* the start hint is hidden on purpose */
 
@@ -175,7 +185,13 @@
     border: 1px solid rgba(255,255,255,0.17); background: rgba(255,255,255,0.05);
     color: rgba(255,255,255,0.48);
     display: flex; align-items: center; justify-content: center;
-    cursor: pointer; touch-action: none; padding: 0; position: relative;
+    cursor: pointer; touch-action: none; padding: 0;
+    /* `absolute`, NOT `relative`. This block was copied from the games that keep the mute inside a
+       flex bar, where `relative` makes no difference. Here the cluster is positioned with `.cbtn`
+       absolute, and `right: 122px` on top of a `relative` does not position: it SHIFTS 122 px left
+       from the flow position. The button ended up at x = -122 and left the gap between ⛶ and the
+       rest. */
+    position: absolute; top: calc(8px + env(safe-area-inset-top));
     -webkit-tap-highlight-color: transparent;
     box-shadow: 0 1px 6px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.09);
     transition: border-color 0.1s, color 0.1s, background 0.1s, transform 0.08s;
@@ -235,7 +251,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
   </button>
   <button class="cbtn" id="btnBack" aria-label="back" title="Back to menu">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
   </button>
   <button class="cbtn" id="btnPause" aria-label="pause" title="Pause">
     <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg>
@@ -2541,7 +2557,7 @@ paddle on fire</b>, and <b>the CPU falls asleep</b>. When you see the Zzz, that 
 <h5>Desktop</h5>
 <ul>
   <li><b>↑ ↓</b> move your paddle. In two-player, <b>W S</b> drive the left one.</li>
-  <li><b>P</b> or <span class="ik"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg></span> <b>Pause</b> pauses; <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg></span> <b>Back to menu</b> leaves the match.</li>
+  <li><b>P</b> or <span class="ik"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg></span> <b>Pause</b> pauses; <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span> <b>Back to menu</b> leaves the match.</li>
   <li>In the menu, <b>↑ ↓</b> pick and <b>Enter</b> confirms.</li>
 </ul>
 <h5>Mobile</h5>

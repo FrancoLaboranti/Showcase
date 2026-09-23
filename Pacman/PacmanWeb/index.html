@@ -15,13 +15,23 @@
     width: 100%; height: 100%;
     background: #000;
     overflow: hidden;
-    touch-action: none;
+    /* `manipulation`, NOT `none`. The browser resolves the allowed gesture as the INTERSECTION of
+       the touched element's `touch-action` with that of every one of its ancestors, so with `none`
+       here the info panel could declare `pan-y` all it liked and still not scroll: the
+       intersection came out empty. `manipulation` kills the double-tap zoom, which is the part
+       that actually got in the way, and lets scrolling through. Whatever must NOT be dragged says
+       so itself: the canvas below, the stick zones and the buttons. Loop worked this out first.
+       Measured: 21 of the 22 games had this and the info panel did not scroll in any of them. */
+    touch-action: manipulation;
+    /* Reaching the end of something does not drag what is behind it or fire "pull to refresh".
+       It matters twice over here, because every game lives in an iframe of the Arcade. */
+    overscroll-behavior: none;
     user-select: none; -webkit-user-select: none;
     font-family: 'Press Start 2P', 'Courier New', monospace;
   }
   /* The canvas takes only the area ABOVE the bottom bar (Tron V1-style UI). Sizes are set
      explicitly from JS on each resize: W × (innerHeight − barH). */
-  #c { display: block; position: absolute; top: 0; left: 0; }
+  #c { display: block; position: absolute; top: 0; left: 0; touch-action: none; }
 
   #hint {
     position: absolute; left: 0; right: 0; top: calc(10px + env(safe-area-inset-top));

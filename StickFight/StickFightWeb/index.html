@@ -9,13 +9,23 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body {
     width: 100%; height: 100%; overflow: hidden; background: #eee3d4;
-    touch-action: none;
+    /* `manipulation`, NOT `none`. The browser resolves the allowed gesture as the INTERSECTION of
+       the touched element's `touch-action` with that of every one of its ancestors, so with `none`
+       here the info panel could declare `pan-y` all it liked and still not scroll: the
+       intersection came out empty. `manipulation` kills the double-tap zoom, which is the part
+       that actually got in the way, and lets scrolling through. Whatever must NOT be dragged says
+       so itself: the canvas below, the stick zones and the buttons. Loop worked this out first.
+       Measured: 21 of the 22 games had this and the info panel did not scroll in any of them. */
+    touch-action: manipulation;
+    /* Reaching the end of something does not drag what is behind it or fire "pull to refresh".
+       It matters twice over here, because every game lives in an iframe of the Arcade. */
+    overscroll-behavior: none;
     user-select: none; -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
     font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     color: #221e1b;
   }
-  canvas { position: fixed; inset: 0; display: block; }
+  canvas { position: fixed; inset: 0; display: block; touch-action: none; }
 
   /* ── Top hint: it fades after 5 s (the convention in every port) ── */
   #hint {
@@ -202,7 +212,7 @@
 
 </style>
 </head>
-<body>
+<body class="inMenu">
 <canvas id="c"></canvas>
 
 <div id="hint"></div>
@@ -1528,8 +1538,14 @@ class Fighter {
     this.x += (this.vx + rootVx) * dt; this.y += this.vy * dt;
     const feetNow = this.y + STAND;
     this.wallSide = 0;
-    if (this.x < ARENA.pad) { this.x = ARENA.pad; this.vx = Math.max(0, this.vx); this.wallSide = -1; }
-    if (this.x > ARENA.w - ARENA.pad) { this.x = ARENA.w - ARENA.pad; this.vx = Math.min(0, this.vx); this.wallSide = 1; }
+    // The arena's edge is a wall only AS HIGH AS IT IS PAINTED. It used to be a bare clamp on x with
+    // no top at all, so above the drawn wall you still got a `wallSide` and could chain wall jumps
+    // into empty sky with nothing on screen to push off. The x is still clamped up there (nobody
+    // leaves the arena); what ends is the SURFACE. The wall jump is not touched, nor is it counted
+    // or capped: it simply stops where the wall stops, which is what you are looking at.
+    const enMuro = this.y + STAND > ARENA.muroTopY;
+    if (this.x < ARENA.pad) { this.x = ARENA.pad; this.vx = Math.max(0, this.vx); if (enMuro) this.wallSide = -1; }
+    if (this.x > ARENA.w - ARENA.pad) { this.x = ARENA.w - ARENA.pad; this.vx = Math.min(0, this.vx); if (enMuro) this.wallSide = 1; }
 
     if (this.grounded) {
       // am I still above my surface? (I fell off the ledge → coyote)
@@ -2898,7 +2914,7 @@ function drawEffects() {
 // `ARENA.surfs` / `ARENA.exit` / … and keeps working without a line being touched.
 const ARENA = {
   w: CFG.world.arenaW, floorY: 620, surfs: [], ledges: [],
-  exit: { x: 0, y: 0 }, pad: 0.15 * CH, topY: 0, seed: 0, plan: '',
+  exit: { x: 0, y: 0 }, pad: 0.15 * CH, topY: 0, muroTopY: 0, seed: 0, plan: '',
   semilla: 0, nivel: 1, etapa: null,
   // SOLID BLOCKS: {x, y, w, h} with real lateral collision. Their top also enters `surfs`
   // as a NON-oneway surface, so you walk over them and you do not pass through them from below.
@@ -3396,6 +3412,9 @@ function buildLevel(seed, nivel) {
     ARENA.exit.x = topSurf.x + topSurf.w / 2;
     ARENA.exit.y = topSurf.y;
     ARENA.topY = topSurf.y - 80;
+    // Where the side walls END. It is a field and not a number written twice because the collision
+    // and the drawing HAVE to agree: the bug was exactly that they did not.
+    ARENA.muroTopY = ARENA.topY - 300;
     buildNav();
 
     // ── validation: the EXIT has to be reachable from the floor ──
@@ -3527,8 +3546,8 @@ function bakeTerrain() {
   // solid blocks: the same treatment as the floor (they are terrain, not floating platforms)
   for (const b of ARENA.muros) slab(b.x, b.y, b.w, b.h, 9);
   // the side walls
-  slab(-420, ARENA.topY - 300, 420, ARENA.floorY - ARENA.topY + 950, 0);
-  slab(ARENA.w, ARENA.topY - 300, 420, ARENA.floorY - ARENA.topY + 950, 0);
+  slab(-420, ARENA.muroTopY, 420, ARENA.floorY - ARENA.topY + 950, 0);
+  slab(ARENA.w, ARENA.muroTopY, 420, ARENA.floorY - ARENA.topY + 950, 0);
   // the EXIT door (an ink frame + a sign)
   const ex = ARENA.exit.x, ey = ARENA.exit.y;
   c2.fillStyle = '#5b4a3a'; c2.strokeStyle = INK; c2.lineWidth = inkW;
@@ -3703,8 +3722,8 @@ function plantelDeNivel() {
   const R = lvlRnd((ARENA.seed ^ 0x9e3b) >>> 0);
   const E = ARENA.etapa || ETAPAS[0];
   const base = 3 + E.lvl;                                   // 4 · 5 · 6 · 7
-  const cuantos = clamp(base + ((R() * 3) | 0), 4, enemies.length);
-  const orden = enemies.map((e, i) => i);
+  const cuantos = clamp(base + ((R() * 3) | 0), 4, PLANTEL.length);
+  const orden = PLANTEL.map((e, i) => i);
   for (let i = orden.length - 1; i > 0; i--) { const j = (R() * (i + 1)) | 0; const t = orden[i]; orden[i] = orden[j]; orden[j] = t; }
   const vivos = orden.slice(0, cuantos);
   // an archetype mix: always at least one that presses and one that holds, the rest free
@@ -3738,16 +3757,27 @@ function armarNivel(semilla) {
   game.kos = 0; game.levelT = 0;
   buildLevel(semilla === undefined ? (Math.random() * 1e9) | 0 : semilla, game.nivel);
   bakeBg(); bakeTerrain();
-  repartirEnemigos();
-  resetFighter(P1, 180); P1.facing = 1;
+  // Who fights is decided BEFORE placing anyone, and `enemies` is left holding EXACTLY those.
+  // It used to hold the nine always, and the ones left out were marked `dead`. That is a DIFFERENT
+  // thing: `dead` means "I knocked this one down", and every reader of the flag was written for that
+  // meaning. So the benched ones were drawn (standing, because resetFighter leaves them in the idle
+  // pose and with the ragdoll off), they took part in `separateBodies` (ST.IDLE is in SEP_STATES) and
+  // shoved the player, and `aiThink` skipped them, so they could not be hit and never reacted. On
+  // screen that is more fighters than the counter asks for, several of them frozen solid.
+  // Now not being in the level means NOT BEING IN THE ARRAY: every reader is right without asking.
   const plantel = plantelDeNivel();
-  for (const e of enemies) { resetFighter(e, e.spawnX); e.facing = -1; e.brain = newBrain(); e.dead = true; }
+  enemies.length = 0;                          // in place: window.SF handed this array out by reference
   plantel.vivos.forEach((idx, k) => {
-    const e = enemies[idx];
-    e.dead = false;
+    const e = PLANTEL[idx];
+    e.brain = newBrain();
     e.brain.arch = plantel.mezcla[k];
+    enemies.push(e);
   });
-  game.totalEnem = plantel.vivos.length;
+  allFighters = [P1, ...enemies];
+  repartirEnemigos();                          // it spreads THE ONES WHO FIGHT: over the nine it left holes where the benched stood
+  for (const e of enemies) { resetFighter(e, e.spawnX); e.facing = -1; }
+  resetFighter(P1, 180); P1.facing = 1;
+  game.totalEnem = enemies.length;             // the number you SEE is the number you have to beat: one array, not two counts
   hud.chipT = 9;
   sparks.length = 0; dmgNums.length = 0; smears.length = 0; ghosts.length = 0; hitArcs.length = 0;
   trauma = 0;
@@ -4249,6 +4279,9 @@ const ENEMY_LOADOUTS = [
   { x: 7700, shirt: '#c0392b', shirtDark: '#7a2018', pants: '#1a1a1a', pantsDark: '#0e0e0e', shoe: '#080808', hairStyle: 'mohawk',   hairCol: '#080808' },
 ];
 buildLevel((Math.random() * 1e9) | 0);      // the initial level (the menu's); startMatch builds another
+// PLANTEL = the nine that exist. `enemies` = the ones fighting THIS level; armarNivel rewrites it
+// in place, never reassigns it, because window.SF hands the array out by reference.
+const PLANTEL = [];
 const enemies = [];
 for (const L of ENEMY_LOADOUTS) {
   const e = new Fighter(L.x, [70, 60, 55], null, newInput());
@@ -4259,16 +4292,17 @@ for (const L of ENEMY_LOADOUTS) {
   e.shoe  = L.shoe;
   e.hairStyle = L.hairStyle; e.hairCol = L.hairCol;
   if (L.hat) { e.hat = true; e.hatCol = L.hatCol; }
-  enemies.push(e);
+  PLANTEL.push(e);
 }
-const allFighters = [P1, ...enemies];
+enemies.push(...PLANTEL);                 // in the menu the nine are the backdrop; armarNivel narrows it
+let allFighters = [P1, ...enemies];       // `let`: armarNivel rebuilds it with the level's roster
 for (const f of allFighters) {
   const g = groundAt(f.x, -1e4);
   f.y = g.y - STAND; f.surf = g.s; f.grounded = true;
   f.replantFeet();
 }
 document.body.classList.add('inMenu');
-window.SF = { P1, enemies, CFG, game, cam, MOVES, POSES, ST, simT: 0, get inP1() { return inP1; } };
+window.SF = { P1, enemies, PLANTEL, ARENA, CFG, game, cam, MOVES, POSES, ST, simT: 0, get inP1() { return inP1; } };
 
 document.getElementById('hint').textContent = IS_TOUCH
   ? 'stick = move · double-tap = dash · knock the enemies down and reach the EXIT →'
@@ -4377,14 +4411,21 @@ scheduleRaf();
       panel.classList.toggle('show');
       btn.classList.toggle('on', panel.classList.contains('show'));
     });
+    // It reads `fpsSm`, which the game's own loop already smooths every frame and which was being
+    // computed and shown NOWHERE. A second counter with its own rAF was measuring the same thing
+    // twice. And it says what the other games' panels say, not a bare FPS number.
     const fEl = document.getElementById('fpsInfo');
-    let frames = 0, t0 = performance.now();
     (function tick() {
-      frames++;
-      const now = performance.now();
-      if (now - t0 >= 500) {
-        if (panel && panel.classList.contains('show') && fEl) fEl.textContent = 'FPS: ' + Math.round(frames * 1000 / (now - t0));
-        frames = 0; t0 = now;
+      if (panel && panel.classList.contains('show') && fEl) {
+        let vivos = 0;
+        for (const e of enemies) if (!e.dead) vivos++;
+        fEl.textContent = [
+          'FPS: ' + Math.round(fpsSm),
+          'ms: ' + (1000 / Math.max(1, fpsSm)).toFixed(1),
+          'Level: ' + game.nivel + '  Stage: ' + ARENA.etapa.n,
+          'Fighters left: ' + vivos + ' / ' + game.totalEnem,
+          'HP: ' + Math.round(P1.hp),
+        ].join('\n');
       }
       requestAnimationFrame(tick);
     })();

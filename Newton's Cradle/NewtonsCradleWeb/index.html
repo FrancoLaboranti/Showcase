@@ -12,7 +12,17 @@
     width: 100%; height: 100%;
     background: radial-gradient(circle at 50% 35%, #1a1d22 0%, #050608 70%);
     overflow: hidden;
-    touch-action: none;
+    /* `manipulation`, NOT `none`. The browser resolves the allowed gesture as the INTERSECTION of
+       the touched element's `touch-action` with that of every one of its ancestors, so with `none`
+       here the info panel could declare `pan-y` all it liked and still not scroll: the
+       intersection came out empty. `manipulation` kills the double-tap zoom, which is the part
+       that actually got in the way, and lets scrolling through. Whatever must NOT be dragged says
+       so itself: the canvas below, the stick zones and the buttons. Loop worked this out first.
+       Measured: 21 of the 22 games had this and the info panel did not scroll in any of them. */
+    touch-action: manipulation;
+    /* Reaching the end of something does not drag what is behind it or fire "pull to refresh".
+       It matters twice over here, because every game lives in an iframe of the Arcade. */
+    overscroll-behavior: none;
     user-select: none; -webkit-user-select: none;
     font-family: 'Segoe UI', system-ui, sans-serif;
   }
@@ -21,6 +31,10 @@
   #c {
     display: block; position: absolute;
     top: 0; left: 0;
+      /* It never had one of its own: it lived off the body's global ban. Now that the body
+       lets gestures through, the canvas is what does not. Dragging a finger over the game
+       moves the game, not the page. */
+    touch-action: none;
   }
 
   #hint {
@@ -1485,11 +1499,12 @@
   const SND_VTHR     = 0.4;    // rad/s: below this it does not sound (numerical rubbing)
 
   // ══════════════ MIX ══════════════
-  // ORDERED BY MEASURED BRIGHTNESS, not by file number. The spectral centroids are wood5 562 Hz,
-  // wood1 1044, wood6 1893, wood2 1955, wood3 2289 and wood4 2947, so the numbering says nothing
-  // about how they sound. A gentle touch takes the dullest impact, a hard one the brightest: that
-  // is what six clips were cut for.
-  const WOOD_FILES = ['wood5.mp3', 'wood1.mp3', 'wood6.mp3', 'wood2.mp3', 'wood3.mp3', 'wood4.mp3'];
+  // ORDERED BY MEASURED BRIGHTNESS, not by file number, and measured on the SHIPPED mp3s and not
+  // on the raw cuts: encoding rolls the top off, so the two do not agree. Centroids are wood5
+  // 562 Hz, wood2 1027, wood1 1044, wood6 1893, wood3 2289 and wood4 2947. A gentle touch takes
+  // the dullest impact and a hard one the brightest: that is what six clips were cut for, and it
+  // is why this list has to be re-measured whenever one of them is replaced.
+  const WOOD_FILES = ['wood5.mp3', 'wood2.mp3', 'wood1.mp3', 'wood6.mp3', 'wood3.mp3', 'wood4.mp3'];
   // The clips are normalised (peak ~0.89), so they need a real reduction. Level lives here.
   const MIX = { wood: 0.42, synth: 0.035, master: 0.9 };
   // Several balls can land within the same cooldown window and stack. The limiter takes the sum.

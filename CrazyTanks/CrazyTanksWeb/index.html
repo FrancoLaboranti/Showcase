@@ -19,14 +19,24 @@
     width: 100%; height: 100%;
     background: #000;
     overflow: hidden;
-    touch-action: none;
+    /* `manipulation`, NOT `none`. The browser resolves the allowed gesture as the INTERSECTION of
+       the touched element's `touch-action` with that of every one of its ancestors, so with `none`
+       here the info panel could declare `pan-y` all it liked and still not scroll: the
+       intersection came out empty. `manipulation` kills the double-tap zoom, which is the part
+       that actually got in the way, and lets scrolling through. Whatever must NOT be dragged says
+       so itself: the canvas below, the stick zones and the buttons. Loop worked this out first.
+       Measured: 21 of the 22 games had this and the info panel did not scroll in any of them. */
+    touch-action: manipulation;
+    /* Reaching the end of something does not drag what is behind it or fire "pull to refresh".
+       It matters twice over here, because every game lives in an iframe of the Arcade. */
+    overscroll-behavior: none;
     user-select: none; -webkit-user-select: none;
     font-family: 'Orbitron', 'Segoe UI', system-ui, sans-serif;
   }
   /* The canvas has a fixed LOGICAL resolution of 1280×720 (the same as the original pygame) and is scaled with
      a letterbox to fit the screen, that way all the percentage geometry and the SCREEN_X-dependent
      physics thresholds behave identically to the desktop game. */
-  #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; }
+  #c { display: block; position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
 
   #hint { display: none; }   /* the start hint is hidden on purpose */
 
@@ -53,9 +63,14 @@
   .btn svg { display: block; width: 16px; height: 16px; pointer-events: none; }
   /* A SINGLE movement joystick (hand-rolled): it is grabbed at any point on the left-hand side of the
      screen and appears centred on the finger. The vector marks the heading; firing is automatic. */
-  #jMove { position: fixed; left: 0; bottom: 0; width: 48%; height: 86%; z-index: 4; touch-action: none; }
+  /* Same here: the stick's zone is switched on by `padsShown`, which also starts out `false`. */
+  #jMove { position: fixed; left: 0; bottom: 0; width: 48%; height: 86%; z-index: 4; touch-action: none; display: none; }
   /* Action buttons (bottom-right): nitro (boost) on top, fire (missile) underneath. */
-  #actBtns { position: fixed; right: calc(12px + env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 5; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  /* `none` to start with, not `flex`: the loop owns this visibility (`btnsShown`), and that flag
+     starts out `false`, meaning "hidden". With `flex` here the CSS contradicted the flag and the
+     buttons were on screen from the moment the HTML was parsed until the loop's first pass.
+     Measured: visible at least up to t = 300 ms, with the game still in the menu. */
+  #actBtns { position: fixed; right: calc(12px + env(safe-area-inset-right)); bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 5; display: none; flex-direction: column; align-items: center; gap: 12px; }
   #actBtns .btn { width: 54px; height: 54px; position: relative; }
   #actBtns .btn svg { width: 22px; height: 22px; }
   .btn.fireBtn  { background: rgba(255,90,60,0.18);  border-color: rgba(255,90,60,0.5); overflow: hidden; }
@@ -87,14 +102,20 @@
     opacity: 1 !important;
   }
   /* Corner buttons (fullscreen + back): positioned individually to replicate Pong's ORDER and
-     spacing → from the outside in: exit(8) · info(46) · fullscreen(84) · back(122) · pause(160). */
-  #btnFs, #btnBack {
+     spacing → from the outside in: exit(8) · info(46) · fullscreen(84) · sound(122) · back(160) ·
+     pause(198). Back and pause are conditional, so they go INSIDE: with the mute last, the menu
+     would show two gaps between ⛶ and it. Same reasoning as Pong's. */
+  #btnFs, #btnBack, #btnMute {
     position: absolute; top: calc(8px + env(safe-area-inset-top));
     width: 30px; height: 30px; z-index: 4;
   }
+  /* The MUTE was missing from this rule and from the ladder: it was left on a loose
+     `position: relative`, which parked it in the 0,0 corner, far from the cluster. Measured there.
+     It gets its own rung in Pong's order, which is the one this comment says it mirrors. */
   #btnFs   { right: calc(84px + env(safe-area-inset-right)); }
-  #btnBack { right: calc(122px + env(safe-area-inset-right)); }
-  #btnFs svg, #btnBack svg { width: 14px; height: 14px; }
+  #btnMute { right: calc(122px + env(safe-area-inset-right)); }
+  #btnBack { right: calc(160px + env(safe-area-inset-right)); }
+  #btnFs svg, #btnBack svg, #btnMute svg { width: 14px; height: 14px; }
   /* The fullscreen icon: it shows "expand" or "contract" depending on the state (body.fs-on) */
   #btnFs .ic-exit { display: none; }
   body.fs-on #btnFs .ic-enter { display: none; }
@@ -145,7 +166,7 @@
   /* Pause, as in Pong: the LEFT-hand end of the corner cluster (to the left of fullscreen/back). During a race only (__setPauseUI handles the display). */
   #btnPause {
     position: absolute;
-    right: calc(160px + env(safe-area-inset-right));
+    right: calc(198px + env(safe-area-inset-right));   /* shifted along: the mute took the 160 */
     top: calc(8px + env(safe-area-inset-top));
     width: 30px; height: 30px; border-radius: 50%;
     border: 1px solid rgba(255,255,255,0.16);
@@ -239,7 +260,6 @@
   /* These buttons are `static`, so the `::after` below would position itself against another
      ancestor and the enlarged area would land in the wrong place. `relative`, NOT `absolute`,
      which takes them out of the flow and stacks them, gives them the containing block without moving them. */
-  #btnMute { position: relative; }
   /* TOUCH AREA: these buttons' bodies are 30 px and a thumb needs ~44. The pseudo-element
      enlarges the TARGET without enlarging the drawing. Vertically only: the corner buttons sit at
      a 38 px pitch with 30 px bodies, so widening sideways would make
@@ -295,7 +315,7 @@
        Positioned individually (not grouped) to match Pong's cluster in size and spacing. -->
   <button class="btn" id="btnMute" aria-label="sound" title="Sound"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg></button>
   <button class="btn" id="btnFs" aria-label="fullscreen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></button>
-  <button class="btn" id="btnBack" data-k="ESCAPE" aria-label="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 4H8l-7 8 7 8h13a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2z"/><path d="M18 9l-6 6M12 9l6 6"/></svg></button>
+  <button class="btn" id="btnBack" data-k="ESCAPE" aria-label="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></button>
 
 <script src="matter.min.js"></script>
 <script>
