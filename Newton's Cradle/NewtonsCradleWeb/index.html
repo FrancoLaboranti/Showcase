@@ -170,11 +170,16 @@
   // ── TUNING KNOBS ──
   const FIXED_DT       = 5;       // ms per physics step (an accumulator → stable and independent of the fps)
   const OMEGA          = 6.1;     // rad/s: the pendulum's natural frequency (a short period ≈ 2π/OMEGA ≈ 1.0 s)
-  const DAMP           = 0.15;    // 1/s: air damping (small = it oscillates for a long time)
+  // 1/s: air damping. THE DOMINANT TERM, by a distance: over 23 s the collisions take about 36% of
+  // the energy between them and the air takes the rest. It was 0.15, which emptied the cradle in
+  // well under a minute. That went unnoticed while the chain kept a residual sway, because there
+  // was always something moving; with a clean transfer only the ends swing and the room empties.
+  // A real cradle keeps going for minutes.
+  const DAMP           = 0.06;
   // No real impact is perfectly elastic. 0.5% of velocity per hit (about 1% of the energy) puts
   // the loss where it belongs, in the blow, and it also stops the numerical error of the position
   // correction from building up over thousands of contacts.
-  const COLLISION_LOSS = 0.995;
+  const COLLISION_LOSS = 0.998;
   // 0 = a clean swap, which is what an elastic collision between EQUAL masses is. It used to be
   // 0.005, on purpose, "so the chain keeps a little sway". That sway adds up hit after hit: with a
   // ball lifted 0.6 rad, the share of the energy sitting in the INNER balls went 3.6% at 5 s, 15%
@@ -349,6 +354,7 @@
     get balls() { return balls; },
     get OMEGA() { return OMEGA; },
     get nro() { return nroBalls; },
+    get choques() { return nChoques; },      // how many times the group reversal actually fired
     // Specific energy of the chain: kinetic + potential of each pendulum, with phi measured from
     // the vertical. In a real cradle this can only go DOWN.
     energia() {
@@ -403,6 +409,7 @@
   // between is left at rest. With two balls it is the swap of before, so nothing changes for the
   // simple case; with five it is what the toy does.
   const CONTACT_ANG = ANG_EPS * 2;      // after the position pass a contact sits at the same angle
+  let nChoques = 0;                    // QA: a loss is charged on every reversal, so the count matters
   function resolveGroups() {
     let i = 0;
     while (i < balls.length) {
@@ -419,6 +426,7 @@
         let acerca = 0;
         for (let k = i; k < j; k++) acerca = Math.max(acerca, balls[k + 1].velocidad - balls[k].velocidad);
         if (acerca > VEL_EPS) {
+          nChoques++;
           frameImpactV = Math.max(frameImpactV, acerca);                           // energy of this frame's strongest collision → sound
           const v = [];
           for (let k = i; k <= j; k++) v.push(balls[k].velocidad);
@@ -1704,7 +1712,7 @@
 
 
 <div id="infoPanel"><h4>Newton's Cradle</h4>
-The desk toy: steel spheres that pass the impulse end to end. <b>Lift two or three together and the
+The desk toy. Steel spheres that pass the impulse end to end. <b>Lift two or three together and the
 same number swings out the other side.</b> Nothing to win: it is there to be watched.
 <hr>
 <h5>Desktop</h5>
@@ -1717,7 +1725,7 @@ same number swings out the other side.</b> Nothing to win: it is there to be wat
 </ul>
 <h5>Mobile</h5>
 <ul>
-  <li><b>Drag a sphere and release it</b>; the bar buttons behave the same as on desktop.</li>
+  <li><b>Drag a sphere and release it</b>. The bar buttons behave the same as on desktop.</li>
 </ul>
 <hr>
 <span class="dim">The room runs a day-night cycle of about a minute. It does nothing: it is there

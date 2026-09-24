@@ -100,6 +100,11 @@
   #btnPause .ic-play { display: none; }
   #btnPause.paused .ic-pause, #btnPause.on .ic-pause { display: none; }
   #btnPause.paused .ic-play,  #btnPause.on .ic-play  { display: block; }
+  /* The panel's icons are INERT copies: the rules above are scoped to `#btnPause`, and inside
+     `#infoPanel` there is no such ancestor, so neither applied and the two bars and the triangle
+     were drawn on top of each other. The panel describes the BUTTON, not its current state.
+     This game does not load `arcade-shell.css`, which is where the other five get this. */
+  #infoPanel .ik .ic-play { display: none; }
   /* fullscreen: ic-exit hidden by default; arcade-shell.js toggles body.fs-on */
   #btnFs .ic-exit { display: none; }
   body.fs-on #btnFs .ic-enter { display: none; }
@@ -263,7 +268,6 @@
 
 <div id="infoPanel"><h4>Stick Fight</h4>
 A brawling sandbox. Clear the stage and reach the <b>EXIT</b> on the right to move on.
-<b>Block with the BLOCK button</b>, or by holding the direction away from the enemy. Blocking crouched stops sweeps.
 <hr>
 <h5>Desktop</h5>
 <ul>
@@ -287,26 +291,6 @@ A brawling sandbox. Clear the stage and reach the <b>EXIT</b> on the right to mo
   <li><span class="ik"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg></span> pauses · <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg></span> back to the menu · <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg></span> sound on/off.</li>
   <li><span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg></span> fullscreen · <span class="ik"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span> leaves for the Arcade.</li>
 </ul>
-<hr>
-<b>Combos</b>
-<ul>
-  <li><b>Punch x4</b>: jab, cross, hook, uppercut. The uppercut is the launcher.</li>
-  <li><b>Finish the chain with a kick</b> and where you are in it decides which one comes out: after
-      one punch a low sweep that knocks down, after two a roundhouse, after the third or the fourth a
-      spinning kick in the air.</li>
-  <li><b>Dash + punch</b>: a lunging straight that inherits the dash's speed as extra damage and
-      knockback. <b>Run + kick</b>: flying kick. <b>Crouch + kick</b>: sweep.</li>
-</ul>
-<b>Climbing and recovery</b>
-<ul>
-  <li>Jump at a platform edge to hang; push in or jump to pull up. Against a wall you slide and can
-      jump off it.</li>
-  <li><b>Crouch + jump on a platform drops you through it</b>, which is the fast way down.</li>
-  <li><b>While you are flying, press jump, punch or kick to recover in mid-air.</b> Landing while
-      holding a direction rolls instead of dropping you flat; on the ground any button gets you up
-      sooner.</li>
-</ul>
-<hr>
 <span class="fps" id="fpsInfo">FPS: --</span>
 </div>
 <script>
@@ -390,7 +374,12 @@ const CFG = {
   },
   // A stricter grab hitbox: you used to grab platforms almost by accident with grabW=0.30
   // and grabH=0.36. Now you have to aim closer to the ledge for it to catch.
-  climb: { grabW: 0.18, grabH: 0.22, climbT: 0.33, slideCap: 0.25, wjVx: 0.45, wjVy: 0.80, wjBonus: 0.3 },
+  // wjVx used to be 0.45 against wjVy 0.80, so the wall jump came out almost vertical and read as
+  // climbing UP the wall instead of bouncing off it. Level up with the vertical: it leaves at about
+  // 45 degrees, which is the wall jump everyone knows. `wjLock` is how long the horizontal input is
+  // ignored afterwards; without it, holding towards the wall (which is what keeps you in WALLSLIDE
+  // in the first place) cancelled the push and re-stuck you on the same frame.
+  climb: { grabW: 0.18, grabH: 0.22, climbT: 0.33, slideCap: 0.25, wjVx: 0.78, wjVy: 0.80, wjBonus: 0.3, wjLock: 0.18 },
   // FPA camera: it follows the player, small on screen (frac = the figure's height / the screen's height)
   cam: { frac: 0.11, posHl: 0.15, look: 0.22, vDead: 0.18 },
   juice: {
@@ -1211,6 +1200,7 @@ class Fighter {
     this.hitChain = 0; this.hitChainT = 0;        // consecutive hits taken → they degrade the stun
     this.ledge = null; this.climbFrom = null; this.wallSide = 0; this.lastDashDir = 0; this.dashT = 9;
     this.noGrabT = 0;                       // grace period after letting go of a ledge on purpose
+    this.wjLockT = 0;                       // horizontal input locked out right after a wall jump
     this.dashCdT = 0;                                                 // the dash's cooldown (it blocks a new dash while > 0)
     this.foe = null; this.dead = false;
     fk(this.targetPose, this.renderPts, x, 0, 1);
@@ -1245,6 +1235,7 @@ class Fighter {
     this.hitFlash = Math.max(0, this.hitFlash - dt);
     this.invuln = Math.max(0, this.invuln - dt);
     this.noGrabT = Math.max(0, this.noGrabT - dt);
+    this.wjLockT = Math.max(0, this.wjLockT - dt);
     this.flinchW *= Math.pow(2, -dt / CFG.anim.flinchHl);
     this.renderPtsPrev.set(this.renderPts);
     this.readInput(dt);                      // ALWAYS on real dt: a tap inside the freeze is not lost (it stays in the buffer)
@@ -1416,6 +1407,7 @@ class Fighter {
           this.vx = -this.wallSide * CFG.climb.wjVx * S;
           this.vy = -(CFG.climb.wjVy + bonus) * S;
           this.facing = -this.wallSide; this.state = ST.JUMP; this.grounded = false;
+          this.wjLockT = CFG.climb.wjLock;                             // the push has to survive the finger still pressing into the wall
           sfx.jump(this.x, this.y); spawnDust(this.x + this.wallSide * 0.1 * CH, this.y, 5);
         }
         break;
@@ -1542,7 +1534,8 @@ class Fighter {
       // multiplied by softCap (the air is a touch slower). We still let it grow if you come in with
       // run-up (an aerial dash, a launch), only a gentle drag until it comes down to the cap.
       const airMax = mv.softCap * mv.maxRun * S;
-      const want = clamp(i.mx, -1, 1);
+      // During the wall jump's lockout the stick is ignored: see CFG.climb.wjLock.
+      const want = this.wjLockT > 0 ? 0 : clamp(i.mx, -1, 1);
       if (want !== 0) {
         if (Math.abs(this.vx) < airMax || Math.sign(this.vx) !== Math.sign(want))
           this.vx += want * mv.airAccel * S * dt;
@@ -1724,6 +1717,7 @@ class Fighter {
     }
   }
   tryWallSlide() {
+    if (this.wjLockT > 0) return;                                      // just bounced off: no re-sticking to the same wall
     if (this.wallSide === 0 || this.vy <= 0) return;
     if (this.input.mx * this.wallSide > 0.2) {
       this.state = ST.WALLSLIDE; this.stateT = 0; this.facing = this.wallSide;
@@ -3763,7 +3757,7 @@ function resetFighter(f, x) {
   f.y = g.y - STAND; f.surf = g.s; f.grounded = true;
   f.state = ST.IDLE; f.stateT = 0; f.atk = null; f.rot = 0; f.juggle = 0; f.combo = 0; f.stun = 0;
   f.hitstopT = 0; f.pendKb = false; f.rag.on = false; f.rag.w = 0; f.invuln = 0; f.ledge = null;
-  f.hitChain = 0; f.hitChainT = 0; f.noGrabT = 0;
+  f.hitChain = 0; f.hitChainT = 0; f.noGrabT = 0; f.wjLockT = 0;
   f.buffer.length = 0; f.dead = false; f.leanAx = 0; f.prevVx = 0;
   f.popT = 9; f.squashT = 9; f.squashAmt = 0; f.guardW = 0; f.atkChained = false;
   f.poseCur.set(POSES.idle); f.poseVel.fill(0);
@@ -4318,7 +4312,10 @@ function drawDebugBoxes(f) {
 
 // ════════════════ INIT: the player + the enemies ════════════════
 // Player: an "adventurer" outfit (a light blue shirt, navy trousers, plain hair).
-const P1 = new Fighter(180, [90, 165, 220], null, inP1);
+// The second argument is the tint of the SMEARS and the dash's ghosts. It was still the blue of
+// the old character, so the dash drew a cyan silhouette of a player who is now orange. Same
+// `#e2781e` as the stick's knob and the shirt.
+const P1 = new Fighter(180, [226, 120, 30], null, inP1);
 P1.isPlayer = true;
 // The stick's knob is `#e2781e`, and that orange is now the player's: on a phone the thing you
 // move and the thing that moves are the same colour, which is how you find yourself in a brawl
@@ -4368,8 +4365,8 @@ document.body.classList.add('inMenu');
 window.SF = { P1, enemies, PLANTEL, ARENA, CFG, game, cam, MOVES, POSES, ST, simT: 0, moveStick, btnState, get inP1() { return inP1; } };
 
 document.getElementById('hint').textContent = IS_TOUCH
-  ? 'stick = move · double-tap = dash · knock the enemies down and reach the EXIT →'
-  : 'A/D move · W jump · S crouch · J punch · K kick · SHIFT dash · reach the EXIT →';
+  ? 'stick: move · up = jump · down = crouch  ·  DASH · BLOCK · PUNCH · KICK  ·  reach the EXIT →'
+  : 'A/D move · W jump · S crouch · J punch · K kick · L block · SHIFT dash · reach the EXIT →';
 setTimeout(() => document.getElementById('hint').classList.add('off'), 5000);
 
 function zeroIn(i) { i.mx = 0; i.my = 0; i.jump = false; i.punch = false; i.kick = false; i.block = false; i.dashPulse = 0; }

@@ -285,6 +285,12 @@
 #btnPause .ic-play { display: none; }
 #btnPause.on .ic-pause { display: none; }
 #btnPause.on .ic-play { display: block; }
+/* The panel's icons are INERT copies: the rule above is scoped to `#btnPause`, and inside
+   `#infoPanel` there is no such ancestor, so it never applied and the two bars and the triangle
+   were drawn on top of each other. The panel describes the BUTTON, not the state it happens to
+   be in. This game inlines its own copy of the shell's rules instead of linking the file, so the
+   shared rule does not reach it. */
+#infoPanel .ik .ic-play { display: none; }
 </style>
 </head>
 <body>
@@ -993,18 +999,26 @@ function noiseHit(dur, vol, freq, q, type, t0) {
 //
 // On small tracks `camX`/`camY` stay at 0 and the whole world fits inside the rectangle, so
 // everything comes back as 1 without a special case.
-const AUDIO_HALO = 0.5;      // the halo, as a fraction of the view's shortest side
+const AUDIO_HALO = 0.5;      // how far PAST the screen's corner something is still heard, as a fraction of the half-diagonal
 const AUDIO_FLOOR = 0.05;    // under this it is inaudible: better not to spend the voice
+// Half the diagonal of the visible window: the unit the distance is measured in. 1 = the corner of
+// the screen, more than 1 = off camera.
+const AUDIO_SEMIDIAG = 0.5 * Math.hypot(SCREEN_X, SCREEN_Y);
 function audible(x, y) {
   // No position: GLOBAL. Without this guard a missing x/y propagates NaN all the way to
   // `setValueAtTime`, which throws inside `voice()`'s try/catch and loses the sound with no warning.
   if (!isFinite(x) || !isFinite(y)) return 1;
-  const dx = Math.max(camX - x, 0, x - (camX + SCREEN_X));
-  const dy = Math.max(camY - y, 0, y - (camY + SCREEN_Y));
-  if (dx === 0 && dy === 0) return 1;
-  const t = Math.hypot(dx, dy) / (AUDIO_HALO * Math.min(SCREEN_X, SCREEN_Y));
-  if (t >= 1) return 0;
-  const g = (1 - t) * (1 - t);
+  // Distance to the CENTRE of the camera, not to the edge of the visible rectangle. Measuring to
+  // the rectangle meant returning 1 the moment the position fell inside it, so a tank right next to
+  // you and one in the opposite corner of the screen sounded exactly as loud. Measured over a race:
+  // 448 of 600 readings came back at 1.000 flat, and on a SMALL track, where the whole world IS the
+  // view, it would be all of them: the flat drone this is supposed to replace.
+  const cx = camX + SCREEN_X / 2, cy = camY + SCREEN_Y / 2;
+  const t = Math.min(1, Math.hypot(x - cx, y - cy) / (AUDIO_SEMIDIAG * (1 + AUDIO_HALO)));
+  // 1 - t^2 and not (1 - t)^2: what is ON SCREEN has to stay clearly audible (about 0.56 at the
+  // corner) and only what is outside fades out. A square falloff from the centre would leave the
+  // edges of the picture almost mute, which reads as broken rather than as distant.
+  const g = 1 - t * t;
   return g < AUDIO_FLOOR ? 0 : g;
 }
 // `spGain` multiplies inside note/noiseHit so the attenuation does not have to be threaded through
@@ -4530,18 +4544,18 @@ shoot the others. <b>A hit sends the other tank into a spin.</b>
 <hr>
 <h5>Desktop</h5>
 <ul>
-  <li><b>Arrow keys</b> or <b>W A S D</b> drive, in the menu as well. <b>Space</b> fires a shell, same as <span class="ik"><svg class="fbomb fbLight" viewBox="0 0 54 54" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(8.8 10.9) scale(1.4)"><circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" stroke="none"/><path d="M15 9.5 18 6.5" stroke-width="2"/><circle cx="18.8" cy="5.6" r="1.7" fill="currentColor" stroke="none"/><path d="M20.5 3.6 21.7 2.6M20.2 6.4 21.6 6.7M17.6 3.3 17.2 1.9" stroke-width="1.4"/></g></svg></span> <b>Fire</b>.
+  <li><b>Arrow keys</b> or <b>WASD</b> drive, in the menu as well. <b>Space</b> fires a shell, same as <span class="ik"><svg class="fbomb fbLight" viewBox="0 0 54 54" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(8.8 10.9) scale(1.4)"><circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" stroke="none"/><path d="M15 9.5 18 6.5" stroke-width="2"/><circle cx="18.8" cy="5.6" r="1.7" fill="currentColor" stroke="none"/><path d="M20.5 3.6 21.7 2.6M20.2 6.4 21.6 6.7M17.6 3.3 17.2 1.9" stroke-width="1.4"/></g></svg></span> <b>Fire</b>.
       <b>Shift</b> uses nitro, same as <span class="ik"><svg class="nflame nfLight" viewBox="0 0 54 54" fill="currentColor" stroke="none"><path transform="translate(10 11.5) scale(1.4)" d="M12.5 2c.6 3-1.4 4-1.4 6.3 0 1 .7 1.7 1.6 1.7 1.2 0 1.7-1 1.6-2.2 1.7 1.3 2.7 3.4 2.7 5.5a5.5 5.5 0 0 1-11 0c0-2.7 1.7-4.6 3-6.1C10.9 5.3 11.8 3.7 12.5 2z"/></svg></span> <b>Nitro</b>.</li>
-  <li><b>Enter</b> confirms in the menu; <b>Esc</b> goes back. <span class="ik"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg></span> <b>Pause</b> in the corner.</li>
+  <li><b>Enter</b> confirms in the menu. <b>Esc</b> goes back. <span class="ik"><svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><g class="ic-pause"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></g><g class="ic-play"><path d="M8 5l12 7-12 7z"/></g></svg></span> <b>Pause</b> in the corner.</li>
 </ul>
 <h5>Mobile</h5>
 <ul>
   <li><b>Joystick</b> on the left drives.</li>
-  <li><span class="ik"><svg class="fbomb fbLight" viewBox="0 0 54 54" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(8.8 10.9) scale(1.4)"><circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" stroke="none"/><path d="M15 9.5 18 6.5" stroke-width="2"/><circle cx="18.8" cy="5.6" r="1.7" fill="currentColor" stroke="none"/><path d="M20.5 3.6 21.7 2.6M20.2 6.4 21.6 6.7M17.6 3.3 17.2 1.9" stroke-width="1.4"/></g></svg></span> <b>Fire</b> (the red bomb) and <span class="ik"><svg class="nflame nfLight" viewBox="0 0 54 54" fill="currentColor" stroke="none"><path transform="translate(10 11.5) scale(1.4)" d="M12.5 2c.6 3-1.4 4-1.4 6.3 0 1 .7 1.7 1.6 1.7 1.2 0 1.7-1 1.6-2.2 1.7 1.3 2.7 3.4 2.7 5.5a5.5 5.5 0 0 1-11 0c0-2.7 1.7-4.6 3-6.1C10.9 5.3 11.8 3.7 12.5 2z"/></svg></span> <b>Nitro</b> (the cyan flame) are the buttons on the right.</li>
+  <li><span class="ik"><svg class="fbomb fbLight" viewBox="0 0 54 54" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><g transform="translate(8.8 10.9) scale(1.4)"><circle cx="10.5" cy="14.5" r="6.5" fill="currentColor" stroke="none"/><path d="M15 9.5 18 6.5" stroke-width="2"/><circle cx="18.8" cy="5.6" r="1.7" fill="currentColor" stroke="none"/><path d="M20.5 3.6 21.7 2.6M20.2 6.4 21.6 6.7M17.6 3.3 17.2 1.9" stroke-width="1.4"/></g></svg></span> <b>Fire</b> and <span class="ik"><svg class="nflame nfLight" viewBox="0 0 54 54" fill="currentColor" stroke="none"><path transform="translate(10 11.5) scale(1.4)" d="M12.5 2c.6 3-1.4 4-1.4 6.3 0 1 .7 1.7 1.6 1.7 1.2 0 1.7-1 1.6-2.2 1.7 1.3 2.7 3.4 2.7 5.5a5.5 5.5 0 0 1-11 0c0-2.7 1.7-4.6 3-6.1C10.9 5.3 11.8 3.7 12.5 2z"/></svg></span> <b>Nitro</b> are the buttons on the right.</li>
 </ul>
 <hr>
-<b>Nitro runs out</b>: pick up the cyan orbs on the track to refill it, or drift for real and it recharges on its own, a little per drift.
-<span class="dim">Each biome has its own grip: on snow the tank slides, on tarmac it bites. The
+<b>Nitro runs out</b>: pick up orbs on the track to refill it, or drift for real and it recharges on its own, a little per drift.
+<span class="dim">Each biome has its own grip: on snow the tank slides. The
 track rattle changes with the surface before you feel the slide.</span>
 </div>
 
