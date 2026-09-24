@@ -77,6 +77,11 @@
   #ui #btnMinus svg, #ui #btnPlus svg { width: 24px; height: 24px; }
   /* visual indicator for toggled-on state */
   #ui button.on { background: rgba(120,200,255,0.28); border-color: rgba(120,200,255,0.55); }
+  /* Muted, the speaker loses its waves and gets the cross: the same two groups as the rest of the
+     collection, so the icon reads the same in every game. */
+  #btnMute .ic-off { display: none; }
+  #btnMute.muted .ic-on  { display: none; }
+  #btnMute.muted .ic-off { display: block; }
   /* The ✕/⛶/ⓘ buttons + the exit overlay come from arcade-shell.css. */
   /* FPS HUD: Pong format: a monospaced panel at the top left, no border-radius. */
   #fpsOverlay {
@@ -136,6 +141,9 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9"/><path d="M3 4v5h5"/></svg>
       </button>
     </div>
+      <button id="btnMute" aria-label="sound" title="Sound">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z" fill="currentColor" stroke="none"/><g class="ic-on"><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18 6a8.5 8.5 0 0 1 0 12"/></g><g class="ic-off"><path d="M16 9l5 6M21 9l-5 6"/></g></svg>
+      </button>
     <button id="btnFs" aria-label="fullscreen" title="Fullscreen">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
     </button>
@@ -1547,11 +1555,30 @@
     };
     el.addEventListener('pointerdown', start);
   }
+  // Mute: it survives a reload, like in the rest of the collection. It is declared HERE and not
+  // down in the audio block: the button wiring runs before that block, and a `let` is in the dead
+  // zone until its declaration is reached. Measured: ReferenceError on opening the game.
+  let muted = false;
+  try { muted = localStorage.getItem('cradleMuted') === '1'; } catch (e) {}
+
   function tappable(el, fn) { el.addEventListener('pointerdown', e => { e.preventDefault(); audioResume(); fn(); }); }
 
   holdable(document.getElementById('btnPlus'), addBall);
   holdable(document.getElementById('btnMinus'), removeBall);
   const btnGhost = document.getElementById('btnGhost');
+  // The mute. `tappable` already calls audioResume(), so on the first tap the context exists and
+  // the gain can be written straight away.
+  {
+    const btnMute = document.getElementById('btnMute');
+    btnMute.classList.toggle('muted', muted);
+    tappable(btnMute, () => {
+      muted = !muted;
+      if (master && actx) { master.gain.cancelScheduledValues(actx.currentTime); master.gain.value = muted ? 0 : MIX.master; }
+      btnMute.classList.toggle('muted', muted);
+      try { localStorage.setItem('cradleMuted', muted ? '1' : '0'); } catch (e) {}
+    });
+  }
+
   tappable(btnGhost, () => { ghosted = !ghosted; btnGhost.classList.toggle('on', ghosted); });
   const btnHold = document.getElementById('btnHold');
   tappable(btnHold, () => { holding = !holding; btnHold.classList.toggle('on', holding); });
@@ -1593,7 +1620,7 @@
       if (!actx) {
         actx = new (window.AudioContext || window.webkitAudioContext)();
         try {
-          master = actx.createGain(); master.gain.value = MIX.master;
+          master = actx.createGain(); master.gain.value = muted ? 0 : MIX.master;
           const lim = actx.createDynamicsCompressor();
           lim.threshold.value = LIMITER.threshold; lim.knee.value = LIMITER.knee;
           lim.ratio.value = LIMITER.ratio; lim.attack.value = LIMITER.attack;

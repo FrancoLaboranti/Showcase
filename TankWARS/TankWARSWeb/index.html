@@ -114,9 +114,18 @@
     background: radial-gradient(circle at 50% 35%, rgba(160,220,255,0.95), rgba(120,200,255,0.55) 70%);
     border: 1px solid rgba(180,228,255,0.8);
   }
-  /* The resting position: near the buttons (the bottom corners). Left near the exit, right near the boost/missile. */
-  #jMoveRest { left: 25%; bottom: 13%; }
-  #jAimRest  { left: 75%; bottom: 13%; border-color: rgba(255,90,60,0.35); box-shadow: inset 0 2px 14px rgba(0,0,0,0.5), 0 0 16px rgba(255,90,60,0.25); }
+  /* The resting position: each one against ITS OWN margin, anchored in PIXELS and not as a
+     percentage of the width. At 25% / 75% both sat towards the middle (measured at 834 px wide:
+     centres 209 px from the left and 208 from the right), and on a wider screen a percentage pushes
+     them further in still (at 1084 the left one went to 271). At 13% of the height the 90 px circle
+     also stuck 3 px out past the bottom edge. */
+  #jMoveRest { left: calc(96px + env(safe-area-inset-left)); bottom: calc(74px + env(safe-area-inset-bottom)); }
+  /* `right` with the X translate FLIPPED, so `right: N` leaves the centre exactly N from the right
+     edge, the mirror of what `left` does for the other one. 118 px keeps it 19 px clear of the
+     button column, which starts 54 px in: close to them without covering them. */
+  #jAimRest  { left: auto; right: calc(118px + env(safe-area-inset-right)); bottom: calc(74px + env(safe-area-inset-bottom));
+               transform: translate(50%, 50%);
+               border-color: rgba(255,90,60,0.35); box-shadow: inset 0 2px 14px rgba(0,0,0,0.5), 0 0 16px rgba(255,90,60,0.25); }
   #jAimRest::after { background: radial-gradient(circle at 50% 35%, rgba(255,170,150,0.95), rgba(255,90,60,0.6) 70%); border-color: rgba(255,180,160,0.85); }
 
   /* Top-right corner buttons: fullscreen / restart / debug */
@@ -4010,23 +4019,9 @@
       }
     }
 
-    // The START HINT: the objective + the controls, centred, it fades after ~7s. The timer only runs during play (it holds
-    // with the shop/pause open). It does not go at the top (that is where the wave banner is) or on a defeat/victory.
-    if (manager.startHintT != null && manager.startHintT < 7 && !manager.gameover && !manager.victory) {
-      if (!manager.shopOpen && !manager.menu && !manager.paused) manager.startHintT += dt;
-      const t = manager.startHintT, a = Math.min(1, t/0.4) * clampN((7 - t)/1.1, 0, 1);
-      if (a > 0.01) {
-        ctx.globalAlpha = a;
-        const cy = H*0.44;
-        textGlow('CLEAR THE WAVES', [255,255,255], W/2, cy, sper(0.04), 'center');
-        textGlow('grab gold → buy upgrades → survive to Wave 50', [255,210,90], W/2, cy + sper(0.038), sper(0.023), 'center');
-        const ctrl = IS_TOUCH
-          ? 'Left stick moves · right stick aims & fires · missile / boost buttons · tap the rage bar · shop button'
-          : 'WASD move · mouse aim & fire · right-click missile · Shift boost · Q rage · TAB shop';
-        textGlow(ctrl, [150,200,255], W/2, cy + sper(0.038) + sper(0.03), sper(0.019), 'center');
-        ctx.globalAlpha = 1;
-      }
-    }
+    // The START HINT used to go here: the objective plus the list of controls, centred and fading
+    // after 7 s. It covered the opening of the round, and the controls already live in the ⓘ panel,
+    // which is where anyone looks for them.
 
     if (manager.paused && !manager.menu && !manager.gameover && !manager.victory) {
       ctx.fillStyle = 'rgba(5,7,12,0.66)'; ctx.fillRect(0, 0, W, H);   // the veil only
@@ -4145,7 +4140,6 @@
     camShake = 0;
     aimX = player.x + xper(0.15); aimY = player.y;
     parts.length = 0; popups.length = 0; dmgNums.length = 0; manager.banner = null;
-    manager.startHintT = 0;   // the central start hint (the objective + the controls); it fades after ~7s
   }
 
   function purge() {
@@ -4345,9 +4339,9 @@ Survive waves of enemy tanks. Between waves you spend what you earned in the sho
 <b>On the field</b>
 <ul>
   <li><b>Crates</b> block the way and you can break them to get more coins.</li>
-  <li><b>Lootboxes</b> can give you coins, restore health or give you special upgrades!.</li>
+  <li><b>Lootboxes</b> can give you coins, restore health or give you special upgrades!</li>
   <li>Be careful of <b>Mines</b> nearby.</li>
-  <li>The <b>shield</b> absorbs shots until it breaks, be careful when it runs out! You'll need to take cover until it comes back.</li>
+  <li>The <b>shield</b> absorbs shots until it breaks, be careful when it runs out! You'll need to take cover until it recharges.</li>
 </ul>
 <div id="fpsOverlay" class="stats"></div>
 </div>

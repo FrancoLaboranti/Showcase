@@ -570,6 +570,9 @@
     canvas.style.width  = W + 'px';
     canvas.style.height = H + 'px';
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    // The baked layers are sized in device pixels: a resize invalidates both.
+    bakeBackground();
+    boardKey = '';
   }
   window.addEventListener('resize', resize);
 
@@ -584,14 +587,17 @@
   function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
   function clamp01(t) { return Math.max(0, Math.min(1, t)); }
 
-  function drawRoundedRect(x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x+r, y);
-    ctx.lineTo(x+w-r, y); ctx.quadraticCurveTo(x+w, y, x+w, y+r);
-    ctx.lineTo(x+w, y+h-r); ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
-    ctx.lineTo(x+r, y+h); ctx.quadraticCurveTo(x, y+h, x, y+h-r);
-    ctx.lineTo(x, y+r); ctx.quadraticCurveTo(x, y, x+r, y);
-    ctx.closePath();
+  // `c` opcional: por defecto el contexto de pantalla, y los horneados fuera de pantalla le pasan
+  // el suyo.
+  function drawRoundedRect(x, y, w, h, r, c) {
+    c = c || ctx;
+    c.beginPath();
+    c.moveTo(x+r, y);
+    c.lineTo(x+w-r, y); c.quadraticCurveTo(x+w, y, x+w, y+r);
+    c.lineTo(x+w, y+h-r); c.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+    c.lineTo(x+r, y+h); c.quadraticCurveTo(x, y+h, x, y+h-r);
+    c.lineTo(x, y+r); c.quadraticCurveTo(x, y, x+r, y);
+    c.closePath();
   }
 
   // Text scaled by BOARD SIZE, not by H. In mobile landscape H is small and sizes
@@ -602,12 +608,61 @@
   }
 
   // ── DRAW ──
-  function drawBackground() {
-    const grad = ctx.createRadialGradient(W/2, H*0.45, 0, W/2, H*0.45, Math.hypot(W, H)*0.65);
+  // ── BAKED LAYERS ──
+  // Neither the background nor the board's body changes between frames, and both were the two
+  // expensive things in the loop: a full-screen RADIAL gradient (evaluated per pixel: at dpr 2 on a
+  // phone that is about a million and a half of them, sixty times a second) and a `shadowBlur` the
+  // size of the board (Canvas 2D shadows rasterise into a separate surface and blur it). They are
+  // painted once into an offscreen canvas and blitted from then on. Re-baked on resize, and the
+  // board's one also when the winner changes, because the glow takes their colour.
+  let bgCv = null, boardCv = null, boardKey = '';
+
+  function bakeBackground() {
+    bgCv = bgCv || document.createElement('canvas');
+    bgCv.width = canvas.width; bgCv.height = canvas.height;
+    const g = bgCv.getContext('2d');
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const grad = g.createRadialGradient(W/2, H*0.45, 0, W/2, H*0.45, Math.hypot(W, H)*0.65);
     grad.addColorStop(0, COL_BG_INNER);
     grad.addColorStop(1, COL_BG_OUTER);
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
+    g.fillStyle = grad;
+    g.fillRect(0, 0, W, H);
+  }
+  function drawBackground() {
+    if (!bgCv) bakeBackground();
+    ctx.drawImage(bgCv, 0, 0, W, H);
+  }
+
+  // The board's chrome: the outer glow, the inner gradient and the light edge. The key carries what
+  // it depends on, so a change in the winner (or a resize) re-bakes it and nothing else does.
+  function bakeBoard() {
+    const { bx, by, size } = boardRect();
+    const r = size * 0.025;
+    boardCv = boardCv || document.createElement('canvas');
+    boardCv.width = canvas.width; boardCv.height = canvas.height;
+    const g = boardCv.getContext('2d');
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    g.clearRect(0, 0, boardCv.width, boardCv.height);
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const winning = winner > 0;
+    const glowCol = winning ? colorForMark(winner) : [120, 140, 180];
+    g.shadowColor = `rgba(${glowCol[0]},${glowCol[1]},${glowCol[2]},${winning ? 0.22 : 0.08})`;
+    g.shadowBlur = size * 0.06;
+    g.shadowOffsetY = size * 0.005;
+    g.fillStyle = COL_BOARD_B;
+    drawRoundedRect(bx, by, size, size, r, g);
+    g.fill();
+    g.shadowBlur = 0; g.shadowOffsetY = 0;
+    const grad = g.createLinearGradient(0, by, 0, by + size);
+    grad.addColorStop(0, COL_BOARD_T);
+    grad.addColorStop(1, COL_BOARD_B);
+    g.fillStyle = grad;
+    drawRoundedRect(bx, by, size, size, r, g);
+    g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.05)';
+    g.lineWidth = 1;
+    drawRoundedRect(bx + 0.5, by + 0.5, size - 1, size - 1, r, g);
+    g.stroke();
   }
 
   function drawMark(mark, cx, cy, r, alpha) {
@@ -639,30 +694,10 @@
     const lineW = Math.max(2, size * 0.008);
     const r = size * 0.025;
 
-    // 1) Board: a soft outer shadow (the winner's colour if it is over)
-    const winning = winner > 0;
-    const glowCol = winning ? colorForMark(winner) : [120, 140, 180];
-    ctx.shadowColor = `rgba(${glowCol[0]},${glowCol[1]},${glowCol[2]},${winning ? 0.22 : 0.08})`;
-    ctx.shadowBlur = size * 0.06;
-    ctx.shadowOffsetY = size * 0.005;
-    ctx.fillStyle = COL_BOARD_B;
-    drawRoundedRect(bx, by, size, size, r);
-    ctx.fill();
-    ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
-
-    // 2) The board's inner gradient
-    const grad = ctx.createLinearGradient(0, by, 0, by + size);
-    grad.addColorStop(0, COL_BOARD_T);
-    grad.addColorStop(1, COL_BOARD_B);
-    ctx.fillStyle = grad;
-    drawRoundedRect(bx, by, size, size, r);
-    ctx.fill();
-
-    // 3) A thin light edge on top (inner)
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 1;
-    drawRoundedRect(bx + 0.5, by + 0.5, size - 1, size - 1, r);
-    ctx.stroke();
+    // 1-3) The board's body: glow + gradient + edge, all baked. See bakeBoard.
+    const clave = winner + '|' + Math.round(size) + 'x' + canvas.width;
+    if (!boardCv || clave !== boardKey) { bakeBoard(); boardKey = clave; }
+    ctx.drawImage(boardCv, 0, 0, W, H);
 
     // 4) Pulse of the winning cells (below the marks), after the line finishes
     if (winLine && winAnim <= 0) {
