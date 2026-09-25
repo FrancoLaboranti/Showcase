@@ -5,7 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#070a12">
 <title>Loop</title>
-<link rel="stylesheet" href="../../Arcade/arcade-shell.css">
+<script>
+// The shared shell CSS is a SUBRESOURCE: the Arcade busts the game's HTML with `?t=`, but the
+// browser keeps serving its own cached copy of this file, so a fix in it can sit unseen for days
+// while the markup around it is already new. Measured: v2.0.8's HTML with v2.0.7's CSS, which is
+// the pause icon fixed and the mute and fullscreen ones still drawn on top of each other.
+// It is asked for with the SAME buster the page arrived with, so the two travel together.
+// `document.write` on purpose: inside `<head>` while parsing it is synchronous and render-blocking,
+// exactly like a static `<link>`. Appending the node from JS lets the sheet arrive late and the
+// corner buttons flash unstyled.
+(function () {
+  var t = location.search.match(/[?&]t=(\d+)/);
+  document.write('<link rel="stylesheet" href="../../Arcade/arcade-shell.css' + (t ? '?t=' + t[1] : '') + '">');
+})();
+</script>
 <!-- Outfit: geometric and round. The previous one was the system's system-ui, which on Windows
      falls back to Segoe UI and reads square and generic - above all in the score's numbers, which
      are the largest element on screen. -->

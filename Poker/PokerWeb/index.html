@@ -766,7 +766,12 @@
         bump = Math.max(BIG_BLIND, Math.round((G.pot + callAmt) * frac));
       }
       bump = Math.min(bump, G.cpuChips - callAmt);
+      // Read before posting: with something to call this is a RE-RAISE, with nothing it is a bet.
+      const resube = callAmt > 0;
       postBet('cpu', callAmt + bump);
+      setMsg(G.cpuChips <= 0 ? `CPU goes ALL IN: $${G.cpuBet}`
+             : resube ? `CPU raises to $${G.cpuBet}`
+                      : `CPU bets $${G.cpuBet}`);
       // NO resolveAllIn: the player still has to call/fold. If we called it here, an all-in
       // raise by the CPU would deflate itself before the player responded.
       G.lastRaiser = 'cpu';
@@ -775,7 +780,12 @@
       return;
     }
 
-    if (callAmt > 0) postBet('cpu', callAmt);
+    if (callAmt > 0) {
+      postBet('cpu', callAmt);
+      setMsg(G.cpuChips <= 0 ? `CPU calls ALL IN: $${callAmt}` : `CPU calls $${callAmt}`);
+    } else {
+      setMsg('CPU checks');
+    }
     resolveAllIn();
     G.acted.add('cpu');
     G.currentPlayer = 'player';
@@ -1315,7 +1325,9 @@
     // CPU "turn" pacing: a delay the first time it is their turn, then they act.
     // NOTE: the all-in auto-advance forces the CPU too; the `inBetting()` guard prevents a double trigger.
     if (inBetting() && G.currentPlayer === 'cpu' && !G.allInActive) {
-      if (!G.cpuPending) { G.cpuPending = true; G.cpuTimer = 0.9; }
+      // The line goes on the TRANSITION, not every frame: this branch runs once, when the turn
+      // passes over. Without it the deliberate 0.9 s wait reads as the game having locked up.
+      if (!G.cpuPending) { G.cpuPending = true; G.cpuTimer = 0.9; setMsg('CPU is thinking...'); }
       else {
         G.cpuTimer -= dt;
         if (G.cpuTimer <= 0) { G.cpuPending = false; cpuAct(); }

@@ -3624,6 +3624,13 @@ function drawPaper() {                                                // a flat 
 }
 function drawWorld() {
   if (!terrainCanvas) return;
+  // The bake ends 250 world units under the floor and the slab is drawn 640 deep, so looking any
+  // further down showed the paper background behind a hard horizontal edge. The rock carries on as
+  // a flat fill in its own colour, overlapping by a pixel so no hairline is left: the seam is gone
+  // because the two match, and it costs one rect instead of a taller bake.
+  const yFin = terrainCanvas._y0 + terrainCanvas._h;
+  ctx.fillStyle = ROCK;
+  ctx.fillRect(terrainCanvas._x0, yFin - 1, terrainCanvas._w, 4000);
   ctx.drawImage(terrainCanvas, terrainCanvas._x0, terrainCanvas._y0, terrainCanvas._w, terrainCanvas._h);
 }
 
