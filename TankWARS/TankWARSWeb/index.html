@@ -680,6 +680,33 @@
     glow(t.x, t.y, rr*1.08, [60,200,255], 0.22);
     circle(t.x, t.y, rr, [130,235,255], t.drawRadius/6);
     circle(t.x, t.y, rr*0.93, [52,204,255], t.drawRadius/11);
+    // ── IMPACT ON THE BUBBLE ──
+    // The ring is ALWAYS on, so on its own it says nothing about the moment something hits it.
+    // This lights the side that was hit and sends a ripple outwards: an arc whose width and
+    // brightness fall off with the timer, plus an expanding hoop. Additive, so it reads over
+    // the explosion of whatever it just ate.
+    if (t.shieldHitT > 0) {
+      const dur = t.shieldHitBig >= 1 ? 0.42 : 0.16;
+      const u = clampN(t.shieldHitT / dur, 0, 1);      // 1 = just now, 0 = gone
+      const k = u * u * (0.45 + 0.55*t.shieldHitBig);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      const half = (0.55 + 0.75*t.shieldHitBig) * (0.45 + 0.55*u);   // the arc CLOSES as it fades
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, rr, t.shieldHitAng - half, t.shieldHitAng + half);
+      ctx.strokeStyle = `rgba(210,250,255,${0.85*k})`;
+      ctx.lineWidth = t.drawRadius * (0.30 + 0.45*t.shieldHitBig) * (0.4 + 0.6*u);
+      ctx.lineCap = 'round'; ctx.stroke();
+      glow(t.x + Math.cos(t.shieldHitAng)*rr, t.y + Math.sin(t.shieldHitAng)*rr,
+           rr*(0.34 + 0.30*t.shieldHitBig), [150,240,255], 0.55*k);
+      const ripple = rr * (1 + (1-u) * 0.42 * t.shieldHitBig);       // a hoop leaving the bubble
+      if (t.shieldHitBig >= 1) {
+        ctx.beginPath(); ctx.arc(t.x, t.y, ripple, 0, TAU);
+        ctx.strokeStyle = `rgba(160,240,255,${0.5*u*u})`;
+        ctx.lineWidth = t.drawRadius * 0.16 * u; ctx.stroke();
+      }
+      ctx.restore();
+    }
   }
   function roundRectPath(x, y, w, h, r) {
     r = Math.min(r, w/2, h/2);
@@ -1051,6 +1078,13 @@
     crit(x, y) { voiceAt('crit', 60, x, y, () => note(1750, 1750, 0, 0.035, 'sine', 0.035, 0)); },
     // ELECTRICITY: the shot was eaten by the shield. There was no metal, so it does not sound like metal.
     absorb(x, y) { voiceAt('absorb', 45, x, y, () => { note(1250, 1250, 0, 0.04, 'sine', 0.05, 0); noiseHit(0, 0.02, 0.02, 2600, 6); }); },
+    // A MISSILE eaten by the shield. Same ELECTRICITY family (it is the shield talking, so it is
+    // not allowed to sound like metal), but with body: a fifth that falls, a longer tail and a
+    // wash of noise. Deliberately CONSONANT, because the game's one dissonance is the shield
+    // BREAKING (1400 + 1483, a semitone) and these two must never be mistaken for each other.
+    absorbBig(x, y) { voiceAt('absorbB', 120, x, y, () => {
+      note(1470, 980, 0, 0.26, 'sine', 0.075, 0); note(980, 735, 0, 0.30, 'sine', 0.055, 0);
+      noiseHit(0, 0.16, 0.05, 2100, 3); noiseHit(0.03, 0.10, 0.03, 1250, 2); }); },
     // Big CORDITE, scaled by the size of whatever died.
     enemyDie(r, x, y) {
       const k = Math.max(0.3, Math.min(1, (r || 0.02) / 0.035));
@@ -1141,6 +1175,10 @@
       this.shieldCapacity = SHIELD_CAP; this.shieldCharge = 0; this.shieldAugment = 0;
       this.shieldChargeSpeed = 1; this.shielded = false;
       this.covered = 0;   // COVER projected by a nearby Shielder: while > 0, it absorbs shots as if it had a shield (it does not depend on its own capacity)
+      // IMPACT ON THE SHIELD: a timer and the direction it came from, so the bubble can flare where
+      // it was hit. Without this, a blocked missile was a boom NEXT TO the tank with no damage: you
+      // could not tell your shield had done it, which is the one moment it is worth having.
+      this.shieldHitT = 0; this.shieldHitAng = 0; this.shieldHitBig = 0;
       this.shieldLockout = 8;   // OVERLOAD: on exhausting the shield it is DISABLED for this long (AI: long; the player lowers it a lot)
       this.maxHealth = MAXHP; this.health = this.maxHealth; this.healthRegenCD = 1; this.healthRegenSpeed = 1;   // natural health (the enemy subclasses override maxHealth)
       this.attack = 1; this.defense = 1; this.moveSpeed = 1;
@@ -1149,12 +1187,28 @@
       this.drawAura = false;
       tanks.push(this);
     }
+    // Something landed on the bubble and the bubble ate it. `ang` is where it came from, so the
+    // flare can sit on that side instead of lighting the whole ring evenly. `big` is a missile:
+    // it flares wider and longer and shakes the screen, because a blocked boss missile is a big
+    // event and used to be completely silent. It is all diegetic on purpose: the bubble itself
+    // reacts, with no text over it.
+    flashShield(ang, big) {
+      this.shieldHitAng = ang;
+      this.shieldHitT = Math.max(this.shieldHitT, big ? 0.42 : 0.16);
+      this.shieldHitBig = big ? 1 : Math.max(this.shieldHitBig * 0.5, 0.25);
+      if (!big) return;
+      sfx.absorbBig(this.x, this.y);
+      const rr = this.shieldR || this.drawRadius*2.5;
+      burst(this.x + Math.cos(ang)*rr, this.y + Math.sin(ang)*rr, [150,240,255], 14, sper(0.30), 0.42, sper(0.004));
+      if (this.isPlayer) addShake(sper(0.005));      // you FEEL it, but it does not read as taking a hit
+    }
     process() {
       this.hitCD = Math.max(this.hitCD - dt, 0);
       this.covered = Math.max(this.covered - dt, 0);
       this.primaryShotCD = Math.max(this.primaryShotCD - dt, 0);
       this.secondaryShotCD = Math.max(this.secondaryShotCD - dt, 0);
       this.healthRegenCD = Math.max(this.healthRegenCD - dt, 0);
+      this.shieldHitT = Math.max(this.shieldHitT - dt, 0);   // the flare on the bubble fades out
       if (this.shieldCD > 0) {                            // an OVERLOAD in progress: the shield is disabled and does NOT recharge
         this.shieldCD = Math.max(this.shieldCD - dt, 0);
         if (this.shieldCD === 0) this.shieldCharge = this.shieldCapacity + this.shieldAugment;   // the overload ended → it comes back FULL
@@ -1211,7 +1265,12 @@
           // if the target is shielded/covered; unshielded, it detonates on touching the body (r1). detonate()
           // leaves the shielded/covered ones immune → the Shielder's dome blocks missiles for it and its allies.
           const trigR = (this.shielded || this.covered > 0) ? r25 : r1;
-          if (d2 <= (trigR + shot.radius)**2) shot.detonate();
+          if (d2 <= (trigR + shot.radius)**2) {
+            // BLOCKED: the bubble is what stopped it. Announce it, because detonate() skips the
+            // shielded and so the whole event used to be a boom to one side and no damage number.
+            if (this.shielded || this.covered > 0) this.flashShield(Math.atan2(dy, dx), true);
+            shot.detonate();
+          }
           continue;
         }
         if (this.shielded || this.covered > 0) {
@@ -1225,6 +1284,7 @@
               shot.color = modifyColor(player.color, 150);
             } else {
               sfx.absorb(this.x, this.y);          // ELECTRICITY: there was no metal, it does not sound like metal
+              this.flashShield(Math.atan2(dy, dx), false);   // a small crackle where it landed
               toRemove.add(shot);                  // absorbed by the shield
             }
           }
@@ -2066,7 +2126,7 @@
       if (this.health <= 0 && !this.exploded) {        // the explosion: area damage (Tank.process does the downing/cleanup next frame)
         this.exploded = true;
         if (player && getDist([this.x,this.y],[player.x,player.y]) < this.radius*6 && player.powerModeActiveTime === 0) {
-          player.health = Math.max(player.health - (player.shielded ? 100 : 350), 0); player.hitCD = 0.03;   // the Exploder's blast (HP)
+          player.health = Math.max(player.health - 350, 0); player.hitCD = 0.03;   // the Exploder's blast: 350 HP, THROUGH the shield (see Mine.detonate)
         }
       }
     }
@@ -2140,7 +2200,7 @@
       // The charge's IMPACT: ONLY during an active dash (dashing>0) and ONCE, before, the check ran every frame
       // while they overlapped → 200 HP per frame = it killed you in ~5 frames even with full health+shield.
       if (this.dashing > 0 && d <= (this.radius+player.radius)*1.15 && player.powerModeActiveTime === 0) {
-        player.health = Math.max(player.health - (player.shielded ? 60 : 200), 0); player.hitCD = 0.04;   // the Charger's ram (HP)
+        player.health = Math.max(player.health - 200, 0); player.hitCD = 0.04;   // the Charger's ram: 200 HP, THROUGH the shield (see Mine.detonate)
         addShake(sper(0.008)); this.dashing = 0; this.dashCD = rnd(2.8, 4.5);   // dashing=0 → it does not re-hit until the next dash
       }
     }
@@ -2851,8 +2911,19 @@
       addShake(sper(0.013));
       for (const t of tanks) {
         if (getDist([this.x,this.y],[t.x,t.y]) >= this.blast) continue;
-        if (t.isPlayer) { if (t.powerModeActiveTime === 0) { t.health = Math.max(t.health - (t.shielded?120:400), 0); t.hitCD = 0.04; } }
-        else { t.health = Math.max(t.health - 500, 0); t.hitCD = 0.04; }   // a mine: it hurts enemies too (HP)
+        // ── THE THREE SOURCES THAT GO THROUGH THE SHIELD ──
+        // A mine, the Exploder's blast and the Charger's ram. Everything else the shield stops
+        // DEAD: a cannon shot is absorbed (or deflected, with the power-up) and a missile
+        // detonates on the bubble and skips the shielded in its area.
+        // They are CONTACT, not fire. The shield is the answer to being shot at, not to standing
+        // on a mine or letting a kamikaze reach you, so dodging has to be the answer instead.
+        // They used to be reduced rather than ignored, and against the player's flat 1000 HP that
+        // read as nothing: 120 (12 %) from a mine, 100 from an Exploder, 60 from a Charger.
+        // Rage still makes you immune, which is what rage is for.
+        // A mine is 400 for EVERYONE, player and enemies alike: it is a trap lying on the floor
+        // and it does not care who stepped on it. It used to hit enemies for 500.
+        if (t.isPlayer) { if (t.powerModeActiveTime === 0) { t.health = Math.max(t.health - 400, 0); t.hitCD = 0.04; } }
+        else { t.health = Math.max(t.health - 400, 0); t.hitCD = 0.04; }
       }
       toRemove.add(this);
     }
@@ -3885,10 +3956,14 @@
       // HEALTH
       const hy = yper(0.016), bh = yper(0.022), hf = clampN(hpFrac, 0, 1);
       hudBar(bx, hy, bw, bh, hf, hc);
-      if (player.health > player.maxHealth) {                   // overheal (capped at 1.5×): an extra light-blue band
+      if (player.health > player.maxHealth) {                   // overheal (capped at 2×): an extra light-blue band
         ctx.save(); roundRectPath(bx, hy, bw, bh, bh/2); ctx.clip();
         ctx.globalCompositeOperation = 'lighter';
-        const ov = clampN((player.health - player.maxHealth) / (player.maxHealth*0.5), 0, 1);
+        // The band spans a WHOLE maxHealth, the same as the bar underneath it, because that is
+        // exactly how much extra health you can carry: both lifesteal and the first aid box cap
+        // at 2× maxHealth. It used to divide by maxHealth*0.5, so the second layer represented
+        // half of what the first one did: it filled up at 1.5× and then sat there lying to you.
+        const ov = clampN((player.health - player.maxHealth) / player.maxHealth, 0, 1);
         const og = ctx.createLinearGradient(bx, hy, bx, hy+bh);
         og.addColorStop(0, 'rgba(190,248,255,0.95)'); og.addColorStop(1, 'rgba(90,205,255,0.6)');
         ctx.fillStyle = og; ctx.fillRect(bx, hy, bw*ov, bh);

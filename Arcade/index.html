@@ -52,6 +52,12 @@
     html.gameOpen main,
     html.gameOpen footer,
     html.gameOpen #enter { visibility: hidden; }
+    /* The same mitigation WHILE THE MENU IS BEING SCROLLED. --accent is an inherited property that
+       feeds 22 name glows (a 3-layer text-shadow, blurs of 1/14/28 px) and 22 ribbons with their
+       own glow: interpolating it repaints all of that on every frame, and it competes with the
+       scroll for the same raster budget just when the finger is asking for pixels. A paused
+       animation resumes where it left off, so the colour holds for a moment and never jumps. */
+    html.scrolling { animation-play-state: paused; }
     html, body {
       margin: 0; padding: 0; height: 100%; width: 100%;
       /* Atmosphere: 3 subtle colour blooms in the corners + a very dark base. It gives depth without
@@ -116,6 +122,11 @@
     main {
       flex: 1; overflow-y: auto; padding: 16px 16px 4px;
       -webkit-overflow-scrolling: touch;
+      /* The list is the only thing that scrolls. Without this, reaching either end hands the
+         gesture over to the document: in a browser tab that is Android's pull-to-refresh and iOS's
+         rubber band, and the finger moves while the list does not. `contain` keeps the bounce
+         inside the list and stops the chain. */
+      overscroll-behavior: contain;
     }
     .grid {
       display: grid;
@@ -380,19 +391,19 @@
     <div class="ev" id="splashVer"></div>
   </div>
 
-  <button id="exitApp" aria-label="close the app" title="Close the app">
+  <button id="exitApp" aria-label="Close the app" title="Close the app">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v9"/><path d="M6.4 6.4a8 8 0 1 0 11.2 0"/></svg>
   </button>
   <!-- The Arcade's ⛶ button: browser only (not the PWA). It toggles fullscreen at shell level. -->
-  <button id="fsApp" aria-label="fullscreen" title="Fullscreen">
+  <button id="fsApp" aria-label="Fullscreen" title="Fullscreen">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><g class="ic-enter"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></g><g class="ic-exit"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></g></svg>
   </button>
 
   <header>
     <h1>ARCADE</h1>
     <div class="barAccent"></div>
-    <div class="subtitle">PROTOTIPOS</div>
-    <button id="installBtn">⬇ INSTALAR APP</button>
+    <div class="subtitle">PROTOTYPES</div>
+    <button id="installBtn">⬇ INSTALL APP</button>
   </header>
 
   <main>
@@ -409,7 +420,7 @@
   <script>
     // Visible version (splash + footer). BUMP this number on every update → it lets you confirm
     // at a glance whether the PWA picked up the latest deploy (Android caches hard).
-    const VERSION = 'v2.1.0';
+    const VERSION = 'v2.1.1';
     { const sv = document.getElementById('splashVer'); if (sv) sv.textContent = VERSION;
       const fv = document.getElementById('footerVer'); if (fv) fv.textContent = VERSION + ' · © 2026 Franco Laboranti'; }
 
@@ -644,6 +655,19 @@
       e.preventDefault();
       launch(tile.dataset.src, tile.dataset.orient);
     });
+
+    // While the menu is scrolling, html.scrolling pauses the accent cycle (see the CSS). The
+    // listener is PASSIVE, so it can never hold up a frame of the gesture, and it reuses a single
+    // timer: it only touches the class when the scroll starts and 160 ms after it stops.
+    {
+      const lista = document.querySelector('main');
+      let quieto = 0;
+      lista.addEventListener('scroll', () => {
+        if (!quieto) root.classList.add('scrolling');
+        else clearTimeout(quieto);
+        quieto = setTimeout(() => { quieto = 0; root.classList.remove('scrolling'); }, 160);
+      }, { passive: true });
+    }
 
     // Messages from the embedded game:
     //  • arcade:exit       → close the player (back to the menu)
