@@ -1,0 +1,266 @@
+/* ════════════════════════════════════════════════════════════════════
+   Arcade shell: the shared CSS for the Arcade's ✕ / ⛶ / ⓘ buttons.
+
+   Include it in each game with:
+     <link rel="stylesheet" href="../../Arcade/arcade-shell.css">
+
+   Requirements in the game's HTML:
+   · A <div id="bar"> with display:flex; justify-content:center (the shell only
+     adds the gap). If the game has no bar (Snake/TankWARS use floating buttons),
+     the bar rules are ignored and the buttons are positioned by their own CSS.
+   · The buttons #btnExit, #btnFs and #btnInfo in the order ✕ · #ui · ⛶ · ⓘ.
+
+   ── THE BUTTON'S BODY ──
+   Taken from Loop, which is where the buttons feel like part of the game. It is not
+   a palette: it is three layers that give volume without drawing a frame.
+     · a panel SURFACE, barely lighter than the background;
+     · a LIGHT EDGE on top (`inset 0 1px 0`), which is what makes the button read
+       as a physical piece and not as a painted rectangle;
+     · a short DARK BASE (`0 1px 6px`), a short shadow, NOT a big blur: it costs
+       the same and it reads the same.
+   The active state does not grow the body, it SHRINKS it (scale .9) and lights the
+   accent. A button that grows when touched covers what is next to it exactly when
+   the finger is already on top.
+
+   ── THE ACCENT IS A VARIABLE, NOT A COLOUR ──
+   Each game redefines `--shell-accent` in its own :root with the colour it already
+   uses. That way the collection feels like one thing and no game ends up wearing
+   Loop's cyan over its palette. The default is the Arcade's cyan.
+   ════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --shell-accent:      rgba(120,200,255,0.62);   /* the game's colour: each game redefines it */
+  --shell-accent-soft: rgba(120,200,255,0.26);
+  --shell-face:        rgba(255,255,255,0.05);
+  --shell-line:        rgba(255,255,255,0.17);
+  --shell-line-hi:     rgba(255,255,255,0.34);
+  --shell-ink:         rgba(255,255,255,0.48);
+  --shell-ink-hi:      rgba(255,255,255,0.92);
+  --shell-danger:      rgba(240,90,95,0.62);
+  --shell-danger-soft: rgba(240,90,95,0.26);
+}
+
+/* Centred bar: EVERYTHING in one row; ✕ · the game's buttons · ⛶ · ⓘ. */
+#bar { gap: 8px; }
+
+/* The initial "hint" line (the sentence centred on startup), hidden by default in EVERY game:
+   it got in the way and the controls now live in the ⓘ button. !important because each game
+   defines its own #hint at the same specificity and the cascade wins without the flag. */
+#hint { display: none !important; }
+
+/* The shell's three buttons share one body. */
+#btnInfo, #btnFs, #btnExit {
+  position: relative;                            /* for the enlarged touch area below */
+  width: 32px; height: 32px; border-radius: 50%; flex: 0 0 auto;
+  align-self: flex-end; margin-bottom: 6px;
+  border: 1px solid var(--shell-line);
+  background: var(--shell-face);
+  color: var(--shell-ink);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; touch-action: none; padding: 0;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 1px 6px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.09);
+  transition: border-color 0.1s, color 0.1s, background 0.1s, transform 0.08s;
+}
+#btnInfo svg, #btnFs svg, #btnExit svg { display: block; width: 15px; height: 15px; pointer-events: none; }
+
+/* TOUCH AREA: the body is 32 px because bigger covers game, but a thumb needs ~44. The
+   pseudo-element enlarges the target WITHOUT enlarging the drawing. The sideways expansion is
+   only 2 px on purpose: with `gap: 8px` between buttons, two areas of ±4 would touch and the tap
+   would land on the neighbour. Vertically there is room to spare. */
+#btnInfo::after, #btnFs::after, #btnExit::after { content: ''; position: absolute; inset: -7px -2px; border-radius: 50%; }
+
+/* ── HOVER: ONLY WHERE A POINTER REALLY HOVERS ──
+   Two bugs lived here. The rule was scoped to these three ids, so the sound button sitting next
+   to them in the same bar (`#btnMute`, which several games draw with an inline copy of this body)
+   never lit up: Poker showed it side by side, ⛶ reacting and sound dead. And it was not inside
+   a media query, so on a phone the last button touched kept its hover look until the next tap
+   somewhere else (a finger leaves `:hover` stuck). `(hover: hover) and (pointer: fine)` is a
+   mouse or a trackpad; a touch screen answers no and never sees these rules.
+
+   What hover does, in every game: the rim and the ink brighten, and NOTHING else. No fill and no
+   scale, because those two belong to the pressed state (fill + shrink) and to `.on` (fill, no
+   shrink): hover has to read as "you can press this", never as "this is on".
+
+   The `:where(...)` tail is the pattern every game copies: hover applies only to a button that is
+   enabled, not being pressed and not `.on`, so the three states can never mix whatever the order
+   of the rules. It is inside `:where` because that adds ZERO specificity: a plain `:not(:disabled)`
+   would weigh a class and win over the game's own `:active` and `.on` rules.
+
+   `#btnMute` only gets the BEHAVIOUR from here (hover, focus ring), not the body: in several
+   games the mute is one of the big round buttons of `#ui`, and those declare their own hover with
+   more specificity (`#ui button:hover`), which wins over this one as it should. */
+@media (hover: hover) and (pointer: fine) {
+  #btnInfo:hover:where(:enabled:not(:active):not(.on)), #btnFs:hover:where(:enabled:not(:active)),
+  #btnExit:hover:where(:enabled:not(:active)), #btnMute:hover:where(:enabled:not(:active)) {
+    border-color: var(--shell-line-hi); color: var(--shell-ink-hi);
+  }
+  /* The exit warns even on hover: the rim goes full red, still without a fill. */
+  #btnExit:hover:where(:enabled:not(:active)) { border-color: var(--shell-danger); }
+}
+
+/* Safety nets for EVERY button of every game that links this file, at zero specificity (all of
+   `:where`), so any rule a game writes for its own buttons wins over them. A disabled button
+   must not promise a click, and a keyboard focus must be visible in the game's colour. */
+:where(button:disabled) { cursor: default; }
+:where(button:focus-visible) { outline: 2px solid var(--shell-accent); outline-offset: 2px; }
+
+/* Keyboard: a ring of its own. Without it a button focused with Tab looks like any other.
+   `:focus-visible` and not `:focus` so the ring does NOT appear when touched with a finger. */
+#btnInfo:focus-visible, #btnFs:focus-visible, #btnExit:focus-visible, #btnMute:focus-visible {
+  outline: none; border-color: var(--shell-accent); color: var(--shell-ink-hi);
+  box-shadow: 0 1px 6px rgba(0,0,0,0.42), inset 0 1px 0 rgba(255,255,255,0.09), 0 0 0 3px var(--shell-accent-soft);
+}
+
+#btnInfo:active, #btnFs:active {
+  background: var(--shell-accent-soft); border-color: var(--shell-accent);
+  color: var(--shell-ink-hi); transform: scale(0.9);
+}
+/* Panel open: the button stays LIT. It is the shell's only persistent state and it has to read
+   without comparing it against the other two. */
+#btnInfo.on {
+  background: var(--shell-accent-soft); border-color: var(--shell-accent); color: var(--shell-ink-hi);
+}
+#btnFs .ic-exit { display: none; }
+body.fs-on #btnFs .ic-enter { display: none; }
+body.fs-on #btnFs .ic-exit  { display: block; }
+
+/* Exit (✕): the same body, but the border already warns at rest and the active state is full
+   red. The colour IS the warning: it is the only shell button that takes you out of the game. */
+#btnExit { border-color: var(--shell-danger-soft); }
+#btnExit:active {
+  background: var(--shell-danger-soft); border-color: var(--shell-danger);
+  color: var(--shell-ink-hi); transform: scale(0.9);
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   INFO PANEL: `#infoPanel`
+   Same criterion as Loop's: a card anchored under the button, with its width
+   limited by the viewport, its own scroll and overscroll containment.
+
+   Two things that are NOT decorative:
+   · `touch-action: pan-x pan-y` + `overscroll-behavior: contain`. Several games set
+     `touch-action: none` on the body, and the browser resolves the allowed gesture
+     as the INTERSECTION with every ancestor: without this line the panel does not
+     scroll under the finger however much overflow it has.
+   · The LANDSCAPE media query. On a phone lying down what is scarce is HEIGHT: a
+     380 px column is several screens of scrolling with air at the sides. Twice the
+     width halves the number of lines.
+   ════════════════════════════════════════════════════════════════════ */
+#infoPanel {
+  position: fixed; right: 10px;
+  bottom: calc(var(--bar-height, 58px) + 10px + env(safe-area-inset-bottom));
+  z-index: 60; width: min(400px, 92vw); max-height: 70vh; overflow-y: auto;
+  /* `pan-x pan-y`, NOT `pan-y`. The Arcade runs the landscape games WITHOUT turning the phone:
+     the device stays in portrait and the iframe is rotated 90 degrees in CSS. `touch-action`
+     constrains the gesture's axis in the element's LOCAL coordinates, so with the frame rotated the
+     swipe the player makes vertically arrives at the panel as horizontal and `pan-y` refuses it.
+     Standalone it measured fine, which is why the harness said 22/22 while it did not scroll in the
+     hand. Both axes, and still no zoom. */
+  touch-action: pan-x pan-y; overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
+  padding: 14px 16px; border-radius: 14px;
+  background: rgba(10,13,20,0.975);
+  border: 1px solid var(--shell-accent);
+  box-shadow: 0 10px 34px rgba(0,0,0,0.6);
+  font-size: 12.5px; line-height: 1.6; color: #c7d2e2; font-weight: 300;
+  display: none;
+}
+#infoPanel.show { display: block; }
+#infoPanel h4 {
+  margin: 0 0 7px; font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--shell-ink-hi);
+}
+#infoPanel b { color: var(--shell-accent-text, #9fe0ff); font-weight: 700; }
+#infoPanel .k {                                   /* a key or a button, so it reads as an object */
+  display: inline-block; padding: 0 5px; margin: 0 1px; border-radius: 4px;
+  border: 1px solid var(--shell-line); background: rgba(255,255,255,0.06);
+  color: var(--shell-ink-hi); font-size: 11px; font-weight: 600; line-height: 17px;
+}
+
+/* ── THE BUTTON'S ICON, NOT ITS NAME ──
+   A control with an icon is named with ITS icon: the SAME `<svg>` the bar button draws, put inside
+   a small version of that same round body. The player recognises the button in the panel without
+   having to translate a phrase into a drawing, which is exactly what "Ghost mode" in bold was
+   asking for. Buttons labelled with text keep using `.k`: there the label IS what you see. */
+#infoPanel .ik {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; border-radius: 50%; flex: none;
+  border: 1px solid var(--shell-line); background: var(--shell-face);
+  color: var(--shell-ink-hi); vertical-align: -5px; margin: 0 2px;
+}
+#infoPanel .ik svg { width: 13px; height: 13px; display: block; }
+/* `currentColor` is what makes this work without touching the SVG: the icon inherits the chip's
+   ink exactly as it inherits the button's. A fixed fill/stroke in the SVG would break it. */
+#infoPanel ul { margin: 5px 0 0; padding-left: 17px; }
+#infoPanel li { margin: 2px 0; }
+#infoPanel hr { border: 0; border-top: 1px solid rgba(255,255,255,0.11); margin: 9px 0; }
+#infoPanel .fps { color: #8ee36b; font-weight: 700; }
+#infoPanel .dim { color: rgba(255,255,255,0.42); }
+
+/* ── A panel written in the game's panel.md (arcade-shell.js renders it, 2026-09-30) ──
+   Scoped to `.mdPanel`, so a panel still written in its page keeps its look, and wrapped in
+   `:where()`, so each rule weighs exactly what `#infoPanel h4` weighs: a game's own panel rules come
+   later in its page and still win (CaveIn keeps its pixel font on the title). What this adds is the
+   shape of a panel for a PLAYER rather than a manual: one sentence of what the game is, short
+   labelled groups, and each control as a row whose keys or button icon sit in a column of their
+   own. That column belongs to the LIST's grid (`display: contents` on the row), so every row of a
+   group starts its text at the same x, however many keys its widest row has. */
+#infoPanel:where(.mdPanel) h4 { margin-bottom: 3px; font-size: 15px; letter-spacing: 0.05em; }
+#infoPanel:where(.mdPanel) p { margin: 0 0 6px; }
+#infoPanel:where(.mdPanel) p.lead { font-size: 13px; line-height: 1.5; color: var(--shell-ink-hi); font-weight: 400; }
+#infoPanel:where(.mdPanel) h5 {
+  margin: 12px 0 4px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--shell-accent-text, #9fe0ff);
+}
+#infoPanel:where(.mdPanel) ul {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: max-content 1fr; column-gap: 10px; row-gap: 3px; align-items: center;
+}
+#infoPanel:where(.mdPanel) li { grid-column: 1 / -1; position: relative; margin: 0; padding-left: 13px; }
+#infoPanel:where(.mdPanel) li::before {
+  content: ''; position: absolute; left: 2px; top: 0.7em; width: 4px; height: 4px;
+  border-radius: 50%; background: var(--shell-accent); opacity: 0.8;
+}
+#infoPanel:where(.mdPanel) li.row { display: contents; }
+#infoPanel:where(.mdPanel) li.row::before { content: none; }
+#infoPanel:where(.mdPanel) .keys { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; }
+#infoPanel:where(.mdPanel) .keys > * { margin: 0; }
+@media (orientation: landscape) and (max-height: 560px) {
+  /* Lying down, height is what is scarce: two columns halve the scrolling. A group never breaks. */
+  #infoPanel:where(.mdPanel) .md { column-count: 2; column-gap: 24px; }
+  #infoPanel:where(.mdPanel) .md > h4, #infoPanel:where(.mdPanel) .md > p.lead { column-span: all; }
+  #infoPanel:where(.mdPanel) h5 { margin-top: 8px; break-after: avoid; }
+  #infoPanel:where(.mdPanel) ul { break-inside: avoid; }
+}
+
+@media (orientation: landscape) and (max-height: 560px) {
+  #infoPanel {
+    width: min(700px, 95vw); max-height: 84vh;
+    font-size: 11.5px; line-height: 1.5; padding: 11px 14px;
+    bottom: calc(var(--bar-height, 46px) + 6px + env(safe-area-inset-bottom));
+  }
+  #infoPanel hr { margin: 7px 0; }
+  #infoPanel h4 { font-size: 12px; margin-bottom: 5px; }
+  /* The chip shrinks with the panel, but not as much as the text: below ~16 px a bar icon stops
+     being recognisable and turns back into a smudge. */
+  #infoPanel .ik { width: 17px; height: 17px; vertical-align: -4px; }
+  #infoPanel .ik svg { width: 11px; height: 11px; }
+}
+
+/* The pause button says what it is going to DO, not what state it is in: paused it shows ▶
+   because what it does is resume. Same pattern (and same SVG) as Loop. Each game already marked
+   the `.on` class while paused, so this adds no logic. */
+#btnPause .ic-play { display: none; }
+#btnPause.on .ic-pause { display: none; }
+#btnPause.on .ic-play { display: block; }
+
+/* ── the panel's icons are INERT copies ──
+   The rules above hide one of the two drawings, and they are scoped to the button: inside
+   `#infoPanel` there is no `#btnPause` above the icon, so neither applied and the two bars and the
+   triangle were painted on top of each other. Measured with the panel open: it happened in the six
+   games that show the icon. The panel describes the BUTTON, not the state it is in right now, so
+   the two bars are the right drawing. */
+#infoPanel .ik .ic-play,
+#infoPanel .ik .ic-off,
+#infoPanel .ik .ic-exit { display: none; }
+
