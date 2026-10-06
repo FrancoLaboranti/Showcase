@@ -28,7 +28,7 @@ Fifteen of them were born in the browser and have no Python original.
 | **Stone Crown**: real-time strategy on a procedural map: gather, build, train an army and raze the rival's base | [▶](Games/Stone%20Crown/StoneCrownWeb/index.html) |
 | **Cave-In**: a grid bomber down a mine that is coming apart, four strata and a boss at the bottom of each | [▶](Games/Cave%20In/CaveInWeb/index.html) |
 | **Cinderheart**: a turn-based party RPG up a stair into a dead sky: six zones, a skill tree, loot and a boss at the top of each | [▶](Games/Cinder%20Heart/CinderHeartWeb/index.html) |
-| **Lanternvale**: a top-down action RPG in the spirit of the old Flash RPGs: a village, five wild zones, quests, loot and three bosses | [▶](Games/Lantern%20Vale/LanternValeWeb/index.html) |
+| **Lanternvale**: a top-down action RPG in the spirit of the old Flash RPGs: a village, five wild zones, quests, loot and three bosses | [▶](Games/Lanternvale/LanternvaleWeb/index.html) |
 | **Rumble Cup**: five-a-side arcade football after Nintendo World Cup, with five pitches, ten specials and a cup to win | [▶](Games/Rumble%20Cup/RumbleCupWeb/index.html) |
 | Marbles: marble physics sandbox | [▶](Games/Marbles/MarblesWeb/index.html) |
 | Tank Wars | [▶](Games/Tank%20Wars/TankWarsWeb/index.html) |
