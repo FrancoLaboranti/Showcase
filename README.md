@@ -1,6 +1,6 @@
 # Showcase
 
-Twenty-seven games, simulations and visual toys, each one a self-contained prototype. Most began as
+Thirty games, simulations and visual toys, each one a self-contained prototype. Most began as
 [Pygame](https://www.pygame.org/) experiments and every one of them now has a **browser version**:
 plain HTML and Canvas 2D, hand-rolled, no framework and no build step.
 
@@ -14,7 +14,7 @@ just turn the phone sideways.
 
 ## The games
 
-Twelve of them were born in the browser and have no Python original.
+Fifteen of them were born in the browser and have no Python original.
 
 | | Play |
 |---|---|
@@ -45,6 +45,9 @@ Twelve of them were born in the browser and have no Python original.
 | Simon | [▶](Games/Simon/SimonWeb/index.html) |
 | Newton's Cradle | [▶](Games/Newton's%20Cradle/NewtonsCradleWeb/index.html) |
 | Clock | [▶](Games/Clock/ClockWeb/index.html) |
+| **Al Paso!**: Run a street food stand on the Costanera of Buenos Aires: cook, plate, serve and collect before the line loses patience (Spanish interface) | [▶](Games/Al%20Paso!/AlPasoWeb/index.html) |
+| **Bloom**: a relaxing garden where you plant and harvest flowers for their pigments, mix them, paint your decorations and unlock more garden | [▶](Games/Bloom/BloomWeb/index.html) |
+| **Afterfall**: a first-person zombie survival game: scavenge a dead town from a shelter with a small backpack, mind the noise you make, and repair the truck that takes you out | [▶](Games/Afterfall/AfterfallWeb/index.html) |
 
 ## How it's built
 
