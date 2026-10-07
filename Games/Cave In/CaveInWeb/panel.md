@@ -35,4 +35,4 @@ Bomb your way down a mine that is coming apart. Clear out every creature, find t
 - <img class="it" data-it="shield" alt=""> **hard hat**: survive one hit
 - <img class="it" data-it="life" alt=""> **the canary**: one more life
 - Bombs, blast and boots have a ceiling that rises with each stratum. Above it, a find turns into points.
-- Dying costs only the last special you found.
+- Dying costs everything you found: you come back with the stratum's starting bombs, blast and boots, and no specials.
