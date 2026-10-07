@@ -5,7 +5,7 @@ Un puesto de comida en la Costanera: cocinás, armás, entregás y cobrás mient
 ## Cómo se juega
 - Paty y chori se cocinan en la **parrilla** y se terminan en el **armado**. El sánguche hace el camino al revés: primero el armado, después la parrilla.
 - Lo que está **listo** en la parrilla se quema a los 7 segundos: sacalo antes. Un plato terminado se enfría en el mostrador y el cliente lo nota; si nadie lo toma, se tira.
-- La parrilla tiene cuatro lugares y el armado uno solo: elegí qué va primero.
+- La parrilla tiene cuatro lugares y el armado dos tablas: elegí qué va primero.
 - Un plato que el cliente no pidió le saca paciencia y satisfacción.
 - La mercadería se compra antes de abrir. Durante el día podés reponer, pero sale el doble. Lo que sobra se echa a perder en parte.
 - Después de las 21:00 no llegan clientes nuevos: terminá los pedidos que quedan.
