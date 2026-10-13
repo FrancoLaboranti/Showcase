@@ -1,23 +1,38 @@
 # Al Paso!
+> La Costanera tiene hambre y la fila no espera.
 
-Un puesto de comida en la Costanera: cocinás, armás, entregás y cobrás mientras la fila pierde la paciencia. Cerrá el día con ganancia y clientes contentos. Este texto es una PROPUESTA que Franco edita antes de publicarlo.
+Tenés un puesto de comida al paso en la Costanera y una semana para hacerlo rendir. Hacés patys, choris y sánguches entre la parrilla, la plancha y las tablas de armado, y se los das a una fila que pierde la paciencia. Comprá bien antes de abrir, no quemes nada y cerrá cada día con ganancia.
 
-## Cómo se juega
-- Paty y chori se cocinan en la **parrilla** y se terminan en el **armado**. El sánguche hace el camino al revés: primero el armado, después la parrilla.
-- Lo que está **listo** en la parrilla se quema a los 7 segundos: sacalo antes. Un plato terminado se enfría en el mostrador y el cliente lo nota; si nadie lo toma, se tira.
-- La parrilla tiene cuatro lugares y el armado dos tablas: elegí qué va primero.
-- Un plato que el cliente no pidió le saca paciencia y satisfacción.
-- La mercadería se compra antes de abrir. Durante el día podés reponer, pero sale el doble. Lo que sobra se echa a perder en parte.
-- Después de las 21:00 no llegan clientes nuevos: terminá los pedidos que quedan.
+## La semana
+- Una partida va de lunes a domingo: la plata y lo que queda en la heladera pasan al día siguiente, y el fin de semana viene más gente.
+- Termina el domingo, o antes si ya no te alcanza para abrir.
+- Antes de cada día comprás la mercadería: **SUGERIDO** llena la heladera con un poco de todo, y **ABRIR EL PUESTO** arranca el día. **Todo lleva pan**: si se acaba, no sale nada.
 
 ## Controles
-- touch: Tocá los botones de abajo para preparar, y la parrilla, el armado, el mostrador, los pedidos o la caja para ir moviendo todo. En la caja se cobra.
-- touch: Tocá a un cliente para entregarle lo que pidió. Para elegir vos, tocá primero el plato.
-- touch: {btnPause} pausa
-- keys: Hacé clic en los botones de abajo para preparar, y en la parrilla, el armado, el mostrador, los pedidos o la caja para ir moviendo todo. En la caja se cobra.
-- keys: Hacé clic en un cliente para entregarle lo que pidió. Para elegir vos, hacé clic primero en el plato.
+- Tocá **Paty**, **Chori** o **Sánguche** (los tickets de abajo a la izquierda) para empezar uno.
+- Cuando algo está listo, tocalo y pasa al paso siguiente; lo terminado queda en el mostrador.
+- Tocá a un cliente para darle todo lo que pidió. Para elegir vos, tocá primero el plato y después al cliente.
+- **REPONER** (abajo a la derecha) compra un paquete durante el día.
+- keys: Con el mouse, hacé clic donde dice tocá.
 - keys: [1] [2] [3] paty, chori, sánguche
-- keys: [C] cobrar
-- keys: [P] / [Esc] pausa
-- keys: [R] reiniciar (dos veces)
-- keys: [M] sonido
+- keys: [Enter] abrir el puesto o seguir
+- keys: [P] / [Esc] pausa, [M] sonido
+- keys: [R] dos veces: semana nueva, desde el lunes
+
+## En el puesto
+- **Lo que está listo en la parrilla o en la plancha se quema a los 7 segundos**: sacalo a tiempo. Lo quemado se tira con un toque.
+- La parrilla tiene cuatro lugares, la plancha uno y el armado tres tablas. Paty y chori van de la parrilla al armado; el sánguche, al revés: primero el armado, después la plancha.
+- **La barrita bajo cada pedido es la paciencia.** Cada plato se cobra al entregarlo, y cuanto antes atendés, más contento se va el cliente y más propina deja con el último.
+- Un plato que no pidió le saca paciencia y satisfacción. Uno que se enfrió en el mostrador también lo nota, y si nadie lo toma, se tira.
+- Reponer durante el día sale el doble, y de lo que sobra a la noche una parte se echa a perder.
+- Desde las 20:24 no viene nadie nuevo. A las 21:00 se cierra: tenés 35 segundos para despachar a los que quedan.
+
+## La clientela
+- **Gorra y celular**: apurado. Pide una sola cosa y espera poco.
+- **Sombrero y cámara**: turista. Paga un poco más.
+- **Con un chico**: familia. Pide tres o cuatro cosas y tiene más paciencia.
+- **Boina y diario**: habitual. Un error le pesa menos, y si se va contento deja algo más de propina.
+- **Anteojos oscuros y corbata**: exigente. Espera poco, paga más y un error le pesa mucho. Viene solo en la hora pico.
+
+## Consejo
+- Si te piden un chori, ponelo primero: es lo que más tarda en la parrilla, y lo que más paga.
