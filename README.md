@@ -60,15 +60,17 @@ experiments.
 Each game is a self-contained page, built with plain HTML, CSS, JavaScript and Canvas 2D: one HTML file with its CSS
 and JavaScript inside it, drawing to a single `<canvas>`, with no framework and no build step.
 
-- **Original implementations**: the mechanics, the rendering, the audio synthesis and the touch joysticks are written
+- **Original implementations**: the mechanics, the rendering, the sound engine and the touch joysticks are written
   for these games. The third-party code is [Matter.js](https://brm.io/matter-js/), the rigid-body physics of three of
-  them, and [Stockfish](https://stockfishchess.org/), the engine Chess plays against.
+  them, and [Stockfish](https://stockfishchess.org/), the engine Chess plays against. The sounds are recordings from
+  sound libraries, cut, levelled and mixed for each game (their sources are in [LICENSE](LICENSE)); the few voices that
+  have no recording yet are still synthesised in the browser.
 - **Designed for the browser**: games launch straight from the web, with no installation.
 - **Desktop and mobile**: every game has touch controls of its own (sticks, buttons, swipes or taps, whatever it
   needs) and keyboard and mouse on a computer, and its ⓘ button shows the controls of the device in your hand.
 - **Independent projects**: each game lives in its own folder under `Games/` and keeps its own implementation, so it
-  can evolve on its own. The only shared pieces are the Arcade's shell (the corner buttons and the info panel) and its
-  audio module.
+  can evolve on its own. The only shared pieces are the Arcade's shell (the corner buttons and the info panel), its
+  audio module and the sounds several games use.
 - **Python originals**: where one exists, the browser version is a reimplementation, not a port run through a
   transpiler. The two are edited separately and have drifted apart on purpose, since a phone wants different controls
   than a keyboard.
