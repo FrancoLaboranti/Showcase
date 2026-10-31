@@ -12,5 +12,5 @@ The classic desk toy: lift a sphere, let it fall, and the impulse runs through t
 - {btnReset} restart: they hang back at rest
 
 ## Tips
-- With the sound on, every clack is a real recorded impact, louder and brighter the harder they hit.
+- With the sound on, every clack is a hit of a real recorded cradle, and the harder they meet, the harder the hit you hear.
 - Look past the cradle: the window goes from day to night and back about once a minute.

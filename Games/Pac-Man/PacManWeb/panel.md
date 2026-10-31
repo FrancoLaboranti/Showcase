@@ -18,7 +18,7 @@ Clear every pellet from the maze before the ghosts corner you: red chases you, p
 ## Know this
 - **Three lives**, and one more at 10,000 points.
 - Each ghost eaten on one power pellet is worth double the last: 200, 400, 800, 1,600, and 2,000 more for all four.
-- **The ghosts stay blue for less time every level.**
+- **The ghosts stay blue for less time over the first levels**, then hold at five and a half seconds.
 - With 20 pellets left, red speeds up and stops falling back to its corner.
 - A fruit wanders through twice a level, and it does not stay long.
 - Clear a maze fast for a speed bonus, and without dying for a perfect bonus that grows with every perfect level in a row.
