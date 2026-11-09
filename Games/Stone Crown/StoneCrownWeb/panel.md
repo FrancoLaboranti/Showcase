@@ -7,10 +7,11 @@ Gather food, wood, gold and stone, spread your village across the map and raise 
 - Leave the rival with **no Hearth and no villagers**. It wins the same way.
 
 ## Controls
-- keys: **Click** selects, **drag** boxes several, [Shift]+click adds or removes, a **double click** takes every unit of that type on screen.
+- keys: **Click** selects, **drag** boxes several, [Shift]+click adds or removes, a **double click** takes every unit of that type on screen, or every building of that kind (on a wall, its line on screen). Several Barracks share out what you train.
 - keys: **Right-click** does what fits the spot: move, attack, gather, hunt, farm, build or repair, unload, shelter. With a building that trains, it sets the rally point; on the minimap it sends the selection there.
 - keys: To build, pick it on the card and click its spot; [Shift] keeps placing. A wall is press, drag, release.
 - keys: Hover a card button to see its cost and what it does. [Shift]+click on a unit's button queues five.
+- keys: [Q] trains at the selected building, and [E] builds the Siegeworks' catapult. Hold [Shift] for five at once.
 - keys: [W] [A] [S] [D] move the camera (or the arrows, or the screen edge). The wheel or [+] [-] zooms, the middle button drags.
 - keys: [E] attack-move
 - keys: [X] stop
@@ -19,9 +20,9 @@ Gather food, wood, gold and stone, spread your village across the map and raise 
 - keys: [H] the Hearth
 - keys: [Space] centre on the selection
 - keys: [Shift] + [1–9] save a group; [1–9] calls it back, twice centres it
-- keys: [Delete] twice: demolish the selected building
+- keys: [Delete] twice: demolish the selected buildings, or delete the selected units
 - keys: [P] pause · [Esc] cancel, or deselect
-- touch: **Tap** a unit to select it, **two taps** for every unit of its type on screen. Hold a finger still a moment, then drag, to box several.
+- touch: **Tap** a unit to select it, **two taps** for every unit of its type on screen, or every building of that kind. Hold a finger still a moment, then drag, to box several.
 - touch: With units selected, tap the ground to move, an enemy to attack or a resource to work.
 - touch: One finger drags the camera, two pinch to zoom; the minimap moves it too.
 - touch: To build, pick the building, tap or drag its outline into place and confirm with the tick. A wall: tap its start, then its end, then the tick.
