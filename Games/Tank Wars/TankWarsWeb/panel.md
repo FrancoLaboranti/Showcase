@@ -7,6 +7,7 @@ Hold out against fifty waves of enemy tanks, from laser-sighted snipers and ramm
 - Pick a **tank** and any **mutators**, then **PLAY**. Every tank spends the same power differently, and each mutator is a trade: hover one (hold it, on a touch screen) to read it.
 - **Hardcore** brings the same waves sooner and tougher, with more elites and mines and fewer lootboxes.
 - **50 waves** and a **Final Boss**. Kill it and the run goes on in **Endless** until you die.
+- Leaving for the menu keeps the run. **CONTINUE** takes you back to the start of the wave you were on, with what you had then, but never with more health, rage or missiles than when you left.
 - Death ends the run, its upgrades and its powers. New tank colours unlock at wave 20, five bosses in one run, the Final Boss, 50,000 points and Endless ×5.
 
 ## Controls
