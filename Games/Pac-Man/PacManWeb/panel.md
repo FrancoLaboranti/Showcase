@@ -4,8 +4,7 @@
 Clear every pellet from the maze before the ghosts corner you: red chases you, pink cuts you off ahead, cyan flanks you with red, and orange loses its nerve up close. Eat a power pellet and for a few seconds they turn blue, and you can eat them.
 
 ## How to start
-- Choose a **mode** and a **skin** on the menu, then **PLAY**.
-- touch: Tap the left or right half of a row to change it.
+- touch: On the menu, tap the left or right half of a row to change it.
 - **Classic** is the arcade game. **Hard** has faster ghosts and less time to eat them. **Marathon** starts at level 6, with the fast ghosts already out. **Daily** is the same run for everyone, all day.
 - New skins unlock as your best score reaches 15,000, 30,000, 60,000 and 100,000.
 
@@ -20,7 +19,6 @@ Clear every pellet from the maze before the ghosts corner you: red chases you, p
 - Each ghost eaten on one power pellet is worth double the last: 200, 400, 800, 1,600, and 2,000 more for all four.
 - **The ghosts stay blue for less time over the first levels**, then hold at five and a half seconds.
 - With 20 pellets left, red speeds up and stops falling back to its corner.
-- A fruit wanders through twice a level, and it does not stay long.
 - Clear a maze fast for a speed bonus, and without dying for a perfect bonus that grows with every perfect level in a row.
 - **Every fifth level is a bonus round**: no ghosts, eight fruits, 22 seconds. The maze itself changes every four levels.
 - Going back to the menu mid-game keeps the score out of the records.

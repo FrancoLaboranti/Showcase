@@ -11,8 +11,8 @@ Mano a mano contra la CPU: tres cartas cada uno, la mano es de quien gana dos de
 - touch: Tocá una carta para levantarla y tocala otra vez (o deslizala hacia arriba) para jugarla. Arrastrala sobre otra para cambiarlas de lugar.
 - touch: Tocá la mesa para pasar rápido a la mano siguiente.
 - keys: Un clic en una carta la levanta y otro la juega (o arrastrala hacia arriba). Arrastrala sobre otra para cambiarlas de lugar.
-- keys: [1] [2] [3] elegís una carta; la misma tecla otra vez la juega
-- keys: [←] [→] cambiás de carta; [Enter] la juega o saltea la espera
+- keys: [1] [2] [3] elegís una carta, y la misma tecla otra vez la juega
+- keys: [←] [→] cambiás de carta, y [Enter] la juega o saltea la espera
 - keys: [T] truco, retruco o vale cuatro
 - keys: [E] [R] [F] envido, real envido, falta envido
 - keys: [Q] [N] quiero, no quiero
@@ -20,14 +20,14 @@ Mano a mano contra la CPU: tres cartas cada uno, la mano es de quien gana dos de
 - keys: [P] pausa
 
 ## Los cantos
-- Los botones muestran solo lo que podés cantar en ese momento. El envido va en la primera baza, antes de tirar tu carta; el truco, en tu turno.
+- El envido va en la primera baza, antes de tirar tu carta, y el truco, en tu turno.
 - **Solo quien quiso el último truco lo puede subir**: si te cantan truco y decís quiero, el retruco es tuyo.
 - **El envido está primero**: a un truco cantado en la primera baza le podés contestar con envido. Se arregla el envido y después se contesta el truco.
-- Sin truco la mano vale 1; con truco, 2; retruco, 3; vale cuatro, 4. No querido vale uno menos.
+- La mano vale 1 sin truco, 2 con truco, 3 con retruco y 4 con vale cuatro. No querido vale uno menos.
 - Irse **al mazo** entrega lo que vale la mano, sin confirmación (2 si es en la primera baza, antes de cualquier canto). Si ya no podés ganarla, la mano se va sola al mazo.
 
 ## El envido
-- Dos cartas del mismo palo suman **20 más sus números**; el 10, el 11 y el 12 valen 0. Sin dos del mismo palo, vale tu carta más alta. Si empatan, gana el mano.
+- Dos cartas del mismo palo suman **20 más sus números**, y el 10, el 11 y el 12 valen 0. Sin dos del mismo palo, vale tu carta más alta. Si empatan, gana el mano.
 - El envido vale 2 y el real envido 3, y se suman si se encadenan. La falta envido vale lo que le falta para ganar al que va adelante (en las malas, el partido entero).
 - No querido vale 1, o lo que ya sumaban los cantos anteriores al último.
 

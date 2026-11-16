@@ -9,15 +9,13 @@ Two cards against the CPU's two, five on the board, one pot between you. Every r
 - When either of you runs out of chips, [DEAL] gives both a fresh $10000.
 
 ## Your move
-- [CHECK] [CALL] pass when nothing is owed, or match the bet (the button shows the price)
+- [CHECK] [CALL] pass when nothing is owed, or match the bet
 - [RAISE] bet more, with the chips you stacked
-- [ALL IN] your whole stack
 - [FOLD] give up the hand and the pot
-- touch: Tap the chips in the bar ([10] to [1000]) to stack the total you raise to. Tap a column on the table to take one back; [CANCEL] clears them all.
-- keys: Click the chips in the bar ([10] to [1000]) to stack the total you raise to. Click a column on the table to take one back; [CANCEL] clears them all.
+- touch: Tap the chips in the bar ([10] to [1000]) to stack the total you raise to. Tap a column on the table to take one back, or [CANCEL] to clear them all.
+- keys: Click the chips in the bar ([10] to [1000]) to stack the total you raise to. Click a column on the table to take one back, or [CANCEL] to clear them all.
 - **RAISE** lights up once the stack reaches the minimum shown under it.
 
 ## Reading the CPU
 - **Bet size matters**: the more your bet costs against the pot, the more hands the CPU lets go.
-- It raises its strong hands, and bluffs too, most often on the flop.
-- Two hands of one kind? The showdown names the pair or the kicker that decided it, and the winning cards stay lit until the next deal.
+- It bluffs most often on the flop.

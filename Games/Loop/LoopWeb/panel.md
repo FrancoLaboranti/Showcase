@@ -4,13 +4,13 @@
 You are a marble trailing a thread of light over a clock face, and chess pieces come at you along lanes they show you before they move. Bat orbs into them with the thread, close loops around them, and survive twelve hours: each one brings a rule you choose, and the twelfth brings the Watchmaker.
 
 ## The thread
-- **Cross your own thread** to close a loop, and everything inside takes the hit. **A tight loop hits harder and a big one scores more.**
+- **A tight loop hits harder and a big one scores more.**
 - The thread bats orbs like a paddle, and a batted orb turns <span class="g">CHARGED</span> and hurts the pieces. Swing your head into it and it flies the way you are moving.
-- A third of the way into each hour a <span class="g">diamond</span> lights up in each of the nine sectors: loop one to claim it. **Three in a row sets off a FRENZY** (once an hour): nothing can hurt you, the pieces are dragged to you and break at a touch, every point counts double, and you win back a third of your health.
+- Each hour a <span class="g">diamond</span> lights up in each of the nine sectors: loop one to claim it. **Three in a row sets off a FRENZY** (once an hour): nothing can hurt you, the pieces are dragged to you and break at a touch, every point counts double, and you win back a third of your health.
 
 ## The clock
 - One sweep of the hand is an **hour**. It chimes at 3, 6, 9 and 12, and each chime sends a shockwave out from the centre.
-- From the second hour on, you pick the hour's **rule** from three. The bolder the rule, the more every point is worth while it lasts.
+- The first hour has no **rule**. From the second on you pick one of three, and the bolder it is, the more every point is worth while it lasts.
 - Your **cards** are upgrades and playing cards at once, and five of them make a **poker hand**: the better the hand, the bigger its bonus.
 - A **pawn** that reaches the centre of the face promotes to a stronger piece.
 
@@ -28,6 +28,5 @@ You are a marble trailing a thread of light over a clock face, and chess pieces 
 - keys: [P] pause
 - keys: [T] the tuning panel, an extra toy: live sliders for the game's numbers.
 
-## Tips
-- With a piece on top of you, close a small loop for damage. When the face is quiet, draw a big one for points.
+## Tip
 - **TEST RUN** cannot kill you: the place to learn the rules and the cards.

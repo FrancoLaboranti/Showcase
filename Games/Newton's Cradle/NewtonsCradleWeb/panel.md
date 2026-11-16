@@ -1,7 +1,7 @@
 # Newton's Cradle
 > Lift one ball. Watch the far one answer.
 
-The classic desk toy: lift a sphere, let it fall, and the impulse runs through the row and kicks out the one at the far end. Lift two or three together and the same number swings out the other side. There is nothing to win; it is there to be played with and watched.
+The classic desk toy: lift a sphere, let it fall, and the impulse runs through the row and kicks out the one at the far end. Lift two or three together and the same number swings out the other side. There is nothing to win: it is there to be played with and watched.
 
 ## Controls
 - **Drag a sphere aside and let go** to set the others going.

@@ -20,7 +20,7 @@ Fight your way down a foundry buried under the city: find the coloured keys, rea
 - keys: [Esc] / [P] pause
 
 ## The arsenal
-- You start with the knife and the riveter; the other four lie further down.
+- You start with the knife and the riveter. The other four lie further down.
 - [1] **Knife**: silent, up close, and it needs nothing.
 - [2] **Riveter**: precise, and it never runs dry.
 - [3] **Blunderbuss**: a fistful of scrap at arm's length.
@@ -36,7 +36,6 @@ Fight your way down a foundry buried under the city: find the coloured keys, rea
 - **Bellringers** keep away and ring up more flies. **Kill them first.**
 
 ## Down here
-- A coloured door wants the **key** of its colour, and some rooms lock behind you until the ambush inside is dead.
+- Some rooms lock behind you until the ambush inside is dead.
 - **Secrets**: wall panels that open when you use them, and cracked walls that break under fire.
-- Molten floors burn while you stand on them.
 - **Dying** restarts the sublevel with what you carried into it. CONTINUE picks the run up exactly where you left it.

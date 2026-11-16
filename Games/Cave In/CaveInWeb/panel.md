@@ -5,7 +5,7 @@ Drop bombs that burst in a cross, blow open the crates and whatever crawls betwe
 
 ## How to start
 - **Start at** a deeper stratum once you have beaten the boss above it.
-- **Difficulty**: Easy gives 5 lives, slower creatures, 30 more seconds a depth and weaker bosses; Normal, 3 lives; Hard, 2 lives, faster creatures, 20 seconds less and tougher bosses.
+- **Difficulty** sets your lives (5 on Easy, 3 on Normal, 2 on Hard), and with them the creatures' speed, the clock and the bosses.
 
 ## Controls
 - touch: Put your thumb anywhere on the left half: the stick is born under it.
@@ -19,12 +19,12 @@ Drop bombs that burst in a cross, blow open the crates and whatever crawls betwe
 
 ## Going down
 - **The lift opens once every creature is gone.** Do not bomb it: it spits out more, and for a moment they cannot be hurt.
-- On a boss's depth there is no crate and no clock: the lift appears in the middle once the boss and its creatures are down.
-- When the clock runs out the mine caves in from the edges. A rock's shadow shows where it will land, and the rock hurts.
+- On a boss's depth there is no crate or clock: the lift appears in the middle once the boss and its creatures are down.
+- When the clock runs out the mine caves in from the edges, and a rock's shadow shows where it will land.
 
 ## Bombs
 - **The glow on the floor is exactly where a blast will reach**, and it burns brighter as the fuse runs out.
-- Stone stops a blast; a crate breaks and stops it too.
+- Stone stops a blast, and a crate breaks and stops it too.
 - **Only your own cell counts**: a blast that does not reach it cannot hurt you, and the grey smoke it leaves is harmless.
 - A blast that reaches another bomb sets it off. In one blast, chain included, each creature after the first scores double: x2, x4, up to x16.
 

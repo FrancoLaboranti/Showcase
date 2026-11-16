@@ -5,12 +5,10 @@ Your device's own time on a glowing analogue face, with the date and the time in
 
 ## Controls
 - **Tap or click** anywhere to switch the second hand between **tick** (a jump each second) and **sweep** (a smooth glide).
-- {btnSec} the same switch, from the bar
 - {btnColor} next colour
 - {btnAuto} auto colour: a new one every 2 seconds
 
 ## Listen
-- A soft quartz tick every second, in both modes; sweep adds a quiet mechanical ticking under it.
+- A soft quartz tick every second, and sweep adds a quiet mechanical ticking under it.
 - A click marks each new minute, and a wind chime each hour.
-- With auto colour on, the tick changes pitch with every colour.
-- The clock remembers its colour, its second hand, auto colour and the sound for next time.
+- The clock remembers your choices for next time.
