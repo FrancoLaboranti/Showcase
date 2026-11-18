@@ -19,7 +19,19 @@ Take a quest in the village, walk out of the gate and fight through meadow, fore
 - keys: [E] / [Enter] talk, open, pick up, read
 - keys: [I] [L] [M] bag, quests and map
 - keys: [P] / [Esc] pause
-- keys: In a conversation, [Space] moves on and the number keys pick an answer. The mouse works every menu.
+- keys: In a conversation, [Space] moves on and the number keys pick an answer. The mouse works every menu, and so do the arrows with [Enter], [Esc] closing.
+- keys: [Q] [E] turn the pages of the bag and the shop
+- pad: Left stick walks, softly or at a run.
+- pad: [RT] attack (hold to keep swinging)
+- pad: [RB] dodge
+- pad: [X] [Y] [LB] [LT] skills, as they unlock
+- pad: [B] drink a potion
+- pad: [A] talk, open, pick up, read
+- pad: The D-pad opens the bag (down), the quests (left) and the map (up).
+- pad: In a conversation, the D-pad lights an answer and [A] takes it. [B] says goodbye.
+- pad: In the bag, the shop, the quest log and on the title, the D-pad and [A] choose. [B] closes the bag, the shop, the quests and the map.
+- pad: [LB] [RB] turn the pages of the bag and the shop.
+- pad: [Start] pause
 
 ## On the road
 - **Attacks aim themselves** at the nearest monster, and three quick swings make a combo. A dodge makes you untouchable for an instant.

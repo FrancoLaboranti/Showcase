@@ -14,6 +14,12 @@ You are an ink stickman on a paper world, brawling across floating platforms. Ev
 - keys: [L] block (holding away from the attacker blocks too)
 - keys: [Shift] dash the way you hold, or double-tap [A] / [D]
 - keys: [P] pause
+- keys: [Enter] fights from the menu and skips the card of a cleared level. On the menu the arrows walk to a difficulty, [Enter] takes it, and FIGHT is one more step down.
+- pad: The left stick moves you like the touch stick: **up jumps**, **down crouches**, and a quick double flick sideways dashes. The D-pad moves you too.
+- pad: [A] jump, [X] punch, [Y] kick
+- pad: Hold [RT] to block (holding away from the attacker blocks too)
+- pad: [RB] dash the way you push
+- pad: On the menu [A] fights. The D-pad walks to a difficulty and [A] takes it, then down to FIGHT. [A] also skips the card of a cleared level.
 - keys: [T] the tuning panel, an extra toy: live sliders for the game's numbers.
 - touch: Tap the title on the menu three times for the tuning panel, an extra toy: live sliders for the game's numbers.
 

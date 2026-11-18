@@ -5,10 +5,13 @@ Adiviná la palabra letra por letra antes de que se complete el dibujo en la hor
 
 ## Controles
 - keys: Escribí una letra, o hacé clic en el teclado que está debajo de la palabra.
+- pad: La cruceta recorre el teclado de abajo y [A] elige la letra marcada.
 - [↻] otra palabra
 - [ES] / [EN] cambiar el idioma (y repartir otra palabra)
+- pad: [Y] reparte otra palabra, [RB] cambia el idioma
 - touch: Cuando termina la ronda, tocá en cualquier lado para la siguiente.
 - keys: Cuando termina la ronda, hacé clic o apretá [Enter] para la siguiente.
+- pad: Cuando termina la ronda, [A] para la siguiente.
 
 ## Para saber
 - Las palabras en español vienen sin tildes pero con la Ñ, que tiene su tecla.

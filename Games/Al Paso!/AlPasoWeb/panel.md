@@ -15,9 +15,15 @@ Tenés un puesto de comida al paso en la Costanera y una semana para hacerlo ren
 - **REPONER** (abajo a la derecha) compra un paquete durante el día, al doble de precio.
 - keys: [1] [2] [3] [4] paty, chori, sánguche, fritas
 - keys: [5] una bebida de la heladera
-- keys: [Enter] abrir el puesto o seguir
+- keys: Las flechas mueven un cursor, y [Enter] o [Espacio] tocan lo que marca.
+- keys: [Retroceso] suelta el plato o la bebida que tenés en la mano
 - keys: [P] / [Esc] pausa, [M] sonido
 - keys: [R] dos veces: semana nueva, desde el lunes
+- pad: La cruceta o el stick izquierdo mueven un cursor por el puesto, y [A] toca lo que marca.
+- pad: [X] [Y] [LB] [RB] paty, chori, sánguche, fritas
+- pad: [RT] una bebida de la heladera
+- pad: [B] suelta el plato o la bebida que tenés en la mano
+- pad: [Start] pausa, [Back] vuelve al menú
 
 ## En el puesto
 - **Lo que está listo en la parrilla, la plancha o la freidora se quema a los 7 segundos.** Lo quemado se tira con un toque.

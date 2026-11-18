@@ -5,14 +5,19 @@ Clear every pellet from the maze before the ghosts corner you: red chases you, p
 
 ## How to start
 - touch: On the menu, tap the left or right half of a row to change it.
+- pad: On the menu, up and down pick a row, left and right change it, and [A] starts.
 - **Classic** is the arcade game. **Hard** has faster ghosts and less time to eat them. **Marathon** starts at level 6, with the fast ghosts already out. **Daily** is the same run for everyone, all day.
 - New skins unlock as your best score reaches 15,000, 30,000, 60,000 and 100,000.
 
 ## Controls
 - touch: **Swipe** the way you want to go, anywhere on the screen. Keep your finger down and swipe again to chain turns.
 - keys: [W] [A] [S] [D] steer, or the arrows
+- pad: [D-pad] steer, or the left stick
 - Press a turn early: it is taken at the next opening.
 - keys: [P] pause, [Esc] back to the menu
+- pad: [Start] pause, [Back] back to the menu
+- pad: [A] save a new record, play again
+- pad: [B] leave a new record unsaved
 
 ## Know this
 - **Three lives**, and one more at 10,000 points.

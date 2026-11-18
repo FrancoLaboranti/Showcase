@@ -19,6 +19,13 @@ Race fifteen rival tanks on a circuit generated fresh for every race, across six
 - keys: [Shift] nitro (hold)
 - keys: [Enter] / [Esc] confirm, go back (or click a row's left or right half)
 - keys: [P] pause
+- pad: [RT] throttle: the further you squeeze it, the faster you go
+- pad: [LT] brake and reverse
+- pad: [D-pad] steer, or the left stick
+- pad: [A] fire a bomb (one every two seconds)
+- pad: [RB] nitro (hold)
+- pad: In the menus the D-pad or the stick picks and changes a row, [A] confirms and [B] goes back.
+- pad: [Start] pause, [Back] back to the menu
 
 ## On the track
 - **A bomb spins a tank out** and nearly stops it. It flies straight off your nose, so line up first.

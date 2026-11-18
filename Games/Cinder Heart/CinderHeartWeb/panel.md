@@ -14,7 +14,14 @@ Wren robbed the wrong reliquary and woke up with the last ember of a dead sun bu
 - keys: [←] [→] / [Tab] move the aim
 - keys: [Enter] / [Space] act, or the next line of a dialogue
 - keys: [1] [2] answer in a dialogue
-- keys: [Esc] cancel, [P] pause
+- keys: [Q] [E] the previous or next ability
+- keys: The arrows and [Enter] also work the map, the Camp and every menu.
+- keys: [Esc] cancel or leave the Camp, [P] pause
+- pad: [LB] [RB] pick an ability, [A] to act
+- pad: The D-pad moves the aim, [B] puts the ability down
+- pad: The D-pad and [A] work the map, the Camp, a dialogue's answers and every menu
+- pad: [A] the next line of a dialogue, [B] cancels a box or leaves the Camp
+- pad: [Start] pause
 - The pause holds the battle speed (1x or 2x) and the battle log.
 - Tap or click anything to read it: a unit or its plate, a status, a turn-order portrait. On your turn a unit takes two taps: the first one aims.
 

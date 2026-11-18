@@ -27,6 +27,13 @@ You are a marble trailing a thread of light over a clock face, and chess pieces 
 - keys: [1–5] with a full hand, which card the new one replaces, or [Q] to keep your hand
 - keys: [P] pause
 - keys: [T] the tuning panel, an extra toy: live sliders for the game's numbers.
+- pad: [Left stick] move, and a light push rolls slowly: the way to draw the small loops that hit hardest
+- pad: [RT] lunge: nothing can hurt you, you hit what you cross, and the thread pulls straight (the quickest way to close a loop)
+- pad: [RB] pulse: a shockwave that shoves everything away
+- pad: [Y] your cards and the poker hands (the game waits)
+- pad: [D-pad] or [Left stick] picks a rule, a card or the one it replaces, and [A] takes it. [X] keeps your hand
+- pad: [D-pad] or [Left stick] on the menu: up and down the run, left and right the difficulty
+- pad: [Start] pause
 
 ## Tip
 - **TEST RUN** cannot kill you: the place to learn the rules and the cards.

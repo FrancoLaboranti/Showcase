@@ -4,7 +4,7 @@
 Hold out against fifty waves of enemy tanks, from laser-sighted snipers and rammers to bosses that breed and teleport. Every wreck drops gold for the shop and the odd lootbox offers a new power, so the tank that reaches wave 50 is not the one that started.
 
 ## The run
-- Every **tank** spends the same power differently, and each **mutator** is a trade: hover one (hold it, on a touch screen) to read it.
+- Every **tank** spends the same power differently, and each **mutator** is a trade: hover one (hold it on a touch screen, or land on it with a pad) to read it.
 - **Hardcore** brings the same waves sooner and tougher, with more elites and mines and fewer lootboxes.
 - **50 waves** and a **Final Boss**. Kill it and the run goes on in **Endless** until you die.
 - Leaving for the menu keeps the run. **CONTINUE** takes you back to the start of the wave you were on, with what you had then, but never with more health, rage or missiles than when you left.
@@ -22,6 +22,13 @@ Hold out against fifty waves of enemy tanks, from laser-sighted snipers and ramm
 - keys: [Q] rage, when the bar is full
 - keys: [Tab] shop (the game waits)
 - keys: [P] pause
+- pad: Left stick drives. Right stick swings the sight around the tank, and it stays pointing where you left it.
+- pad: [RT] cannon (hold)
+- pad: [RB] homing missile
+- pad: [LT] boost (hold)
+- pad: [Y] rage, when the bar is full
+- pad: [X] shop (the game waits), and [B] closes it
+- pad: The D-pad and [A] choose in the menu, the shop and the power picks. [A] also leaves GAME OVER.
 
 ## Staying alive
 - **The shield rises by itself** against shells and missiles until its charge runs dry, then it is down for a few seconds.

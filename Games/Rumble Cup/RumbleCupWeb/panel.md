@@ -22,6 +22,14 @@ Five against five, with sliding tackles that floor a man, a special shot for eve
 - keys: [Space] switch to the mate nearest the ball
 - keys: [Z] [X] [C] [V] pass, shoot, tackle, special (the other hand's set)
 - keys: [P] / [Esc] pause
+- pad: In the menus the D-pad picks a line, [A] chooses and [B] goes back. During a cup [B] rests, so a late tackle never quits it: MENU and [A] do.
+- pad: [D-pad] move (or the left stick), hold [LT] to sprint
+- pad: [X] shoot (hold to charge, or hold [RT]), or jump without the ball
+- pad: [A] pass to the mate you point at (hold for a lob)
+- pad: [B] sliding tackle, or a shoulder barge with the ball (your keeper picks it up)
+- pad: [Y] special shot
+- pad: [RB] switch to the mate nearest the ball
+- pad: [Start] pause, [Back] back to the menu
 
 ## On the pitch
 - **A sliding tackle that lands on the man on the ball wins it.** Near or far, it takes the legs of whoever is in its way. You have no punch, but the CPU's players may punch whoever just hit one of theirs.

@@ -9,6 +9,11 @@ A sea snake over a dark reef, in a lake full of rival snakes. Eat stars to grow 
 - keys: [P] pause
 - touch: The stick appears where your thumb lands in the bottom third of the screen.
 - touch: {btnSprint} sprint while held, or two fingers anywhere. It is also the turbo gauge, which refills when you let go.
+- pad: Tilt the left stick and the snake swims that way.
+- pad: [RT] sprint while held. It burns turbo, which refills when you let go.
+- pad: [Start] pause
+- pad: On a level's cards the D-pad lights one up, [A] takes it and [Y] rerolls.
+- pad: [A] swim again after a game over
 
 ## The fight
 - **Only heads can be bitten**, yours included. Sprint with a rival's head in front of you and you lunge: the bite lands only if your head reaches its head.

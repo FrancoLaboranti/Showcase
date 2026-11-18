@@ -18,6 +18,12 @@ Fight your way down a foundry buried under the city: find the coloured keys, rea
 - keys: [Q] the last weapon (the wheel cycles them)
 - keys: [Tab] / [M] map
 - keys: [Esc] / [P] pause
+- pad: The left stick or the D-pad walks and strafes, the right stick turns, and [LT] held runs
+- pad: [RT] fire
+- pad: [A] open doors, pull levers, and choose on the menus
+- pad: [X] reload, [Y] map
+- pad: [RB] / [LB] the next and the previous weapon
+- pad: [Start] pause, [Back] back to the menu
 
 ## The arsenal
 - You start with the knife and the riveter. The other four lie further down.

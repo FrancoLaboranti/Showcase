@@ -6,15 +6,22 @@ A number on an open cell says how many of the eight cells around it hide a mine.
 ## Controls
 - touch: Tap a cell to dig it, press and hold to plant or lift a flag.
 - keys: Click a cell to dig it, right click (or hold the left button) to plant or lift a flag.
+- keys: Or steer a cursor with the arrows, [Enter] digs under it and [F] plants or lifts a flag.
+- pad: The D-pad or the stick steers a cursor over the field, [A] digs under it and [X] plants or lifts a flag.
 - {btnMode} Classic or Gold Rush
 - [★★] difficulty: each star means a bigger field and more mines
+- keys: [G] / [D] the mode, the difficulty
+- pad: [LB] / [RB] the mode, the difficulty
 - touch: {btnReset} a new field
 - keys: {btnReset} / [R] a new field
+- pad: {btnReset} / [Back] a new field
 
 ## The field
 - **The first dig is always safe**, and it always opens up a patch.
 - A flagged cell cannot be dug, so a flag also guards against a slip of the finger.
-- After a win or a blast, tap or click the field to play again.
+- touch: After a win or a blast, tap the field to play again.
+- keys: After a win or a blast, click the field or press [Enter] to play again.
+- pad: After a win or a blast, [A] plays again.
 
 ## Gold Rush
 - **Gold never opens by itself**: each nugget has to be dug out by hand. A golden **!** on an open cell means gold still lies next to it.

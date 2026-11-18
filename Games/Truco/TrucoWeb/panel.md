@@ -13,11 +13,16 @@ Mano a mano contra la CPU: tres cartas cada uno, la mano es de quien gana dos de
 - keys: Un clic en una carta la levanta y otro la juega (o arrastrala hacia arriba). Arrastrala sobre otra para cambiarlas de lugar.
 - keys: [1] [2] [3] elegís una carta, y la misma tecla otra vez la juega
 - keys: [←] [→] cambiás de carta, y [Enter] la juega o saltea la espera
+- keys: [↑] [↓] te llevan a los cantos, [Enter] canta el marcado y [Esc] te devuelve a tus cartas
 - keys: [T] truco, retruco o vale cuatro
 - keys: [E] [R] [F] envido, real envido, falta envido
 - keys: [Q] [N] quiero, no quiero
 - keys: [M] al mazo
 - keys: [P] pausa
+- pad: La cruceta o el stick cambian de carta, y [A] la juega o saltea la espera.
+- pad: Arriba o abajo te llevan a los cantos, [A] canta el marcado y [B] te devuelve a tus cartas.
+- pad: En el menú, la cruceta marca un botón y [A] lo elige.
+- pad: [Start] pausa, [Back] vuelve al menú
 
 ## Los cantos
 - El envido va en la primera baza, antes de tirar tu carta, y el truco, en tu turno.

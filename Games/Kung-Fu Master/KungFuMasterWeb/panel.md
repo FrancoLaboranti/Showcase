@@ -19,6 +19,11 @@ Fight your way up a tower, hall by hall, as grapplers, knife throwers, brutes an
 - keys: [J] [K] [L] high punch, low punch, kick (or [Z] [X] [C])
 - keys: [V] / [B] block, while you hold it
 - keys: [P] / [Esc] pause
+- pad: The D-pad or the left stick walks, jumps (up) and crouches (down), and [RB] held makes you run
+- pad: [A] jump (hold a direction to jump forward), and start or continue
+- pad: [X] [B] [Y] high punch, low punch, kick
+- pad: [RT] block, while you hold it
+- pad: [Start] pause, and [B] fights on
 
 ## The moves
 - <span class="k round hi">HIGH</span> is fast and short, at head height: small fighters duck under it.

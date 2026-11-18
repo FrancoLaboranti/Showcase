@@ -23,6 +23,15 @@ Every trip out of the shelter is a gamble: search the town for food, water, medi
 - keys: [I] / [Tab] backpack
 - keys: [H] [F] [G] medicine, food, water
 - keys: [P] / [Esc] pause
+- pad: Left stick walks (a light push sneaks), right stick looks around.
+- pad: [RT] attack
+- pad: [A] use or pick up
+- pad: [RB] next weapon
+- pad: [X] reload
+- pad: [LB] sneak (hold)
+- pad: [Y] backpack: the D-pad picks a slot, [A] uses it, [X] drops it, [B] closes it
+- pad: The D-pad and [A] work the menu and the shelter.
+- pad: [Start] pause
 
 ## Staying alive
 - **Noise draws them.** The hatchet is as loud as a footstep, the pistol carries far, the shotgun farther, and a scream farthest of all. Sneaking is quiet.

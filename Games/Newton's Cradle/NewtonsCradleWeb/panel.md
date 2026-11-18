@@ -10,6 +10,9 @@ The classic desk toy: lift a sphere, let it fall, and the impulse runs through t
 - {btnGhost} ghost mode: they pass through each other instead of colliding
 - {btnHold} freeze: everything stops in place, and a sphere you lift stays up there. Press it again and they all fall.
 - {btnReset} restart: they hang back at rest
+- keys: [↑] / [↓] add and take away a sphere too, [G] is ghost mode and [F] is freeze.
+- pad: **The D-pad's left and right** pick a sphere and a ring marks it. Hold [RT] to take it, lean **the left stick** to lift it as far as you like, and let go of [RT] to drop it.
+- pad: Up and down on the D-pad add and take away a sphere, [X] is ghost mode and [Y] is freeze.
 
 ## Tips
 - With the sound on, every clack is a hit of a real recorded cradle, and the harder they meet, the harder the hit you hear.

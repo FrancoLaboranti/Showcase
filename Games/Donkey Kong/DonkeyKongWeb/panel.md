@@ -6,6 +6,8 @@ The 1981 arcade climb: the gorilla hurls barrels down the girders, fire creeps o
 ## How to start
 - **DAILY CHALLENGE** plays the day's boards, the same all day, with a record of its own.
 - The swatches on the menu dress you in a new colour. More unlock as your points pile up, game after game.
+- keys: [↑] [↓] pick PLAY or DAILY CHALLENGE, [←] [→] try on the colours, [Enter] starts.
+- pad: On the menu the D-pad picks PLAY or DAILY CHALLENGE, left and right try on the colours, and [A] starts.
 
 ## Controls
 - touch: {btnLeft} / {btnRight} walk
@@ -15,6 +17,9 @@ The 1981 arcade climb: the gorilla hurls barrels down the girders, fire creeps o
 - keys: [↑] [↓] or [W] [S] climb a ladder
 - keys: [Space] jump
 - keys: [P] pause, [M] sound
+- pad: The D-pad or the left stick walks and climbs.
+- pad: [A] or [RT] jump.
+- pad: [Start] pauses, [Back] takes you to the menu.
 
 ## The climb
 - **A fall from higher than your own jump costs a life.** Take the ladders down too, never the edge.

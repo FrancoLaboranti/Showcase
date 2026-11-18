@@ -16,6 +16,11 @@ Pong with two twists: **two points in a row set your paddle on fire**, and **the
 - keys: [←] [→] change a setup value
 - keys: [Enter] confirm, or play on when a match ends
 - keys: [P] pause, [Backspace] back to the menu
+- pad: [D-pad] moves your paddle at full speed, the left stick as fast as you push it
+- pad: In Two Players the first pad pressed plays the right paddle and a second pad the left one.
+- pad: On the menu, up and down pick a row, left and right change a setup value, and [A] confirms.
+- pad: [A] play on when a match ends
+- pad: [Start] pause, [B] back to the menu
 
 ## Know this
 - **A paddle on fire** moves faster and hits harder. Concede a point and it goes out.

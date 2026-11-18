@@ -14,6 +14,10 @@ Your light cycle never stops, and it leaves a solid wall of light behind it. Tur
 - keys: [↓] turn right
 - keys: [Enter] next round, [Esc] back to the menu
 - keys: In the menu, [↑] [↓] pick a row, [←] [→] change it, [Enter] plays.
+- pad: [LB] or the D-pad's left turns left, [RB] or its right turns right, and the stick does the same
+- pad: [A] next round, [B] back to the menu once the round is over
+- pad: [Start] pause, [Back] back to the menu
+- pad: In the menu, the D-pad picks a row and changes it, [A] plays.
 - touch: Tap the left or right half of the screen to turn that way, or press {btnLeft} {btnRight}.
 
 ## Tip
