@@ -24,6 +24,7 @@ The 1981 arcade climb: the gorilla hurls barrels down the girders, fire creeps o
 ## The climb
 - **A fall from higher than your own jump costs a life.** Take the ladders down too, never the edge.
 - **The BONUS counts down**: reach Pauline and you keep what is left, but if it hits zero you lose a life. You start with three.
+- Near the top or the foot of a ladder, **push left or right to step off** onto the girder, no need to finish the climb.
 - A **broken ladder** only takes you as far as the break, but barrels and fire come down it all the same.
 - The **hammer** floats above a girder: jump to grab it. For eight seconds it smashes barrels and fire, but you cannot jump or climb.
 - **Jumping a barrel scores**, and chaining jumps over different barrels multiplies it, up to x5.

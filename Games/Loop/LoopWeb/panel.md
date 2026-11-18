@@ -11,7 +11,7 @@ You are a marble trailing a thread of light over a clock face, and chess pieces 
 ## The clock
 - One sweep of the hand is an **hour**. It chimes at 3, 6, 9 and 12, and each chime sends a shockwave out from the centre.
 - The first hour has no **rule**. From the second on you pick one of three, and the bolder it is, the more every point is worth while it lasts.
-- Your **cards** are upgrades and playing cards at once, and five of them make a **poker hand**: the better the hand, the bigger its bonus.
+- Your **cards** are upgrades and playing cards at once, and five of them make a **poker hand**: the better the hand, the bigger its bonus. Cards can repeat, so five of one rank is a hand too, **five of a kind**, worth more than four of a kind and less than a straight flush.
 - A **pawn** that reaches the centre of the face promotes to a stronger piece.
 
 ## Controls
@@ -29,10 +29,10 @@ You are a marble trailing a thread of light over a clock face, and chess pieces 
 - keys: [T] the tuning panel, an extra toy: live sliders for the game's numbers.
 - pad: [Left stick] move, and a light push rolls slowly: the way to draw the small loops that hit hardest
 - pad: [RT] lunge: nothing can hurt you, you hit what you cross, and the thread pulls straight (the quickest way to close a loop)
-- pad: [RB] pulse: a shockwave that shoves everything away
+- pad: [LT] pulse: a shockwave that shoves everything away
 - pad: [Y] your cards and the poker hands (the game waits)
 - pad: [D-pad] or [Left stick] picks a rule, a card or the one it replaces, and [A] takes it. [X] keeps your hand
-- pad: [D-pad] or [Left stick] on the menu: up and down the run, left and right the difficulty
+- pad: [D-pad] or [Left stick] on the menu: up and down between the runs, the difficulties and PLAY, left and right pick one
 - pad: [Start] pause
 
 ## Tip

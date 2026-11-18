@@ -22,8 +22,8 @@ Race fifteen rival tanks on a circuit generated fresh for every race, across six
 - pad: [RT] throttle: the further you squeeze it, the faster you go
 - pad: [LT] brake and reverse
 - pad: [D-pad] steer, or the left stick
-- pad: [A] fire a bomb (one every two seconds)
-- pad: [RB] nitro (hold)
+- pad: [X] fire a bomb (one every two seconds)
+- pad: [A] nitro (hold)
 - pad: In the menus the D-pad or the stick picks and changes a row, [A] confirms and [B] goes back.
 - pad: [Start] pause, [Back] back to the menu
 

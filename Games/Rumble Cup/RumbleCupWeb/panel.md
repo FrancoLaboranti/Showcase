@@ -22,20 +22,21 @@ Five against five, with sliding tackles that floor a man, a special shot for eve
 - keys: [Space] switch to the mate nearest the ball
 - keys: [Z] [X] [C] [V] pass, shoot, tackle, special (the other hand's set)
 - keys: [P] / [Esc] pause
-- pad: In the menus the D-pad picks a line, [A] chooses and [B] goes back. During a cup [B] rests, so a late tackle never quits it: MENU and [A] do.
-- pad: [D-pad] move (or the left stick), hold [LT] to sprint
-- pad: [X] shoot (hold to charge, or hold [RT]), or jump without the ball
+- pad: In the menus the D-pad or the stick picks a line, [A] chooses and [B] goes back. During a cup [B] rests, so a late tackle never quits it: MENU and [A] do.
+- pad: [D-pad] move (or the left stick), hold [RT] to sprint
+- pad: [X] shoot (hold to charge)
+- pad: [RB] jump, then [X] in the air for a header
 - pad: [A] pass to the mate you point at (hold for a lob)
 - pad: [B] sliding tackle, or a shoulder barge with the ball (your keeper picks it up)
 - pad: [Y] special shot
-- pad: [RB] switch to the mate nearest the ball
+- pad: [LB] switch to the mate nearest the ball
 - pad: [Start] pause, [Back] back to the menu
 
 ## On the pitch
 - **A sliding tackle that lands on the man on the ball wins it.** Near or far, it takes the legs of whoever is in its way. You have no punch, but the CPU's players may punch whoever just hit one of theirs.
-- **A ball in the air is played first time.** At your waist, pass sends it to a mate, shoot volleys it and special fires your shot. Jump into a high ball to take it on the chest, and shoot again in the air for a header (pass for a headed pass).
+- **A ball in the air is played first time.** At your waist, pass sends it to a mate, shoot volleys it and special fires your shot. Jump into a high ball to take it on the chest, and shoot in the air for a header (pass for a headed pass).
 - Your throw-ins, corners and keeper's kicks: the stick aims, pass plays it short and shoot sends it long.
-- **Your keeper is one more player.** Pass back to him and he is yours, with the ball at his feet. A mate's pass stays there, any other ball he can pick up in his box, and that stops play for his kick.
+- **Your keeper is one more player.** Pass back to him along the ground and he is yours, with the ball at his feet. Lob it or clear it to him and he catches it like any ball he can pick up in his box, and that stops play for his kick.
 - Heavy players shrug off what sends a light one flying, and a body sent flying takes down the light ones it lands on. Floored, you cannot be hit again: mash any button to get up sooner.
 
 ## The special

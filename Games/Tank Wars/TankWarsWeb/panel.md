@@ -22,7 +22,7 @@ Hold out against fifty waves of enemy tanks, from laser-sighted snipers and ramm
 - keys: [Q] rage, when the bar is full
 - keys: [Tab] shop (the game waits)
 - keys: [P] pause
-- pad: Left stick drives. Right stick swings the sight around the tank, and it stays pointing where you left it.
+- pad: Left stick drives. Right stick steers the sight, which leans towards enemy tanks and holds on to the one you let it settle on.
 - pad: [RT] cannon (hold)
 - pad: [RB] homing missile
 - pad: [LT] boost (hold)
