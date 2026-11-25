@@ -68,6 +68,10 @@ and JavaScript inside it, drawing to a single `<canvas>`, with no framework and 
 - **Designed for the browser**: games launch straight from the web, with no installation.
 - **Desktop and mobile**: every game has touch controls of its own (sticks, buttons, swipes or taps, whatever it
   needs) and keyboard and mouse on a computer, and its ⓘ button shows the controls of the device in your hand.
+- **Playable with a gamepad**: the menu, every game and every button around it can be reached with a gamepad
+  (holding Start lights the game's buttons, a long press of Back returns to the menu). On a computer, a game's 🎮 button
+  opens its controls, where its keys and its gamepad buttons can be changed, each on its own tab, in that game's own
+  look.
 - **Independent projects**: each game lives in its own folder under `Games/` and keeps its own implementation, so it
   can evolve on its own. The only shared pieces are the Arcade's shell (the corner buttons and the info panel), its
   audio module and the sounds several games use.
