@@ -26,7 +26,7 @@ Hold out against fifty waves of enemy tanks, from laser-sighted snipers and ramm
 - pad: [RT] cannon (hold)
 - pad: [RB] homing missile
 - pad: [LT] boost (hold)
-- pad: [Y] rage, when the bar is full
+- pad: [R3] rage (press the right stick in), when the bar is full
 - pad: [X] shop (the game waits), and [B] closes it
 - pad: The D-pad and [A] choose in the menu, the shop and the power picks. [A] also leaves GAME OVER.
 
