@@ -23,7 +23,7 @@ Fight your way down a foundry buried under the city: find the coloured keys, rea
 - pad: [A] open doors, pull levers, and choose on the menus
 - pad: [X] reload, [Y] map
 - pad: [RB] / [LB] the next and the previous weapon
-- pad: [Start] pause, [Back] back to the menu
+- pad: [Start] pause, [Select] back to the menu
 
 ## The arsenal
 - You start with the knife and the riveter. The other four lie further down.

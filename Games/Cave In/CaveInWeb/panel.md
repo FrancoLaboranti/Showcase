@@ -6,8 +6,8 @@ Drop bombs that burst in a cross, blow open the crates and whatever crawls betwe
 ## How to start
 - **Start at** a deeper stratum once you have beaten the boss above it.
 - **Difficulty** sets your lives (5 on Easy, 3 on Normal, 2 on Hard), and with them the creatures' speed, the clock and the bosses.
-- keys: On the menu the arrows pick: left and right where you start, up and down the difficulty.
-- pad: On the menu the D-pad chooses: left and right where you start, up and down the difficulty, and [A] starts.
+- keys: On the menu the arrows move one highlight: up and down between Play, Start at and Difficulty, left and right change the one it is on, and [Enter] starts from any of them.
+- pad: On the menu the D-pad moves one highlight: up and down between Play, Start at and Difficulty, left and right change the one it is on, and [A] starts from any of them.
 
 ## Controls
 - touch: Put your thumb anywhere on the left half: the stick is born under it.
@@ -18,9 +18,10 @@ Drop bombs that burst in a cross, blow open the crates and whatever crawls betwe
 - keys: [K] fire the detonator
 - keys: [P] / [Esc] pause, [M] sound
 - keys: Hold a second direction and you turn into the next opening by yourself.
+- keys: When a run ends, [Enter] plays on from that depth (after a victory it takes you to the menu) and [Esc] goes to the menu.
 - pad: The D-pad or the left stick walks the tunnels.
 - pad: [A] or [RT] drop a bomb, [RB] fires the detonator
-- pad: [Start] or [B] pause, [Back] takes you to the menu
+- pad: [Start] pauses, [Select] takes you to the menu
 - pad: When a run ends, [A] plays on from that depth (after a victory it takes you to the menu) and [B] goes to the menu.
 
 ## Going down

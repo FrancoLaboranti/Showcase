@@ -15,7 +15,7 @@ Clear every pellet from the maze before the ghosts corner you: red chases you, p
 - pad: [D-pad] steer, or the left stick
 - Press a turn early: it is taken at the next opening.
 - keys: [P] pause, [Esc] back to the menu
-- pad: [Start] pause, [Back] back to the menu
+- pad: [Start] pause, [Select] back to the menu
 - pad: [A] save a new record, play again
 - pad: [B] leave a new record unsaved
 

@@ -19,7 +19,7 @@ The 1981 arcade climb: the gorilla hurls barrels down the girders, fire creeps o
 - keys: [P] pause, [M] sound
 - pad: The D-pad or the left stick walks and climbs.
 - pad: [A] or [RT] jump.
-- pad: [Start] pauses, [Back] takes you to the menu.
+- pad: [Start] pauses, [Select] takes you to the menu.
 
 ## The climb
 - **A fall from higher than your own jump costs a life.** Take the ladders down too, never the edge.
@@ -30,7 +30,10 @@ The 1981 arcade climb: the gorilla hurls barrels down the girders, fire creeps o
 - **Jumping a barrel scores**, and chaining jumps over different barrels multiplies it, up to x5.
 
 ## Further up
-- From level 2 each level opens with a choice: **CALM**, or a hazard (FAST BARRELS, BARREL RAIN, CLIMBERS, INFERNAL) that is harder and pays more. Tap one, or pick with the arrows.
+- From level 2 each level opens with a choice: **CALM**, or a hazard (FAST BARRELS, BARREL RAIN, CLIMBERS, INFERNAL) that is harder and pays more. Nothing starts until you take one.
+- touch: Tap the challenge you want.
+- keys: [↑] [↓] light a challenge and [Enter] takes it, or click the one you want.
+- pad: The D-pad lights a challenge and [A] takes it.
 - **RAGE!** flashes once a level as a warning: then, for six seconds, the barrels come faster and closer together.
 - A **blue barrel** is faster and never takes a ladder, and jumping it is worth more.
 - Every fourth level has eight **rivets**: walk over them all for a bonus at the top. The others hide Pauline's **hat, purse and umbrella**: take all three for a bonus.

@@ -16,6 +16,7 @@ Plant tulips, daffodils and hydrangeas, water them, and gather the petals their 
 - keys: [1–6] the six tools, in the order below
 - keys: [+] / [-] zoom (the wheel too)
 - keys: [P] / [Esc] pause, [M] sound
+- keys: On the menu [↑] / [↓] pick Continue or New garden and [Enter] chooses
 
 ## The six tools
 - **Plant**: pick a seed, then tap soil or an empty pot.

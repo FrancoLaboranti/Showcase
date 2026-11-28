@@ -15,7 +15,8 @@ Two cards against the CPU's two, five on the board, one pot between you. Every r
 - touch: Tap the chips in the bar ([10] to [1000]) to stack the total you raise to. Tap a column on the table to take one back, or [CANCEL] to clear them all.
 - keys: Click the chips in the bar ([10] to [1000]) to stack the total you raise to. Click a column on the table to take one back, or [CANCEL] to clear them all.
 - keys: The arrows walk the bar as well, [Enter] presses the lit button and [Esc] takes the last chip back.
-- pad: The D-pad walks the bar and [A] presses the lit button. Each chip you press goes on the total you raise to, [B] takes the last one back and [CANCEL] clears them all.
+- pad: The D-pad or the left stick walks the bar and [A] presses the lit button. Each chip you press goes on the total you raise to, [B] takes the last one back and [CANCEL] clears them all.
+- pad: [Select] starts the match over, with a fresh $10000 each.
 - **RAISE** lights up once the stack reaches the minimum shown under it.
 
 ## Reading the CPU

@@ -23,8 +23,8 @@ Take a quest in the village, walk out of the gate and fight through meadow, fore
 - keys: [Q] [E] turn the pages of the bag and the shop
 - pad: Left stick walks, softly or at a run.
 - pad: [RT] attack (hold to keep swinging)
-- pad: [RB] dodge
-- pad: [X] [Y] [LB] [LT] skills, as they unlock
+- pad: [LT] dodge
+- pad: [RB] [LB] [Y] [X] skills 1 to 4, as they unlock
 - pad: [B] drink a potion
 - pad: [A] talk, open, pick up, read
 - pad: The D-pad opens the bag (down), the quests (left) and the map (up).

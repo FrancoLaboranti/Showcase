@@ -7,6 +7,8 @@ A sea snake over a dark reef, in a lake full of rival snakes. Eat stars to grow 
 - keys: Move the mouse and the snake swims toward the pointer.
 - keys: Hold any mouse button to sprint. It burns turbo, which refills when you let go.
 - keys: [P] pause
+- keys: On a level's cards the arrows light one up, [Enter] takes it and [R] rerolls.
+- keys: [Enter] swim again after a game over
 - touch: The stick appears where your thumb lands in the bottom third of the screen.
 - touch: {btnSprint} sprint while held, or two fingers anywhere. It is also the turbo gauge, which refills when you let go.
 - pad: Tilt the left stick and the snake swims that way.

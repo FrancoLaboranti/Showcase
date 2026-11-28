@@ -5,7 +5,7 @@ Adiviná la palabra letra por letra antes de que se complete el dibujo en la hor
 
 ## Controles
 - keys: Escribí una letra, o hacé clic en el teclado que está debajo de la palabra.
-- pad: La cruceta recorre el teclado de abajo y [A] elige la letra marcada.
+- pad: La cruceta o el stick izquierdo recorren el teclado de abajo y [A] elige la letra marcada.
 - [↻] otra palabra
 - [ES] / [EN] cambiar el idioma (y repartir otra palabra)
 - pad: [Y] reparte otra palabra, [RB] cambia el idioma

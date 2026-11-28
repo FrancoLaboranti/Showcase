@@ -7,6 +7,7 @@ Gather food, wood, gold and stone, spread your village across the map and raise 
 - Leave the rival with **no Hearth and no villagers**. It wins the same way.
 
 ## Controls
+- keys: On the menu the arrows light a rival, a map or PLAY, and [Enter] presses the lit one.
 - keys: **Click** selects, **drag** boxes several, [Shift]+click adds or removes, and a **double click** takes every unit or building of that kind on screen.
 - keys: **Right-click** does what fits the spot, from moving and attacking to gathering, building and sheltering. With a building that trains, it sets the rally point, and on the minimap it sends the selection there.
 - keys: To build, pick it on the card and click its spot ([Shift] keeps placing). A wall is press, drag, release.

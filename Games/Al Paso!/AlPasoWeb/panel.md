@@ -23,7 +23,7 @@ Tenés un puesto de comida al paso en la Costanera y una semana para hacerlo ren
 - pad: [X] [Y] [LB] [RB] paty, chori, sánguche, fritas
 - pad: [RT] una bebida de la heladera
 - pad: [B] suelta el plato o la bebida que tenés en la mano
-- pad: [Start] pausa, [Back] vuelve al menú
+- pad: [Start] pausa, [Select] vuelve al menú
 
 ## En el puesto
 - **Lo que está listo en la parrilla, la plancha o la freidora se quema a los 7 segundos.** Lo quemado se tira con un toque.

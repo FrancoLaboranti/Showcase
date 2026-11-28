@@ -25,7 +25,7 @@ Race fifteen rival tanks on a circuit generated fresh for every race, across six
 - pad: [X] fire a bomb (one every two seconds)
 - pad: [A] nitro (hold)
 - pad: In the menus the D-pad or the stick picks and changes a row, [A] confirms and [B] goes back.
-- pad: [Start] pause, [Back] back to the menu
+- pad: [Start] pause, [Select] back to the menu
 
 ## On the track
 - **A bomb spins a tank out** and nearly stops it. It flies straight off your nose, so line up first.

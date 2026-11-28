@@ -10,6 +10,7 @@ The disc lights up a sequence, each colour with a note of its own, and you play 
 - keys: [↑] [→] [↓] [←] play red, green, blue and yellow, clockwise from the top left, and [Enter] presses the centre.
 - pad: [Y] [B] [A] [X] or the D-pad play red, green, blue and yellow, clockwise from the top left.
 - pad: [A] presses the centre too, to start, to leave a game over and to lift a pause.
+- pad: [Select] goes back to the menu.
 
 ## Tip
 - **Each colour always plays the same note, and the four make a chord.** Hum the sequence back and you remember it by ear as well as by sight, which is how the original toy worked.

@@ -22,6 +22,7 @@ Hold out against fifty waves of enemy tanks, from laser-sighted snipers and ramm
 - keys: [Q] rage, when the bar is full
 - keys: [Tab] shop (the game waits)
 - keys: [P] pause
+- keys: The arrows and [Enter] choose in the menu, the shop and the power picks. [Enter] also leaves GAME OVER.
 - pad: Left stick drives. Right stick steers the sight, which leans towards enemy tanks and holds on to the one you let it settle on.
 - pad: [RT] cannon (hold)
 - pad: [RB] homing missile
@@ -29,6 +30,7 @@ Hold out against fifty waves of enemy tanks, from laser-sighted snipers and ramm
 - pad: [R3] rage (press the right stick in), when the bar is full
 - pad: [X] shop (the game waits), and [B] closes it
 - pad: The D-pad and [A] choose in the menu, the shop and the power picks. [A] also leaves GAME OVER.
+- pad: [Select] goes back to the menu.
 
 ## Staying alive
 - **The shield rises by itself** against shells and missiles until its charge runs dry, then it is down for a few seconds.

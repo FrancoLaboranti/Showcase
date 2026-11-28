@@ -14,7 +14,7 @@ A number on an open cell says how many of the eight cells around it hide a mine.
 - pad: [LB] / [RB] the mode, the difficulty
 - touch: {btnReset} a new field
 - keys: {btnReset} / [R] a new field
-- pad: {btnReset} / [Back] a new field
+- pad: {btnReset} / [Select] a new field
 
 ## The field
 - **The first dig is always safe**, and it always opens up a patch.

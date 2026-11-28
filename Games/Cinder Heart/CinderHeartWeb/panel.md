@@ -18,7 +18,7 @@ Wren robbed the wrong reliquary and woke up with the last ember of a dead sun bu
 - keys: The arrows and [Enter] also work the map, the Camp and every menu.
 - keys: [Esc] cancel or leave the Camp, [P] pause
 - pad: [LB] [RB] pick an ability, [A] to act
-- pad: The D-pad moves the aim, [B] puts the ability down
+- pad: Left and right on the D-pad move the aim, [B] puts the ability down
 - pad: The D-pad and [A] work the map, the Camp, a dialogue's answers and every menu
 - pad: [A] the next line of a dialogue, [B] cancels a box or leaves the Camp
 - pad: [Start] pause

@@ -12,7 +12,8 @@ Tap or click anywhere and a rocket climbs from that spot. Nine kinds of burst, f
 - {btnBlowOne} hold it to burst the rockets in the air, one by one
 - {btnBlowAll} burst everything in the air at once
 - keys: The four above are also [A], [5], [W] and [Q].
-- pad: The four above are [LB], [Y], [RB] and [X].
+- pad: The four above are [B], [Y], [A] and [X].
+- pad: [Select] starts the show over on a clear sky.
 
 ## Good to know
 - About one rocket in ten is a dud and falls dark. {btnBlowAll} still sets it off on the way down.
